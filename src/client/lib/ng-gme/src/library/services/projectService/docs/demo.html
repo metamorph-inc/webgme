@@ -1,0 +1,22 @@
+<div data-ng-controller="ProjectServiceDemoController" style="height: 700px; overflow-x:auto; padding: 0 1ex;">
+
+  <ul>
+    <li><b>Available projects</b>
+      <ul>
+        <li ng-repeat='project in projects'><i>Project Name (and Id):</i> {{ project.info.visibleName }} ({{ project.id }})
+          <ul>
+            <li>Description: {{ project.info.description }}</li>
+            <li>Tags: <span ng-repeat='tag in project.info.tags'>{{ tag }}; </span></li>
+          </ul>
+        </li>
+      </ul>
+    </li>
+    <li><b>Available tags</b>
+      <ul>
+        <li ng-repeat='tag in tags'><i>{{tag.id }}:</i> {{ tag.name }}
+        </li>
+      </ul>
+    </li>
+  </ul>
+
+</div>

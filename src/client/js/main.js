@@ -80,7 +80,8 @@ require.config({
         'angular': 'lib/angular/angular-1.2.19/angular' + ( DEBUG ? '.min' : '' ),
         'angular-route': 'lib/angular/angular-1.2.19/angular-route' + ( DEBUG ? '.min' : '' ),
         'angular-route-styles': 'lib/angular/angular-route-styles/route-styles',
-        'angular-ui-bootstrap': 'lib/angular/ui-bootstrap/ui-bootstrap-tpls-0.11.0.min'
+        'angular-ui-bootstrap': 'lib/angular/ui-bootstrap/ui-bootstrap-tpls-0.11.0.min',
+        'ng-gme': 'lib/ng-gme/dist/ng-gme'
     },
 
     shim: {
@@ -113,7 +114,12 @@ require.config({
         'jquery-csszoom': ['jquery-ui'],
         'jquery-spectrum': ['jquery'],
         'raphael_svg': ['raphael_core'],
-        'raphael_vml': ['raphael_core']
+        'raphael_vml': ['raphael_core'],
+        'ng-gme': [
+            'angular',
+            'lib/ng-gme/dist/ng-gme-templates.js',
+            'css!lib/ng-gme/dist/ng-gme.css'
+        ]
     }
 });
 
@@ -135,7 +141,8 @@ require(
         'angular',
         'angular-route',
         'angular-route-styles',
-        'angular-ui-bootstrap'
+        'angular-ui-bootstrap',
+        'ng-gme'
 
     ],
     function (domReady, jQuery, jQueryUi, jQueryUiiPad, jqueryWebGME, jqueryDataTables, bootstrap, underscore,

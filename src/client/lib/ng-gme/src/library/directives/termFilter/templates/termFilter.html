@@ -1,0 +1,24 @@
+<div class="tag-filter">
+    <h4>Filter by tags</h4>
+    <div ng-repeat="term in availableTerms"
+         class="taxonomy-term"
+         ng-class="term.id + (selectedTermIds.indexOf(term.id) > -1 ? ' selected' : '')"
+         data-ng-click="toggle(term)">
+        <a href="#" title="Change selection">
+            <span class="selected-mark">
+                <i ng-class="selectedTermIds.indexOf(term.id) > -1 ? 'glyphicon glyphicon-ok' : 'icon-placeholder'"></i>
+            </span>{{::term.name}}
+        </a>
+    </div>
+
+    <!--<div ng-repeat="term in availableTerms | isSelected: selectedTermIds:-1"-->
+         <!--class="taxonomy-term"-->
+         <!--ng-class="term.id"-->
+         <!--data-ng-click="toggle(term)">-->
+        <!--<a href="#" title="Change selection">-->
+            <!--<span class="selected-mark">-->
+                <!--<i class="icon-placeholder"></i>-->
+            <!--</span>{{::term.name}}-->
+        <!--</a>-->
+    <!--</div>-->
+</div>

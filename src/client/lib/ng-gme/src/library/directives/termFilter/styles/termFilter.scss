@@ -1,0 +1,27 @@
+.tag-filter {
+
+  .taxonomy-term:not(.selected) {
+    border: 1px solid #999;
+    color: #999;
+    background-color: #fff;
+
+    a {
+      color: #555;
+    }
+
+  }
+
+  .taxonomy-term.selected {
+    border: 1px solid transparent;
+  }
+
+  .selected-mark {
+    margin-right: .5ex;
+  }
+
+  .icon-placeholder {
+    display: inline-block;
+    width: 10px;
+  }
+
+}

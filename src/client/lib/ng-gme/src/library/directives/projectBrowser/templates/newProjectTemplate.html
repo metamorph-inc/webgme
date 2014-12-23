@@ -1,0 +1,45 @@
+<div class="edit-project-details">
+    <form class="drop-box">
+        <div class="row">
+            <div class="col-md-6">
+                <input type="text" class="form-control" data-ng-model="newItem.title"
+                       placeholder="New item name">
+                    <!--<value-widget-->
+
+                        <!--ng-model="widgetDescriptor.model"-->
+                        <!--model-config="widgetDescriptor.modelConfigEdit"-->
+
+                        <!--input-config="widgetDescriptor.inputConfig"-->
+
+                        <!--widget-type="widgetDescriptor.widgetType"-->
+                        <!--widget-mode="'edit'"-->
+                        <!--widget-config="widgetDescriptor.widgetConfigEdit"-->
+                        <!--widget-disabled="inputsDisabled">-->
+
+                    <!--</value-widget>-->
+
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-md-12">
+                <textarea class="form-control edit-workspace-description" rows="5"
+                          data-ng-model="newItem.description"
+                          placeholder="Description"></textarea>
+            </div>
+        </div>
+        <div class="row tags-input-row">
+            <div class="col-md-12">
+                <tags-input ng-model="newItem.tags" display-property="name">
+                    <auto-complete source="loadTags($query)"></auto-complete>
+                </tags-input>
+            </div>
+        </div>
+        <div class="row form-footer">
+            <div class="col-md-8">
+                <button class="btn btn-default btn-submit btn-success"
+                        data-ng-click="createItem(newItem)">Save
+                </button>
+            </div>
+        </div>
+    </form>
+</div>

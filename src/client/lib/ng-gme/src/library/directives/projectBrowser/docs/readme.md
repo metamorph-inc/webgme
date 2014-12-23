@@ -1,0 +1,1 @@
+Depends on `ng-tags-input`.

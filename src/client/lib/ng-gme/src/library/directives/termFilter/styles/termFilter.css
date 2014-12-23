@@ -1,0 +1,13 @@
+.tag-filter .taxonomy-term:not(.selected) {
+  border: 1px solid #999;
+  color: #999;
+  background-color: #fff; }
+  .tag-filter .taxonomy-term:not(.selected) a {
+    color: #555; }
+.tag-filter .taxonomy-term.selected {
+  border: 1px solid transparent; }
+.tag-filter .selected-mark {
+  margin-right: .5ex; }
+.tag-filter .icon-placeholder {
+  display: inline-block;
+  width: 10px; }

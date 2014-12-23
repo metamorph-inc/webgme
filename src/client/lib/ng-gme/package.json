@@ -1,0 +1,73 @@
+{
+  "name": "ng-gme",
+  "version": "0.0.1",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/webgme/ng-gme"
+  },
+  "license": "MIT",
+  "dependencies": {},
+  "devDependencies": {
+    "angular-markdown-directive": "^0.3.0",
+    "angular-sanitize": "0.0.1",
+    "bower": ">=1.3.9",
+    "browserify": "^5.10.1",
+    "browserify-shim": "^3.7.0",
+    "chai": ">=1.9.0",
+    "code-mirror": "~3.22.0",
+    "codemirror": "^4.7.0",
+    "connect-livereload": "^0.4.0",
+    "cssify": "~0.6.0",
+    "express": "^4.8.6",
+    "gulp": "^3.8.7",
+    "gulp-angular-templatecache": "^1.3.0",
+    "gulp-clean": "^0.3.1",
+    "gulp-concat": "^2.3.4",
+    "gulp-js-prettify": "^0.1.0",
+    "gulp-jshint": "^1.8.4",
+    "gulp-livereload": "^2.1.1",
+    "gulp-rename": "^1.2.0",
+    "gulp-sass": "^0.7.3",
+    "gutil": "^1.5.5",
+    "istanbul": ">=0.2.6",
+    "jslint": ">=0.3.0",
+    "mocha": ">=1.17.1",
+    "process": "^0.7.0",
+    "run-sequence": "^0.3.6",
+    "tiny-lr": "^0.1.1",
+    "vinyl-source-stream": "^1.0.0",
+    "webgme": "https://github.com/webgme/webgme/tarball/feature/projectMeta",
+    "yargs": "^1.3.1"
+  },
+  "browserify": {
+    "transform": [
+      "browserify-shim",
+      "cssify"
+    ]
+  },
+  "browser": {
+    "showdown": "./vendor/showdown_for_browserify.js",
+    "codemirror-css": "./bower_components/codemirror/lib/codemirror.css",
+    "angular-ui-codemirror": "./bower_components/angular-ui-codemirror/ui-codemirror.js",
+    "chance": "./bower_components/chance/chance.js",
+    "ui-utils": "./bower_components/angular-ui-utils/ui-utils.js"
+  },
+  "browserify-shim": {
+    "showdown": "Showdown"
+  },
+  "engines": {
+    "node": ">=0.10.0"
+  },
+  "config": {},
+  "scripts": {},
+  "readme": "ERROR: No README data found!",
+  "readmeFilename": "README.md",
+  "bugs": {
+    "url": "https://github.com/webgme/ng-gme/issues"
+  },
+  "homepage": "https://github.com/webgme/ng-gme",
+  "_id": "ng-gme@0.0.1",
+  "_shasum": "9d3a6b5319892b78ff0baf02f1e54a27784d8b1c",
+  "_from": "https://github.com/webgme/ng-gme/tarball/master",
+  "_resolved": "https://github.com/webgme/ng-gme/tarball/master"
+}

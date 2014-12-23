@@ -1,0 +1,30 @@
+{
+  "name": "ng-gme",
+  "version": "0.0.1",
+  "homepage": "https://github.com/webgme/ng-gme",
+  "authors": [
+    "Laszlo Juracz <laszlo.juracz@vanderbilt.edu>",
+    "Patrik Meijer <patrik85@yahoo.com>"
+  ],
+  "license": "MIT",
+  "keywords": [
+    "angular",
+    "gme"
+  ],
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+    "test",
+    "tests"
+  ],
+  "devDependencies": {
+    "angular-dragdrop": "~1.0.7",
+    "angular-moment": "~0.8.2",
+    "angular-ui-sortable": "~0.12.11",
+    "moment": "~0.8.2"
+  },
+  "dependencies": {
+    "angular-ui-utils": "~0.1.1"
+  }
+}

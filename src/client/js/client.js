@@ -1036,16 +1036,10 @@ define([
       //loading functions
       function getStringHash(node) {
         //TODO there is a memory issue with the huge strings so we have to replace it with something
+        if (node.parent && node.parent.data && node.parent.data[node.relid]) {
+            return node.parent.data[node.relid];
+        }
         return _gHash++;
-        /*
-         var datas = _core.getDataForSingleHash(node),
-         i,hash="";
-         for(i=0;i<datas.length;i++){
-         hash+=datas[i];
-         }
-         return hash;
-         */
-
       }
 
       function getModifiedNodes(newerNodes) {
@@ -1096,10 +1090,14 @@ define([
       function userEvents(userId, modifiedNodes) {
         var newPaths = {};
         var startErrorLevel = _loadError;
-        for (var i in _users[userId].PATTERNS) {
-          if (_nodes[i]) { //TODO we only check pattern if its root is there...
-            patternToPaths(i, _users[userId].PATTERNS[i], newPaths);
-          }
+          var pattern = function(i) {
+              if (_nodes[i]) { //TODO we only check pattern if its root is there...
+                  patternToPaths(i, _users[userId].PATTERNS[i], newPaths);
+              }
+          };
+          var patterns = _users[userId].PATTERNS;
+        for (var i in patterns) {
+            pattern(i);
         }
 
         if (startErrorLevel !== _loadError) {
@@ -1108,24 +1106,34 @@ define([
         var events = [];
 
         //deleted items
-        for (i in _users[userId].PATHS) {
-          if (!newPaths[i]) {
-            events.push({etype: 'unload', eid: i});
-          }
+          var delete_ = function(i) {
+              if (!newPaths[i]) {
+                  events.push({etype: 'unload', eid: i});
+              }
+          };
+          var paths = _users[userId].PATHS;
+        for (i in paths) {
+            delete_(i);
         }
 
         //added items
+          var new_ = function(i) {
+              if (!_users[userId].PATHS[i]) {
+                  events.push({etype: 'load', eid: i});
+              }
+          };
         for (i in newPaths) {
-          if (!_users[userId].PATHS[i]) {
-            events.push({etype: 'load', eid: i});
-          }
+            new_(i);
         }
 
         //updated items
+        var update = function(i) {
+            if (newPaths[modifiedNodes[i]]) {
+                events.push({etype: 'update', eid: modifiedNodes[i]});
+            }
+        };
         for (i = 0; i < modifiedNodes.length; i++) {
-          if (newPaths[modifiedNodes[i]]) {
-            events.push({etype: 'update', eid: modifiedNodes[i]});
-          }
+            update(i);
         }
 
         _users[userId].PATHS = newPaths;

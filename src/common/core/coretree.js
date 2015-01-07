@@ -4,15 +4,13 @@
  * Author: Miklos Maroti
  */
 
-define([ "util/assert", "util/zssha1", "core/future", "core/tasync", 'util/canon' ], function (ASSERT, ZSSHA1, FUTURE, TASYNC, CANON) {
+define([ "util/assert", "util/key", "core/future", "core/tasync", 'util/canon' ], function (ASSERT, GENKEY, FUTURE, TASYNC, CANON) {
 	"use strict";
 
 	var HASH_REGEXP = new RegExp("#[0-9a-f]{40}");
 	var isValidHash = function (key) {
 		return typeof key === "string" && key.length === 41 && HASH_REGEXP.test(key);
 	};
-
-	var SHA = new ZSSHA1();
 
 	var MAX_RELID = Math.pow(2, 31);
 	var createRelid = function (data) {
@@ -645,13 +643,6 @@ define([ "util/assert", "util/zssha1", "core/future", "core/tasync", 'util/canon
 
 		// ------- persistence
 
-		var generateRandom160bitHex = function () {
-			function r8() {
-				return (0x100000000 + Math.floor(Math.random() * (0x100000000-1))).toString(16).substring(1);
-			}
-			return r8() + r8() + r8() + r8() + r8();
-		};
-
 		var getHash = function (node) {
 			if (node === null) {
 				return null;
@@ -717,7 +708,7 @@ define([ "util/assert", "util/zssha1", "core/future", "core/tasync", 'util/canon
 				ASSERT(hash === "" || typeof hash === "undefined");
 
 				if (hash === "") {
-					hash = "#" + generateRandom160bitHex();
+					hash = "#" + GENKEY(data);
 					data[ID_NAME] = hash;
 
 					done = FUTURE.join(done, storage.insertObject(data));

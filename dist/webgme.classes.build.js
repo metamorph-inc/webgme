@@ -14542,7 +14542,7 @@ define('client',[
                       _project.loadObject(newhash, function (err, commitObj) {
                           if (!err && commitObj) {
                               loading(commitObj.root, function (err) {
-                                  myCallback();
+                                  myCallback(err);
                                   if (newhash !== currentHash) {
                                       doLoad(currentHash);
                                   } else {
@@ -14555,7 +14555,7 @@ define('client',[
                                   _project.loadObject(newhash, function (err2, commitObj) {
                                       if (!err2 && commitObj) {
                                           loading(commitObj.root, function (err) {
-                                              myCallback();
+                                              myCallback(err);
                                               if (newhash !== currentHash) {
                                                   doLoad(currentHash);
                                               } else {
@@ -15426,21 +15426,21 @@ define('client',[
           }
           if (!_inTransaction) {
             ASSERT(_project && _core && _branch);
-            _core.persist(_nodes[ROOT_PATH].node, function (err) {
-            });
-            var newRootHash = _core.getHash(_nodes[ROOT_PATH].node);
-            var newCommitHash = _project.makeCommit([_recentCommits[0]], newRootHash, _msg, function (err) {
-              //TODO now what??? - could we end up here?
-            });
-            _msg = "";
-            addCommit(newCommitHash);
-            _selfCommits[newCommitHash] = true;
-            _redoer.addModification(newCommitHash,"");
-            _project.setBranchHash(_branch, _recentCommits[1], _recentCommits[0], function (err) {
-              //TODO now what??? - could we screw up?
-              loading(newRootHash);
-              callback(err);
-            });
+              var commitFrom = _recentCommits[0];
+              _core.persist(_nodes[ROOT_PATH].node, function (err) {
+                  var newRootHash = _core.getHash(_nodes[ROOT_PATH].node);
+                  var newCommitHash = _project.makeCommit([commitFrom], newRootHash, _msg, function (err) {
+                      _msg = "";
+                      addCommit(newCommitHash);
+                      _selfCommits[newCommitHash] = true;
+                      _redoer.addModification(newCommitHash,"");
+                      _project.setBranchHash(_branch, commitFrom, newCommitHash, function (err) {
+                          //TODO now what??? - could we screw up?
+                          loading(newRootHash);
+                          callback(err);
+                      });
+                  });
+              });
             //loading(newRootHash);
           } else {
             _core.persist(_nodes[ROOT_PATH].node, function (err) {
@@ -17197,6 +17197,7 @@ define('client',[
 
     return Client;
   });
+
 define('blob/BlobConfig',[], function(){
 
     var BlobConfig = {

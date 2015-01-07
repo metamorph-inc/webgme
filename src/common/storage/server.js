@@ -514,13 +514,15 @@ define([ "util/assert","util/guid","util/url","socket.io","worker/serverworkerma
                                     project.setBranchHash(branch,oldhash,newhash,function(err){
                                         if(!err){
                                             //here comes the branch eventing
+                                            var event;
                                             if(oldhash === '' && newhash !== ''){
-                                                fireEvent({type:SERVER_EVENT.BRANCH_CREATED,project:projectName,branch:branch,commit:newhash});
+                                                event = {type:SERVER_EVENT.BRANCH_CREATED,project:projectName,branch:branch,commit:newhash};
                                             } else if(oldhash !== '' && newhash === ''){
-                                                fireEvent({type:SERVER_EVENT.BRANCH_DELETED,project:projectName,branch:branch});
+                                                event = {type:SERVER_EVENT.BRANCH_DELETED,project:projectName,branch:branch};
                                             } else if(oldhash !== '' && newhash !== ''){
-                                                fireEvent({type:SERVER_EVENT.BRANCH_UPDATED,project:projectName,branch:branch,commit:newhash});
+                                                event = {type:SERVER_EVENT.BRANCH_UPDATED,project:projectName,branch:branch,commit:newhash};
                                             }
+                                            fireEvent(event);
                                         }
                                         callback(err);
                                     });

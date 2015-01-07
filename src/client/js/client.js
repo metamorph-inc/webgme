@@ -592,7 +592,7 @@ define([
                       _project.loadObject(newhash, function (err, commitObj) {
                           if (!err && commitObj) {
                               loading(commitObj.root, function (err) {
-                                  myCallback();
+                                  myCallback(err);
                                   if (newhash !== currentHash) {
                                       doLoad(currentHash);
                                   } else {
@@ -605,7 +605,7 @@ define([
                                   _project.loadObject(newhash, function (err2, commitObj) {
                                       if (!err2 && commitObj) {
                                           loading(commitObj.root, function (err) {
-                                              myCallback();
+                                              myCallback(err);
                                               if (newhash !== currentHash) {
                                                   doLoad(currentHash);
                                               } else {

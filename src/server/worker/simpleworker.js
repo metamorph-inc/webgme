@@ -253,6 +253,7 @@ function(CONSTANT,Core,Storage,GUID,DUMP,logManager,FS,PATH,BlobServerClient,Plu
     };
 
     var getAllProjectsInfo = function(userId,callback){
+        return callback(null, {});
         var projectNames,
             userAuthInfo = null,
             completeInfo = {},

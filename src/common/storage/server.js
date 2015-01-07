@@ -137,7 +137,7 @@ define([ "util/assert","util/guid","util/url","socket.io","worker/serverworkerma
             }
 
             for(i=0;i<callbacks.length;i++){
-                callbacks[i](null,guid,parameters);
+                // callbacks[i](null,guid,parameters);
             }
         }
         function eventRequest(latestGuid,callback){
@@ -491,7 +491,10 @@ define([ "util/assert","util/guid","util/url","socket.io","worker/serverworkerma
                         if(err){
                             callback(err);
                         } else {
-                            project.getBranchNames(callback);
+                            project.getBranchNames(function (err, branches) {
+                                var master = {'master': branches['master'] };
+                                callback(err, master);
+                            });
                         }
                     });
                 });

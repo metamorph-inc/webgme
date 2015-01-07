@@ -28,3 +28,5 @@ src/bin/*.xme
 blob-local-storage
 
 *.swp
+
+dist/webgme.classes.build.js.map

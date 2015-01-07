@@ -1720,20 +1720,9 @@ define([
           }
         if (_database) {
           if (_project) {
-            _project.getBranchNames(function (err, names) {
-              if (err) {
-                return callback(err);
-              }
-
-              if (names[branch]) {
                 stopRunningAddOns();
                 branchWatcher(branch, innerCallback);
                 //startCoreAddOnsAsync(_projectName,branch,innerCallback);
-              } else {
-                callback(new Error('there is no such branch!'));
-              }
-
-            });
           } else {
             callback(new Error('there is no open project!'));
           }

@@ -543,6 +543,8 @@ define([
           callback(err);
         };
         var redoerNeedsClean = true;
+        var currentHash = '';
+        var currentlyLoading = false;
         var branchHashUpdated = function (err, newhash, forked) {
           var doUpdate = false;
           if (branch === _branch && !_offline) {
@@ -585,21 +587,43 @@ define([
                 _self.dispatchEvent(_self.events.REDO_AVAILABLE, canRedo);
 
                 if(doUpdate){
-                  _project.loadObject(newhash, function (err, commitObj) {
-                    if (!err && commitObj) {
-                      loading(commitObj.root,myCallback);
-                    } else {
-                      setTimeout(function () {
-                        _project.loadObject(newhash, function (err, commitObj) {
+                  currentHash = newhash;
+                  var doLoad = function (newhash) {
+                      _project.loadObject(newhash, function (err, commitObj) {
                           if (!err && commitObj) {
-                            loading(commitObj.root,myCallback);
+                              loading(commitObj.root, function (err) {
+                                  myCallback();
+                                  if (newhash !== currentHash) {
+                                      doLoad(currentHash);
+                                  } else {
+                                      currentlyLoading = false;
+                                  }
+                              });
                           } else {
-                            console.log("second load try failed on commit!!!", err);
+                              console.log("BUG: first try to load commit failed", err);
+                              setTimeout(function () {
+                                  _project.loadObject(newhash, function (err2, commitObj) {
+                                      if (!err2 && commitObj) {
+                                          loading(commitObj.root, function (err) {
+                                              myCallback();
+                                              if (newhash !== currentHash) {
+                                                  doLoad(currentHash);
+                                              } else {
+                                                  currentlyLoading = false;
+                                              }
+                                          });
+                                      } else {
+                                          console.log("BUG: first try to load commit failed", err, err2);
+                                      }
+                                  });
+                              }, 1000);
                           }
-                        });
-                      }, 1000);
-                    }
-                  });
+                      });
+                  }
+                  if (currentlyLoading === false) {
+                      currentlyLoading = true;
+                      doLoad(newhash);
+                  }
                 }
 
                 //branch status update

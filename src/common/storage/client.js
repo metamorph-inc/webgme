@@ -489,27 +489,23 @@ define([ "util/assert", "util/guid" ], function (ASSERT, GUID) {
             function loadObject (hash, callback) {
                 ASSERT(typeof callback === 'function');
                 if (socketConnected) {
-                    if(loadBucketSize === 0){
-                        ++loadBucketSize;
+                    if(loadBucket.length === 0){
                         loadBucket.push({hash:hash,cb:callback});
                         loadBucketTimer = setTimeout(function(){
                             var myBucket = loadBucket;
                             loadBucket = [];
                             loadBucketTimer = null;
-                            loadBucketSize = 0;
                             loadObjects(myBucket);
-                        },10);
-                    } else if (loadBucketSize === 99){
+                        },1);
+                    } else if (loadBucket.length === 99){
                         loadBucket.push({hash:hash,cb:callback});
                         var myBucket = loadBucket;
                         loadBucket = [];
                         clearTimeout(loadBucketTimer);
                         loadBucketTimer = null;
-                        loadBucketSize = 0;
                         loadObjects(myBucket);
                     } else {
                         loadBucket.push({hash:hash,cb:callback});
-                        ++loadBucketSize;
                     }
                 } else {
                     callback(new Error(ERROR_DISCONNECTED));
@@ -517,7 +513,6 @@ define([ "util/assert", "util/guid" ], function (ASSERT, GUID) {
             }
 
             var loadBucket = [],
-                loadBucketSize = 0,
                 loadBucketTimer;
             function loadObjects (hashedObjects){
                 var hashes = {},i;
@@ -525,7 +520,7 @@ define([ "util/assert", "util/guid" ], function (ASSERT, GUID) {
                     hashes[hashedObjects[i].hash] = true;
                 }
                 hashes = Object.keys(hashes);
-                socket.emit('loadObjects',project,hashes,function(err,results){
+                socket.emit('loadObjects',project,hashes,function objectLoaded(err,results){
                     for(i=0;i<hashedObjects.length;i++){
                         hashedObjects[i].cb(err,results[hashedObjects[i].hash]);
                     }

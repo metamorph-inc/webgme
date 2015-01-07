@@ -8717,27 +8717,23 @@ define('storage/client',[ "util/assert", "util/guid" ], function (ASSERT, GUID) 
             function loadObject (hash, callback) {
                 ASSERT(typeof callback === 'function');
                 if (socketConnected) {
-                    if(loadBucketSize === 0){
-                        ++loadBucketSize;
+                    if(loadBucket.length === 0){
                         loadBucket.push({hash:hash,cb:callback});
                         loadBucketTimer = setTimeout(function(){
                             var myBucket = loadBucket;
                             loadBucket = [];
                             loadBucketTimer = null;
-                            loadBucketSize = 0;
                             loadObjects(myBucket);
-                        },10);
-                    } else if (loadBucketSize === 99){
+                        },1);
+                    } else if (loadBucket.length === 99){
                         loadBucket.push({hash:hash,cb:callback});
                         var myBucket = loadBucket;
                         loadBucket = [];
                         clearTimeout(loadBucketTimer);
                         loadBucketTimer = null;
-                        loadBucketSize = 0;
                         loadObjects(myBucket);
                     } else {
                         loadBucket.push({hash:hash,cb:callback});
-                        ++loadBucketSize;
                     }
                 } else {
                     callback(new Error(ERROR_DISCONNECTED));
@@ -8745,7 +8741,6 @@ define('storage/client',[ "util/assert", "util/guid" ], function (ASSERT, GUID) 
             }
 
             var loadBucket = [],
-                loadBucketSize = 0,
                 loadBucketTimer;
             function loadObjects (hashedObjects){
                 var hashes = {},i;
@@ -8753,7 +8748,7 @@ define('storage/client',[ "util/assert", "util/guid" ], function (ASSERT, GUID) 
                     hashes[hashedObjects[i].hash] = true;
                 }
                 hashes = Object.keys(hashes);
-                socket.emit('loadObjects',project,hashes,function(err,results){
+                socket.emit('loadObjects',project,hashes,function objectLoaded(err,results){
                     for(i=0;i<hashedObjects.length;i++){
                         hashedObjects[i].cb(err,results[hashedObjects[i].hash]);
                     }
@@ -9678,7 +9673,7 @@ define('storage/cache',[ "util/assert" ], function (ASSERT) {
 				}
 			}
 
-			function deepFreeze (obj) {
+			var deepFreeze = function (obj) {
 				ASSERT(typeof obj === "object");
 
 				tryFreeze(obj);
@@ -9687,7 +9682,10 @@ define('storage/cache',[ "util/assert" ], function (ASSERT) {
 				for (key in obj) {
 					maybeFreeze(obj[key]);
 				}
-			}
+			};
+            if (typeof WebGMEGlobal !== 'undefined' && typeof WebGMEGlobal.getConfig !== 'undefined' && !WebGMEGlobal.getConfig().debug) {
+                deepFreeze = function () { };
+            }
 
 			function cacheInsert (key, obj) {
 				ASSERT(typeof cache[key] === "undefined" && obj[ID_NAME] === key);
@@ -14495,6 +14493,8 @@ define('client',[
           callback(err);
         };
         var redoerNeedsClean = true;
+        var currentHash = '';
+        var currentlyLoading = false;
         var branchHashUpdated = function (err, newhash, forked) {
           var doUpdate = false;
           if (branch === _branch && !_offline) {
@@ -14537,21 +14537,43 @@ define('client',[
                 _self.dispatchEvent(_self.events.REDO_AVAILABLE, canRedo);
 
                 if(doUpdate){
-                  _project.loadObject(newhash, function (err, commitObj) {
-                    if (!err && commitObj) {
-                      loading(commitObj.root,myCallback);
-                    } else {
-                      setTimeout(function () {
-                        _project.loadObject(newhash, function (err, commitObj) {
+                  currentHash = newhash;
+                  var doLoad = function (newhash) {
+                      _project.loadObject(newhash, function (err, commitObj) {
                           if (!err && commitObj) {
-                            loading(commitObj.root,myCallback);
+                              loading(commitObj.root, function (err) {
+                                  myCallback();
+                                  if (newhash !== currentHash) {
+                                      doLoad(currentHash);
+                                  } else {
+                                      currentlyLoading = false;
+                                  }
+                              });
                           } else {
-                            console.log("second load try failed on commit!!!", err);
+                              console.log("BUG: first try to load commit failed", err);
+                              setTimeout(function () {
+                                  _project.loadObject(newhash, function (err2, commitObj) {
+                                      if (!err2 && commitObj) {
+                                          loading(commitObj.root, function (err) {
+                                              myCallback();
+                                              if (newhash !== currentHash) {
+                                                  doLoad(currentHash);
+                                              } else {
+                                                  currentlyLoading = false;
+                                              }
+                                          });
+                                      } else {
+                                          console.log("BUG: first try to load commit failed", err, err2);
+                                      }
+                                  });
+                              }, 1000);
                           }
-                        });
-                      }, 1000);
-                    }
-                  });
+                      });
+                  }
+                  if (currentlyLoading === false) {
+                      currentlyLoading = true;
+                      doLoad(newhash);
+                  }
                 }
 
                 //branch status update

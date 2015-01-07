@@ -432,6 +432,9 @@ define([ "util/assert","util/guid","util/url","socket.io","worker/serverworkerma
                         project, i,
                         insertObject = function(object,next){
                             project.insertObject(object,next);
+                            // FIXME only works with cache
+                            //project.insertObject(object, function () {});
+                            //next();
                         },
                         innerCb = function(err){
                             error = error || err;

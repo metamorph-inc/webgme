@@ -24,9 +24,11 @@ define([ "mongodb", "util/assert", "util/canon" ], function (MONGODB, ASSERT, CA
 		options.host = options.host || "localhost";
 		options.port = options.port || 27017;
 		options.database = options.database || "webgme";
-		options.timeout = options.timeout || (1000 * 60 * 10);
+		options.timeout = options.timeout || (1000 * 90);
 
 		var mongo = null;
+        var branches = {};
+        var branchesTimeout;
 
 		function openDatabase (callback) {
 			//ASSERT(mongo === null && typeof callback === "function");
@@ -329,7 +331,16 @@ define([ "mongodb", "util/assert", "util/canon" ], function (MONGODB, ASSERT, CA
 						if (oldhash === null || oldhash !== newhash) {
 							callback(null, newhash, null);
 						} else {
-							setTimeout(callback, options.timeout, null, newhash, null);
+                            branches[branch] = branches[branch] || [];
+                            branches[branch].push(callback);
+                            if (branches[branch].length === 1) {
+                                branchesTimeout = setTimeout(function (err, newhash) {
+                                    for (var i = 0; i < (branches[branch] || []).length; i++) {
+                                        branches[branch][i](null, newhash, null);
+                                    }
+                                    delete branches[branch];
+                                }, options.timeout, null, newhash, null);
+                            }
 						}
 					}
 				});
@@ -361,6 +372,22 @@ define([ "mongodb", "util/assert", "util/canon" ], function (MONGODB, ASSERT, CA
 				} else {
 					ongoingUpdate[_branch] = true;
 				}
+
+                var oldcb = callback;
+                function notify(err) {
+                    oldcb(err);
+                    if (err) {
+                        return;
+                    }
+                    for (var i = 0; i < (branches[branch] || []).length; i++) {
+                        branches[branch][i](null, newhash, null);
+                    }
+                    delete branches[branch];
+                    if (branchesTimeout) {
+                        clearTimeout(branchesTimeout);
+                    }
+                }
+                callback = notify;
 
                 fsyncDatabase(function(){
                     if (oldhash === newhash) {

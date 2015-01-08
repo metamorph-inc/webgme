@@ -619,7 +619,7 @@ define([
                                               }
                                           });
                                       } else {
-                                          console.log("BUG: first try to load commit failed", err, err2);
+                                          console.log("BUG: second try to load commit failed", err, err2);
                                       }
                                   });
                               }, 1000);

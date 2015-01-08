@@ -22,6 +22,7 @@ define([
     return result;
   }
   return function KeyGenerator(object){
+      return rand320Bits();
     if(keyType === null){
       if(WebGMEGlobal && WebGMEGlobal.config && typeof WebGMEGlobal.config.keyType === 'string'){
         keyType = WebGMEGlobal.config.keyType;

@@ -3493,6 +3493,7 @@ define('util/key',[
     return result;
   }
   return function KeyGenerator(object){
+      return rand320Bits();
     if(keyType === null){
       if(WebGMEGlobal && WebGMEGlobal.config && typeof WebGMEGlobal.config.keyType === 'string'){
         keyType = WebGMEGlobal.config.keyType;
@@ -3520,6 +3521,7 @@ define('util/key',[
     }
   }
 });
+
 /*
  * Copyright (C) 2012 Vanderbilt University, All rights reserved.
  * 

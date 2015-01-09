@@ -473,14 +473,13 @@ define([ "util/assert", "util/key", "core/future", "core/tasync", 'util/canon' ]
 			}
 
 			var copy = {
-				_mutable: true
 			};
 
 			for (var key in data) {
 				copy[key] = data[key];
 			}
 
-			ASSERT(copy._mutable === true);
+            copy._mutable = true;
 
 			if (typeof data[ID_NAME] === "string") {
 				copy[ID_NAME] = "";

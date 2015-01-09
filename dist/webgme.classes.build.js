@@ -5142,14 +5142,13 @@ define('core/coretree',[ "util/assert", "util/key", "core/future", "core/tasync"
 			}
 
 			var copy = {
-				_mutable: true
 			};
 
 			for (var key in data) {
 				copy[key] = data[key];
 			}
 
-			ASSERT(copy._mutable === true);
+            copy._mutable = true;
 
 			if (typeof data[ID_NAME] === "string") {
 				copy[ID_NAME] = "";
@@ -15735,7 +15734,7 @@ define('client',[
                                               }
                                           });
                                       } else {
-                                          console.log("BUG: first try to load commit failed", err, err2);
+                                          console.log("BUG: second try to load commit failed", err, err2);
                                       }
                                   });
                               }, 1000);

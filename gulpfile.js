@@ -31,7 +31,7 @@ function build() {
 gulp.task('rjs-build', shell.task(['node ./node_modules/requirejs/bin/r.js -o ./utils/build/webgme.classes/cbuild.js']));
 
 gulp.task('register-watchers', [], function (cb) {
-    gulp.watch(sourcePattern, ['rjs-build']);
+    gulp.watch('src/**/*.js', ['rjs-build']);
     return cb;
 });
 

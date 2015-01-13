@@ -213,17 +213,9 @@ define([
 
             // load commit hash and run based on branch name or commit hash
             if (managerConfiguration.branchName) {
-                pluginContext.project.getBranchNames(function (err, branchNames) {
-                    self.logger.debug(branchNames);
-
-                    if (branchNames.hasOwnProperty(managerConfiguration.branchName)) {
-                        pluginContext.commitHash = branchNames[managerConfiguration.branchName];
+                        // pluginContext.commitHash = branchNames[managerConfiguration.branchName];
                         pluginContext.branchName = managerConfiguration.branchName;
                         loadCommitHashAndRun(pluginContext.commitHash);
-                    } else {
-                        callback('cannot find branch \'' + managerConfiguration.branchName + '\'', pluginContext);
-                    }
-                });
             } else {
                 loadCommitHashAndRun(pluginContext.commitHash);
             }

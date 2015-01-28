@@ -213,9 +213,12 @@ define([
 
             // load commit hash and run based on branch name or commit hash
             if (managerConfiguration.branchName) {
-                        // pluginContext.commitHash = branchNames[managerConfiguration.branchName];
+                pluginContext.project.getBranchNames(function (err, branchNames) {
+
+                        pluginContext.commitHash = pluginContext.commitHash || branchNames[managerConfiguration.branchName];
                         pluginContext.branchName = managerConfiguration.branchName;
                         loadCommitHashAndRun(pluginContext.commitHash);
+                });
             } else {
                 loadCommitHashAndRun(pluginContext.commitHash);
             }

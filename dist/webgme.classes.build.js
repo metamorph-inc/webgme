@@ -1,5 +1,5 @@
 var GME = GME || {}; GME.classes = GME.classes || {};(function(){/** vim: et:ts=4:sw=4:sts=4
- * @license RequireJS 2.1.11 Copyright (c) 2010-2014, The Dojo Foundation All Rights Reserved.
+ * @license RequireJS 2.1.15 Copyright (c) 2010-2014, The Dojo Foundation All Rights Reserved.
  * Available via the MIT or new BSD license.
  * see: http://github.com/jrburke/requirejs for details
  */
@@ -12,7 +12,7 @@ var requirejs, require, define;
 (function (global) {
     var req, s, head, baseElement, dataMain, src,
         interactiveScript, currentlyAddingScript, mainScript, subPath,
-        version = '2.1.11',
+        version = '2.1.15',
         commentRegExp = /(\/\*([\s\S]*?)\*\/|([^:]|^)\/\/(.*)$)/mg,
         cjsRequireRegExp = /[^.]\s*require\s*\(\s*["']([^'"\s]+)["']\s*\)/g,
         jsSuffixRegExp = /\.js$/,
@@ -180,7 +180,7 @@ var requirejs, require, define;
 
     if (typeof requirejs !== 'undefined') {
         if (isFunction(requirejs)) {
-            //Do not overwrite and existing requirejs instance.
+            //Do not overwrite an existing requirejs instance.
             return;
         }
         cfg = requirejs;
@@ -232,21 +232,20 @@ var requirejs, require, define;
          * @param {Array} ary the array of path segments.
          */
         function trimDots(ary) {
-            var i, part, length = ary.length;
-            for (i = 0; i < length; i++) {
+            var i, part;
+            for (i = 0; i < ary.length; i++) {
                 part = ary[i];
                 if (part === '.') {
                     ary.splice(i, 1);
                     i -= 1;
                 } else if (part === '..') {
-                    if (i === 1 && (ary[2] === '..' || ary[0] === '..')) {
-                        //End of the line. Keep at least one non-dot
-                        //path segment at the front so it can be mapped
-                        //correctly to disk. Otherwise, there is likely
-                        //no path mapping for a path starting with '..'.
-                        //This can still fail, but catches the most reasonable
-                        //uses of ..
-                        break;
+                    // If at the start, or previous value is still ..,
+                    // keep them so that when converted to a path it may
+                    // still work when converted to a path, even though
+                    // as an ID it is less than ideal. In larger point
+                    // releases, may be better to just kick out an error.
+                    if (i === 0 || (i == 1 && ary[2] === '..') || ary[i - 1] === '..') {
+                        continue;
                     } else if (i > 0) {
                         ary.splice(i - 1, 2);
                         i -= 2;
@@ -267,43 +266,37 @@ var requirejs, require, define;
          */
         function normalize(name, baseName, applyMap) {
             var pkgMain, mapValue, nameParts, i, j, nameSegment, lastIndex,
-                foundMap, foundI, foundStarMap, starI,
-                baseParts = baseName && baseName.split('/'),
-                normalizedBaseParts = baseParts,
+                foundMap, foundI, foundStarMap, starI, normalizedBaseParts,
+                baseParts = (baseName && baseName.split('/')),
                 map = config.map,
                 starMap = map && map['*'];
 
             //Adjust any relative paths.
-            if (name && name.charAt(0) === '.') {
-                //If have a base name, try to normalize against it,
-                //otherwise, assume it is a top-level require that will
-                //be relative to baseUrl in the end.
-                if (baseName) {
+            if (name) {
+                name = name.split('/');
+                lastIndex = name.length - 1;
+
+                // If wanting node ID compatibility, strip .js from end
+                // of IDs. Have to do this here, and not in nameToUrl
+                // because node allows either .js or non .js to map
+                // to same file.
+                if (config.nodeIdCompat && jsSuffixRegExp.test(name[lastIndex])) {
+                    name[lastIndex] = name[lastIndex].replace(jsSuffixRegExp, '');
+                }
+
+                // Starts with a '.' so need the baseName
+                if (name[0].charAt(0) === '.' && baseParts) {
                     //Convert baseName to array, and lop off the last part,
                     //so that . matches that 'directory' and not name of the baseName's
                     //module. For instance, baseName of 'one/two/three', maps to
                     //'one/two/three.js', but we want the directory, 'one/two' for
                     //this normalization.
                     normalizedBaseParts = baseParts.slice(0, baseParts.length - 1);
-                    name = name.split('/');
-                    lastIndex = name.length - 1;
-
-                    // If wanting node ID compatibility, strip .js from end
-                    // of IDs. Have to do this here, and not in nameToUrl
-                    // because node allows either .js or non .js to map
-                    // to same file.
-                    if (config.nodeIdCompat && jsSuffixRegExp.test(name[lastIndex])) {
-                        name[lastIndex] = name[lastIndex].replace(jsSuffixRegExp, '');
-                    }
-
                     name = normalizedBaseParts.concat(name);
-                    trimDots(name);
-                    name = name.join('/');
-                } else if (name.indexOf('./') === 0) {
-                    // No baseName, so this is ID is resolved relative
-                    // to baseUrl, pull off the leading dot.
-                    name = name.substring(2);
                 }
+
+                trimDots(name);
+                name = name.join('/');
             }
 
             //Apply map config if available.
@@ -379,7 +372,13 @@ var requirejs, require, define;
                 //retry
                 pathConfig.shift();
                 context.require.undef(id);
-                context.require([id]);
+
+                //Custom require that does not do map translation, since
+                //ID is "absolute", already mapped/resolved.
+                context.makeRequire(null, {
+                    skipMap: true
+                })([id]);
+
                 return true;
             }
         }
@@ -445,7 +444,16 @@ var requirejs, require, define;
                             return normalize(name, parentName, applyMap);
                         });
                     } else {
-                        normalizedName = normalize(name, parentName, applyMap);
+                        // If nested plugin references, then do not try to
+                        // normalize, as it will not normalize correctly. This
+                        // places a restriction on resourceIds, and the longer
+                        // term solution is not to normalize until plugins are
+                        // loaded and all normalizations to allow for async
+                        // loading of a loader plugin. But for now, fixes the
+                        // common uses. Details in #1131
+                        normalizedName = name.indexOf('!') === -1 ?
+                                         normalize(name, parentName, applyMap) :
+                                         name;
                     }
                 } else {
                     //A regular module.
@@ -2084,7 +2092,8 @@ define('util/assert',[],function () {
 
 			console.log("Throwing", error.stack);
 			console.log();
-			
+
+			debugger;
 			throw error;
 		}
 	};
@@ -5499,6 +5508,7 @@ define('core/coretree',[ "util/assert", "util/key", "core/future", "core/tasync"
 
 		var __test = function (text, cond) {
 			if (!cond) {
+				debugger;
 				throw new Error(text);
 			}
 		};
@@ -10551,7 +10561,9 @@ define('storage/failsafe',[ "util/assert", "util/guid" ], function (ASSERT, GUID
 							if (err) {
 								callback(err, newhash, forkedhash);
 							} else {
-								if (newhash && branchObj.local.indexOf(newhash) !== -1) {
+								var index = branchObj.unackedSentHashes.indexOf(newhash);
+								if (newhash && index !== -1) {
+									branchObj.unackedSentHashes.splice(index+1, branchObj.unackedSentHashes.length);
 									callback(err, newhash, forkedhash);
 								} else {
 									//we forked!!!
@@ -10641,12 +10653,14 @@ define('storage/failsafe',[ "util/assert", "util/guid" ], function (ASSERT, GUID
 					ASSERT(branchObj.local.length === 0);
 					branchObj.state = BRANCH_STATES.AHEAD;
 					branchObj.local = [ newhash, oldhash ];
+					branchObj.unackedSentHashes = [newhash, oldhash];
 					project.setBranchHash(branch, oldhash, newhash, returnFunction);
 					return;
 				case BRANCH_STATES.AHEAD:
 					ASSERT(branchObj.local.length > 0);
 					if (oldhash === branchObj.local[0]) {
 						branchObj.local.unshift(newhash);
+						branchObj.unackedSentHashes.unshift(newhash);
 						project.setBranchHash(branch, oldhash, newhash, returnFunction);
 					} else {
 						callback(new Error("branch hash mismatch"));
@@ -15129,7 +15143,8 @@ define('client',[
     'coreclient/dumpmore',
     'coreclient/import',
     'coreclient/copyimport',
-    'coreclient/serialization'
+    'coreclient/serialization',
+    'core/tasync'
   ],
   function (
     ASSERT,
@@ -15145,7 +15160,8 @@ define('client',[
     DumpMore,
     MergeImport,
     Import,
-    Serialization) {
+    Serialization,
+    TASYNC) {
 
     
 
@@ -15161,7 +15177,8 @@ define('client',[
 
     function getNewCore(project) {
       //return new NullPointerCore(new DescriptorCore(new SetCore(new GuidCore(new Core(project)))));
-      return Core(project, {autopersist: true, usertype: 'nodejs'});
+      var options = {autopersist: true, usertype: 'nodejs'};
+      return Core(project, options);
     }
 
     function UndoRedo(_client) {
@@ -15296,6 +15313,9 @@ define('client',[
         console.warn('WebGMEGlobal not defined - cannot get plugins.');
       }
 
+
+
+
       function print_nodes(pretext) {
         if (pretext) {
           console.log(pretext);
@@ -15320,6 +15340,15 @@ define('client',[
       _configuration.reconnamount = _configuration.reconnamount || 1000;
       _configuration.autostart = _configuration.autostart === null || _configuration.autostart === undefined ? false : _configuration.autostart;
 
+      if( typeof GME !== 'undefined'){
+        GME.config = GME.config || {};
+        GME.config.keyType = _configuration.storageKeyType;
+      }
+
+      if( typeof WebGMEGlobal !== 'undefined'){
+        WebGMEGlobal.config = WebGMEGlobal.config || {};
+        WebGMEGlobal.config.keyType = _configuration.storageKeyType;
+      }
 
       //TODO remove the usage of jquery
       //$.extend(_self, new EventDispatcher());
@@ -15655,7 +15684,31 @@ define('client',[
         };
       }
 
-      function branchWatcher(branch, callback) {
+        var Lock = function () {
+            var waiters = [];
+
+            return {
+                lock: function (func) {
+                    waiters.push(func);
+                    if (waiters.length === 1) {
+                        func();
+                    }
+                },
+
+                unlock: function () {
+                    waiters.shift();
+                    if (waiters.length >= 1) {
+                        var func = waiters[0];
+                        func();
+                    }
+                }
+            };
+        };
+        var lock = new Lock();
+
+
+
+        function branchWatcher(branch, callback) {
         ASSERT(_project);
         callback = callback || function () {
         };
@@ -15665,7 +15718,6 @@ define('client',[
         };
         var redoerNeedsClean = true;
         var currentHash = '';
-        var currentlyLoading = false;
         var branchHashUpdated = function (err, newhash, forked) {
           var doUpdate = false;
           if (branch === _branch && !_offline) {
@@ -15714,11 +15766,7 @@ define('client',[
                           if (!err && commitObj) {
                               loading(commitObj.root, function (err) {
                                   myCallback(err);
-                                  if (newhash !== currentHash) {
-                                      doLoad(currentHash);
-                                  } else {
-                                      currentlyLoading = false;
-                                  }
+                                  lock.unlock();
                               });
                           } else {
                               console.log("BUG: first try to load commit failed", err);
@@ -15727,24 +15775,20 @@ define('client',[
                                       if (!err2 && commitObj) {
                                           loading(commitObj.root, function (err) {
                                               myCallback(err);
-                                              if (newhash !== currentHash) {
-                                                  doLoad(currentHash);
-                                              } else {
-                                                  currentlyLoading = false;
-                                              }
+                                              lock.unlock();
                                           });
                                       } else {
                                           console.log("BUG: second try to load commit failed", err, err2);
+                                          lock.unlock();
                                       }
                                   });
                               }, 1000);
                           }
                       });
                   }
-                  if (currentlyLoading === false) {
-                      currentlyLoading = true;
+                  lock.lock(function () {
                       doLoad(newhash);
-                  }
+                  });
                 }
 
                 //branch status update
@@ -16451,21 +16495,11 @@ define('client',[
       }
 
       function loadRoot(newRootHash, callback) {
-        //with the newer approach we try to optimize a bit the mechanizm of the loading and try to get rid of the paralellism behind it
+        //with the newer approach we try to optimize a bit the mechanism of the loading and try to get rid of the paralellism behind it
         var patterns = {},
           orderedPatternIds = [],
           error = null,
-          i, j, keysi, keysj,
-          loadNextPattern = function (index) {
-            if (index < orderedPatternIds.length) {
-              loadPattern(_core, orderedPatternIds[index], patterns[orderedPatternIds[index]], _loadNodes, function (err) {
-                error = error || err;
-                loadNextPattern(index + 1);
-              });
-            } else {
-              callback(error);
-            }
-          };
+          i, j, keysi, keysj;
         _loadNodes = {};
         _loadError = 0;
 
@@ -16504,7 +16538,12 @@ define('client',[
               callback(null);
               reLaunchUsers();
             } else {
-              loadNextPattern(0);
+                var _loadPattern = TASYNC.throttle(TASYNC.wrap(loadPattern), 1);
+                var fut = TASYNC.lift(
+                    orderedPatternIds.map(function (pattern, index) {
+                        return TASYNC.apply(_loadPattern, [_core, pattern, patterns[pattern], _loadNodes], this);
+                    }));
+                TASYNC.unwrap(function() { return fut; })(callback);
             }
           } else {
             callback(err);
@@ -16597,25 +16636,22 @@ define('client',[
           }
           if (!_inTransaction) {
             ASSERT(_project && _core && _branch);
-              var commitFrom = _recentCommits[0];
-              _core.persist(_nodes[ROOT_PATH].node, function (err) {
-                  var newRootHash = _core.getHash(_nodes[ROOT_PATH].node);
-                  var newCommitHash = _project.makeCommit([commitFrom], newRootHash, _msg, function (err) {
-                      _msg = "";
-                      addCommit(newCommitHash);
-                      _selfCommits[newCommitHash] = true;
-                      _redoer.addModification(newCommitHash,"");
-                      _project.setBranchHash(_branch, commitFrom, newCommitHash, function (err) {
-                          //TODO now what??? - could we screw up?
-                          loading(newRootHash);
-                          callback(err);
-                      });
-                  });
-              });
-            //loading(newRootHash);
-          } else {
             _core.persist(_nodes[ROOT_PATH].node, function (err) {
             });
+            var newRootHash = _core.getHash(_nodes[ROOT_PATH].node);
+            var newCommitHash = _project.makeCommit([_recentCommits[0]], newRootHash, _msg, function (err) {
+              //TODO now what??? - could we end up here?
+            });
+            _msg = "";
+            addCommit(newCommitHash);
+            _selfCommits[newCommitHash] = true;
+            _redoer.addModification(newCommitHash,"");
+            _project.setBranchHash(_branch, _recentCommits[1], _recentCommits[0], function (err) {
+              //TODO now what??? - could we screw up?
+              loading(newRootHash);
+              callback(err);
+            });
+            //loading(newRootHash);
           }
         } else {
           _msg = "";
@@ -21557,15 +21593,10 @@ define('plugin/PluginManagerBase',[
             // load commit hash and run based on branch name or commit hash
             if (managerConfiguration.branchName) {
                 pluginContext.project.getBranchNames(function (err, branchNames) {
-                    self.logger.debug(branchNames);
 
-                    if (branchNames.hasOwnProperty(managerConfiguration.branchName)) {
-                        pluginContext.commitHash = branchNames[managerConfiguration.branchName];
+                        pluginContext.commitHash = pluginContext.commitHash || branchNames[managerConfiguration.branchName];
                         pluginContext.branchName = managerConfiguration.branchName;
                         loadCommitHashAndRun(pluginContext.commitHash);
-                    } else {
-                        callback('cannot find branch \'' + managerConfiguration.branchName + '\'', pluginContext);
-                    }
                 });
             } else {
                 loadCommitHashAndRun(pluginContext.commitHash);
@@ -21636,6 +21667,7 @@ define('plugin/PluginManagerBase',[
 
         return PluginManagerBase;
     });
+
 define('js/Dialogs/PluginConfig/PluginConfigDialog',[], function () {
    return;
 });

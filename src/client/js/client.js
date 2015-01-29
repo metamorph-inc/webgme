@@ -14,7 +14,8 @@ define([
     'coreclient/dumpmore',
     'coreclient/import',
     'coreclient/copyimport',
-    'coreclient/serialization'
+    'coreclient/serialization',
+    'core/tasync'
   ],
   function (
     ASSERT,
@@ -30,7 +31,8 @@ define([
     DumpMore,
     MergeImport,
     Import,
-    Serialization) {
+    Serialization,
+    TASYNC) {
 
     "use strict";
 
@@ -46,7 +48,8 @@ define([
 
     function getNewCore(project) {
       //return new NullPointerCore(new DescriptorCore(new SetCore(new GuidCore(new Core(project)))));
-      return Core(project, {autopersist: true, usertype: 'nodejs'});
+      var options = {autopersist: true, usertype: 'nodejs'};
+      return Core(project, options);
     }
 
     function UndoRedo(_client) {
@@ -181,6 +184,9 @@ define([
         console.warn('WebGMEGlobal not defined - cannot get plugins.');
       }
 
+
+
+
       function print_nodes(pretext) {
         if (pretext) {
           console.log(pretext);
@@ -205,6 +211,15 @@ define([
       _configuration.reconnamount = _configuration.reconnamount || 1000;
       _configuration.autostart = _configuration.autostart === null || _configuration.autostart === undefined ? false : _configuration.autostart;
 
+      if( typeof GME !== 'undefined'){
+        GME.config = GME.config || {};
+        GME.config.keyType = _configuration.storageKeyType;
+      }
+
+      if( typeof WebGMEGlobal !== 'undefined'){
+        WebGMEGlobal.config = WebGMEGlobal.config || {};
+        WebGMEGlobal.config.keyType = _configuration.storageKeyType;
+      }
 
       //TODO remove the usage of jquery
       //$.extend(_self, new EventDispatcher());
@@ -574,7 +589,6 @@ define([
         };
         var redoerNeedsClean = true;
         var currentHash = '';
-        var currentlyLoading = false;
         var branchHashUpdated = function (err, newhash, forked) {
           var doUpdate = false;
           if (branch === _branch && !_offline) {
@@ -1352,21 +1366,11 @@ define([
       }
 
       function loadRoot(newRootHash, callback) {
-        //with the newer approach we try to optimize a bit the mechanizm of the loading and try to get rid of the paralellism behind it
+        //with the newer approach we try to optimize a bit the mechanism of the loading and try to get rid of the paralellism behind it
         var patterns = {},
           orderedPatternIds = [],
           error = null,
-          i, j, keysi, keysj,
-          loadNextPattern = function (index) {
-            if (index < orderedPatternIds.length) {
-              loadPattern(_core, orderedPatternIds[index], patterns[orderedPatternIds[index]], _loadNodes, function (err) {
-                error = error || err;
-                loadNextPattern(index + 1);
-              });
-            } else {
-              callback(error);
-            }
-          };
+          i, j, keysi, keysj;
         _loadNodes = {};
         _loadError = 0;
 
@@ -1405,7 +1409,12 @@ define([
               callback(null);
               reLaunchUsers();
             } else {
-              loadNextPattern(0);
+                var _loadPattern = TASYNC.throttle(TASYNC.wrap(loadPattern), 1);
+                var fut = TASYNC.lift(
+                    orderedPatternIds.map(function (pattern, index) {
+                        return TASYNC.apply(_loadPattern, [_core, pattern, patterns[pattern], _loadNodes], this);
+                    }));
+                TASYNC.unwrap(function() { return fut; })(callback);
             }
           } else {
             callback(err);

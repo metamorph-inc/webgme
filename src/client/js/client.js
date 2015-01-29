@@ -1482,25 +1482,22 @@ define([
           }
           if (!_inTransaction) {
             ASSERT(_project && _core && _branch);
-              var commitFrom = _recentCommits[0];
-              _core.persist(_nodes[ROOT_PATH].node, function (err) {
-                  var newRootHash = _core.getHash(_nodes[ROOT_PATH].node);
-                  var newCommitHash = _project.makeCommit([commitFrom], newRootHash, _msg, function (err) {
-                      _msg = "";
-                      addCommit(newCommitHash);
-                      _selfCommits[newCommitHash] = true;
-                      _redoer.addModification(newCommitHash,"");
-                      _project.setBranchHash(_branch, commitFrom, newCommitHash, function (err) {
-                          //TODO now what??? - could we screw up?
-                          loading(newRootHash);
-                          callback(err);
-                      });
-                  });
-              });
-            //loading(newRootHash);
-          } else {
             _core.persist(_nodes[ROOT_PATH].node, function (err) {
             });
+            var newRootHash = _core.getHash(_nodes[ROOT_PATH].node);
+            var newCommitHash = _project.makeCommit([_recentCommits[0]], newRootHash, _msg, function (err) {
+              //TODO now what??? - could we end up here?
+            });
+            _msg = "";
+            addCommit(newCommitHash);
+            _selfCommits[newCommitHash] = true;
+            _redoer.addModification(newCommitHash,"");
+            _project.setBranchHash(_branch, _recentCommits[1], _recentCommits[0], function (err) {
+              //TODO now what??? - could we screw up?
+              loading(newRootHash);
+              callback(err);
+            });
+            //loading(newRootHash);
           }
         } else {
           _msg = "";

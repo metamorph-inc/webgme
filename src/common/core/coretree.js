@@ -830,6 +830,7 @@ define([ "util/assert", "util/key", "core/future", "core/tasync", 'util/canon' ]
 
 		var __test = function (text, cond) {
 			if (!cond) {
+				debugger;
 				throw new Error(text);
 			}
 		};

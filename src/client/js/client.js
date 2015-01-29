@@ -540,7 +540,31 @@ define([
         };
       }
 
-      function branchWatcher(branch, callback) {
+        var Lock = function () {
+            var waiters = [];
+
+            return {
+                lock: function (func) {
+                    waiters.push(func);
+                    if (waiters.length === 1) {
+                        func();
+                    }
+                },
+
+                unlock: function () {
+                    waiters.shift();
+                    if (waiters.length >= 1) {
+                        var func = waiters[0];
+                        func();
+                    }
+                }
+            };
+        };
+        var lock = new Lock();
+
+
+
+        function branchWatcher(branch, callback) {
         ASSERT(_project);
         callback = callback || function () {
         };
@@ -599,11 +623,7 @@ define([
                           if (!err && commitObj) {
                               loading(commitObj.root, function (err) {
                                   myCallback(err);
-                                  if (newhash !== currentHash) {
-                                      doLoad(currentHash);
-                                  } else {
-                                      currentlyLoading = false;
-                                  }
+                                  lock.unlock();
                               });
                           } else {
                               console.log("BUG: first try to load commit failed", err);
@@ -612,24 +632,20 @@ define([
                                       if (!err2 && commitObj) {
                                           loading(commitObj.root, function (err) {
                                               myCallback(err);
-                                              if (newhash !== currentHash) {
-                                                  doLoad(currentHash);
-                                              } else {
-                                                  currentlyLoading = false;
-                                              }
+                                              lock.unlock();
                                           });
                                       } else {
                                           console.log("BUG: second try to load commit failed", err, err2);
+                                          lock.unlock();
                                       }
                                   });
                               }, 1000);
                           }
                       });
                   }
-                  if (currentlyLoading === false) {
-                      currentlyLoading = true;
+                  lock.lock(function () {
                       doLoad(newhash);
-                  }
+                  });
                 }
 
                 //branch status update

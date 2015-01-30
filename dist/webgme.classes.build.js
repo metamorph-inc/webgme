@@ -9737,7 +9737,7 @@ define('storage/client',[ "util/assert", "util/guid" ], function (ASSERT, GUID) 
                                 clearTimeout(callbacks[guid].to);
                                 delete callbacks[guid];
                                 projects[project] = {
-                                    fsyncDatabase: fsyncDatabase,
+                                    fsyncDatabase: fsync,
                                     getDatabaseStatus: getDatabaseStatus,
                                     closeProject: closeProject,
                                     loadObject: loadObject,
@@ -9765,8 +9765,7 @@ define('storage/client',[ "util/assert", "util/guid" ], function (ASSERT, GUID) 
             }
 
             //functions
-
-            function fsyncDatabase (callback) {
+            function fsync(callback){
                 ASSERT(typeof callback === 'function');
                 if (socketConnected) {
                     var guid = GUID();
@@ -9774,8 +9773,9 @@ define('storage/client',[ "util/assert", "util/guid" ], function (ASSERT, GUID) 
                         cb: callback,
                         to: setTimeout(callbackTimeout, options.timeout, guid)
                     };
+                    flushSaveBucket();
                     socket.emit('fsyncDatabase', function (err) {
-                        if (callbacks[guid]) {
+                        if(callbacks[guid]){
                             clearTimeout(callbacks[guid].to);
                             delete callbacks[guid];
                             callback(err);
@@ -9838,23 +9838,27 @@ define('storage/client',[ "util/assert", "util/guid" ], function (ASSERT, GUID) 
             function loadObject (hash, callback) {
                 ASSERT(typeof callback === 'function');
                 if (socketConnected) {
-                    if(loadBucket.length === 0){
+                    if(loadBucketSize === 0){
+                        ++loadBucketSize;
                         loadBucket.push({hash:hash,cb:callback});
                         loadBucketTimer = setTimeout(function(){
                             var myBucket = loadBucket;
                             loadBucket = [];
                             loadBucketTimer = null;
+                            loadBucketSize = 0;
                             loadObjects(myBucket);
-                        },1);
-                    } else if (loadBucket.length === 99){
+                        },10);
+                    } else if (loadBucketSize === 99){
                         loadBucket.push({hash:hash,cb:callback});
                         var myBucket = loadBucket;
                         loadBucket = [];
                         clearTimeout(loadBucketTimer);
                         loadBucketTimer = null;
+                        loadBucketSize = 0;
                         loadObjects(myBucket);
                     } else {
                         loadBucket.push({hash:hash,cb:callback});
+                        ++loadBucketSize;
                     }
                 } else {
                     callback(new Error(ERROR_DISCONNECTED));
@@ -9862,6 +9866,7 @@ define('storage/client',[ "util/assert", "util/guid" ], function (ASSERT, GUID) 
             }
 
             var loadBucket = [],
+                loadBucketSize = 0,
                 loadBucketTimer;
             function loadObjects (hashedObjects){
                 var hashes = {},i;
@@ -9869,7 +9874,7 @@ define('storage/client',[ "util/assert", "util/guid" ], function (ASSERT, GUID) 
                     hashes[hashedObjects[i].hash] = true;
                 }
                 hashes = Object.keys(hashes);
-                socket.emit('loadObjects',project,hashes,function objectLoaded(err,results){
+                socket.emit('loadObjects',project,hashes,function(err,results){
                     for(i=0;i<hashedObjects.length;i++){
                         hashedObjects[i].cb(err,results[hashedObjects[i].hash]);
                     }
@@ -9880,26 +9885,15 @@ define('storage/client',[ "util/assert", "util/guid" ], function (ASSERT, GUID) 
             function insertObject (object, callback) {
                 ASSERT(typeof callback === 'function');
                 if (socketConnected) {
-                    if(saveBucketSize === 0){
-                        ++saveBucketSize;
+                    if(saveBucket.length === 0){
                         saveBucket.push({object:object,cb:callback});
                         saveBucketTimer = setTimeout(function(){
-                            var myBucket = saveBucket;
-                            saveBucket = [];
-                            saveBucketTimer = null;
-                            saveBucketSize = 0;
-                            insertObjects(myBucket);
+                           flushSaveBucket();
                         },10);
-                    } else if (saveBucketSize === 99){
+                    } else if (saveBucket.length === 99){
                         saveBucket.push({object:object,cb:callback});
-                        var myBucket = saveBucket;
-                        saveBucket = [];
-                        clearTimeout(saveBucketTimer);
-                        saveBucketTimer = null;
-                        saveBucketSize = 0;
-                        insertObjects(myBucket);
+                        flushSaveBucket();
                     } else {
-                        ++saveBucketSize;
                         saveBucket.push({object:object,cb:callback});
                     }
                 } else {
@@ -9908,8 +9902,22 @@ define('storage/client',[ "util/assert", "util/guid" ], function (ASSERT, GUID) 
             }
 
             var saveBucket = [],
-                saveBucketSize = 0,
                 saveBucketTimer;
+
+            function flushSaveBucket(){
+                var myBucket = saveBucket;
+                saveBucket = [];
+                try{
+                    clearTimeout(saveBucketTimer);
+                } catch(e){
+                    //TODO there is no task to do here
+                }
+                saveBucketTimer = null;
+                if(myBucket.length > 0){
+                    insertObjects(myBucket);
+                }
+            }
+
             function insertObjects (objects) {
                 var storeObjects = [],i;
                 for(i=0;i<objects.length;i++){
@@ -10076,6 +10084,7 @@ define('storage/client',[ "util/assert", "util/guid" ], function (ASSERT, GUID) 
                         cb: callback,
                         to: setTimeout(callbackTimeout, options.timeout, guid)
                     };
+                    flushSaveBucket();
                     socket.emit('setBranchHash', project, branch, oldhash, newhash, function (err) {
                         if (callbacks[guid]) {
                             clearTimeout(callbacks[guid].to);
@@ -11537,25 +11546,26 @@ define('logManager',[], function () {
 	};
 
 	Logger = function (componentName) {
-		this.debug = function (msg) {
-			logMessage("DEBUG", componentName, msg);
-		};
+        function _getLog(level) {
+            if (isComponentAllowedToLog(componentName) === true && logLevels[level] <= currentLogLevel) {
+                return function log(msg) {
+                    logMessage(level, componentName, msg);
+                };
+            } else {
+                return function log_noop(msg) {
+                };
+            }
+        }
 
-		this.info = function (msg) {
-			logMessage("INFO", componentName, msg);
-		};
+		this.debug = _getLog("DEBUG");
 
-		this.warning = function (msg) {
-			logMessage("WARNING", componentName, msg);
-		};
+		this.info = _getLog("INFO");
 
-		this.warn = function (msg) {
-			logMessage("WARNING", componentName, msg);
-		};
+		this.warning = _getLog("WARNING");
 
-		this.error = function (msg) {
-			logMessage("ERROR", componentName, msg);
-		};
+		this.warn = _getLog("WARNING");
+
+		this.error = _getLog("ERROR");
 	};
 
     var _setLogLevel = function (level) {

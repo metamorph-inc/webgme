@@ -5,7 +5,11 @@
 require('./_globals.js');
 var WebGME = require('../webgme'),
   FS = require('fs'),
-  requirejs = require('requirejs');
+  requirejs = require('requirejs'),
+  config = WebGMEGlobal.getConfig();
+config.port = 45013;
+WebGMEGlobal.setConfig(config);
+
 requirejs.config({
   nodeRequire: require,
   paths:{
@@ -21,7 +25,7 @@ requirejs.config({
     "worker": "server/worker",
     "coreclient": "common/core/users",
     "blob": "middleware/blob",
-    "eventDispatcher": "common/eventDispatcher",
+    "eventDispatcher": "common/EventDispatcher",
     " /listAllDecorators": "../test/asset/empty",
     " /listAllPlugins": "../test/asset/empty",
     " /socket.io/socket.io.js": "socketio-client"
@@ -239,7 +243,7 @@ describe('Client#Basic#Pre',function(){
   CLNT.connectToDatabaseAsync({},done);
  });
  it('creates an empty project',function(done){
-  CLNT.createProjectAsync(projectName,done);
+  CLNT.createProjectAsync(projectName,{},done);
  });
  it('selects the empty project',function(done){
   CLNT.selectProjectAsync(projectName,done);

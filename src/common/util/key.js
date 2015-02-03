@@ -11,7 +11,7 @@ define([
 
   var keyType = null;
   var ZSSHA = new ZS();
-  function rand320Bits(){
+  function rand160Bits(){
     //#4ca8ccec576284f66055d9f6c1a571d48a70902c
     var result = "", i,code;
     for (i = 0; i < 40; i++) {
@@ -22,12 +22,13 @@ define([
     return result;
   }
   return function KeyGenerator(object){
-      return rand320Bits();
     if(keyType === null){
-      if(WebGMEGlobal && WebGMEGlobal.config && typeof WebGMEGlobal.config.keyType === 'string'){
+      if(typeof WebGMEGlobal !== 'undefined' && WebGMEGlobal.config && typeof WebGMEGlobal.config.keyType === 'string'){
         keyType = WebGMEGlobal.config.keyType;
-      } else if(WebGMEGlobal && typeof WebGMEGlobal.getConfig === 'function'){
+      } else if( typeof WebGMEGlobal !== 'undefined' && typeof WebGMEGlobal.getConfig === 'function') {
         keyType = WebGMEGlobal.getConfig().storageKeyType || "plainSHA1";
+      } else if(typeof GME !== 'undefined' && GME.config && typeof GME.config.keyType === 'string'){
+          keyType = GME.config.keyType;
       } else {
         keyType = "plainSHA1";
       }
@@ -36,8 +37,8 @@ define([
     ASSERT(typeof keyType === 'string');
 
     switch (keyType){
-      case 'rand320Bits':
-        return rand320Bits();
+      case 'rand160Bits':
+        return rand160Bits();
         break;
       case 'asmSHA1':
         return asmCrypto.SHA1.hex(CANON.stringify(object));

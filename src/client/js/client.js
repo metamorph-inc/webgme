@@ -1150,14 +1150,10 @@ define([
       function userEvents(userId, modifiedNodes) {
         var newPaths = {};
         var startErrorLevel = _loadError;
-          var pattern = function(i) {
-              if (_nodes[i]) { //TODO we only check pattern if its root is there...
-                  patternToPaths(i, _users[userId].PATTERNS[i], newPaths);
-              }
-          };
-          var patterns = _users[userId].PATTERNS;
-        for (var i in patterns) {
-            pattern(i);
+        for (var i in _users[userId].PATTERNS) {
+          if (_nodes[i]) { //TODO we only check pattern if its root is there...
+            patternToPaths(i, _users[userId].PATTERNS[i], newPaths);
+          }
         }
 
         if (startErrorLevel !== _loadError) {
@@ -1166,34 +1162,24 @@ define([
         var events = [];
 
         //deleted items
-          var delete_ = function(i) {
-              if (!newPaths[i]) {
-                  events.push({etype: 'unload', eid: i});
-              }
-          };
-          var paths = _users[userId].PATHS;
-        for (i in paths) {
-            delete_(i);
+        for (i in _users[userId].PATHS) {
+          if (!newPaths[i]) {
+            events.push({etype: 'unload', eid: i});
+          }
         }
 
         //added items
-          var new_ = function(i) {
-              if (!_users[userId].PATHS[i]) {
-                  events.push({etype: 'load', eid: i});
-              }
-          };
         for (i in newPaths) {
-            new_(i);
+          if (!_users[userId].PATHS[i]) {
+            events.push({etype: 'load', eid: i});
+          }
         }
 
         //updated items
-        var update = function(i) {
-            if (newPaths[modifiedNodes[i]]) {
-                events.push({etype: 'update', eid: modifiedNodes[i]});
-            }
-        };
         for (i = 0; i < modifiedNodes.length; i++) {
-            update(i);
+          if (newPaths[modifiedNodes[i]]) {
+            events.push({etype: 'update', eid: modifiedNodes[i]});
+          }
         }
 
         _users[userId].PATHS = newPaths;

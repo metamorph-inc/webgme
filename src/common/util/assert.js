@@ -13,7 +13,7 @@ define(function () {
 
 			console.log("Throwing", error.stack);
 			console.log();
-
+			
 			debugger;
 			throw error;
 		}

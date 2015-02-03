@@ -2092,7 +2092,7 @@ define('util/assert',[],function () {
 
 			console.log("Throwing", error.stack);
 			console.log();
-
+			
 			debugger;
 			throw error;
 		}
@@ -3491,7 +3491,7 @@ define('util/key',[
 
   var keyType = null;
   var ZSSHA = new ZS();
-  function rand320Bits(){
+  function rand160Bits(){
     //#4ca8ccec576284f66055d9f6c1a571d48a70902c
     var result = "", i,code;
     for (i = 0; i < 40; i++) {
@@ -3502,12 +3502,13 @@ define('util/key',[
     return result;
   }
   return function KeyGenerator(object){
-      return rand320Bits();
     if(keyType === null){
-      if(WebGMEGlobal && WebGMEGlobal.config && typeof WebGMEGlobal.config.keyType === 'string'){
+      if(typeof WebGMEGlobal !== 'undefined' && WebGMEGlobal.config && typeof WebGMEGlobal.config.keyType === 'string'){
         keyType = WebGMEGlobal.config.keyType;
-      } else if(WebGMEGlobal && typeof WebGMEGlobal.getConfig === 'function'){
+      } else if( typeof WebGMEGlobal !== 'undefined' && typeof WebGMEGlobal.getConfig === 'function') {
         keyType = WebGMEGlobal.getConfig().storageKeyType || "plainSHA1";
+      } else if(typeof GME !== 'undefined' && GME.config && typeof GME.config.keyType === 'string'){
+          keyType = GME.config.keyType;
       } else {
         keyType = "plainSHA1";
       }
@@ -3516,8 +3517,8 @@ define('util/key',[
     ASSERT(typeof keyType === 'string');
 
     switch (keyType){
-      case 'rand320Bits':
-        return rand320Bits();
+      case 'rand160Bits':
+        return rand160Bits();
         break;
       case 'asmSHA1':
         return asmCrypto.SHA1.hex(CANON.stringify(object));
@@ -3530,7 +3531,6 @@ define('util/key',[
     }
   }
 });
-
 /*
  * Copyright (C) 2012 Vanderbilt University, All rights reserved.
  * 
@@ -9569,7 +9569,7 @@ define('storage/client',[ "util/assert", "util/guid" ], function (ASSERT, GUID) 
             }
         }
 
-        function fsyncDatabase (callback) {
+        function fsyncDatabase (callback, projectName) {
             ASSERT(typeof callback === 'function');
             if (socketConnected) {
                 var guid = GUID();
@@ -9577,7 +9577,7 @@ define('storage/client',[ "util/assert", "util/guid" ], function (ASSERT, GUID) 
                     cb: callback,
                     to: setTimeout(callbackTimeout, options.timeout, guid)
                 };
-                socket.emit('fsyncDatabase', function (err) {
+                socket.emit('fsyncDatabase', projectName, function (err) {
                     if(callbacks[guid]){
                         clearTimeout(callbacks[guid].to);
                         delete callbacks[guid];
@@ -9774,7 +9774,7 @@ define('storage/client',[ "util/assert", "util/guid" ], function (ASSERT, GUID) 
                         to: setTimeout(callbackTimeout, options.timeout, guid)
                     };
                     flushSaveBucket();
-                    socket.emit('fsyncDatabase', function (err) {
+                    socket.emit('fsyncDatabase', project, function (err) {
                         if(callbacks[guid]){
                             clearTimeout(callbacks[guid].to);
                             delete callbacks[guid];
@@ -10244,500 +10244,486 @@ define('storage/client',[ "util/assert", "util/guid" ], function (ASSERT, GUID) 
  * Author: Tamas Kecskes
  */
 
-define('storage/failsafe',[ "util/assert", "util/guid" ], function (ASSERT, GUID) {
-	
-	var BRANCH_OBJ_ID = '*branch*';
-	var BRANCH_STATES = {
-		SYNC: 'sync',
-		FORKED: 'forked',
-		DISCONNECTED: 'disconnected',
-		AHEAD: 'ahead'
-	};
+define('storage/failsafe',["util/assert", "util/guid"], function (ASSERT, GUID) {
+  
+  var BRANCH_OBJ_ID = '*branch*';
+  var BRANCH_STATES = {
+    SYNC: 'sync',
+    FORKED: 'forked',
+    DISCONNECTED: 'disconnected',
+    AHEAD: 'ahead'
+  };
 
-	function Database (_database, options) {
-		ASSERT(typeof options === "object" && typeof _database === "object");
-		options.failsafe = options.failsafe || "memory";
-		options.failsafefrequency = options.failsafefrequency || 10000;
-		options.timeout = options.timeout || 10000;
+  function Database(_database, options) {
+    ASSERT(typeof options === "object" && typeof _database === "object");
+    options.failsafe = options.failsafe || "memory";
+    options.failsafefrequency = options.failsafefrequency || 10000;
+    options.timeout = options.timeout || 10000;
 
-		var exceptionErrors = [], fsId = "FS", dbId = options.database || "noID", SEPARATOR = "$", STATUS_CONNECTED = "connected", pendingStorage = {}, storage = null;
+    var exceptionErrors = [], fsId = "FS", dbId = options.database || "noID", SEPARATOR = "$", STATUS_CONNECTED = "connected", pendingStorage = {}, storage = null;
 
-		function loadPending () {
-			for ( var i = 0; i < storage.length; i++) {
-				if (storage.key(i).indexOf(fsId) === 0) {
-					var keyArray = storage.key(i).split(SEPARATOR);
-					ASSERT(keyArray.length === 4);
-					if (keyArray[1] === dbId) {
-						var object = JSON.parse(storage.getItem(storage.key(i)));
-						pendingStorage[keyArray[2]] = object;
-					}
-				}
-			}
-			for (i in pendingStorage) {
-				if (!pendingStorage[i][BRANCH_OBJ_ID]) {
-					pendingStorage[i][BRANCH_OBJ_ID] = {};
-				}
-			}
-		}
-
-		function savePending () {
-			//TODO maybe some check would be good, but not necessarily
-			for ( var i in pendingStorage) {
-				storage.setItem(fsId + SEPARATOR + dbId + SEPARATOR + i, JSON.stringify(pendingStorage[i]));
-			}
-		}
-
-		function openDatabase (callback) {
-			if (options.failsafe === "local" && localStorage) {
-				storage = localStorage;
-			} else if (options.failsafe === "session" && sessionStorage) {
-				storage = sessionStorage;
-			} else if (options.failsafe === "memory") {
-				storage = {
-					length: 0,
-					keys: [],
-					data: {},
-					getItem: function (key) {
-						ASSERT(typeof key === "string");
-						return this.data[key];
-					},
-					setItem: function (key, object) {
-						ASSERT(typeof key === "string" && typeof object === "string");
-						this.data[key] = object;
-						this.keys.push(key);
-						this.length++;
-					},
-					key: function (index) {
-						return this.keys[index];
-					}
-				};
-			}
-
-			if (storage) {
-				loadPending();
-				setInterval(savePending, options.failsafefrequency);
-				_database.openDatabase(callback);
-			} else {
-				callback(new Error('cannot initialize fail safe storage'));
-			}
-		}
-
-		function closeDatabase (callback) {
-			_database.closeDatabase(callback);
-		}
-
-		function fsyncDatabase (callback) {
-			_database.fsyncDatabase(function (err) {
-				//TODO we should start to select amongst errors
-				callback(null);
-			});
-		}
-
-		function getProjectNames (callback) {
-			_database.getProjectNames(callback);
-		}
-
-        function getAllowedProjectNames(callback) {
-            _database.getAllowedProjectNames(callback);
+    function loadPending() {
+      for (var i = 0; i < storage.length; i++) {
+        if (storage.key(i).indexOf(fsId) === 0) {
+          var keyArray = storage.key(i).split(SEPARATOR);
+          ASSERT(keyArray.length === 4);
+          if (keyArray[1] === dbId) {
+            var object = JSON.parse(storage.getItem(storage.key(i)));
+            pendingStorage[keyArray[2]] = object;
+          }
         }
+      }
+      for (i in pendingStorage) {
+        if (!pendingStorage[i][BRANCH_OBJ_ID]) {
+          pendingStorage[i][BRANCH_OBJ_ID] = {};
+        }
+      }
+    }
 
-		function deleteProject (project, callback) {
-			_database.deleteProject(project, callback);
-		}
+    function savePending() {
+      //TODO maybe some check would be good, but not necessarily
+      for (var i in pendingStorage) {
+        storage.setItem(fsId + SEPARATOR + dbId + SEPARATOR + i, JSON.stringify(pendingStorage[i]));
+      }
+    }
 
-		function openProject (projectName, callback) {
-			var project = null;
-			var inSync = true;
-			_database.openProject(projectName, function (err, proj) {
-				if (!err && proj) {
-					project = proj;
-					if (!pendingStorage[projectName]) {
-						pendingStorage[projectName] = {};
-						pendingStorage[projectName][BRANCH_OBJ_ID] = {};
-					}
-					callback(null, {
-						fsyncDatabase: fsyncDatabase,
-						getDatabaseStatus: project.getDatabaseStatus,
-						closeProject: project.closeProject,
-						loadObject: loadObject,
-						insertObject: insertObject,
-						getInfo: project.getInfo,
-						setInfo: project.setInfo,
-						findHash: project.findHash,
-						dumpObjects: project.dumpObjects,
-						getBranchNames: getBranchNames,
-						getBranchHash: getBranchHash,
-						setBranchHash: setBranchHash,
-						getCommits: project.getCommits,
-						makeCommit: project.makeCommit,
-						ID_NAME: project.ID_NAME
-					});
-				} else {
-					callback(err, project);
-				}
-			});
+    function openDatabase(callback) {
+      if (options.failsafe === "local" && localStorage) {
+        storage = localStorage;
+      } else if (options.failsafe === "session" && sessionStorage) {
+        storage = sessionStorage;
+      } else if (options.failsafe === "memory") {
+        storage = {
+          length: 0,
+          keys: [],
+          data: {},
+          getItem: function (key) {
+            ASSERT(typeof key === "string");
+            return this.data[key];
+          },
+          setItem: function (key, object) {
+            ASSERT(typeof key === "string" && typeof object === "string");
+            this.data[key] = object;
+            this.keys.push(key);
+            this.length++;
+          },
+          key: function (index) {
+            return this.keys[index];
+          }
+        };
+      }
 
-			function synchronise (callback) {
-				if (pendingStorage[projectName]) {
-					var objects = [];
-					var count = 0;
-					var savingObject = function (object, cb) {
-						project.insertObject(object, function (err) {
-							if (err) {
-								if (!pendingStorage[projectName]) {
-									pendingStorage[projectName] = {};
-								}
-								pendingStorage[projectName][object._id] = object;
-							}
-							cb();
-						});
-					};
-					var objectProcessed = function () {
-						if (--count === 0) {
-							callback();
-						}
-					};
+      if (storage) {
+        loadPending();
+        setInterval(savePending, options.failsafefrequency);
+        _database.openDatabase(callback);
+      } else {
+        callback(new Error('cannot initialize fail safe storage'));
+      }
+    }
 
-					for ( var i in pendingStorage[projectName]) {
-						if (i !== BRANCH_OBJ_ID) {
-							objects.push(pendingStorage[projectName][i]);
-						}
-					}
-					var branchObj = pendingStorage[projectName][BRANCH_OBJ_ID];
-					pendingStorage[projectName] = {};
-					pendingStorage[projectName][BRANCH_OBJ_ID] = branchObj;
+    function openProject(projectName, callback) {
+      var project = null;
+      var inSync = true;
+      _database.openProject(projectName, function (err, proj) {
+        if (!err && proj) {
+          project = proj;
+          if (!pendingStorage[projectName]) {
+            pendingStorage[projectName] = {};
+            pendingStorage[projectName][BRANCH_OBJ_ID] = {};
+          }
+          callback(null, {
+            fsyncDatabase: project.fsyncDatabase,
+            getDatabaseStatus: project.getDatabaseStatus,
+            closeProject: project.closeProject,
+            loadObject: loadObject,
+            insertObject: insertObject,
+            getInfo: project.getInfo,
+            setInfo: project.setInfo,
+            findHash: project.findHash,
+            dumpObjects: project.dumpObjects,
+            getBranchNames: getBranchNames,
+            getBranchHash: getBranchHash,
+            setBranchHash: setBranchHash,
+            getCommits: project.getCommits,
+            makeCommit: project.makeCommit,
+            ID_NAME: project.ID_NAME
+          });
+        } else {
+          callback(err, project);
+        }
+      });
 
-					//synchronizing the branches
-					var aheadBranches = [];
-					for (i in pendingStorage[projectName][BRANCH_OBJ_ID]) {
-						if (pendingStorage[projectName][BRANCH_OBJ_ID][i].state === BRANCH_STATES.DISCONNECTED) {
-							if (pendingStorage[projectName][BRANCH_OBJ_ID][i].local.length > 0) {
-								pendingStorage[projectName][BRANCH_OBJ_ID][i].state = BRANCH_STATES.AHEAD;
-								//we try to save our local head
-								aheadBranches.push(i);
-							} else {
-								pendingStorage[projectName][BRANCH_OBJ_ID][i].state = BRANCH_STATES.SYNC;
-							}
-						}
-					}
+      function synchronise(callback) {
+        if (pendingStorage[projectName]) {
+          var objects = [];
+          var count = 0;
+          var savingObject = function (object, cb) {
+            project.insertObject(object, function (err) {
+              if (err) {
+                if (!pendingStorage[projectName]) {
+                  pendingStorage[projectName] = {};
+                }
+                pendingStorage[projectName][object._id] = object;
+              }
+              cb();
+            });
+          };
+          var objectProcessed = function () {
+            if (--count === 0) {
+              callback();
+            }
+          };
 
-					count = objects.length + aheadBranches.length;
-					for (i = 0; i < aheadBranches.length; i++) {
-						synchroniseBranch(aheadBranches[i], objectProcessed);
-					}
-					for (i = 0; i < objects.length; i++) {
-						savingObject(objects[i], objectProcessed);
-					}
-					if (objects.length === 0) {
-						callback();
-					}
-				} else {
-					callback();
-				}
-			}
+          for (var i in pendingStorage[projectName]) {
+            if (i !== BRANCH_OBJ_ID) {
+              objects.push(pendingStorage[projectName][i]);
+            }
+          }
+          var branchObj = pendingStorage[projectName][BRANCH_OBJ_ID];
+          pendingStorage[projectName] = {};
+          pendingStorage[projectName][BRANCH_OBJ_ID] = branchObj;
 
-			function synchroniseBranch (branchname, callback) {
-				var branchObj = pendingStorage[projectName][BRANCH_OBJ_ID][branchname];
-				project.getBranchHash(branchname, branchObj.local[0], function (err, newhash, forked) {
-					if (!err && newhash) {
-						if (branchObj.local.indexOf(newhash) !== -1) {
-							project.setBranchHash(branchname, newhash, branchObj.local[0], callback);
-						} else {
-							//we forked
-							branchObj.state = BRANCH_STATES.FORKED;
-							branchObj.fork = newhash;
-							callback(null);
-						}
-					} else {
-						callback(err);
-					}
-				});
-			}
+          //synchronizing the branches
+          var aheadBranches = [];
+          for (i in pendingStorage[projectName][BRANCH_OBJ_ID]) {
+            if (pendingStorage[projectName][BRANCH_OBJ_ID][i].state === BRANCH_STATES.DISCONNECTED) {
+              if (pendingStorage[projectName][BRANCH_OBJ_ID][i].local.length > 0) {
+                pendingStorage[projectName][BRANCH_OBJ_ID][i].state = BRANCH_STATES.AHEAD;
+                //we try to save our local head
+                aheadBranches.push(i);
+              } else {
+                pendingStorage[projectName][BRANCH_OBJ_ID][i].state = BRANCH_STATES.SYNC;
+              }
+            }
+          }
 
-			function errorMode () {
-				if (inSync) {
-					inSync = false;
-					for ( var i in pendingStorage[projectName][BRANCH_OBJ_ID]) {
-						if (pendingStorage[projectName][BRANCH_OBJ_ID][i].state !== BRANCH_STATES.FORKED) {
-							pendingStorage[projectName][BRANCH_OBJ_ID][i].state = BRANCH_STATES.DISCONNECTED;
-						}
-					}
-					var checkIfAvailable = function (err, newstate) {
-						if (newstate === STATUS_CONNECTED) {
-							synchronise(function () {
-								inSync = true;
-							});
-						} else {
-							project.getDatabaseStatus(newstate, checkIfAvailable);
-						}
-					};
-					project.getDatabaseStatus(null, checkIfAvailable);
-				}
-			}
+          count = objects.length + aheadBranches.length;
+          for (i = 0; i < aheadBranches.length; i++) {
+            synchroniseBranch(aheadBranches[i], objectProcessed);
+          }
+          for (i = 0; i < objects.length; i++) {
+            savingObject(objects[i], objectProcessed);
+          }
+          if (objects.length === 0) {
+            callback();
+          }
+        } else {
+          callback();
+        }
+      }
 
-			function loadObject (hash, callback) {
-				project.loadObject(hash, function (err, object) {
-					if (!err && object) {
-						callback(null, object);
-					} else {
-						errorMode();
-						if (exceptionErrors.indexOf(err) !== -1) {
-							callback(err, object);
-						} else {
-							if (pendingStorage[projectName] && pendingStorage[projectName][hash]) {
-								callback(null, pendingStorage[projectName][hash]);
-							} else {
-								callback(err, object);
-							}
-						}
-					}
-				});
-			}
+      function synchroniseBranch(branchname, callback) {
+        var branchObj = pendingStorage[projectName][BRANCH_OBJ_ID][branchname];
+        project.getBranchHash(branchname, branchObj.local[0], function (err, newhash, forked) {
+          if (!err && newhash) {
+            var index = branchObj.unackedSentHashes.indexOf(newhash);
+            if (index !== -1) {
+              // the server will catch up eventually...
+            } else if (branchObj.local.indexOf(newhash) !== -1) {
+              project.setBranchHash(branchname, newhash, branchObj.local[0], callback);
+            } else {
+              //we forked
+              branchObj.state = BRANCH_STATES.FORKED;
+              branchObj.fork = newhash;
+              callback(null);
+            }
+          } else {
+            callback(err);
+          }
+        });
+      }
 
-			function insertObject (object, callback) {
-				project.insertObject(object, function (err) {
-					if (err) {
-						errorMode();
-						if (exceptionErrors.indexOf(err) !== -1) {
-							callback(err);
-						} else {
-							//TODO have to check if the id is already taken...
-							if (!pendingStorage[projectName]) {
-								pendingStorage[projectName] = {};
-							}
-							pendingStorage[projectName][object._id] = object;
-							callback(null);
-						}
-					} else {
-						callback(err);
-					}
-				});
-			}
+      function errorMode() {
+        if (inSync) {
+          inSync = false;
+          for (var i in pendingStorage[projectName][BRANCH_OBJ_ID]) {
+            if (pendingStorage[projectName][BRANCH_OBJ_ID][i].state !== BRANCH_STATES.FORKED) {
+              pendingStorage[projectName][BRANCH_OBJ_ID][i].state = BRANCH_STATES.DISCONNECTED;
+            }
+          }
+          var checkIfAvailable = function (err, newstate) {
+            if (newstate === STATUS_CONNECTED) {
+              synchronise(function () {
+                inSync = true;
+              });
+            } else {
+              project.getDatabaseStatus(newstate, checkIfAvailable);
+            }
+          };
+          project.getDatabaseStatus(null, checkIfAvailable);
+        }
+      }
 
-			function getBranchNames (callback) {
-				project.getBranchNames(function (err, names) {
-					//we need the locally stored names either way
-					var locals = {};
-					for ( var i in pendingStorage[projectName][BRANCH_OBJ_ID]) {
-						if (pendingStorage[projectName][BRANCH_OBJ_ID][i].local.length > 0) {
-							locals[i] = pendingStorage[projectName][BRANCH_OBJ_ID][i].local[0];
-						} else if (pendingStorage[projectName][BRANCH_OBJ_ID][i].fork === null && pendingStorage[projectName][BRANCH_OBJ_ID][i].remote !== null) {
-							locals[i] = pendingStorage[projectName][BRANCH_OBJ_ID][i].remote;
-						}
-					}
+      function loadObject(hash, callback) {
+        project.loadObject(hash, function (err, object) {
+          if (!err && object) {
+            callback(null, object);
+          } else {
+            errorMode();
+            if (exceptionErrors.indexOf(err) !== -1) {
+              callback(err, object);
+            } else {
+              if (pendingStorage[projectName] && pendingStorage[projectName][hash]) {
+                callback(null, pendingStorage[projectName][hash]);
+              } else {
+                callback(err, object);
+              }
+            }
+          }
+        });
+      }
 
-					if (err) {
-						errorMode();
-						if (exceptionErrors.indexOf(err) !== -1) {
-							callback(err);
-						} else {
-							callback(null, locals);
-						}
-					} else {
-						for (i in names) {
-							if (!locals[i]) {
-								locals[i] = names[i];
-							} else if (locals[i] === pendingStorage[projectName][BRANCH_OBJ_ID][i].remote) {
-								locals[i] = names[i];
-							}
-						}
-						callback(err, locals);
-					}
-				});
-			}
+      function insertObject(object, callback) {
+        project.insertObject(object, function (err) {
+          if (err) {
+            errorMode();
+            if (exceptionErrors.indexOf(err) !== -1) {
+              callback(err);
+            } else {
+              //TODO have to check if the id is already taken...
+              if (!pendingStorage[projectName]) {
+                pendingStorage[projectName] = {};
+              }
+              pendingStorage[projectName][object._id] = object;
+              callback(null);
+            }
+          } else {
+            callback(err);
+          }
+        });
+      }
 
-			function getBranchHash (branch, oldhash, callback) {
-				if (!pendingStorage[projectName][BRANCH_OBJ_ID][branch]) {
-					pendingStorage[projectName][BRANCH_OBJ_ID][branch] = {
-						local: [],
-						fork: null,
-						state: BRANCH_STATES.SYNC,
-						remote: null
-					};
-				}
-				var branchObj = pendingStorage[projectName][BRANCH_OBJ_ID][branch];
+      function getBranchNames(callback) {
+        project.getBranchNames(function (err, names) {
+          //we need the locally stored names either way
+          var locals = {};
+          for (var i in pendingStorage[projectName][BRANCH_OBJ_ID]) {
+            if (pendingStorage[projectName][BRANCH_OBJ_ID][i].local.length > 0) {
+              locals[i] = pendingStorage[projectName][BRANCH_OBJ_ID][i].local[0];
+            } else if (pendingStorage[projectName][BRANCH_OBJ_ID][i].fork === null && pendingStorage[projectName][BRANCH_OBJ_ID][i].remote !== null) {
+              locals[i] = pendingStorage[projectName][BRANCH_OBJ_ID][i].remote;
+            }
+          }
 
-				if (branchObj.state === BRANCH_STATES.SYNC || branchObj.state === BRANCH_STATES.AHEAD) {
-					project.getBranchHash(branch, oldhash, function (err, newhash, forkedhash) {
-						if (!err && newhash) {
-							branchObj.remote = newhash;
-						}
-						switch (branchObj.state) {
-						case BRANCH_STATES.SYNC:
-							callback(err, newhash, forkedhash);
-							break;
-						case BRANCH_STATES.AHEAD:
-							if (err) {
-								callback(err, newhash, forkedhash);
-							} else {
-								var index = branchObj.unackedSentHashes.indexOf(newhash);
-								if (newhash && index !== -1) {
-									branchObj.unackedSentHashes.splice(index+1, branchObj.unackedSentHashes.length);
-									callback(err, newhash, forkedhash);
-								} else {
-									//we forked!!!
-									branchObj.state = BRANCH_STATES.FORKED;
-									branchObj.fork = newhash;
-									callback(null, branchObj.local[0], branchObj.fork);
-								}
-							}
-							break;
-						case BRANCH_STATES.DISCONNECTED:
-							callback(null, branchObj.local[0], branchObj.fork);
-							break;
-						default://forked
-							callback(null, branchObj.local[0], branchObj.fork);
-							break;
-						}
-					});
-				} else {
-					//served locally
-					ASSERT((branchObj.local[0] && branchObj.local[0] !== "") || branchObj.remote);
-					var myhash = null;
-					if (branchObj.local[0]) {
-						myhash = branchObj.local[0];
-					} else {
-						myhash = branchObj.remote;
-					}
+          if (err) {
+            errorMode();
+            if (exceptionErrors.indexOf(err) !== -1) {
+              callback(err);
+            } else {
+              callback(null, locals);
+            }
+          } else {
+            for (i in names) {
+              if (!locals[i]) {
+                locals[i] = names[i];
+              } else if (locals[i] === pendingStorage[projectName][BRANCH_OBJ_ID][i].remote) {
+                locals[i] = names[i];
+              }
+            }
+            callback(err, locals);
+          }
+        });
+      }
 
-					if (myhash === oldhash) {
-						setTimeout(function () {
-							callback(null, oldhash, branchObj.fork);
-						}, options.timeout);
-					} else {
-						callback(null, myhash, branchObj.fork);
-					}
+      function getBranchHash(branch, oldhash, callback) {
+        if (!pendingStorage[projectName][BRANCH_OBJ_ID][branch]) {
+          pendingStorage[projectName][BRANCH_OBJ_ID][branch] = {
+            local: [],
+            fork: null,
+            state: BRANCH_STATES.SYNC,
+            remote: null
+          };
+        }
+        var branchObj = pendingStorage[projectName][BRANCH_OBJ_ID][branch];
 
-				}
-			}
+        if (branchObj.state === BRANCH_STATES.SYNC || branchObj.state === BRANCH_STATES.AHEAD) {
+          project.getBranchHash(branch, oldhash, function (err, newhash, forkedhash) {
+            if (!err && newhash) {
+              branchObj.remote = newhash;
+            }
+            switch (branchObj.state) {
+              case BRANCH_STATES.SYNC:
+                callback(err, newhash, forkedhash);
+                break;
+              case BRANCH_STATES.AHEAD:
+                if (err) {
+                  callback(err, newhash, forkedhash);
+                } else {
+                  var index = branchObj.unackedSentHashes.indexOf(newhash);
+                  if (newhash && index !== -1) {
+                    callback(err, newhash, forkedhash);
+                  } else {
+                    //we forked!!!
+                    branchObj.state = BRANCH_STATES.FORKED;
+                    branchObj.fork = newhash;
+                    callback(null, branchObj.local[0], branchObj.fork);
+                  }
+                }
+                break;
+              case BRANCH_STATES.DISCONNECTED:
+                callback(null, branchObj.local[0], branchObj.fork);
+                break;
+              default://forked
+                callback(null, branchObj.local[0], branchObj.fork);
+                break;
+            }
+          });
+        } else {
+          //served locally
+          ASSERT((branchObj.local[0] && branchObj.local[0] !== "") || branchObj.remote);
+          var myhash = null;
+          if (branchObj.local[0]) {
+            myhash = branchObj.local[0];
+          } else {
+            myhash = branchObj.remote;
+          }
 
-			function setBranchHash (branch, oldhash, newhash, callback) {
-				ASSERT(typeof oldhash === 'string' && typeof newhash === 'string');
-				if (!pendingStorage[projectName][BRANCH_OBJ_ID][branch]) {
-					pendingStorage[projectName][BRANCH_OBJ_ID][branch] = {
-						local: [],
-						fork: null,
-						state: BRANCH_STATES.SYNC
-					};
-				}
-				var branchObj = pendingStorage[projectName][BRANCH_OBJ_ID][branch];
+          if (myhash === oldhash) {
+            setTimeout(function () {
+              callback(null, oldhash, branchObj.fork);
+            }, options.timeout);
+          } else {
+            callback(null, myhash, branchObj.fork);
+          }
 
-				var returnFunction = function (err) {
-					if (!err) {
-						var index = branchObj.local.indexOf(newhash);
-						ASSERT(index !== -1);
-						branchObj.local.splice(index, branchObj.local.length - index);
-						if (branchObj.local.length === 0) {
-							branchObj.state = BRANCH_STATES.SYNC;
-						}
-						callback(null);
-					} else {
-						/*//we go to disconnected state
-						ASSERT(branchObj.local.length > 0);
-						if(branchObj.state !== BRANCH_STATES.DISCONNECTED){
-						    branchObj.state = BRANCH_STATES.DISCONNECTED;
-						    var reSyncBranch = function(err,newhash,forkedhash){
-						        if(!err && newhash){
-						            if(branchObj.local.indexOf(newhash) === -1){
-						                //we forked
-						                branchObj.fork = newhash;
-						                branchObj.state = BRANCH_STATES.FORKED;
-						            } else {
-						                setBranchHash(branch,newhash,branchObj.local[0],function(){});
-						            }
-						        } else {
-						            //timeout or something not correct, so we should retry
-						            project.getBranchHash(branch,branchObj.local[0],reSyncBranch);
-						        }
-						    };
-						    project.getBranchHash(branch,branchObj.local[0],reSyncBranch);
-						}*/
-						//we have ancountered an error
-						errorMode();
-					}
-				};
+        }
+      }
 
-				switch (branchObj.state) {
-				case BRANCH_STATES.SYNC:
-					ASSERT(branchObj.local.length === 0);
-					branchObj.state = BRANCH_STATES.AHEAD;
-					branchObj.local = [ newhash, oldhash ];
-					branchObj.unackedSentHashes = [newhash, oldhash];
-					project.setBranchHash(branch, oldhash, newhash, returnFunction);
-					return;
-				case BRANCH_STATES.AHEAD:
-					ASSERT(branchObj.local.length > 0);
-					if (oldhash === branchObj.local[0]) {
-						branchObj.local.unshift(newhash);
-						branchObj.unackedSentHashes.unshift(newhash);
-						project.setBranchHash(branch, oldhash, newhash, returnFunction);
-					} else {
-						callback(new Error("branch hash mismatch"));
-					}
-					return;
-				case BRANCH_STATES.DISCONNECTED:
-					/*ASSERT(branchObj.local.length > 0 || branchObj.remote);
-					if(oldhash === branchObj.local[0] || oldhash === branchObj.remote){
-					    if(branchObj.local.length === 0){
-					        branchObj.local = [newhash,oldhash];
-					    } else {
-					        branchObj.local.unshift(newhash);
-					    }
-					    callback(null);
-					} else {
-					    callback(new Error("branch hash mismatch"));
-					}*/
-					if (branchObj.local.length === 0) {
-						branchObj.local = [ newhash, oldhash ];
-						callback(null);
-					} else {
-						if (oldhash === branchObj.local[0]) {
-							branchObj.local.unshift(newhash);
-							callback(null);
-						} else {
-							callback(new Error("branch hash mismatch"));
-						}
-					}
-					return;
-				default: //BRANCH_STATES.FORKED
-					ASSERT(branchObj.local.length > 0 && branchObj.fork);
-					if (oldhash === branchObj.local[0]) {
-						if (branchObj.fork === newhash) {
-							//clearing the forked leg
-							branchObj.fork = null;
-							branchObj.state = BRANCH_STATES.SYNC;
-							branchObj.local = [];
-						} else {
-							branchObj.local.unshift(newhash);
-						}
-						callback(null);
-					} else {
-						callback(new Error("branch hash mismatch"));
-					}
-					return;
-				}
-			}
-		}
+      function setBranchHash(branch, oldhash, newhash, callback) {
+        ASSERT(typeof oldhash === 'string' && typeof newhash === 'string');
+        if (!pendingStorage[projectName][BRANCH_OBJ_ID][branch]) {
+          pendingStorage[projectName][BRANCH_OBJ_ID][branch] = {
+            local: [],
+            fork: null,
+            state: BRANCH_STATES.SYNC
+          };
+        }
+        var branchObj = pendingStorage[projectName][BRANCH_OBJ_ID][branch];
 
-		return {
-			openDatabase: openDatabase,
-			closeDatabase: closeDatabase,
-			fsyncDatabase: fsyncDatabase,
-			getProjectNames: getProjectNames,
-            getAllowedProjectNames: getAllowedProjectNames,
-            getAuthorizationInfo: _database.getAuthorizationInfo,
-			getDatabaseStatus: _database.getDatabaseStatus,
-			openProject: openProject,
-			deleteProject: deleteProject,
-            simpleRequest: _database.simpleRequest,
-            simpleResult: _database.simpleResult,
-            simpleQuery: _database.simpleQuery,
-            getNextServerEvent: _database.getNextServerEvent,
-            getToken: _database.getToken
-		};
-	}
+        var returnFunction = function (err) {
+          if (!err) {
+            var index = branchObj.local.indexOf(newhash);
+            ASSERT(index !== -1 || branchObj.state === BRANCH_STATES.SYNC);
+            if (index !== -1) {
+              branchObj.local.splice(index, branchObj.local.length - index);
+            }
+            index = branchObj.unackedSentHashes.indexOf(newhash);
+            if (index !== -1) {
+              branchObj.unackedSentHashes.splice(index + 1, branchObj.unackedSentHashes.length);
+            }
+            if (branchObj.local.length === 0) {
+              branchObj.state = BRANCH_STATES.SYNC;
+            }
+          } else {
+            /*//we go to disconnected state
+             ASSERT(branchObj.local.length > 0);
+             if(branchObj.state !== BRANCH_STATES.DISCONNECTED){
+             branchObj.state = BRANCH_STATES.DISCONNECTED;
+             var reSyncBranch = function(err,newhash,forkedhash){
+             if(!err && newhash){
+             if(branchObj.local.indexOf(newhash) === -1){
+             //we forked
+             branchObj.fork = newhash;
+             branchObj.state = BRANCH_STATES.FORKED;
+             } else {
+             setBranchHash(branch,newhash,branchObj.local[0],function(){});
+             }
+             } else {
+             //timeout or something not correct, so we should retry
+             project.getBranchHash(branch,branchObj.local[0],reSyncBranch);
+             }
+             };
+             project.getBranchHash(branch,branchObj.local[0],reSyncBranch);
+             }*/
+            //we have ancountered an error
+            errorMode();
+          }
+        };
 
-	return Database;
+        switch (branchObj.state) {
+          case BRANCH_STATES.SYNC:
+            ASSERT(branchObj.local.length === 0);
+            branchObj.state = BRANCH_STATES.AHEAD;
+            branchObj.local = [newhash, oldhash];
+            branchObj.unackedSentHashes = [newhash, oldhash];
+            project.setBranchHash(branch, oldhash, newhash, returnFunction);
+            callback(null);
+            return;
+          case BRANCH_STATES.AHEAD:
+            ASSERT(branchObj.local.length > 0);
+            if (oldhash === branchObj.local[0]) {
+              branchObj.local.unshift(newhash);
+              branchObj.unackedSentHashes.unshift(newhash);
+              project.setBranchHash(branch, oldhash, newhash, returnFunction);
+              callback(null);
+            } else {
+              callback(new Error("branch hash mismatch"));
+            }
+            return;
+          case BRANCH_STATES.DISCONNECTED:
+            /*ASSERT(branchObj.local.length > 0 || branchObj.remote);
+             if(oldhash === branchObj.local[0] || oldhash === branchObj.remote){
+             if(branchObj.local.length === 0){
+             branchObj.local = [newhash,oldhash];
+             } else {
+             branchObj.local.unshift(newhash);
+             }
+             callback(null);
+             } else {
+             callback(new Error("branch hash mismatch"));
+             }*/
+            if (branchObj.local.length === 0) {
+              branchObj.local = [newhash, oldhash];
+              callback(null);
+            } else {
+              if (oldhash === branchObj.local[0]) {
+                branchObj.local.unshift(newhash);
+                callback(null);
+              } else {
+                callback(new Error("branch hash mismatch"));
+              }
+            }
+            return;
+          default: //BRANCH_STATES.FORKED
+            ASSERT(branchObj.local.length > 0 && branchObj.fork);
+            if (oldhash === branchObj.local[0]) {
+              if (branchObj.fork === newhash) {
+                //clearing the forked leg
+                branchObj.fork = null;
+                branchObj.state = BRANCH_STATES.SYNC;
+                branchObj.local = [];
+              } else {
+                branchObj.local.unshift(newhash);
+              }
+              callback(null);
+            } else {
+              callback(new Error("branch hash mismatch"));
+            }
+            return;
+        }
+      }
+    }
+
+    return {
+      openDatabase: openDatabase,
+      closeDatabase: _database.closeDatabase,
+      fsyncDatabase: _database.fsyncDatabase,
+      getProjectNames: _database.getProjectNames,
+      getAllowedProjectNames: _database.getAllowedProjectNames,
+      getAuthorizationInfo: _database.getAuthorizationInfo,
+      getDatabaseStatus: _database.getDatabaseStatus,
+      openProject: openProject,
+      deleteProject: _database.deleteProject,
+      simpleRequest: _database.simpleRequest,
+      simpleResult: _database.simpleResult,
+      simpleQuery: _database.simpleQuery,
+      getNextServerEvent: _database.getNextServerEvent,
+      getToken: _database.getToken
+    };
+  }
+
+  return Database;
 });
 
 /*
@@ -10856,9 +10842,9 @@ define('storage/cache',[ "util/assert" ], function (ASSERT) {
 					maybeFreeze(obj[key]);
 				}
 			};
-            if (typeof WebGMEGlobal !== 'undefined' && typeof WebGMEGlobal.getConfig !== 'undefined' && !WebGMEGlobal.getConfig().debug) {
-                deepFreeze = function () { };
-            }
+			if (typeof WebGMEGlobal !== 'undefined' && typeof WebGMEGlobal.getConfig !== 'undefined' && !WebGMEGlobal.getConfig().debug) {
+				deepFreeze = function () { };
+			}
 
 			function cacheInsert (key, obj) {
 				ASSERT(typeof cache[key] === "undefined" && obj[ID_NAME] === key);
@@ -16289,14 +16275,10 @@ define('client',[
       function userEvents(userId, modifiedNodes) {
         var newPaths = {};
         var startErrorLevel = _loadError;
-          var pattern = function(i) {
-              if (_nodes[i]) { //TODO we only check pattern if its root is there...
-                  patternToPaths(i, _users[userId].PATTERNS[i], newPaths);
-              }
-          };
-          var patterns = _users[userId].PATTERNS;
-        for (var i in patterns) {
-            pattern(i);
+        for (var i in _users[userId].PATTERNS) {
+          if (_nodes[i]) { //TODO we only check pattern if its root is there...
+            patternToPaths(i, _users[userId].PATTERNS[i], newPaths);
+          }
         }
 
         if (startErrorLevel !== _loadError) {
@@ -16305,34 +16287,24 @@ define('client',[
         var events = [];
 
         //deleted items
-          var delete_ = function(i) {
-              if (!newPaths[i]) {
-                  events.push({etype: 'unload', eid: i});
-              }
-          };
-          var paths = _users[userId].PATHS;
-        for (i in paths) {
-            delete_(i);
+        for (i in _users[userId].PATHS) {
+          if (!newPaths[i]) {
+            events.push({etype: 'unload', eid: i});
+          }
         }
 
         //added items
-          var new_ = function(i) {
-              if (!_users[userId].PATHS[i]) {
-                  events.push({etype: 'load', eid: i});
-              }
-          };
         for (i in newPaths) {
-            new_(i);
+          if (!_users[userId].PATHS[i]) {
+            events.push({etype: 'load', eid: i});
+          }
         }
 
         //updated items
-        var update = function(i) {
-            if (newPaths[modifiedNodes[i]]) {
-                events.push({etype: 'update', eid: modifiedNodes[i]});
-            }
-        };
         for (i = 0; i < modifiedNodes.length; i++) {
-            update(i);
+          if (newPaths[modifiedNodes[i]]) {
+            events.push({etype: 'update', eid: modifiedNodes[i]});
+          }
         }
 
         _users[userId].PATHS = newPaths;
@@ -20329,6 +20301,12 @@ define('blob/BlobClient',['./Artifact', 'blob/BlobMetadata', 'superagent'], func
         if (typeof window !== 'undefined' && typeof Buffer !== 'undefined' && data instanceof Buffer) {
             data = toArrayBuffer(data); // FIXME will this have performance problems
         }
+        // on node, empty Buffers will cause a crash in superagent
+        if (typeof window === 'undefined' && typeof Buffer !== 'undefined' && data instanceof Buffer) {
+            if (data.length === 0) {
+                data = '';
+            }
+        }
         superagent.post(this.getCreateURL(name))
             .set('Content-Type', 'application/octet-stream')
             .set('Content-Length', data.length)
@@ -21677,7 +21655,6 @@ define('plugin/PluginManagerBase',[
 
         return PluginManagerBase;
     });
-
 define('js/Dialogs/PluginConfig/PluginConfigDialog',[], function () {
    return;
 });

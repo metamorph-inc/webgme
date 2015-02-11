@@ -156,9 +156,12 @@ require(
                 DEBUG = CONFIG.debug;
             }
 
+            //#2 check URL
             var d = util.getURLParameterByName('debug').toLowerCase();
             if (d === 'true') {
                 DEBUG = true;
+            } else if (d === 'false') {
+                DEBUG = false;
             }
 
             if (CONFIG.paths) {

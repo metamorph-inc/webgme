@@ -14,7 +14,8 @@ define([
     'coreclient/dumpmore',
     'coreclient/import',
     'coreclient/copyimport',
-    'coreclient/serialization'
+    'coreclient/serialization',
+    'core/tasync'
   ],
   function (
     ASSERT,
@@ -30,7 +31,8 @@ define([
     DumpMore,
     MergeImport,
     Import,
-    Serialization) {
+    Serialization,
+    TASYNC) {
 
     "use strict";
 
@@ -46,7 +48,8 @@ define([
 
     function getNewCore(project) {
       //return new NullPointerCore(new DescriptorCore(new SetCore(new GuidCore(new Core(project)))));
-      return Core(project, {autopersist: true, usertype: 'nodejs'});
+      var options = {autopersist: true, usertype: 'nodejs'};
+      return Core(project, options);
     }
 
     function UndoRedo(_client) {
@@ -164,6 +167,7 @@ define([
         _selfCommits = {},
         AllPlugins, AllDecorators;
 
+
       if (!_configuration.host) {
         if (window) {
           _configuration.host = window.location.protocol + "//" + window.location.host;
@@ -171,10 +175,17 @@ define([
           _configuration.host = "";
         }
       }
-      require([_configuration.host + '/listAllDecorators', _configuration.host + '/listAllPlugins'], function (d, p) {
-        AllDecorators = WebGMEGlobal.allDecorators;
-        AllPlugins = WebGMEGlobal.allPlugins;
-      });
+      if(typeof WebGMEGlobal !== 'undefined') {
+        require([_configuration.host + '/listAllDecorators', _configuration.host + '/listAllPlugins'], function (d, p) {
+          AllDecorators = WebGMEGlobal.allDecorators;
+          AllPlugins = WebGMEGlobal.allPlugins;
+        });
+      } else {
+        console.warn('WebGMEGlobal not defined - cannot get plugins.');
+      }
+
+
+
 
       function print_nodes(pretext) {
         if (pretext) {
@@ -200,6 +211,15 @@ define([
       _configuration.reconnamount = _configuration.reconnamount || 1000;
       _configuration.autostart = _configuration.autostart === null || _configuration.autostart === undefined ? false : _configuration.autostart;
 
+      if( typeof GME !== 'undefined'){
+        GME.config = GME.config || {};
+        GME.config.keyType = _configuration.storageKeyType;
+      }
+
+      if( typeof WebGMEGlobal !== 'undefined'){
+        WebGMEGlobal.config = WebGMEGlobal.config || {};
+        WebGMEGlobal.config.keyType = _configuration.storageKeyType;
+      }
 
       //TODO remove the usage of jquery
       //$.extend(_self, new EventDispatcher());
@@ -243,7 +263,16 @@ define([
       }
 
       function newDatabase() {
-        return Storage({log: LogManager.create('client-storage'), user: getUserId(), host: _configuration.host});
+        var storageOptions ={log: LogManager.create('client-storage'), host: _configuration.host};
+        if(typeof WebGMEGlobal !== 'undefined' && WebGMEGlobal.TESTING === true){
+          storageOptions.type = 'node';
+          storageOptions.host = 'http://localhost';
+          storageOptions.port = _configuration.port;
+          storageOptions.user = "TEST";
+        } else {
+          storageOptions.user = getUserId();
+        }
+        return Storage(storageOptions);
       }
 
       function changeBranchState(newstate) {
@@ -518,7 +547,9 @@ define([
         refreshToken();
 
         //TODO check if this is okay to set it here
-        WebGMEGlobal.getToken = getToken;
+        if(typeof WebGMEGlobal !== 'undefined') {
+           WebGMEGlobal.getToken = getToken;
+        }
         return {
           getToken: getToken
         };
@@ -1288,21 +1319,11 @@ define([
       }
 
       function loadRoot(newRootHash, callback) {
-        //with the newer approach we try to optimize a bit the mechanizm of the loading and try to get rid of the paralellism behind it
+        //with the newer approach we try to optimize a bit the mechanism of the loading and try to get rid of the paralellism behind it
         var patterns = {},
           orderedPatternIds = [],
           error = null,
-          i, j, keysi, keysj,
-          loadNextPattern = function (index) {
-            if (index < orderedPatternIds.length) {
-              loadPattern(_core, orderedPatternIds[index], patterns[orderedPatternIds[index]], _loadNodes, function (err) {
-                error = error || err;
-                loadNextPattern(index + 1);
-              });
-            } else {
-              callback(error);
-            }
-          };
+          i, j, keysi, keysj;
         _loadNodes = {};
         _loadError = 0;
 
@@ -1341,7 +1362,12 @@ define([
               callback(null);
               reLaunchUsers();
             } else {
-              loadNextPattern(0);
+                var _loadPattern = TASYNC.throttle(TASYNC.wrap(loadPattern), 1);
+                var fut = TASYNC.lift(
+                    orderedPatternIds.map(function (pattern, index) {
+                        return TASYNC.apply(_loadPattern, [_core, pattern, patterns[pattern], _loadNodes], this);
+                    }));
+                TASYNC.unwrap(function() { return fut; })(callback);
             }
           } else {
             callback(err);
@@ -1450,9 +1476,6 @@ define([
               callback(err);
             });
             //loading(newRootHash);
-          } else {
-            _core.persist(_nodes[ROOT_PATH].node, function (err) {
-            });
           }
         } else {
           _msg = "";
@@ -1539,7 +1562,7 @@ define([
         }
       }
 
-      function createProjectAsync(projectname, callback) {
+      function createProjectAsync(projectname, projectInfo, callback) {
         if (_database) {
           getAvailableProjectsAsync(function (err, names) {
             if (!err && names) {
@@ -1548,7 +1571,14 @@ define([
                   if (!err && p) {
                     createEmptyProject(p, function (err, commit) {
                       if (!err && commit) {
-                        callback(null);
+                        //TODO currently this is just a hack
+                        p.setInfo(projectInfo || {
+                          visibleName:projectname,
+                          description:"project in webGME",
+                          tags:{}
+                        },function(err){
+                          callback(err);
+                        });
                       } else {
                         callback(err);
                       }
@@ -2725,23 +2755,11 @@ define([
         //});
         switch (testnumber) {
           case 1:
-            /*queryAddOn("HistoryAddOn", {}, function (err, result) {
-              console.log("addon result", err, result);
-            });*/
-            _core.loadTree(_rootHash,function(err,nodes){
-              console.log(err,nodes);
-            });
             break;
           case 2:
-            /*queryAddOn("ConstraintAddOn", {querytype: 'checkProject'}, function (err, result) {
-              console.log("addon result", err, result);
-            });*/
-            Serialization.export(_core,_root,function(err,json){
-              console.log('ready to export',err,json);
-            });
+
             break;
           case 3:
-            console.log(_core.getBaseType(_nodes[WebGMEGlobal.State.getActiveObject()].node));
             break;
         }
 
@@ -2876,7 +2894,8 @@ define([
 
       function createProjectFromFileAsync(projectname, jProject, callback) {
         //if called on an existing project, it will ruin it!!! - although the old commits will be untouched
-        createProjectAsync(projectname, function (err) {
+        //TODO somehow the export / import should contain the INFO field so the tags and description could come from it
+        createProjectAsync(projectname, {}, function (err) {
           selectProjectAsync(projectname, function (err) {
             Serialization.import(_core, _root, jProject, function (err) {
               if (err) {
@@ -2968,6 +2987,33 @@ define([
           }
           _database.simpleResult(id, callback);
         });
+      }
+
+      function setProjectInfoAsync(projectId,info,callback){
+        _database.simpleRequest({command:'setProjectInfo',projectId:projectId,info:info},function(err,rId){
+          if(err){
+            return callback(err);
+          }
+          _database.simpleResult(rId,callback);
+        })
+      }
+
+      function getProjectInfoAsync(projectId,callback){
+        _database.simpleRequest({command:'getProjectInfo',projectId:projectId},function(err,rId){
+          if(err){
+            return callback(err);
+          }
+          _database.simpleResult(rId,callback);
+        })
+      }
+
+      function getAllInfoTagsAsync(callback){
+        _database.simpleRequest({command:'getAllInfoTags'},function(err,rId){
+          if(err){
+            return callback(err);
+          }
+          _database.simpleResult(rId,callback);
+        })
       }
 
       function createGenericBranchAsync(project, branch, commit, callback) {
@@ -3174,6 +3220,9 @@ define([
         getFullProjectsInfoAsync: getFullProjectsInfoAsync,
         createGenericBranchAsync: createGenericBranchAsync,
         deleteGenericBranchAsync: deleteGenericBranchAsync,
+        setProjectInfoAsync: setProjectInfoAsync,
+        getProjectInfoAsync: getProjectInfoAsync,
+        getAllInfoTagsAsync: getAllInfoTagsAsync,
 
         //constraint
         setConstraint: setConstraint,

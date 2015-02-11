@@ -45,7 +45,7 @@ define(['logManager',
 
     function StandAloneServer(CONFIG){
         // if the config is not set we use the global
-        CONFIG = CONFIG || webGMEGlobal.getConfig();
+        CONFIG = CONFIG || WebGMEGlobal.getConfig();
         //public functions
         function start(){
             if(CONFIG.httpsecure){
@@ -73,6 +73,8 @@ define(['logManager',
             __storageOptions.host = CONFIG.mongoip;
             __storageOptions.port = CONFIG.mongoport;
             __storageOptions.database = CONFIG.mongodatabase;
+            __storageOptions.user = CONFIG.mongouser;
+            __storageOptions.pwd = CONFIG.mongopwd;
             __storageOptions.log = LogManager.create('StandAloneWebGMEServer-storage');
             __storageOptions.getToken = __gmeAuth.getToken;
 
@@ -89,8 +91,12 @@ define(['logManager',
             __storage.open();
         }
         function stop(){
-            __storage.close();
-            __httpServer.close();
+            try {
+                __storage.close();
+                __httpServer.close();
+            } catch(e){
+                //ignore errors
+            }
         }
         //internal functions
         function globalAuthorization(sessionId,projectName,type,callback){
@@ -347,7 +353,7 @@ define(['logManager',
             __canCheckToken = true,
             __httpServer = null,
             __logoutUrl = CONFIG.logoutUrl || '/',
-            __baseDir = webGMEGlobal.baseDir,
+            __baseDir = WebGMEGlobal.baseDir,
             __clientBaseDir = CONFIG.clientAppDir || __baseDir+'/client',
             __requestCounter = 0,
             __reportedRequestCounter = 0,
@@ -418,6 +424,7 @@ define(['logManager',
                 next();
             });
 
+            __app.use(Express.compress());
             __app.use(Express.cookieParser());
             __app.use(Express.bodyParser());
             __app.use(Express.methodOverride());
@@ -571,7 +578,7 @@ define(['logManager',
             expressFileSending(res,Path.join(__clientBaseDir,req.path));
         });
 
-        __app.get(/^\/.*\.(js|html|gif|png|bmp|svg|json|map)$/,ensureAuthenticated,function(req,res){
+        __app.get(/^\/.*\.(js|_js|html|gif|png|bmp|svg|json|map)$/,ensureAuthenticated,function(req,res){
             //package.json
             if(req.path === '/package.json') {
                 expressFileSending(res,Path.join(__baseDir, '..', req.path));

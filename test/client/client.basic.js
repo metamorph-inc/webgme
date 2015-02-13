@@ -7,6 +7,8 @@ require('../_globals');
 var FS = require('fs'),
   requirejs = require('requirejs'),
   config = WebGMEGlobal.getConfig();
+config.port = 9002;
+config.authentication = false; //we have to make sure that our current config doesn't affect the tests
 
 requirejs.config({
   nodeRequire: require,
@@ -222,12 +224,12 @@ var testTerritory = function(level,cb){
  return {
   setNext: setNext,
   finish: finish
- }
+ };
 };
 
 function createTestProject(callback) {
 
- CLNT.connectToDatabaseAsync({},function (err) {
+    CLNT.connectToDatabaseAsync({},function (err) {
    if (err) {
     callback(err);
     return;
@@ -308,17 +310,15 @@ function createTestProject(callback) {
 
 describe('Client tests', function () {
 
- before(function(done) {
-  config.port = 45013;
-  WebGMEGlobal.setConfig(config);
+    before(function(done) {
 
-  SRV = new global.WebGME.standaloneServer();
-  SRV.start();
+        SRV = new global.WebGME.standaloneServer(config);
+        SRV.start(function() {
+            CLNT = new CLIENT({host: " ", port: config.port});
 
-  CLNT = new CLIENT({host:" ",port:WebGMEGlobal.getConfig().port});
-
-  createTestProject(done);
- });
+            createTestProject(done);
+        });
+    });
 
  after(function(done) {
    CLNT.deleteProjectAsync(projectName, function (err) {

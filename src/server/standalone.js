@@ -77,8 +77,10 @@ define(['logManager',
                 __storageOptions.session = true;
                 __storageOptions.sessioncheck = __sessionStore.check;
                 __storageOptions.secret = CONFIG.sessioncookiesecret;
+                __storageOptions.authentication = CONFIG.authentication;
                 __storageOptions.authorization = globalAuthorization;
-                __storageOptions.authInfo = __gmeAuth.getAuthorizationInfo;
+                __storageOptions.auth_deleteProject = __gmeAuth.deleteProject;
+                __storageOptions.getAuthorizationInfo = __gmeAuth.getAuthorizationInfo;
             }
 
             __storageOptions.host = CONFIG.mongoip;
@@ -220,6 +222,12 @@ define(['logManager',
                                 res.send(400); //no use for redirecting in this case
                             }
                         });
+                    } else if (CONFIG.guest) {
+                        req.session.authenticated = true;
+                        req.session.udmId = 'anonymous';
+                        req.session.userType = 'GME';
+                        res.cookie('webgme', req.session.udmId);
+                        return next();
                     } else {
                         res.redirect('/login'+getRedirectUrlParameter(req));
                     }
@@ -471,7 +479,7 @@ define(['logManager',
             res.clearCookie('isisforge'); //todo is this really needed
             req.logout();
             req.session.authenticated = false;
-            req.session.userType = 'unknown';
+            req.session.userType = 'loggedout';
             res.redirect(__logoutUrl);
         });
         __app.get('/login',function(req,res){
@@ -503,7 +511,7 @@ define(['logManager',
         __logger.info("creating decorator specific routing rules");
         __app.get('/bin/getconfig.js', ensureAuthenticated, function (req, res) {
             res.status(200);
-            res.setHeader('Content-type', 'application/json');
+            res.setHeader('Content-type', 'application/javascript');
             res.end("define([],function(){ return " + JSON.stringify(CONFIG) + ";});");
         });
         __logger.info("creating decorator specific routing rules");
@@ -581,7 +589,7 @@ define(['logManager',
 
         //TODO remove this part as this is only temporary!!!
         __app.get('/docs/*', function (req, res) {
-            expressFileSending(res, Path.join(__baseDir, req.path));
+            expressFileSending(res, Path.join(__baseDir, '..', req.path));
         });
 
 
@@ -655,7 +663,7 @@ define(['logManager',
                         res.header("Access-Control-Allow-Origin", "*");
                         res.header("Access-Control-Allow-Headers", "X-Requested-With");
                         if (req.params.command === __REST.command.etf) {
-                            if (httpStatus === _HTTPError.ok) {
+                            if (httpStatus === 200) {
                                 var filename = 'exportedNode.json';
                                 if (req.query.output) {
                                     filename = req.query.output;
@@ -723,7 +731,7 @@ define(['logManager',
                 }
             }
             res.status(200);
-            res.setHeader('Content-type', 'application/json');
+            res.setHeader('Content-type', 'application/javascript');
             //res.end("define([],function(){ return "+JSON.stringify(names)+";});");
             res.end("(function(){ WebGMEGlobal.allDecorators = " + JSON.stringify(names) + ";}());");
         });
@@ -742,14 +750,14 @@ define(['logManager',
                 }
             }
             res.status(200);
-            res.setHeader('Content-type', 'application/json');
+            res.setHeader('Content-type', 'application/javascript');
             //res.end("define([],function(){ return "+JSON.stringify(names)+";});");
             res.end("(function(){ WebGMEGlobal.allPlugins = " + JSON.stringify(names) + ";}());");
         });
         __app.get('/listAllVisualizerDescriptors', ensureAuthenticated, function (req, res) {
             var allVisualizerDescriptors = getVisualizersDescriptor();
             res.status(200);
-            res.setHeader('Content-type', 'application/json');
+            res.setHeader('Content-type', 'application/javascript');
             res.end("define([],function(){ return " + JSON.stringify(allVisualizerDescriptors) + ";});");
         });
 

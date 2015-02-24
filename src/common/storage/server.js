@@ -245,7 +245,7 @@ define([ "util/assert","util/guid","util/url","socket.io","worker/serverworkerma
                                 var time2 = process.hrtime();
                                 console.log(msg + " " + (((time2[0] - time1[0]) * 1000) + ((time2[1] - time1[1]) / 1000 / 1000 | 0)));
                                 callback2.apply(this, arguments);
-                            }
+                            };
                             cb.apply(this, args);
                         }]);
                     };
@@ -731,14 +731,17 @@ define([ "util/assert","util/guid","util/url","socket.io","worker/serverworkerma
         function stopConnectedWorkers(socketId){
             var i;
             if(_workerManager){
+                var stop = function (worker) {
+                    _workerManager.result(_connectedWorkers[socketId][i], function (err) {
+                        if (err) {
+                            options.log.error("unable to stop connected worker [" + worker + "] of socket " + socketId);
+                        }
+                    });
+                };
                 _connectedWorkers[socketId] = _connectedWorkers[socketId] || [];
                 for(i=0;i<_connectedWorkers[socketId].length;i++){
                     //TODO probably we would need some kind of result handling
-                    _workerManager.result(_connectedWorkers[socketId][i],function(err){
-                        if(err){
-                            options.log.error("unable to stop connected worker ["+_connectedWorkers[socketId][i]+"] of socket "+socketId);
-                        }
-                    });
+                    stop(_connectedWorkers[socketId][i]);
                 }
                 delete _connectedWorkers[socketId];
             }

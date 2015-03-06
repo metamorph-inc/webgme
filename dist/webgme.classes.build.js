@@ -2096,8 +2096,10 @@ define('util/assert',[],function () {
 		if( !cond ) {
 			var error = new Error(msg || "ASSERT failed");
 
+			if (typeof TESTING === 'undefined') {
 			console.log("Throwing", error.stack);
 			console.log();
+			}
 			
 			debugger;
 			throw error;
@@ -2423,1119 +2425,54 @@ define('util/canon',[], function() {
 
 });
 
-/*
- The MIT License (MIT)
-
- Copyright (c) 2013 Artem S Vybornov
-
- Permission is hereby granted, free of charge, to any person obtaining a copy of
- this software and associated documentation files (the "Software"), to deal in
- the Software without restriction, including without limitation the rights to
- use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
- the Software, and to permit persons to whom the Software is furnished to do so,
- subject to the following conditions:
-
- The above copyright notice and this permission notice shall be included in all
- copies or substantial portions of the Software.
-
- THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
- FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
- COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
- IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-
- */
-// source: https://github.com/vibornoff/asmcrypto.js
-// build have been modified to contain only SHA1 algorithm and file is modified to be includable with requirejs
-// kecso
-define('util/asmcryptosha1',[],function(){
-    (function(exports, global) {
-        global["asmCrypto"] = exports;
-        function IllegalStateError() {
-            var err = Error.apply(this, arguments);
-            this.message = err.message, this.stack = err.stack;
-        }
-        IllegalStateError.prototype = Object.create(Error.prototype, {
-            name: {
-                value: "IllegalStateError"
-            }
-        });
-        function IllegalArgumentError() {
-            var err = Error.apply(this, arguments);
-            this.message = err.message, this.stack = err.stack;
-        }
-        IllegalArgumentError.prototype = Object.create(Error.prototype, {
-            name: {
-                value: "IllegalArgumentError"
-            }
-        });
-        function SecurityError() {
-            var err = Error.apply(this, arguments);
-            this.message = err.message, this.stack = err.stack;
-        }
-        SecurityError.prototype = Object.create(Error.prototype, {
-            name: {
-                value: "SecurityError"
-            }
-        });
-        
-        var FloatArray = global.Float64Array || global.Float32Array;
-        function string_to_bytes(str) {
-            var len = str.length, arr = new Uint8Array(len);
-            for (var i = 0; i < len; i++) {
-                var c = str.charCodeAt(i);
-                if (c >>> 8) throw new Error("Wide characters are not allowed");
-                arr[i] = c;
-            }
-            return arr;
-        }
-        function hex_to_bytes(str) {
-            var arr = [], len = str.length, i;
-            if (len & 1) {
-                str = "0" + str;
-                len++;
-            }
-            for (i = 0; i < len; i += 2) {
-                arr.push(parseInt(str.substr(i, 2), 16));
-            }
-            return new Uint8Array(arr);
-        }
-        function base64_to_bytes(str) {
-            return string_to_bytes(atob(str));
-        }
-        function bytes_to_string(arr) {
-            var str = "";
-            for (var i = 0; i < arr.length; i++) str += String.fromCharCode(arr[i]);
-            return str;
-        }
-        function bytes_to_hex(arr) {
-            var str = "";
-            for (var i = 0; i < arr.length; i++) {
-                var h = (arr[i] & 255).toString(16);
-                if (h.length < 2) str += "0";
-                str += h;
-            }
-            return str;
-        }
-        function bytes_to_base64(arr) {
-            return btoa(bytes_to_string(arr));
-        }
-        function pow2_ceil(a) {
-            a -= 1;
-            a |= a >>> 1;
-            a |= a >>> 2;
-            a |= a >>> 4;
-            a |= a >>> 8;
-            a |= a >>> 16;
-            a += 1;
-            return a;
-        }
-        function is_number(a) {
-            return typeof a === "number";
-        }
-        function is_string(a) {
-            return typeof a === "string";
-        }
-        function is_buffer(a) {
-            return a instanceof ArrayBuffer;
-        }
-        function is_bytes(a) {
-            return a instanceof Uint8Array;
-        }
-        function is_typed_array(a) {
-            return a instanceof Int8Array || a instanceof Uint8Array || a instanceof Int16Array || a instanceof Uint16Array || a instanceof Int32Array || a instanceof Uint32Array || a instanceof Float32Array || a instanceof Float64Array;
-        }
-        function _heap_init(constructor, options) {
-            var heap = options.heap, size = heap ? heap.byteLength : options.heapSize || 65536;
-            if (size & 4095 || size <= 0) throw new Error("heap size must be a positive integer and a multiple of 4096");
-            heap = heap || new constructor(new ArrayBuffer(size));
-            return heap;
-        }
-        function _heap_write(heap, hpos, data, dpos, dlen) {
-            var hlen = heap.length - hpos, wlen = hlen < dlen ? hlen : dlen;
-            heap.set(data.subarray(dpos, dpos + wlen), hpos);
-            return wlen;
-        }
-        function hash_reset() {
-            this.result = null;
-            this.pos = 0;
-            this.len = 0;
-            this.asm.reset();
-            return this;
-        }
-        function hash_process(data) {
-            if (this.result !== null) throw new IllegalStateError("state must be reset before processing new data");
-            if (is_string(data)) data = string_to_bytes(data);
-            if (is_buffer(data)) data = new Uint8Array(data);
-            if (!is_bytes(data)) throw new TypeError("data isn't of expected type");
-            var asm = this.asm, heap = this.heap, hpos = this.pos, hlen = this.len, dpos = 0, dlen = data.length, wlen = 0;
-            while (dlen > 0) {
-                wlen = _heap_write(heap, hpos + hlen, data, dpos, dlen);
-                hlen += wlen;
-                dpos += wlen;
-                dlen -= wlen;
-                wlen = asm.process(hpos, hlen);
-                hpos += wlen;
-                hlen -= wlen;
-                if (!hlen) hpos = 0;
-            }
-            this.pos = hpos;
-            this.len = hlen;
-            return this;
-        }
-        function hash_finish() {
-            if (this.result !== null) throw new IllegalStateError("state must be reset before processing new data");
-            this.asm.finish(this.pos, this.len, 0);
-            this.result = new Uint8Array(this.HASH_SIZE);
-            this.result.set(this.heap.subarray(0, this.HASH_SIZE));
-            this.pos = 0;
-            this.len = 0;
-            return this;
-        }
-        function sha1_asm(stdlib, foreign, buffer) {
-            "use asm";
-            var H0 = 0, H1 = 0, H2 = 0, H3 = 0, H4 = 0, TOTAL = 0;
-            var I0 = 0, I1 = 0, I2 = 0, I3 = 0, I4 = 0, O0 = 0, O1 = 0, O2 = 0, O3 = 0, O4 = 0;
-            var HEAP = new stdlib.Uint8Array(buffer);
-            function _core(w0, w1, w2, w3, w4, w5, w6, w7, w8, w9, w10, w11, w12, w13, w14, w15) {
-                w0 = w0 | 0;
-                w1 = w1 | 0;
-                w2 = w2 | 0;
-                w3 = w3 | 0;
-                w4 = w4 | 0;
-                w5 = w5 | 0;
-                w6 = w6 | 0;
-                w7 = w7 | 0;
-                w8 = w8 | 0;
-                w9 = w9 | 0;
-                w10 = w10 | 0;
-                w11 = w11 | 0;
-                w12 = w12 | 0;
-                w13 = w13 | 0;
-                w14 = w14 | 0;
-                w15 = w15 | 0;
-                var a = 0, b = 0, c = 0, d = 0, e = 0, n = 0, t = 0, w16 = 0, w17 = 0, w18 = 0, w19 = 0, w20 = 0, w21 = 0, w22 = 0, w23 = 0, w24 = 0, w25 = 0, w26 = 0, w27 = 0, w28 = 0, w29 = 0, w30 = 0, w31 = 0, w32 = 0, w33 = 0, w34 = 0, w35 = 0, w36 = 0, w37 = 0, w38 = 0, w39 = 0, w40 = 0, w41 = 0, w42 = 0, w43 = 0, w44 = 0, w45 = 0, w46 = 0, w47 = 0, w48 = 0, w49 = 0, w50 = 0, w51 = 0, w52 = 0, w53 = 0, w54 = 0, w55 = 0, w56 = 0, w57 = 0, w58 = 0, w59 = 0, w60 = 0, w61 = 0, w62 = 0, w63 = 0, w64 = 0, w65 = 0, w66 = 0, w67 = 0, w68 = 0, w69 = 0, w70 = 0, w71 = 0, w72 = 0, w73 = 0, w74 = 0, w75 = 0, w76 = 0, w77 = 0, w78 = 0, w79 = 0;
-                a = H0;
-                b = H1;
-                c = H2;
-                d = H3;
-                e = H4;
-                t = w0 + (a << 5 | a >>> 27) + e + (b & c | ~b & d) + 1518500249 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                t = w1 + (a << 5 | a >>> 27) + e + (b & c | ~b & d) + 1518500249 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                t = w2 + (a << 5 | a >>> 27) + e + (b & c | ~b & d) + 1518500249 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                t = w3 + (a << 5 | a >>> 27) + e + (b & c | ~b & d) + 1518500249 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                t = w4 + (a << 5 | a >>> 27) + e + (b & c | ~b & d) + 1518500249 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                t = w5 + (a << 5 | a >>> 27) + e + (b & c | ~b & d) + 1518500249 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                t = w6 + (a << 5 | a >>> 27) + e + (b & c | ~b & d) + 1518500249 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                t = w7 + (a << 5 | a >>> 27) + e + (b & c | ~b & d) + 1518500249 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                t = w8 + (a << 5 | a >>> 27) + e + (b & c | ~b & d) + 1518500249 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                t = w9 + (a << 5 | a >>> 27) + e + (b & c | ~b & d) + 1518500249 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                t = w10 + (a << 5 | a >>> 27) + e + (b & c | ~b & d) + 1518500249 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                t = w11 + (a << 5 | a >>> 27) + e + (b & c | ~b & d) + 1518500249 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                t = w12 + (a << 5 | a >>> 27) + e + (b & c | ~b & d) + 1518500249 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                t = w13 + (a << 5 | a >>> 27) + e + (b & c | ~b & d) + 1518500249 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                t = w14 + (a << 5 | a >>> 27) + e + (b & c | ~b & d) + 1518500249 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                t = w15 + (a << 5 | a >>> 27) + e + (b & c | ~b & d) + 1518500249 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                n = w13 ^ w8 ^ w2 ^ w0;
-                w16 = n << 1 | n >>> 31;
-                t = w16 + (a << 5 | a >>> 27) + e + (b & c | ~b & d) + 1518500249 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                n = w14 ^ w9 ^ w3 ^ w1;
-                w17 = n << 1 | n >>> 31;
-                t = w17 + (a << 5 | a >>> 27) + e + (b & c | ~b & d) + 1518500249 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                n = w15 ^ w10 ^ w4 ^ w2;
-                w18 = n << 1 | n >>> 31;
-                t = w18 + (a << 5 | a >>> 27) + e + (b & c | ~b & d) + 1518500249 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                n = w16 ^ w11 ^ w5 ^ w3;
-                w19 = n << 1 | n >>> 31;
-                t = w19 + (a << 5 | a >>> 27) + e + (b & c | ~b & d) + 1518500249 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                n = w17 ^ w12 ^ w6 ^ w4;
-                w20 = n << 1 | n >>> 31;
-                t = w20 + (a << 5 | a >>> 27) + e + (b ^ c ^ d) + 1859775393 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                n = w18 ^ w13 ^ w7 ^ w5;
-                w21 = n << 1 | n >>> 31;
-                t = w21 + (a << 5 | a >>> 27) + e + (b ^ c ^ d) + 1859775393 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                n = w19 ^ w14 ^ w8 ^ w6;
-                w22 = n << 1 | n >>> 31;
-                t = w22 + (a << 5 | a >>> 27) + e + (b ^ c ^ d) + 1859775393 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                n = w20 ^ w15 ^ w9 ^ w7;
-                w23 = n << 1 | n >>> 31;
-                t = w23 + (a << 5 | a >>> 27) + e + (b ^ c ^ d) + 1859775393 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                n = w21 ^ w16 ^ w10 ^ w8;
-                w24 = n << 1 | n >>> 31;
-                t = w24 + (a << 5 | a >>> 27) + e + (b ^ c ^ d) + 1859775393 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                n = w22 ^ w17 ^ w11 ^ w9;
-                w25 = n << 1 | n >>> 31;
-                t = w25 + (a << 5 | a >>> 27) + e + (b ^ c ^ d) + 1859775393 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                n = w23 ^ w18 ^ w12 ^ w10;
-                w26 = n << 1 | n >>> 31;
-                t = w26 + (a << 5 | a >>> 27) + e + (b ^ c ^ d) + 1859775393 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                n = w24 ^ w19 ^ w13 ^ w11;
-                w27 = n << 1 | n >>> 31;
-                t = w27 + (a << 5 | a >>> 27) + e + (b ^ c ^ d) + 1859775393 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                n = w25 ^ w20 ^ w14 ^ w12;
-                w28 = n << 1 | n >>> 31;
-                t = w28 + (a << 5 | a >>> 27) + e + (b ^ c ^ d) + 1859775393 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                n = w26 ^ w21 ^ w15 ^ w13;
-                w29 = n << 1 | n >>> 31;
-                t = w29 + (a << 5 | a >>> 27) + e + (b ^ c ^ d) + 1859775393 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                n = w27 ^ w22 ^ w16 ^ w14;
-                w30 = n << 1 | n >>> 31;
-                t = w30 + (a << 5 | a >>> 27) + e + (b ^ c ^ d) + 1859775393 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                n = w28 ^ w23 ^ w17 ^ w15;
-                w31 = n << 1 | n >>> 31;
-                t = w31 + (a << 5 | a >>> 27) + e + (b ^ c ^ d) + 1859775393 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                n = w29 ^ w24 ^ w18 ^ w16;
-                w32 = n << 1 | n >>> 31;
-                t = w32 + (a << 5 | a >>> 27) + e + (b ^ c ^ d) + 1859775393 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                n = w30 ^ w25 ^ w19 ^ w17;
-                w33 = n << 1 | n >>> 31;
-                t = w33 + (a << 5 | a >>> 27) + e + (b ^ c ^ d) + 1859775393 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                n = w31 ^ w26 ^ w20 ^ w18;
-                w34 = n << 1 | n >>> 31;
-                t = w34 + (a << 5 | a >>> 27) + e + (b ^ c ^ d) + 1859775393 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                n = w32 ^ w27 ^ w21 ^ w19;
-                w35 = n << 1 | n >>> 31;
-                t = w35 + (a << 5 | a >>> 27) + e + (b ^ c ^ d) + 1859775393 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                n = w33 ^ w28 ^ w22 ^ w20;
-                w36 = n << 1 | n >>> 31;
-                t = w36 + (a << 5 | a >>> 27) + e + (b ^ c ^ d) + 1859775393 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                n = w34 ^ w29 ^ w23 ^ w21;
-                w37 = n << 1 | n >>> 31;
-                t = w37 + (a << 5 | a >>> 27) + e + (b ^ c ^ d) + 1859775393 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                n = w35 ^ w30 ^ w24 ^ w22;
-                w38 = n << 1 | n >>> 31;
-                t = w38 + (a << 5 | a >>> 27) + e + (b ^ c ^ d) + 1859775393 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                n = w36 ^ w31 ^ w25 ^ w23;
-                w39 = n << 1 | n >>> 31;
-                t = w39 + (a << 5 | a >>> 27) + e + (b ^ c ^ d) + 1859775393 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                n = w37 ^ w32 ^ w26 ^ w24;
-                w40 = n << 1 | n >>> 31;
-                t = w40 + (a << 5 | a >>> 27) + e + (b & c | b & d | c & d) - 1894007588 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                n = w38 ^ w33 ^ w27 ^ w25;
-                w41 = n << 1 | n >>> 31;
-                t = w41 + (a << 5 | a >>> 27) + e + (b & c | b & d | c & d) - 1894007588 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                n = w39 ^ w34 ^ w28 ^ w26;
-                w42 = n << 1 | n >>> 31;
-                t = w42 + (a << 5 | a >>> 27) + e + (b & c | b & d | c & d) - 1894007588 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                n = w40 ^ w35 ^ w29 ^ w27;
-                w43 = n << 1 | n >>> 31;
-                t = w43 + (a << 5 | a >>> 27) + e + (b & c | b & d | c & d) - 1894007588 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                n = w41 ^ w36 ^ w30 ^ w28;
-                w44 = n << 1 | n >>> 31;
-                t = w44 + (a << 5 | a >>> 27) + e + (b & c | b & d | c & d) - 1894007588 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                n = w42 ^ w37 ^ w31 ^ w29;
-                w45 = n << 1 | n >>> 31;
-                t = w45 + (a << 5 | a >>> 27) + e + (b & c | b & d | c & d) - 1894007588 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                n = w43 ^ w38 ^ w32 ^ w30;
-                w46 = n << 1 | n >>> 31;
-                t = w46 + (a << 5 | a >>> 27) + e + (b & c | b & d | c & d) - 1894007588 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                n = w44 ^ w39 ^ w33 ^ w31;
-                w47 = n << 1 | n >>> 31;
-                t = w47 + (a << 5 | a >>> 27) + e + (b & c | b & d | c & d) - 1894007588 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                n = w45 ^ w40 ^ w34 ^ w32;
-                w48 = n << 1 | n >>> 31;
-                t = w48 + (a << 5 | a >>> 27) + e + (b & c | b & d | c & d) - 1894007588 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                n = w46 ^ w41 ^ w35 ^ w33;
-                w49 = n << 1 | n >>> 31;
-                t = w49 + (a << 5 | a >>> 27) + e + (b & c | b & d | c & d) - 1894007588 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                n = w47 ^ w42 ^ w36 ^ w34;
-                w50 = n << 1 | n >>> 31;
-                t = w50 + (a << 5 | a >>> 27) + e + (b & c | b & d | c & d) - 1894007588 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                n = w48 ^ w43 ^ w37 ^ w35;
-                w51 = n << 1 | n >>> 31;
-                t = w51 + (a << 5 | a >>> 27) + e + (b & c | b & d | c & d) - 1894007588 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                n = w49 ^ w44 ^ w38 ^ w36;
-                w52 = n << 1 | n >>> 31;
-                t = w52 + (a << 5 | a >>> 27) + e + (b & c | b & d | c & d) - 1894007588 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                n = w50 ^ w45 ^ w39 ^ w37;
-                w53 = n << 1 | n >>> 31;
-                t = w53 + (a << 5 | a >>> 27) + e + (b & c | b & d | c & d) - 1894007588 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                n = w51 ^ w46 ^ w40 ^ w38;
-                w54 = n << 1 | n >>> 31;
-                t = w54 + (a << 5 | a >>> 27) + e + (b & c | b & d | c & d) - 1894007588 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                n = w52 ^ w47 ^ w41 ^ w39;
-                w55 = n << 1 | n >>> 31;
-                t = w55 + (a << 5 | a >>> 27) + e + (b & c | b & d | c & d) - 1894007588 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                n = w53 ^ w48 ^ w42 ^ w40;
-                w56 = n << 1 | n >>> 31;
-                t = w56 + (a << 5 | a >>> 27) + e + (b & c | b & d | c & d) - 1894007588 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                n = w54 ^ w49 ^ w43 ^ w41;
-                w57 = n << 1 | n >>> 31;
-                t = w57 + (a << 5 | a >>> 27) + e + (b & c | b & d | c & d) - 1894007588 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                n = w55 ^ w50 ^ w44 ^ w42;
-                w58 = n << 1 | n >>> 31;
-                t = w58 + (a << 5 | a >>> 27) + e + (b & c | b & d | c & d) - 1894007588 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                n = w56 ^ w51 ^ w45 ^ w43;
-                w59 = n << 1 | n >>> 31;
-                t = w59 + (a << 5 | a >>> 27) + e + (b & c | b & d | c & d) - 1894007588 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                n = w57 ^ w52 ^ w46 ^ w44;
-                w60 = n << 1 | n >>> 31;
-                t = w60 + (a << 5 | a >>> 27) + e + (b ^ c ^ d) - 899497514 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                n = w58 ^ w53 ^ w47 ^ w45;
-                w61 = n << 1 | n >>> 31;
-                t = w61 + (a << 5 | a >>> 27) + e + (b ^ c ^ d) - 899497514 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                n = w59 ^ w54 ^ w48 ^ w46;
-                w62 = n << 1 | n >>> 31;
-                t = w62 + (a << 5 | a >>> 27) + e + (b ^ c ^ d) - 899497514 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                n = w60 ^ w55 ^ w49 ^ w47;
-                w63 = n << 1 | n >>> 31;
-                t = w63 + (a << 5 | a >>> 27) + e + (b ^ c ^ d) - 899497514 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                n = w61 ^ w56 ^ w50 ^ w48;
-                w64 = n << 1 | n >>> 31;
-                t = w64 + (a << 5 | a >>> 27) + e + (b ^ c ^ d) - 899497514 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                n = w62 ^ w57 ^ w51 ^ w49;
-                w65 = n << 1 | n >>> 31;
-                t = w65 + (a << 5 | a >>> 27) + e + (b ^ c ^ d) - 899497514 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                n = w63 ^ w58 ^ w52 ^ w50;
-                w66 = n << 1 | n >>> 31;
-                t = w66 + (a << 5 | a >>> 27) + e + (b ^ c ^ d) - 899497514 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                n = w64 ^ w59 ^ w53 ^ w51;
-                w67 = n << 1 | n >>> 31;
-                t = w67 + (a << 5 | a >>> 27) + e + (b ^ c ^ d) - 899497514 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                n = w65 ^ w60 ^ w54 ^ w52;
-                w68 = n << 1 | n >>> 31;
-                t = w68 + (a << 5 | a >>> 27) + e + (b ^ c ^ d) - 899497514 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                n = w66 ^ w61 ^ w55 ^ w53;
-                w69 = n << 1 | n >>> 31;
-                t = w69 + (a << 5 | a >>> 27) + e + (b ^ c ^ d) - 899497514 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                n = w67 ^ w62 ^ w56 ^ w54;
-                w70 = n << 1 | n >>> 31;
-                t = w70 + (a << 5 | a >>> 27) + e + (b ^ c ^ d) - 899497514 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                n = w68 ^ w63 ^ w57 ^ w55;
-                w71 = n << 1 | n >>> 31;
-                t = w71 + (a << 5 | a >>> 27) + e + (b ^ c ^ d) - 899497514 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                n = w69 ^ w64 ^ w58 ^ w56;
-                w72 = n << 1 | n >>> 31;
-                t = w72 + (a << 5 | a >>> 27) + e + (b ^ c ^ d) - 899497514 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                n = w70 ^ w65 ^ w59 ^ w57;
-                w73 = n << 1 | n >>> 31;
-                t = w73 + (a << 5 | a >>> 27) + e + (b ^ c ^ d) - 899497514 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                n = w71 ^ w66 ^ w60 ^ w58;
-                w74 = n << 1 | n >>> 31;
-                t = w74 + (a << 5 | a >>> 27) + e + (b ^ c ^ d) - 899497514 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                n = w72 ^ w67 ^ w61 ^ w59;
-                w75 = n << 1 | n >>> 31;
-                t = w75 + (a << 5 | a >>> 27) + e + (b ^ c ^ d) - 899497514 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                n = w73 ^ w68 ^ w62 ^ w60;
-                w76 = n << 1 | n >>> 31;
-                t = w76 + (a << 5 | a >>> 27) + e + (b ^ c ^ d) - 899497514 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                n = w74 ^ w69 ^ w63 ^ w61;
-                w77 = n << 1 | n >>> 31;
-                t = w77 + (a << 5 | a >>> 27) + e + (b ^ c ^ d) - 899497514 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                n = w75 ^ w70 ^ w64 ^ w62;
-                w78 = n << 1 | n >>> 31;
-                t = w78 + (a << 5 | a >>> 27) + e + (b ^ c ^ d) - 899497514 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                n = w76 ^ w71 ^ w65 ^ w63;
-                w79 = n << 1 | n >>> 31;
-                t = w79 + (a << 5 | a >>> 27) + e + (b ^ c ^ d) - 899497514 | 0;
-                e = d;
-                d = c;
-                c = b << 30 | b >>> 2;
-                b = a;
-                a = t;
-                H0 = H0 + a | 0;
-                H1 = H1 + b | 0;
-                H2 = H2 + c | 0;
-                H3 = H3 + d | 0;
-                H4 = H4 + e | 0;
-            }
-            function _core_heap(offset) {
-                offset = offset | 0;
-                _core(HEAP[offset | 0] << 24 | HEAP[offset | 1] << 16 | HEAP[offset | 2] << 8 | HEAP[offset | 3], HEAP[offset | 4] << 24 | HEAP[offset | 5] << 16 | HEAP[offset | 6] << 8 | HEAP[offset | 7], HEAP[offset | 8] << 24 | HEAP[offset | 9] << 16 | HEAP[offset | 10] << 8 | HEAP[offset | 11], HEAP[offset | 12] << 24 | HEAP[offset | 13] << 16 | HEAP[offset | 14] << 8 | HEAP[offset | 15], HEAP[offset | 16] << 24 | HEAP[offset | 17] << 16 | HEAP[offset | 18] << 8 | HEAP[offset | 19], HEAP[offset | 20] << 24 | HEAP[offset | 21] << 16 | HEAP[offset | 22] << 8 | HEAP[offset | 23], HEAP[offset | 24] << 24 | HEAP[offset | 25] << 16 | HEAP[offset | 26] << 8 | HEAP[offset | 27], HEAP[offset | 28] << 24 | HEAP[offset | 29] << 16 | HEAP[offset | 30] << 8 | HEAP[offset | 31], HEAP[offset | 32] << 24 | HEAP[offset | 33] << 16 | HEAP[offset | 34] << 8 | HEAP[offset | 35], HEAP[offset | 36] << 24 | HEAP[offset | 37] << 16 | HEAP[offset | 38] << 8 | HEAP[offset | 39], HEAP[offset | 40] << 24 | HEAP[offset | 41] << 16 | HEAP[offset | 42] << 8 | HEAP[offset | 43], HEAP[offset | 44] << 24 | HEAP[offset | 45] << 16 | HEAP[offset | 46] << 8 | HEAP[offset | 47], HEAP[offset | 48] << 24 | HEAP[offset | 49] << 16 | HEAP[offset | 50] << 8 | HEAP[offset | 51], HEAP[offset | 52] << 24 | HEAP[offset | 53] << 16 | HEAP[offset | 54] << 8 | HEAP[offset | 55], HEAP[offset | 56] << 24 | HEAP[offset | 57] << 16 | HEAP[offset | 58] << 8 | HEAP[offset | 59], HEAP[offset | 60] << 24 | HEAP[offset | 61] << 16 | HEAP[offset | 62] << 8 | HEAP[offset | 63]);
-            }
-            function _state_to_heap(output) {
-                output = output | 0;
-                HEAP[output | 0] = H0 >>> 24;
-                HEAP[output | 1] = H0 >>> 16 & 255;
-                HEAP[output | 2] = H0 >>> 8 & 255;
-                HEAP[output | 3] = H0 & 255;
-                HEAP[output | 4] = H1 >>> 24;
-                HEAP[output | 5] = H1 >>> 16 & 255;
-                HEAP[output | 6] = H1 >>> 8 & 255;
-                HEAP[output | 7] = H1 & 255;
-                HEAP[output | 8] = H2 >>> 24;
-                HEAP[output | 9] = H2 >>> 16 & 255;
-                HEAP[output | 10] = H2 >>> 8 & 255;
-                HEAP[output | 11] = H2 & 255;
-                HEAP[output | 12] = H3 >>> 24;
-                HEAP[output | 13] = H3 >>> 16 & 255;
-                HEAP[output | 14] = H3 >>> 8 & 255;
-                HEAP[output | 15] = H3 & 255;
-                HEAP[output | 16] = H4 >>> 24;
-                HEAP[output | 17] = H4 >>> 16 & 255;
-                HEAP[output | 18] = H4 >>> 8 & 255;
-                HEAP[output | 19] = H4 & 255;
-            }
-            function reset() {
-                H0 = 1732584193;
-                H1 = 4023233417;
-                H2 = 2562383102;
-                H3 = 271733878;
-                H4 = 3285377520;
-                TOTAL = 0;
-            }
-            function init(h0, h1, h2, h3, h4, total) {
-                h0 = h0 | 0;
-                h1 = h1 | 0;
-                h2 = h2 | 0;
-                h3 = h3 | 0;
-                h4 = h4 | 0;
-                total = total | 0;
-                H0 = h0;
-                H1 = h1;
-                H2 = h2;
-                H3 = h3;
-                H4 = h4;
-                TOTAL = total;
-            }
-            function process(offset, length) {
-                offset = offset | 0;
-                length = length | 0;
-                var hashed = 0;
-                if (offset & 63) return -1;
-                while ((length | 0) >= 64) {
-                    _core_heap(offset);
-                    offset = offset + 64 | 0;
-                    length = length - 64 | 0;
-                    hashed = hashed + 64 | 0;
-                }
-                TOTAL = TOTAL + hashed | 0;
-                return hashed | 0;
-            }
-            function finish(offset, length, output) {
-                offset = offset | 0;
-                length = length | 0;
-                output = output | 0;
-                var hashed = 0, i = 0;
-                if (offset & 63) return -1;
-                if (~output) if (output & 31) return -1;
-                if ((length | 0) >= 64) {
-                    hashed = process(offset, length) | 0;
-                    if ((hashed | 0) == -1) return -1;
-                    offset = offset + hashed | 0;
-                    length = length - hashed | 0;
-                }
-                hashed = hashed + length | 0;
-                TOTAL = TOTAL + length | 0;
-                HEAP[offset | length] = 128;
-                if ((length | 0) >= 56) {
-                    for (i = length + 1 | 0; (i | 0) < 64; i = i + 1 | 0) HEAP[offset | i] = 0;
-                    _core_heap(offset);
-                    length = 0;
-                    HEAP[offset | 0] = 0;
-                }
-                for (i = length + 1 | 0; (i | 0) < 59; i = i + 1 | 0) HEAP[offset | i] = 0;
-                HEAP[offset | 59] = TOTAL >>> 29;
-                HEAP[offset | 60] = TOTAL >>> 21 & 255;
-                HEAP[offset | 61] = TOTAL >>> 13 & 255;
-                HEAP[offset | 62] = TOTAL >>> 5 & 255;
-                HEAP[offset | 63] = TOTAL << 3 & 255;
-                _core_heap(offset);
-                if (~output) _state_to_heap(output);
-                return hashed | 0;
-            }
-            function hmac_reset() {
-                H0 = I0;
-                H1 = I1;
-                H2 = I2;
-                H3 = I3;
-                H4 = I4;
-                TOTAL = 64;
-            }
-            function _hmac_opad() {
-                H0 = O0;
-                H1 = O1;
-                H2 = O2;
-                H3 = O3;
-                H4 = O4;
-                TOTAL = 64;
-            }
-            function hmac_init(p0, p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12, p13, p14, p15) {
-                p0 = p0 | 0;
-                p1 = p1 | 0;
-                p2 = p2 | 0;
-                p3 = p3 | 0;
-                p4 = p4 | 0;
-                p5 = p5 | 0;
-                p6 = p6 | 0;
-                p7 = p7 | 0;
-                p8 = p8 | 0;
-                p9 = p9 | 0;
-                p10 = p10 | 0;
-                p11 = p11 | 0;
-                p12 = p12 | 0;
-                p13 = p13 | 0;
-                p14 = p14 | 0;
-                p15 = p15 | 0;
-                reset();
-                _core(p0 ^ 1549556828, p1 ^ 1549556828, p2 ^ 1549556828, p3 ^ 1549556828, p4 ^ 1549556828, p5 ^ 1549556828, p6 ^ 1549556828, p7 ^ 1549556828, p8 ^ 1549556828, p9 ^ 1549556828, p10 ^ 1549556828, p11 ^ 1549556828, p12 ^ 1549556828, p13 ^ 1549556828, p14 ^ 1549556828, p15 ^ 1549556828);
-                O0 = H0;
-                O1 = H1;
-                O2 = H2;
-                O3 = H3;
-                O4 = H4;
-                reset();
-                _core(p0 ^ 909522486, p1 ^ 909522486, p2 ^ 909522486, p3 ^ 909522486, p4 ^ 909522486, p5 ^ 909522486, p6 ^ 909522486, p7 ^ 909522486, p8 ^ 909522486, p9 ^ 909522486, p10 ^ 909522486, p11 ^ 909522486, p12 ^ 909522486, p13 ^ 909522486, p14 ^ 909522486, p15 ^ 909522486);
-                I0 = H0;
-                I1 = H1;
-                I2 = H2;
-                I3 = H3;
-                I4 = H4;
-                TOTAL = 64;
-            }
-            function hmac_finish(offset, length, output) {
-                offset = offset | 0;
-                length = length | 0;
-                output = output | 0;
-                var t0 = 0, t1 = 0, t2 = 0, t3 = 0, t4 = 0, hashed = 0;
-                if (offset & 63) return -1;
-                if (~output) if (output & 31) return -1;
-                hashed = finish(offset, length, -1) | 0;
-                t0 = H0, t1 = H1, t2 = H2, t3 = H3, t4 = H4;
-                _hmac_opad();
-                _core(t0, t1, t2, t3, t4, 2147483648, 0, 0, 0, 0, 0, 0, 0, 0, 0, 672);
-                if (~output) _state_to_heap(output);
-                return hashed | 0;
-            }
-            function pbkdf2_generate_block(offset, length, block, count, output) {
-                offset = offset | 0;
-                length = length | 0;
-                block = block | 0;
-                count = count | 0;
-                output = output | 0;
-                var h0 = 0, h1 = 0, h2 = 0, h3 = 0, h4 = 0, t0 = 0, t1 = 0, t2 = 0, t3 = 0, t4 = 0;
-                if (offset & 63) return -1;
-                if (~output) if (output & 31) return -1;
-                HEAP[offset + length | 0] = block >>> 24;
-                HEAP[offset + length + 1 | 0] = block >>> 16 & 255;
-                HEAP[offset + length + 2 | 0] = block >>> 8 & 255;
-                HEAP[offset + length + 3 | 0] = block & 255;
-                hmac_finish(offset, length + 4 | 0, -1) | 0;
-                h0 = t0 = H0, h1 = t1 = H1, h2 = t2 = H2, h3 = t3 = H3, h4 = t4 = H4;
-                count = count - 1 | 0;
-                while ((count | 0) > 0) {
-                    hmac_reset();
-                    _core(t0, t1, t2, t3, t4, 2147483648, 0, 0, 0, 0, 0, 0, 0, 0, 0, 672);
-                    t0 = H0, t1 = H1, t2 = H2, t3 = H3, t4 = H4;
-                    _hmac_opad();
-                    _core(t0, t1, t2, t3, t4, 2147483648, 0, 0, 0, 0, 0, 0, 0, 0, 0, 672);
-                    t0 = H0, t1 = H1, t2 = H2, t3 = H3, t4 = H4;
-                    h0 = h0 ^ H0;
-                    h1 = h1 ^ H1;
-                    h2 = h2 ^ H2;
-                    h3 = h3 ^ H3;
-                    h4 = h4 ^ H4;
-                    count = count - 1 | 0;
-                }
-                H0 = h0;
-                H1 = h1;
-                H2 = h2;
-                H3 = h3;
-                H4 = h4;
-                if (~output) _state_to_heap(output);
-                return 0;
-            }
-            return {
-                reset: reset,
-                init: init,
-                process: process,
-                finish: finish,
-                hmac_reset: hmac_reset,
-                hmac_init: hmac_init,
-                hmac_finish: hmac_finish,
-                pbkdf2_generate_block: pbkdf2_generate_block
-            };
-        }
-        var _sha1_block_size = 64, _sha1_hash_size = 20;
-        function sha1_constructor(options) {
-            options = options || {};
-            this.heap = _heap_init(Uint8Array, options);
-            this.asm = options.asm || sha1_asm(global, null, this.heap.buffer);
-            this.BLOCK_SIZE = _sha1_block_size;
-            this.HASH_SIZE = _sha1_hash_size;
-            this.reset();
-        }
-        sha1_constructor.BLOCK_SIZE = _sha1_block_size;
-        sha1_constructor.HASH_SIZE = _sha1_hash_size;
-        var sha1_prototype = sha1_constructor.prototype;
-        sha1_prototype.reset = hash_reset;
-        sha1_prototype.process = hash_process;
-        sha1_prototype.finish = hash_finish;
-        var sha1_instance = null;
-        function get_sha1_instance() {
-            if (sha1_instance === null) sha1_instance = new sha1_constructor({
-                heapSize: 1048576
-            });
-            return sha1_instance;
-        }
-        function sha1_bytes(data) {
-            if (data === undefined) throw new SyntaxError("data required");
-            return get_sha1_instance().reset().process(data).finish().result;
-        }
-        function sha1_hex(data) {
-            var result = sha1_bytes(data);
-            return bytes_to_hex(result);
-        }
-        function sha1_base64(data) {
-            var result = sha1_bytes(data);
-            return bytes_to_base64(result);
-        }
-        sha1_constructor.bytes = sha1_bytes;
-        sha1_constructor.hex = sha1_hex;
-        sha1_constructor.base64 = sha1_base64;
-        exports.SHA1 = sha1_constructor;
-    })({}, function() {
-        return this;
-    }());
-});
 /**
  * Created by tkecskes on 1/6/2015.
  */
+/* globals define, WebGMEGlobal, GME */
 define('util/key',[
-  './sha1',
-  './zssha1',
-  './assert',
-  './canon',
-  './asmcryptosha1' //->asmCrypto
-],function(SHA1,ZS,ASSERT,CANON){
+    './sha1',
+    './zssha1',
+    './assert',
+    './canon'
+], function (SHA1, ZS, ASSERT, CANON) {
+    
+    var keyType = null,
+        ZSSHA = new ZS();
 
-  var keyType = null;
-  var ZSSHA = new ZS();
-  function rand160Bits(){
-    //#4ca8ccec576284f66055d9f6c1a571d48a70902c
-    var result = "", i,code;
-    for (i = 0; i < 40; i++) {
-      code = Math.floor(Math.random() * 16);
-      code = code > 9 ? code+87 : code+48;
-      result += String.fromCharCode(code);
-    }
-    return result;
-  }
-  return function KeyGenerator(object){
-    if(keyType === null){
-      if(typeof WebGMEGlobal !== 'undefined' && WebGMEGlobal.config && typeof WebGMEGlobal.config.keyType === 'string'){
-        keyType = WebGMEGlobal.config.keyType;
-      } else if( typeof WebGMEGlobal !== 'undefined' && typeof WebGMEGlobal.getConfig === 'function') {
-        keyType = WebGMEGlobal.getConfig().storageKeyType || "plainSHA1";
-      } else if(typeof GME !== 'undefined' && GME.config && typeof GME.config.keyType === 'string'){
-          keyType = GME.config.keyType;
-      } else {
-        keyType = "plainSHA1";
-      }
+    function rand160Bits() {
+        var result = '', i, code;
+        for (i = 0; i < 40; i++) {
+            code = Math.floor(Math.random() * 16);
+            code = code > 9 ? code + 87 : code + 48;
+            result += String.fromCharCode(code);
+        }
+        return result;
     }
 
-    ASSERT(typeof keyType === 'string');
+    return function KeyGenerator(object) {
+        if (keyType === null) {
+            if (typeof WebGMEGlobal !== 'undefined' && WebGMEGlobal.config && typeof WebGMEGlobal.config.keyType === 'string') {
+                keyType = WebGMEGlobal.config.keyType;
+            } else if (typeof WebGMEGlobal !== 'undefined' && typeof WebGMEGlobal.getConfig === 'function') {
+                keyType = WebGMEGlobal.getConfig().storageKeyType || 'plainSHA1';
+            } else if (typeof GME !== 'undefined' && GME.config && typeof GME.config.keyType === 'string') {
+                keyType = GME.config.keyType;
+            } else {
+                keyType = 'plainSHA1';
+            }
+        }
 
-    switch (keyType){
-      case 'rand160Bits':
-        return rand160Bits();
-        break;
-      case 'asmSHA1':
-        return asmCrypto.SHA1.hex(CANON.stringify(object));
-        break;
-      case 'ZSSHA':
-        return ZSSHA.getHash(CANON.stringify(object));
-      default: //plainSHA1
-        return SHA1(CANON.stringify(object));
-        break;
-    }
-  }
+        ASSERT(typeof keyType === 'string');
+
+        switch (keyType) {
+            case 'rand160Bits':
+                return rand160Bits();
+            case 'ZSSHA':
+                return ZSSHA.getHash(CANON.stringify(object));
+            default: //plainSHA1
+                return SHA1(CANON.stringify(object));
+        }
+    };
 });
 /*
  * Copyright (C) 2012 Vanderbilt University, All rights reserved.
@@ -5324,6 +4261,26 @@ define('core/coretree',[ "util/assert", "util/key", "core/future", "core/tasync"
 			return keys;
 		};
 
+        var getRawKeys = function(object,predicate){
+            ASSERT(typeof predicate === "undefined" || typeof predicate === "function");
+            predicate = predicate || noUnderscore;
+
+            var keys = Object.keys(object);
+
+            var i = keys.length;
+            while (--i >= 0 && !predicate(keys[i])) {
+                keys.pop();
+            }
+
+            while (--i >= 0) {
+                if (!predicate(keys[i])) {
+                    keys[i] = keys.pop();
+                }
+            }
+
+            return keys;
+        }
+
 		// ------- persistence
 
 		var getHash = function (node) {
@@ -5446,6 +4403,22 @@ define('core/coretree',[ "util/assert", "util/key", "core/future", "core/tasync"
 				return typeof node.data === "object" && node.data !== null ? node : null;
 			}
 		};
+
+		var getChildHash = function(node,relid){
+			ASSERT(isValidNode(node));
+
+			node = getChild(node, relid);
+
+			if (isValidHash(node.data)) {
+				// TODO: this is a hack, we should avoid loading it multiple
+				// times
+				return node.data;
+			} else {
+				return typeof node.data === "object" && node.data !== null ? getHash(node) : null;
+			}
+		};
+
+
 
 		var __loadChild2 = function (node, newdata) {
 			node = normalize(node);
@@ -5595,6 +4568,7 @@ define('core/coretree',[ "util/assert", "util/key", "core/future", "core/tasync"
 			setProperty: setProperty,
 			deleteProperty: deleteProperty,
 			getKeys: getKeys,
+            getRawKeys: getRawKeys,
 
 			isHashed: isHashed,
 			setHashed: setHashed,
@@ -5604,7 +4578,9 @@ define('core/coretree',[ "util/assert", "util/key", "core/future", "core/tasync"
 			loadChild: loadChild,
 			loadByPath: loadByPath,
 
-			isValidNode: isValidNode
+			isValidNode: isValidNode,
+
+			getChildHash: getChildHash
 		};
 	};
 });
@@ -5662,26 +4638,26 @@ define('core/corerel',[ "util/assert", "core/coretree", "core/tasync", "util/can
 		}
 
 		function getAttributeNames(node) {
-			ASSERT(isValidNode(node));
+            ASSERT(isValidNode(node));
 
-			node = coretree.getChild(node, ATTRIBUTES);
-			var keys = coretree.getKeys(node);
-			var i = keys.length;
-			while (--i >= 0) {
-				if (keys[i].charAt(0) === "") {
-					console.log("***** This happens?");
-					keys.splice(i, 1);
-				}
-			}
+            node = (coretree.getProperty(node, ATTRIBUTES) || {});
+            var keys = coretree.getRawKeys(node);
+            var i = keys.length;
+            while (--i >= 0) {
+                if (keys[i].charAt(0) === "") {
+                    console.log("***** This happens?");
+                    keys.splice(i, 1);
+                }
+            }
 
-			return keys;
-		}
+            return keys;
+        }
 
 		function getRegistryNames(node) {
 			ASSERT(isValidNode(node));
 
-			node = coretree.getChild(node, REGISTRY);
-			var keys = coretree.getKeys(node);
+			node = (coretree.getProperty(node, REGISTRY) || {});
+			var keys = coretree.getRawKeys(node);
 			var i = keys.length;
 			while (--i >= 0) {
 				if (keys[i].charAt(0) === "") {
@@ -5694,8 +4670,9 @@ define('core/corerel',[ "util/assert", "core/coretree", "core/tasync", "util/can
 		}
 
 		function getAttribute(node, name) {
-			node = coretree.getChild(node, ATTRIBUTES);
-			return coretree.getProperty(node, name);
+			/*node = coretree.getChild(node, ATTRIBUTES);
+			return coretree.getProperty(node, name);*/
+            return (coretree.getProperty(node,ATTRIBUTES) || {})[name];
 		}
 
 		function delAttribute(node, name) {
@@ -5709,8 +4686,9 @@ define('core/corerel',[ "util/assert", "core/coretree", "core/tasync", "util/can
 		}
 
 		function getRegistry(node, name) {
-			node = coretree.getChild(node, REGISTRY);
-			return coretree.getProperty(node, name);
+			/*node = coretree.getChild(node, REGISTRY);
+			return coretree.getProperty(node, name);*/
+            return (coretree.getProperty(node, REGISTRY) || {})[name];
 		}
 
 		function delRegistry(node, name) {
@@ -5851,28 +4829,28 @@ define('core/corerel',[ "util/assert", "core/coretree", "core/tasync", "util/can
 			return node;
 		}
 
-        function getDataForSingleHash(node) {
-            ASSERT(isValidNode(node));
+		function getDataForSingleHash(node) {
+			ASSERT(isValidNode(node));
 
-            var data = {
-                attributes: coretree.getProperty(node, ATTRIBUTES),
-                registry: coretree.getProperty(node, REGISTRY),
-                children: coretree.getKeys(node)
-            };
-            var prefix = "";
+			var data = {
+				attributes: coretree.getProperty(node, ATTRIBUTES),
+				registry: coretree.getProperty(node, REGISTRY),
+				children: coretree.getKeys(node)
+			};
+			var prefix = "";
 
-            while (node) {
-                var overlays = coretree.getChild(node, OVERLAYS);
-                var rels = coretree.getProperty(overlays, prefix);
-                data[prefix] = rels;
+			while (node) {
+				var overlays = coretree.getChild(node, OVERLAYS);
+				var rels = coretree.getProperty(overlays, prefix);
+				data[prefix] = rels;
 
-                prefix = "/" + coretree.getRelid(node) + prefix;
-                node = coretree.getParent(node);
-            }
+				prefix = "/" + coretree.getRelid(node) + prefix;
+				node = coretree.getParent(node);
+			}
 
-            data = JSON.stringify(data);
-            return data;
-        }
+			data = JSON.stringify(data);
+			return data;
+		}
 
 		function deleteNode(node) {
 			ASSERT(isValidNode(node));
@@ -6153,140 +5131,128 @@ define('core/corerel',[ "util/assert", "core/coretree", "core/tasync", "util/can
 			return TASYNC.lift(children);
 		}
 
-		function getPointerNames(node) {
-			ASSERT(isValidNode(node));
+        function getPointerNames(node) {
+            ASSERT(isValidNode(node));
 
-			var source = "";
-			var names = [];
+            var source = '';
+            var names = [];
 
-			do {
-				var child = coretree.getProperty(coretree.getChild(node, OVERLAYS), source);
-				if (child) {
-					for (var name in child) {
-						ASSERT(names.indexOf(name) === -1);
-						if (isPointerName(name)) {
-							names.push(name);
-						}
-					}
-				}
+            do {
+                var child = (coretree.getProperty(node,OVERLAYS) || {})[source];
+                if (child) {
+                    for (var name in child) {
+                        ASSERT(names.indexOf(name) === -1);
+                        if (isPointerName(name)) {
+                            names.push(name);
+                        }
+                    }
+                }
 
-				source = "/" + coretree.getRelid(node) + source;
-				node = coretree.getParent(node);
-			} while (node);
+                source = '/' + coretree.getRelid(node) + source;
+                node = coretree.getParent(node);
+            } while (node);
 
-			return names;
-		}
+            return names;
+        }
 
-		function getPointerPath(node, name) {
-			ASSERT(isValidNode(node) && typeof name === "string");
+        function getPointerPath(node, name) {
+            ASSERT(isValidNode(node) && typeof name === 'string');
 
-			var source = "";
-			var target;
+            var source = '';
+            var target;
 
-			do {
-				var child = coretree.getChild(node, OVERLAYS);
-				ASSERT(child);
+            do {
+                var child = (coretree.getProperty(node,OVERLAYS) || {})[source];
+                if(child){
+                 target = child[name];
+                 if(target !== undefined){
+                     break;
+                 }
+                }
 
-				child = coretree.getChild(child, source);
-				if (child) {
-					target = coretree.getProperty(child, name);
-					if (target !== undefined) {
-						break;
-					}
-				}
+                source = '/' + coretree.getRelid(node) + source;
+                node = coretree.getParent(node);
+            } while (node);
 
-				source = "/" + coretree.getRelid(node) + source;
-				node = coretree.getParent(node);
-			} while (node);
+            if (target !== undefined) {
+                ASSERT(node);
+                target = coretree.joinPaths(coretree.getPath(node), target);
+            }
 
-			if (target !== undefined) {
-				ASSERT(node);
-				target = coretree.joinPaths(coretree.getPath(node), target);
-			}
+            return target;
+        }
 
-			return target;
-		}
+        function hasPointer(node, name) {
+            ASSERT(isValidNode(node) && typeof name === 'string');
 
-		function hasPointer(node, name) {
-			ASSERT(isValidNode(node) && typeof name === "string");
+            var source = '';
 
-			var source = "";
+            do {
+                var child = (coretree.getProperty(node,OVERLAYS) || {})[source];
+                if (child && child[name] !== undefined) {
+                    return true;
+                }
 
-			do {
-				var child = coretree.getChild(node, OVERLAYS);
-				ASSERT(child);
+                source = '/' + coretree.getRelid(node) + source;
+                node = coretree.getParent(node);
+            } while (node);
 
-				child = coretree.getChild(child, source);
-				if (child && coretree.getProperty(child, name) !== undefined) {
-					return true;
-				}
+            return false;
+        }
 
-				source = "/" + coretree.getRelid(node) + source;
-				node = coretree.getParent(node);
-			} while (node);
+        function getOutsidePointerPath(node, name, source) {
+            ASSERT(isValidNode(node) && typeof name === 'string');
+            ASSERT(typeof source === 'string');
 
-			return false;
-		}
+            var target;
 
-		function getOutsidePointerPath(node, name, source) {
-			ASSERT(isValidNode(node) && typeof name === "string");
-			ASSERT(typeof source === "string");
+            do {
+                var child = (coretree.getProperty(node,OVERLAYS) || {})[source];
+                if(child){
+                    target = child[name];
+                    if(target !== undefined){
+                        break;
+                    }
+                }
 
-			var target;
+                source = '/' + coretree.getRelid(node) + source;
+                node = coretree.getParent(node);
+            } while (node);
 
-			do {
-				var child = coretree.getChild(node, OVERLAYS);
-				ASSERT(child);
+            if (target !== undefined) {
+                ASSERT(node);
+                target = coretree.joinPaths(coretree.getPath(node), target);
+            }
 
-				child = coretree.getChild(child, source);
-				if (child) {
-					target = coretree.getProperty(child, name);
-					if (target !== undefined) {
-						break;
-					}
-				}
+            return target;
+        }
 
-				source = "/" + coretree.getRelid(node) + source;
-				node = coretree.getParent(node);
-			} while (node);
+        function loadPointer(node, name) {
+            ASSERT(isValidNode(node) && name);
 
-			if (target !== undefined) {
-				ASSERT(node);
-				target = coretree.joinPaths(coretree.getPath(node), target);
-			}
+            var source = '';
+            var target;
 
-			return target;
-		}
+            do {
+                var child = (coretree.getProperty(node,OVERLAYS) || {})[source];
+                if(child){
+                    target = child[name];
+                    if(target !== undefined){
+                        break;
+                    }
+                }
 
-		function loadPointer(node, name) {
-			ASSERT(isValidNode(node) && name);
+                source = '/' + coretree.getRelid(node) + source;
+                node = coretree.getParent(node);
+            } while (node);
 
-			var source = "";
-			var target;
-
-			do {
-				var child = coretree.getChild(node, OVERLAYS);
-				ASSERT(child);
-
-				child = coretree.getChild(child, source);
-				if (child) {
-					target = coretree.getProperty(child, name);
-					if (target !== undefined) {
-						break;
-					}
-				}
-
-				source = "/" + coretree.getRelid(node) + source;
-				node = coretree.getParent(node);
-			} while (node);
-
-			if (target !== undefined) {
-				ASSERT(typeof target === "string" && node);
-				return coretree.loadByPath(node, target);
-			} else {
-				return null;
-			}
-		}
+            if (target !== undefined) {
+                ASSERT(typeof target === 'string' && node);
+                return coretree.loadByPath(node, target);
+            } else {
+                return null;
+            }
+        }
 
 		function getCollectionNames(node) {
 			ASSERT(isValidNode(node));
@@ -6414,6 +5380,17 @@ define('core/corerel',[ "util/assert", "core/coretree", "core/tasync", "util/can
 			}
 		}
 
+		function getChildrenHashes(node){
+			var keys = getChildrenRelids(node),
+				i,hashes = {};
+
+			for(i=0;i<keys.length;i++){
+				hashes[keys[i]] = coretree.getChildHash(node,keys[i]);
+			}
+
+			return hashes;
+		}
+
 		// copy everything from coretree
 		var corerel = {};
 		for( var key in coretree) {
@@ -6459,6 +5436,10 @@ define('core/corerel',[ "util/assert", "core/coretree", "core/tasync", "util/can
 		corerel.getCoreTree = function() {
 			return coretree;
 		};
+
+		corerel.getChildrenHashes = getChildrenHashes;
+
+		corerel.overlayInsert = overlayInsert;
 
 		return corerel;
 	}
@@ -6659,6 +5640,15 @@ define('core/setcore',[ "util/assert"], function (ASSERT) {
             }
             return [];
         };
+        setcore.getMemberOwnAttributeNames = function (node, setName, memberPath) {
+            ASSERT(typeof setName === 'string');
+            var memberRelId = getMemberRelId(node, setName, memberPath);
+            if (memberRelId) {
+                var memberNode = innerCore.getChild(innerCore.getChild(innerCore.getChild(node, SETS_ID), setName), memberRelId);
+                return innerCore.getOwnAttributeNames(memberNode);
+            }
+            return [];
+        };
         setcore.getMemberAttribute = function(node,setName,memberPath,attrName){
             ASSERT(typeof setName === 'string' && typeof attrName === 'string');
             harmonizeMemberData(node,setName);
@@ -6696,6 +5686,15 @@ define('core/setcore',[ "util/assert"], function (ASSERT) {
             if(memberRelId){
                 var memberNode = innerCore.getChild(innerCore.getChild(innerCore.getChild(node,SETS_ID),setName),memberRelId);
                 return innerCore.getRegistryNames(memberNode);
+            }
+            return [];
+        };
+        setcore.getMemberOwnRegistryNames = function (node, setName, memberPath) {
+            ASSERT(typeof setName === 'string');
+            var memberRelId = getMemberRelId(node, setName, memberPath);
+            if (memberRelId) {
+                var memberNode = innerCore.getChild(innerCore.getChild(innerCore.getChild(node, SETS_ID), setName), memberRelId);
+                return innerCore.getOwnRegistryNames(memberNode);
             }
             return [];
         };
@@ -7089,100 +6088,25 @@ define('core/coreunwrap',[ "util/assert", "core/tasync" ], function(ASSERT, TASY
 
 		core.loadSubTree = TASYNC.unwrap(oldcore.loadSubTree);
 		core.loadTree = TASYNC.unwrap(oldcore.loadTree);
+
+		//core diff async functions
+		if(typeof oldcore.generateTreeDiff === 'function'){
+			core.generateTreeDiff = TASYNC.unwrap(oldcore.generateTreeDiff);
+		}
+
+		if(typeof  oldcore.generateLightTreeDiff === 'function'){
+		  core.generateLightTreeDiff = TASYNC.unwrap(oldcore.generateLightTreeDiff);
+		}
+
+		if(typeof oldcore.applyTreeDiff === 'function'){
+		  core.applyTreeDiff = TASYNC.unwrap(oldcore.applyTreeDiff);
+		}
+
 		return core;
 	};
 
 	return CoreUnwrap;
 });
-
-/*
- * Copyright (C) 2013 Vanderbilt University, All rights reserved.
- *
- * Author: Tamas Kecskes
- */
-
-define('core/descriptorcore',[], function () {
-    
-
-    var DESCR_ID = "_desc";
-
-    function descriptorCore (_innerCore) {
-
-        //helper functions
-        function updateDescriptorHash(node){
-            var descriptors = _innerCore.getChild(node,DESCR_ID);
-            var dCount = _innerCore.getRegistry(node,'d_count') || 0;
-            _innerCore.setRegistry(node,'d_count',dCount + 1);
-        }
-        var _core = {};
-        for(var i in _innerCore){
-            _core[i] = _innerCore[i];
-        }
-
-
-        //extra functions
-        _core.getAttributeDescriptor = function(node,attributename){
-            var descriptors = _innerCore.getChild(node,DESCR_ID);
-            var descriptor = _innerCore.getChild(descriptors,"a_"+attributename);
-            return _innerCore.getRegistry(descriptor,'descriptor');
-        };
-        _core.setAttributeDescriptor = function(node,attributename,descobject){
-            var descriptors = _innerCore.getChild(node,DESCR_ID);
-            var descriptor = _innerCore.getChild(descriptors,"a_"+attributename);
-            _innerCore.setRegistry(descriptor,'descriptor',descobject);
-            updateDescriptorHash(node);
-        };
-        _core.delAttributeDescriptor = function(node,attributename){
-            var descriptors = _innerCore.getChild(node,DESCR_ID);
-            var descriptor = _innerCore.getChild(descriptors,"a_"+attributename);
-            _innerCore.deleteNode(descriptor);
-            updateDescriptorHash(node);
-        };
-
-        _core.getPointerDescriptor = function(node,pointername){
-            var descriptors = _innerCore.getChild(node,DESCR_ID);
-            var descriptor = _innerCore.getChild(descriptors,"p_"+pointername);
-            return _innerCore.getRegistry(descriptor,'descriptor');
-        };
-        _core.setPointerDescriptor = function(node,pointername,descobject){
-            var descriptors = _innerCore.getChild(node,DESCR_ID);
-            var descriptor = _innerCore.getChild(descriptors,"p_"+pointername);
-            _innerCore.setRegistry(descriptor,'descriptor',descobject);
-            updateDescriptorHash(node);
-        };
-        _core.delPointerDescriptor = function(node,pointername){
-            var descriptors = _innerCore.getChild(node,DESCR_ID);
-            var descriptor = _innerCore.getChild(descriptors,"p_"+pointername);
-            _innerCore.deleteNode(descriptor);
-            updateDescriptorHash(node);
-        };
-
-
-        _core.getNodeDescriptor = function(node){
-            var descriptors = _innerCore.getChild(node,DESCR_ID);
-            var descriptor = _innerCore.getChild(descriptors,"n_");
-            return _innerCore.getRegistry(descriptor,'descriptor');
-        };
-        _core.setNodeDescriptor = function(node,descobject){
-            var descriptors = _innerCore.getChild(node,DESCR_ID);
-            var descriptor = _innerCore.getChild(descriptors,"n_");
-            _innerCore.setRegistry(descriptor,'descriptor',descobject);
-            updateDescriptorHash(node);
-        };
-        _core.delNodeDescriptor = function(node,descobject){
-            var descriptors = _innerCore.getChild(node,DESCR_ID);
-            var descriptor = _innerCore.getChild(descriptors,"n_");
-            _innerCore.deleteNode(descriptor);
-            updateDescriptorHash(node);
-        };
-
-
-        return _core;
-    }
-
-    return descriptorCore;
-});
-
 
 /*
  * Copyright (C) 2012 Vanderbilt University, All rights reserved.
@@ -9070,6 +7994,7 @@ define('core/metacore',[ "util/assert", "core/core", "core/tasync", "util/jjv", 
                       diff.items.push(bigItem.items[index]);
                       diff.minItems.push(bigItem.minItems[index]);
                       diff.maxItems.push(bigItem.maxItems[index]);
+
                   }
                   if(bigItem.min && ((smallItem.min && bigItem.min !== smallItem.min) || !smallItem.min)){
                       diff = diff || {};
@@ -9162,7 +8087,7 @@ define('core/metacore',[ "util/assert", "core/core", "core/tasync", "util/jjv", 
         };
 
         core.clearMetaRules = function(node){
-            core.deleteNode(MetaNode(node));
+            core.deleteNode(MetaNode(node),true);
         };
 
         core.setAttributeMeta = function(node,name,value){
@@ -9177,6 +8102,9 @@ define('core/metacore',[ "util/assert", "core/core", "core/tasync", "util/jjv", 
             return core.getAttribute(MetaNode(node),name);
         };
 
+        core.getValidChildrenPaths = function(node){
+            return core.getMemberPaths(MetaChildrenNode(node),'items');
+        };
         core.setChildMeta = function(node,child,min,max){
             core.addMember(MetaChildrenNode(node),'items',child);
             min = min || -1;
@@ -9325,13 +8253,2136 @@ define('core/coretreeloader',[ "util/assert", "core/core", "core/tasync" ], func
 });
 
 /*
+ * Copyright (C) 2014 Vanderbilt University, All rights reserved.
+ *
+ * Author: Tamas Kecskes
+ */
+define('core/corediff',['util/canon', 'core/tasync', 'util/assert'], function (CANON, TASYNC, ASSERT) {
+  
+
+
+  function diffCore(_innerCore) {
+    var _core = {},
+      _yetToCompute = {},
+      _DIFF = {},
+      _needChecking = true,
+      _rounds = 0,
+      TODELETESTRING = "*to*delete*",
+    /*EMPTYGUID = "00000000-0000-0000-0000-000000000000",
+     EMPTYNODE = _innerCore.createNode({base: null, parent: null, guid: EMPTYGUID}),*/
+      toFrom = {}, //TODO should not be global
+      fromTo = {}, //TODO should not be global
+      _concat_dictionary,
+      _concat_result,
+      _diff_moves = {},
+      _conflict_items = [],
+      _conflict_parents = {},
+      _conflict_mine,
+      _conflict_theirs,
+      _concat_base,
+      _concat_extension,
+      _concat_base_removals,
+      _concat_moves,
+      _resolve_moves;
+
+    for (var i in _innerCore) {
+      _core[i] = _innerCore[i];
+    }
+
+    function normalize(obj) {
+      if (!obj) {
+        return obj;
+      }
+      var keys = Object.keys(obj),
+        i;
+      for (i = 0; i < keys.length; i++) {
+        /*if (Array.isArray(obj[keys[i]])) {
+          if (obj[keys[i]].length === 0) {
+            delete obj[keys[i]];
+          }*/
+        if(Array.isArray(obj[keys[i]])) {
+          //do nothing, leave the array as is
+        } else if(obj[keys[i]] === undefined) {
+          delete obj[keys[i]]; //there cannot be undefined in the object
+        } else if (typeof obj[keys[i]] === 'object'){
+          normalize(obj[keys[i]]);
+          if (obj[keys[i]] && Object.keys(obj[keys[i]]).length === 0) {
+            delete obj[keys[i]];
+          }
+        }
+      }
+      keys = Object.keys(obj);
+      if(keys.length === 1){
+        //it only has the GUID, so the node doesn't changed at all
+        delete obj.guid;
+      }
+    }
+
+    function attr_diff(source, target) {
+      var sNames = _core.getOwnAttributeNames(source),
+        tNames = _core.getOwnAttributeNames(target),
+        i,
+        diff = {};
+
+      for (i = 0; i < sNames.length; i++) {
+        if (tNames.indexOf(sNames[i]) === -1) {
+          diff[sNames[i]] = TODELETESTRING;
+        }
+      }
+
+      for (i = 0; i < tNames.length; i++) {
+        if (_core.getAttribute(source, tNames[i]) === undefined) {
+          diff[tNames[i]] = _core.getAttribute(target, tNames[i]);
+        } else {
+          if (CANON.stringify(_core.getAttribute(source, tNames[i])) !== CANON.stringify(_core.getAttribute(target, tNames[i]))) {
+            diff[tNames[i]] = _core.getAttribute(target, tNames[i]);
+          }
+        }
+      }
+
+      return diff;
+    }
+
+    function reg_diff(source, target) {
+      var sNames = _core.getOwnRegistryNames(source),
+        tNames = _core.getOwnRegistryNames(target),
+        i,
+        diff = {};
+
+      for (i = 0; i < sNames.length; i++) {
+        if (tNames.indexOf(sNames[i]) === -1) {
+          diff[sNames[i]] = TODELETESTRING;
+        }
+      }
+
+      for (i = 0; i < tNames.length; i++) {
+        if (_core.getRegistry(source, tNames[i]) === undefined) {
+          diff[tNames[i]] = _core.getRegistry(target, tNames[i]);
+        } else {
+          if (CANON.stringify(_core.getRegistry(source, tNames[i])) !== CANON.stringify(_core.getRegistry(target, tNames[i]))) {
+            diff[tNames[i]] = _core.getRegistry(target, tNames[i]);
+          }
+        }
+      }
+
+      return diff;
+    }
+
+    function children_diff(source, target) {
+      var sRelids = _core.getChildrenRelids(source),
+        tRelids = _core.getChildrenRelids(target),
+        tHashes = _core.getChildrenHashes(target),
+        sHashes = _core.getChildrenHashes(source),
+        i,
+        diff = {added: [], removed: []};
+
+      for (i = 0; i < sRelids.length; i++) {
+        if (tRelids.indexOf(sRelids[i]) === -1) {
+          diff.removed.push({relid: sRelids[i], hash: sHashes[sRelids[i]]});
+        }
+      }
+
+      for (i = 0; i < tRelids.length; i++) {
+        if (sRelids.indexOf(tRelids[i]) === -1) {
+          diff.added.push({relid: tRelids[i], hash: tHashes[tRelids[i]]});
+        }
+      }
+
+      return diff;
+
+    }
+
+    function pointer_diff(source, target) {
+      var getPointerData = function(node){
+        var data = {},
+        names = _core.getPointerNames(node),
+        i;
+        for(i=0;i<names.length;i++){
+          data[names[i]] = _core.getPointerPath(node,names[i]);
+        }
+        return data;
+      }, 
+      sPointer = getPointerData(source), 
+      tPointer = getPointerData(target);
+
+      if(CANON.stringify(sPointer) !== CANON.stringify(tPointer)){
+        return {source: sPointer,target:tPointer};
+      }
+      return {};
+    }
+
+    function set_diff(source,target){
+      var getSetData = function(node){
+        var data = {},
+        names,targets,keys,i,j,k;
+
+        names = _core.getSetNames(node);
+        for(i=0;i<names.length;i++){
+          data[names[i]] = {};
+          targets = _core.getMemberPaths(node,names[i]);
+          for(j=0;j<targets.length;j++){
+            data[names[i]][targets[j]] = {attr:{},reg:{}};
+            keys = _core.getMemberOwnAttributeNames(node,names[i],targets[j]);
+            for(k=0;k<keys.length;k++){
+              data[names[i]][targets[j]].attr[keys[i]] = _core.getMemberAttribute(node,names[i],targets[j],keys[i]);
+            }
+            keys = _core.getMemberRegistryNames(node,names[i],targets[j]);
+            for(k=0;k<keys.length;k++){
+              data[names[i]][targets[j]].reg[keys[k]] = _core.getMemberRegistry(node,names[i],targets[j],keys[k]);
+            }
+          }
+        }
+
+        return data;
+
+      },
+      sSet = getSetData(source),
+      tSet = getSetData(target);
+
+      if(CANON.stringify(sSet) !== CANON.stringify(tSet)){
+        return {source:sSet,target:tSet};
+      }
+      return {};
+    }
+    function ovr_diff(source,target){
+      var getOvrData = function(node){
+        var paths,names,i,j,
+        ovr = _core.getProperty(node, 'ovr') || {},
+        data = {},
+        base = _core.getPath(node);
+
+        paths = Object.keys(ovr);
+        for(i=0;i<paths.length;i++){
+          if(paths[i].indexOf('_') === -1){
+            data[paths[i]] = {};
+            names = Object.keys(ovr[paths[i]]);
+            for(j=0;j<names.length;j++){
+              if(ovr[paths[i]][names[j]] === "/_nullptr"){
+                data[paths[i]][names[j]] = null;
+              }else if(names[j].slice(-4) !== '-inv' && ovr[paths[i]][names[j]].indexOf('_') === -1){
+                data[paths[i]][names[j]] = _core.joinPaths(base,ovr[paths[i]][names[j]]);
+              }
+            }
+          }
+        }
+        return data;
+      },
+      sOvr = getOvrData(source),
+      tOvr = getOvrData(target);
+
+      if(CANON.stringify(sOvr) !== CANON.stringify(tOvr)){
+        return {source:sOvr,target:tOvr};
+      }
+      return {};
+    }
+
+    function meta_diff(source, target) {
+      var sMeta = _core.getOwnJsonMeta(source),
+      tMeta = _core.getOwnJsonMeta(target);
+      if (CANON.stringify(sMeta) !== CANON.stringify(tMeta)) {
+        return {source: sMeta, target: tMeta};
+      }
+      return {};
+    }
+
+    function combineMoveIntoMetaDiff(diff){
+      var keys = Object.keys(diff),
+      i;
+      for(i=0;i<keys.length;i++){
+        if(_diff_moves[keys[i]]){
+          diff[_diff_moves[keys[i]]] = diff[keys[i]];
+          delete diff[keys[i]];
+        } else if(typeof diff[keys[i]] === 'object'){
+          combineMoveIntoMetaDiff(diff[keys[i]]);
+        }
+      }
+    }
+    function combineMoveIntoPointerDiff(diff){
+      var keys = Object.keys(diff),
+      i;
+      for(i=0;i<keys.length;i++){
+        if(_diff_moves[diff[keys[i]]]){
+         diff[keys[i]] = _diff_moves[diff[keys[i]]];
+        }
+      }
+    }
+
+    function finalizeDiff(){
+      finalizeMetaDiff(_DIFF);
+      finalizePointerDiff(_DIFF);
+      finalizeSetDiff(_DIFF);
+      normalize(_DIFF);
+    } 
+    function finalizeMetaDiff(diff){
+      //at this point _DIFF is ready and the _diff_moves is complete...
+      var relids = getDiffChildrenRelids(diff),
+      i,sMeta,tMeta;
+      if(diff.meta){
+        sMeta = diff.meta.source || {};
+        tMeta = diff.meta.target || {};
+        combineMoveIntoMetaDiff(sMeta);
+        diff.meta = diffObjects(sMeta,tMeta);  
+      }
+      for(i=0;i<relids.length;i++){
+        finalizeMetaDiff(diff[relids[i]]);
+      }
+    }
+    function finalizePointerDiff(diff){
+      var relids = getDiffChildrenRelids(diff),
+      i,sPointer,tPointer;
+      if(diff.pointer){
+        sPointer = diff.pointer.source || {};
+        tPointer = diff.pointer.target || {};
+        /*if(diff.movedFrom && !sPointer.base && tPointer.base){
+          delete tPointer.base;
+        }*/
+        combineMoveIntoPointerDiff(sPointer);
+        diff.pointer = diffObjects(sPointer,tPointer);
+      }
+      for(i=0;i<relids.length;i++){
+        finalizePointerDiff(diff[relids[i]]);
+      } 
+    }
+    function finalizeSetDiff(diff){
+      var relids = getDiffChildrenRelids(diff),
+      i,sSet,tSet;
+      if(diff.set){
+        sSet = diff.set.source || {};
+        tSet = diff.set.target || {};
+        combineMoveIntoMetaDiff(sSet);
+        diff.set = diffObjects(sSet,tSet);
+      }
+      for(i=0;i<relids.length;i++){
+        finalizeSetDiff(diff[relids[i]]);
+      }
+    }
+
+    function isEmptyNodeDiff(diff) {
+      if (
+        Object.keys(diff.children || {}).length > 0 ||
+        Object.keys(diff.attr || {}).length > 0 ||
+        Object.keys(diff.reg || {}).length > 0 ||
+        Object.keys(diff.pointer || {}).length > 0 ||
+        Object.keys(diff.set || {}).length > 0 ||
+        diff.meta
+        ) {
+        return false;
+      }
+      return true;
+    }
+
+    function getPathOfDiff(diff, path) {
+      var pathArray = (path || "").split('/'),
+        i;
+      pathArray.shift();
+      for (i = 0; i < pathArray.length; i++) {
+        diff[pathArray[i]] = diff[pathArray[i]] || {};
+        diff = diff[pathArray[i]];
+      }
+
+      return diff;
+    }
+
+    function extendDiffWithOvr(diff,oDiff){
+      var i,paths,names, j, tDiff;
+      //first extend sources
+      paths = Object.keys(oDiff.source || {});
+      for(i=0;i<paths.length;i++){
+        tDiff = getPathOfDiff(diff, paths[i]);
+        if(!tDiff.removed === true){
+          tDiff.pointer = tDiff.pointer || {source:{},target:{}};
+          names = Object.keys(oDiff.source[paths[i]]);
+          for(j=0;j<names.length;j++){
+            tDiff.pointer.source[names[j]] = oDiff.source[paths[i]][names[j]];
+          }
+        }
+      }
+      //then targets
+      paths = Object.keys(oDiff.target || {});
+      for(i=0;i<paths.length;i++){
+        tDiff = getPathOfDiff(diff, paths[i]);
+        if(!tDiff.removed === true){
+          tDiff.pointer = tDiff.pointer || {source:{},target:{}};
+          names = Object.keys(oDiff.target[paths[i]]);
+          for(j=0;j<names.length;j++){
+            tDiff.pointer.target[names[j]] = oDiff.target[paths[i]][names[j]];
+          }
+        }
+      }
+    }
+
+    function updateDiff(sourceRoot, targetRoot) {
+      var sChildrenHashes = _core.getChildrenHashes(sourceRoot),
+        tChildrenHAshes = _core.getChildrenHashes(targetRoot),
+        sRelids = Object.keys(sChildrenHashes),
+        tRelids = Object.keys(tChildrenHAshes),
+        diff = _core.nodeDiff(sourceRoot, targetRoot) || {},
+        oDiff = ovr_diff(sourceRoot, targetRoot),
+        getChild = function (childArray, relid) {
+          for (var i = 0; i < childArray.length; i++) {
+            if (_core.getRelid(childArray[i]) === relid) {
+              return childArray[i];
+            }
+          }
+          return null;
+        };
+      return TASYNC.call(function (sChildren, tChildren) {
+        ASSERT(sChildren.length >= 0 && tChildren.length >= 0);
+
+        var i, child, done, tDiff, guid, base;
+
+        tDiff = diff.children ? diff.children.removed || [] : [];
+        for (i = 0; i < tDiff.length; i++) {
+          diff.childrenListChanged = true;
+          child = getChild(sChildren, tDiff[i].relid);
+          if(child){
+            guid = _core.getGuid(child);
+            diff[tDiff[i].relid] = {guid: guid, removed: true, hash: _core.getHash(child)};
+            _yetToCompute[guid] = _yetToCompute[guid] || {};
+            _yetToCompute[guid].from = child;
+            _yetToCompute[guid].fromExpanded = false;
+          }
+        }
+
+        tDiff = diff.children ? diff.children.added || [] : [];
+        for (i = 0; i < tDiff.length; i++) {
+          diff.childrenListChanged = true;
+          child = getChild(tChildren, tDiff[i].relid);
+          if(child){
+            guid = _core.getGuid(child);
+            base =_core.getBase(child);
+            if(base){
+              base = _core.getPath(base);
+            }
+            diff[tDiff[i].relid] = {guid: guid, removed: false, hash: _core.getHash(child), pointer:{source:{},target:{base:base}}};
+            _yetToCompute[guid] = _yetToCompute[guid] || {};
+            _yetToCompute[guid].to = child;
+            _yetToCompute[guid].toExpanded = false;
+          }
+        }
+
+        for (i = 0; i < tChildren.length; i++) {
+          child = getChild(sChildren, _core.getRelid(tChildren[i]));
+          if (child && _core.getHash(tChildren[i]) !== _core.getHash(child)) {
+            done = TASYNC.call(function (cDiff, relid, d) {
+              diff[relid] = cDiff;
+              return null;
+            }, updateDiff(child, tChildren[i]), _core.getRelid(child), done);
+          }
+        }
+        return TASYNC.call(function () {
+          delete diff.children;
+          extendDiffWithOvr(diff, oDiff);
+          normalize(diff);
+          if (Object.keys(diff).length > 0) {
+            diff.guid = _core.getGuid(targetRoot);
+            diff.hash = _core.getHash(targetRoot);
+            diff.oGuids = gatherObstructiveGuids(targetRoot);
+            return TASYNC.call(function (finalDiff) {
+              return finalDiff;
+            }, fillMissingGuid(targetRoot, '', diff));
+          } else {
+            return diff;
+          }
+
+        }, done);
+      }, _core.loadChildren(sourceRoot), _core.loadChildren(targetRoot));
+    }
+
+    function gatherObstructiveGuids(node){
+      var result = {},
+        putParents = function(n){
+          while(n){
+            result[_core.getGuid(n)] = true;
+            n = _core.getParent(n);
+          }
+        };
+      while(node){
+        putParents(node);
+        node = _core.getBase(node);
+      }
+      return result;
+    }
+    function fillMissingGuid(root, path, diff) {
+      var relids = getDiffChildrenRelids(diff),
+        i,
+        done;
+
+      for (i = 0; i < relids.length; i++) {
+        done = TASYNC.call(function (cDiff, relid) {
+          diff[relid] = cDiff;
+          return null;
+        }, fillMissingGuid(root, path + '/' + relids[i], diff[relids[i]]), relids[i]);
+      }
+      return TASYNC.call(function () {
+        if (diff.guid) {
+          return diff;
+        } else {
+          return TASYNC.call(function (child) {
+            diff.guid = _core.getGuid(child);
+            diff.hash = _core.getHash(child);
+            diff.oGuids = gatherObstructiveGuids(child);
+            return diff;
+          }, _core.loadByPath(root, path));
+        }
+      }, done);
+    }
+
+    function expandDiff(root, isDeleted) {
+      var diff = {
+        guid: _core.getGuid(root),
+        hash: _core.getHash(root),
+        removed: isDeleted === true
+      };
+      return TASYNC.call(function (children) {
+        var guid;
+        for (var i = 0; i < children.length; i++) {
+          guid = _core.getGuid(children[i]);
+          diff[_core.getRelid(children[i])] = {
+            guid: guid,
+            hash: _core.getHash(children[i]),
+            removed: isDeleted === true
+          };
+
+          if (isDeleted) {
+            _yetToCompute[guid] = _yetToCompute[guid] || {};
+            _yetToCompute[guid].from = children[i];
+            _yetToCompute[guid].fromExpanded = false;
+          } else {
+            _yetToCompute[guid] = _yetToCompute[guid] || {};
+            _yetToCompute[guid].to = children[i];
+            _yetToCompute[guid].toExpanded = false;
+          }
+        }
+        return diff;
+      }, _core.loadChildren(root));
+    }
+
+    function insertIntoDiff(path, diff) {
+      var pathArray = path.split('/'),
+        relid = pathArray.pop(),
+        sDiff = _DIFF,
+        i;
+      pathArray.shift();
+      for (i = 0; i < pathArray.length; i++) {
+        sDiff = sDiff[pathArray[i]];
+      }
+      //sDiff[relid] = diff;
+      sDiff[relid] = mergeObjects(sDiff[relid], diff);
+    }
+
+    function diffObjects(source,target) {
+      var diff = {},
+        sKeys = Object.keys(source),
+        tKeys = Object.keys(target),
+        tDiff,i;
+      for (i = 0; i < sKeys.length; i++) {
+        if(tKeys.indexOf(sKeys[i]) === -1){
+          diff[sKeys[i]] = TODELETESTRING;
+        }
+      }
+      for (i = 0; i < tKeys.length; i++) {
+        if (sKeys.indexOf(tKeys[i]) === -1) {
+          diff[tKeys[i]] = target[tKeys[i]];
+        } else {
+          if (typeof target[tKeys[i]] === typeof source[tKeys[i]] &&
+            typeof target[tKeys[i]] === 'object' &&
+            (target[tKeys[i]] !== null && source[tKeys[i]] !== null)) {
+            tDiff = diffObjects(source[tKeys[i]], target[tKeys[i]]);
+            if(Object.keys(tDiff).length > 0){
+              diff[tKeys[i]] = tDiff;
+            }
+          } else if(source[tKeys[i]] !== target[tKeys[i]]) {
+            diff[tKeys[i]] = target[tKeys[i]];
+          }
+        }
+      }
+      return diff;
+    }
+
+    function mergeObjects(source, target) {
+      var merged = {},
+        sKeys = Object.keys(source),
+        tKeys = Object.keys(target),
+        i;
+      for (i = 0; i < sKeys.length; i++) {
+        merged[sKeys[i]] = source[sKeys[i]];
+      }
+      for (i = 0; i < tKeys.length; i++) {
+        if (sKeys.indexOf(tKeys[i]) === -1) {
+          merged[tKeys[i]] = target[tKeys[i]];
+        } else {
+          if (typeof target[tKeys[i]] === typeof source[tKeys[i]] && typeof target[tKeys[i]] === 'object' && !(target instanceof Array)) {
+            merged[tKeys[i]] = mergeObjects(source[tKeys[i]], target[tKeys[i]]);
+          } else {
+            merged[tKeys[i]] = target[tKeys[i]];
+          }
+        }
+      }
+
+      return merged;
+    }
+
+    function removePathFromDiff(diff,path){
+      var relId,i;
+      if(path === ''){
+        diff = null;
+      } else {
+        path = path.split('/');
+        path.shift();
+        relId = path.pop();
+        for(i=0;i<path.length;i++){
+          diff = diff[path[i]];
+        }
+        delete diff[relId];
+      }
+    }
+    function shrinkDiff(rootDiff){
+      var _shrink = function(diff){
+        if(diff){
+          var keys = getDiffChildrenRelids(diff),
+            i;
+          if(typeof diff.movedFrom === 'string'){
+            removePathFromDiff(rootDiff,diff.movedFrom);
+          }
+
+          if(diff.removed !== false || typeof diff.movedFrom === 'string'){
+            delete diff.hash;
+          }
+
+          if(diff.removed === true){
+            for(i=0;i<keys.length;i++){
+              delete diff[keys[i]];
+            }
+          } else {
+
+            for(i=0;i<keys.length;i++){
+              _shrink(diff[keys[i]]);
+            }
+          }
+        }
+      };
+      _shrink(rootDiff,false);
+    }
+    function checkRound() {
+      var guids = Object.keys(_yetToCompute),
+        done, ytc,
+        i;
+      if (_needChecking !== true || guids.length < 1) {
+        shrinkDiff(_DIFF);
+        finalizeDiff();
+        return _DIFF;
+      }
+      _needChecking = false;
+      for (i = 0; i < guids.length; i++) {
+        ytc = _yetToCompute[guids[i]];
+        if (ytc.from && ytc.to) {
+          //move
+          _needChecking = true;
+          delete _yetToCompute[guids[i]];
+          done = TASYNC.call(function (mDiff, info) {
+            mDiff.guid = _core.getGuid(info.from);
+            mDiff.movedFrom = _core.getPath(info.from);
+            mDiff.ooGuids = gatherObstructiveGuids(info.from);
+            _diff_moves[_core.getPath(info.from)] = _core.getPath(info.to);
+            insertAtPath(_DIFF,_core.getPath(info.to),mDiff);
+            return null;
+          }, updateDiff(ytc.from, ytc.to), ytc);
+        } else {
+          if (ytc.from && ytc.fromExpanded === false) {
+            //expand from
+            ytc.fromExpanded = true;
+            _needChecking = true;
+            done = TASYNC.call(function (mDiff, info) {
+              mDiff.hash = _core.getHash(info.from);
+              mDiff.removed = true;
+              insertIntoDiff(_core.getPath(info.from), mDiff);
+              return null;
+            }, expandDiff(ytc.from, true), ytc);
+          } else if (ytc.to && ytc.toExpanded === false) {
+            //expand to
+            ytc.toExpanded = true;
+            _needChecking = true;
+            done = TASYNC.call(function (mDiff, info) {
+              if(!mDiff.hash){
+                mDiff.hash = _core.getHash(info.to);
+              }
+              mDiff.removed = false;
+              insertIntoDiff(_core.getPath(info.to), mDiff);
+              return null;
+            }, expandDiff(ytc.to, false), ytc);
+          }
+        }
+      }
+      return TASYNC.call(function () {
+        return checkRound();
+      }, done);
+    }
+
+    _core.nodeDiff = function (source, target) {
+      var diff = {
+        children: children_diff(source, target),
+        attr: attr_diff(source, target),
+        reg: reg_diff(source, target),
+        pointer: pointer_diff(source, target),
+        set: set_diff(source, target),
+        meta: meta_diff(source, target)
+      };
+
+      normalize(diff);
+      return isEmptyNodeDiff(diff) ? null : diff;
+    };
+
+    _core.generateTreeDiff = function (sRoot, tRoot) {
+      _yetToCompute = {};
+      _DIFF = {};
+      _diff_moves = {};
+      _needChecking = true;
+      _rounds = 0;
+      return TASYNC.call(function (d) {
+        _DIFF = d;
+        return checkRound();
+      }, updateDiff(sRoot, tRoot));
+    };
+
+    _core.generateLightTreeDiff = function (sRoot, tRoot) {
+      return updateDiff(sRoot, tRoot);
+    };
+
+    function getDiffChildrenRelids(diff) {
+      var keys = Object.keys(diff),
+        i,
+        filteredKeys = [],
+        forbiddenWords = {
+          guid: true,
+          hash: true,
+          attr: true,
+          reg: true,
+          pointer: true,
+          set: true,
+          meta: true,
+          removed: true,
+          movedFrom: true,
+          childrenListChanged: true,
+          oGuids: true,
+          ooGuids: true,
+          min: true,
+          max: true
+        };
+      for (i = 0; i < keys.length; i++) {
+        if (!forbiddenWords[keys[i]]) {
+          filteredKeys.push(keys[i]);
+        }
+      }
+      return filteredKeys;
+    }
+
+    function getMoveSources(diff, path, toFrom, fromTo) {
+      var relids = getDiffChildrenRelids(diff),
+        i, paths = [];
+
+      for (i = 0; i < relids.length; i++) {
+        getMoveSources(diff[relids[i]], path + '/' + relids[i], toFrom, fromTo);
+      }
+
+      if (typeof diff.movedFrom === 'string') {
+        toFrom[path] = diff.movedFrom;
+        fromTo[diff.movedFrom] = path;
+      }
+    }
+
+    function getAncestor(node,path){
+      var ownPath = _core.getPath(node),
+        ancestorPath='',
+        i;
+      path=path.split('/');
+      ownPath=ownPath.split('/');
+      ownPath.shift();
+      path.shift();
+      for(i=0;i<ownPath.length;i++){
+        if(ownPath[i] === path[i]){
+          ancestorPath= ancestorPath+'/'+ownPath[i];
+        } else {
+          break;
+        }
+      }
+      ownPath = _core.getPath(node);
+      while(ownPath !== ancestorPath){
+        node = _core.getParent(node);
+        ownPath = _core.getPath(node);
+      }
+      return node;
+    }
+    function setBaseOfNewNode(node,relid,basePath){
+      //TODO this is a kind of low level hack so maybe there should be another way to do this
+      var ancestor = getAncestor(node,basePath),
+        sourcePath = _core.getPath(node).substr(_core.getPath(ancestor).length),
+        targetPath = basePath.substr(_core.getPath(ancestor).length);
+      sourcePath = sourcePath+'/'+relid;
+      _innerCore.overlayInsert(_core.getChild(ancestor,'ovr'),sourcePath,'base',targetPath);
+    }
+    function makeInitialContainmentChanges(node,diff){
+      var relids = getDiffChildrenRelids(diff),
+        i,done,child,moved;
+
+      for(i=0;i<relids.length;i++){
+        moved = false;
+        if(diff[relids[i]].movedFrom){
+          //moved node
+          moved = true;
+          child = _core.loadByPath(_core.getRoot(node),diff[relids[i]].movedFrom);
+        } else if(diff[relids[i]].removed === false){
+          //added node
+          //first we hack the pointer, then we create the node
+          if(diff[relids[i]].pointer && diff[relids[i]].pointer.base){
+            //we can set base if the node has one, otherwise it is 'inheritance internal' node
+            setBaseOfNewNode(node,relids[i],diff[relids[i]].pointer.base);
+          }
+          if(diff[relids[i]].hash){
+            _core.setProperty(node,relids[i],diff[relids[i]].hash);
+            child = _core.loadChild(node,relids[i]);
+          } else {
+            child = _core.getChild(node,relids[i]);
+            _core.setHashed(child,true);
+          }
+        } else {
+          //simple node
+          child = _core.loadChild(node,relids[i]);
+        }
+
+        done = TASYNC.call(function(n,di,p,m,d){
+          if(m === true){
+            n = _core.moveNode(n,p);
+          }
+          return makeInitialContainmentChanges(n,di);
+        },child,diff[relids[i]],node,moved,done);
+      }
+
+      TASYNC.call(function(d){
+        return null;
+      },done);
+    }
+    function createNewNodes(node, diff) {
+      var relids = getDiffChildrenRelids(diff),
+        i,
+        done;
+
+      for (i = 0; i < relids.length; i++) {
+        if (diff[relids[i]].removed === false && !diff[relids[i]].movedFrom) {
+          //we have to create the child with the exact hash and then recursively call the function for it
+          /*if(!(node.data[relids[i]] && node.data[relids[i]] === diff[relids[i]].hash)){
+            //if it is a child of a new node we probably do not have to create it again...
+            if(diff[relids[i]].hash){
+              _core.setProperty(node,relids[i],diff[relids[i]].hash);
+            } else {
+              //create an empty child
+              var child = _core.getChild(node,relids[i]);
+              _core.setHashed(child,true);
+            }
+          }*/
+          if(diff[relids[i]].hash){
+            _core.setProperty(node,relids[i],diff[relids[i]].hash);
+          } else {
+            var child = _core.getChild(node,relids[i]);
+            _core.setHashed(child,true);
+          }
+          if(diff[relids[i]].pointer && diff[relids[i]].pointer.base){
+            //we can set base if the node has one, otherwise it is 'inheritance internal' node
+            setBaseOfNewNode(node,relids[i],diff[relids[i]].pointer.base);
+          }
+        }
+
+        done = TASYNC.call(function (a, b, c) {
+          return createNewNodes(a, b);
+        }, _core.loadChild(node, relids[i]), diff[relids[i]], done);
+
+      }
+
+      return TASYNC.call(function (d) {
+        return null;
+      },done);
+    }
+
+    function applyNodeChange(root, path, nodeDiff) {
+      //check for move
+      var node;
+      node = _core.loadByPath(root, path);
+
+      return TASYNC.call(function (n) {
+        var done,
+          relids = getDiffChildrenRelids(nodeDiff),
+          i;
+        if (nodeDiff.removed === true) {
+          _core.deleteNode(n);
+          return;
+        }
+        applyAttributeChanges(n, nodeDiff.attr || {});
+        applyRegistryChanges(n, nodeDiff.reg || {});
+        done = applyPointerChanges(n, nodeDiff.pointer || {});
+        done = TASYNC.call(applySetChanges,n, nodeDiff.set || {},done);
+        if(nodeDiff.meta){
+          delete nodeDiff.meta.empty;
+          done = TASYNC.call(applyMetaChanges,n, nodeDiff.meta,done);
+        }
+        for (i = 0; i < relids.length; i++) {
+          /*done = TASYNC.call(function () {
+            return null;
+          }, applyNodeChange(root, path + '/' + relids[i], nodeDiff[relids[i]]), done);*/
+          done = TASYNC.join(done,applyNodeChange(root, path + '/' + relids[i], nodeDiff[relids[i]]));
+        }
+        /*TASYNC.call(function (d) {
+          return done;
+        }, done);*/
+          return done;
+      }, node);
+    }
+
+    function applyAttributeChanges(node, attrDiff) {
+      var i, keys;
+      keys = Object.keys(attrDiff);
+      for (i = 0; i < keys.length; i++) {
+        if (attrDiff[keys[i]] === TODELETESTRING) {
+          _core.delAttribute(node, keys[i]);
+        } else {
+          _core.setAttribute(node, keys[i], attrDiff[keys[i]]);
+        }
+      }
+    }
+
+    function applyRegistryChanges(node, regDiff) {
+      var i, keys;
+      keys = Object.keys(regDiff);
+      for (i = 0; i < keys.length; i++) {
+        if (regDiff[keys[i]] === TODELETESTRING) {
+          _core.delRegistry(node, keys[i]);
+        } else {
+          _core.setRegistry(node, keys[i], regDiff[keys[i]]);
+        }
+      }
+    }
+
+    function setPointer(node, name, target) {
+      var targetNode;
+      if(target === null){
+        targetNode = null;
+      } else {
+        if(fromTo[target]){
+          target = fromTo[target];
+        }
+        targetNode = _core.loadByPath(_core.getRoot(node),target);
+      }
+      return TASYNC.call(function (t) {
+        //TODO watch if handling of base changes!!!
+        _core.setPointer(node, name, t);
+        return;
+      }, targetNode);
+    }
+
+    function applyPointerChanges(node, pointerDiff) {
+      var done,
+        keys = Object.keys(pointerDiff),
+        i;
+      for (i = 0; i < keys.length; i++) {
+        if (pointerDiff[keys[i]] === TODELETESTRING) {
+          _core.deletePointer(node, keys[i]);
+        } else {
+          done = setPointer(node, keys[i], pointerDiff[keys[i]]);
+        }
+      }
+
+      return TASYNC.call(function (d) {
+        return null;
+      }, done);
+
+    }
+
+    function addMember(node, name, target, data) {
+      var memberAttrSetting = function (diff) {
+          var keys = _core.getMemberOwnAttributeNames(node, name, target),
+            i;
+          for (i = 0; i < keys.length; i++) {
+            _core.delMemberAttribute(node, name, target, keys[i]);
+          }
+
+          keys = Object.keys(diff);
+          for (i = 0; i < keys.length; i++) {
+            _core.setMemberAttribute(node, name, target, keys[i], diff[keys[i]]);
+          }
+        },
+        memberRegSetting = function (diff) {
+          var keys = _core.getMemberOwnRegistryNames(node, name, target),
+            i;
+          for (i = 0; i < keys.length; i++) {
+            _core.delMemberRegistry(node, name, target, keys[i]);
+          }
+
+          keys = Object.keys(diff);
+          for (i = 0; i < keys.length; i++) {
+            _core.setMemberRegistry(node, name, target, keys[i], diff[keys[i]]);
+          }
+        };
+      return TASYNC.call(function (t) {
+        _core.addMember(node, name, t);
+        memberAttrSetting(data.attr || {});
+        memberRegSetting(data.reg || {});
+        return;
+      }, _core.loadByPath(_core.getRoot(node), target));
+    }
+
+    function applySetChanges(node, setDiff) {
+      var done,
+        setNames = Object.keys(setDiff),
+        elements, i, j;
+      for (i = 0; i < setNames.length; i++) {
+        if (setDiff[setNames[i]] === TODELETESTRING) {
+          _core.deleteSet(node, setNames[i]);
+        } else {
+          elements = Object.keys(setDiff[setNames[i]]);
+          for (j = 0; j < elements.length; j++) {
+            if (setDiff[setNames[i]][elements[j]] === TODELETESTRING) {
+              _core.delMember(node, setNames[i], elements[j]);
+            } else {
+              done = addMember(node, setNames[i], elements[j], setDiff[setNames[i]][elements[j]]);
+            }
+          }
+        }
+      }
+
+      return TASYNC.call(function (d) {
+        return null;
+      }, done);
+
+    }
+
+    function applyMetaAttributes(node,metaAttrDiff){
+      var i,keys,newValue;
+      if(metaAttrDiff === TODELETESTRING){
+        //we should delete all MetaAttributes
+        keys = _core.getValidAttributeNames(node);
+        for(i=0;i<keys.length;i++){
+          _core.delAttributeMeta(node,keys[i]);
+        }
+      } else {
+        keys = Object.keys(metaAttrDiff);
+        for(i=0;i<keys.length;i++){
+          if(metaAttrDiff[keys[i]] === TODELETESTRING){
+            _core.delAttributeMeta(node,keys[i]);
+          } else {
+            newValue = jsonConcat(_core.getAttributeMeta(node,keys[i]) || {},metaAttrDiff[keys[i]]);
+            _core.setAttributeMeta(node,keys[i],newValue);
+          }
+        }
+      }
+    }
+
+    function applyMetaConstraints(node,metaConDiff){
+      var keys,i;
+      if(metaConDiff === TODELETESTRING){
+        //remove all constraints
+        keys = _core.getConstraintNames(node);
+        for(i=0;i<keys.length;i++){
+          _core.delConstraint(node,keys[i]);
+        }
+      } else {
+        keys = Object.keys(metaConDiff);
+        for(i=0;i<keys.length;i++){
+          if(metaConDiff[keys[i]] === TODELETESTRING){
+            _core.delConstraint(node,keys[i]);
+          } else {
+            _core.setConstraint(node,keys[i],jsonConcat(_core.getConstraint(node,keys[i]) || {},metaConDiff[keys[i]]));
+          }
+        }
+      }
+    }
+
+    function applyMetaChildren(node,metaChildrenDiff){
+      var keys, i,done,
+        setChild = function(target,data,d){
+          _core.setChildMeta(node,target,data.min,data.max);
+        };
+      if(metaChildrenDiff === TODELETESTRING){
+        //remove all valid child
+        keys = _core.getValidChildrenPaths(node);
+        for(i=0;i<keys.length;i++){
+          _core.delChildMeta(node,keys[i]);
+        }
+      } else {
+        _core.setChildrenMetaLimits(node, metaChildrenDiff.min, metaChildrenDiff.max);
+        delete metaChildrenDiff.max; //TODO we do not need it anymore, but maybe there is a better way
+        delete metaChildrenDiff.min;
+        keys = Object.keys(metaChildrenDiff);
+        for(i=0;i<keys.length;i++){
+          if(metaChildrenDiff[keys[i]] === TODELETESTRING){
+            _core.delChildMeta(node,keys[i]);
+          } else {
+            done = TASYNC.call(setChild,_core.loadByPath(_core.getRoot(node),keys[i]),metaChildrenDiff[keys[i]],done);
+          }
+        }
+      }
+
+      TASYNC.call(function(d){
+        return null;
+      },done);
+    }
+
+    function applyMetaPointers(node,metaPointerDiff){
+      var names,targets, i, j,done,
+        setPointer = function(name,target,data,d){
+          _core.setPointerMetaTarget(node,name,target,data.min,data.max);
+        };
+      if(metaPointerDiff === TODELETESTRING){
+        //remove all pointers,sets and their targets
+        names = _core.getValidPointerNames(node);
+        for(i=0;i<names.length;i++){
+          _core.delPointerMeta(node,names[i]);
+        }
+
+        names = _core.getValidSetNames(node);
+        for(i=0;i<names.length;i++){
+          _core.delPointerMeta(node,names[i]);
+        }
+        return;
+      }
+
+      names = Object.keys(metaPointerDiff);
+      for(i=0;i<names.length;i++){
+        if(metaPointerDiff[names[i]] === TODELETESTRING){
+          _core.delPointerMeta(node,names[i]);
+        } else {
+          _core.setPointerMetaLimits(node,names[i],metaPointerDiff[names[i]].min,metaPointerDiff[names[i]].max);
+          delete metaPointerDiff[names[i]].max; //TODO we do not need it anymore, but maybe there is a better way
+          delete metaPointerDiff[names[i]].min;
+          targets = Object.keys(metaPointerDiff[names[i]]);
+          for(j=0;j<targets.length;j++){
+            if(metaPointerDiff[names[i]][targets[j]] === TODELETESTRING){
+              _core.delPointerMetaTarget(node,names[i],targets[j]);
+            } else {
+              done = TASYNC.call(setPointer,names[i],_core.loadByPath(_core.getRoot(node),targets[j]),metaPointerDiff[names[i]][targets[j]],done);
+            }
+          }
+        }
+      }
+
+      TASYNC.call(function(d){
+        return null;
+      },done);
+    }
+
+    function applyMetaAspects(node,metaAspectsDiff){
+      var names,targets, i, j,done,
+        setAspect = function(name,target,d){
+          _core.setAspectMetaTarget(node,name,target);
+        };
+      if(metaAspectsDiff === TODELETESTRING){
+        //remove all aspects
+        names = _core.getValidAspectNames(node);
+        for(i=0;i<names.length;i++){
+          _core.delAspectMeta(node,names[i]);
+        }
+        return;
+      }
+
+      names = Object.keys(metaAspectsDiff);
+      for(i=0;i<names.length;i++){
+        if(metaAspectsDiff[names[i]] === TODELETESTRING){
+          _core.delAspectMeta(node,names[i]);
+        } else {
+          targets = Object.keys(metaAspectsDiff[names[i]]);
+          for(j=0;j<targets.length;j++){
+            if(metaAspectsDiff[names[i]][targets[j]] === TODELETESTRING){
+              _core.delAspectMetaTarget(node,names[i],targets[j]);
+            } else {
+              done = TASYNC.call(setAspect,names[i],_core.loadByPath(_core.getRoot(node),targets[j]),done);
+            }
+          }
+        }
+      }
+
+      TASYNC.call(function(d){
+        return null;
+      },done);
+    }
+
+    function applyMetaChanges(node, metaDiff) {
+      var done;
+      applyMetaAttributes(node,metaDiff.attributes || TODELETESTRING);
+      applyMetaConstraints(node,metaDiff.constraints || TODELETESTRING);
+      done = applyMetaChildren(node,metaDiff.children || TODELETESTRING);
+      done = TASYNC.call(applyMetaPointers,node,metaDiff.pointers || TODELETESTRING,done);
+      done = TASYNC.call(applyMetaAspects,node,metaDiff.aspects || TODELETESTRING,done);
+
+      TASYNC.call(function(d){
+        return null;
+      },done);
+    }
+
+    _core.applyTreeDiff = function (root, diff) {
+      var done;
+
+      toFrom = {};
+      fromTo = {};
+      getMoveSources(diff, '', toFrom, fromTo);
+
+        return TASYNC.join(makeInitialContainmentChanges(root,diff),applyNodeChange(root,'',diff));
+    };
+
+    function getNodeByGuid(diff,guid){
+      var relids, i,temp;
+      if(diff.guid === guid){
+        return diff;
+      }
+
+      relids = getDiffChildrenRelids(diff);
+      for(i=0;i<relids.length;i++){
+        temp = getNodeByGuid(diff[relids[i]],guid);
+        if(temp){
+          return temp;
+        }
+      }
+      return null;
+    }
+    function insertAtPath(diff,path,object){
+      ASSERT(typeof path === 'string');
+      var i,base,relid,nodepath;
+      if(path === ''){
+        _concat_result = JSON.parse(JSON.stringify(object));
+        return;
+      }
+      nodepath = path.match(/\/\/.*\/\//) || [];
+      nodepath = nodepath[0] || "there is no nodepath in the path";
+      path = path.replace(nodepath,"/*nodepath*/");
+      nodepath = nodepath.replace(/\/\//g,"/");
+      nodepath = nodepath.slice(0,-1);
+      path = path.split('/');
+      path.shift();
+      if(path.indexOf("*nodepath*") !== -1){
+        path[path.indexOf("*nodepath*")] = nodepath;
+      }
+      relid = path.pop();
+      base = diff;
+      for(i=0;i<path.length;i++){
+        base[path[i]] = base[path[i]] || {};
+        base = base[path[i]];
+      }
+      base[relid] = JSON.parse(JSON.stringify(object));
+      return;
+    }
+    function changeMovedPaths(singleNode){
+      var keys,i;
+      keys = Object.keys(singleNode);
+      for(i=0;i<keys.length;i++){
+        if(_concat_moves.fromTo[keys[i]]){
+          singleNode[_concat_moves.fromTo[keys[i]]] = singleNode[keys[i]];
+          delete singleNode[keys[i]];
+          if(typeof singleNode[_concat_moves.fromTo[keys[i]]] === 'object' && singleNode[_concat_moves.fromTo[keys[i]]] !== null){
+            changeMovedPaths(singleNode[_concat_moves.fromTo[keys[i]]]);
+          }
+        } else {
+          if(typeof singleNode[keys[i]] === 'string' && keys[i] !== 'movedFrom' && _concat_moves.fromTo[singleNode[keys[i]]]){
+            singleNode[keys[i]] = _concat_moves.fromTo[keys[i]];
+          }
+
+          if(typeof singleNode[keys[i]] === 'object' && singleNode[keys[i]] !== null){
+            changeMovedPaths(singleNode[keys[i]]);
+          }
+        }
+
+      }
+      if(typeof singleNode === 'object' && singleNode !== null){
+        keys = Object.keys(singleNode);
+        for(i=0;i<keys.length;i++){
+          if(_concat_moves.fromTo[keys[i]]){
+            singleNode[_concat_moves.fromTo[keys[i]]] = singleNode[keys[i]];
+            delete singleNode[keys[i]];
+          }
+        }
+      } else if(typeof singleNode === 'string') {
+
+      }
+
+    }
+    function getSingleNode(node){
+      //removes the children from the node
+      var result = JSON.parse(JSON.stringify(node)),
+        keys = getDiffChildrenRelids(result),
+        i;
+      for(i=0;i<keys.length;i++){
+        delete result[keys[i]];
+      }
+      //changeMovedPaths(result);
+      return result;
+    }
+    function jsonConcat(base,extension){
+      var baseKeys = Object.keys(base),
+        extKeys = Object.keys(extension),
+        concat = JSON.parse(JSON.stringify(base)),
+        i;
+      for(i=0;i<extKeys.length;i++){
+        if(baseKeys.indexOf(extKeys[i]) === -1){
+          concat[extKeys[i]] = JSON.parse(JSON.stringify(extension[extKeys[i]]));
+        } else {
+          if(typeof base[extKeys[i]] === 'object' && typeof extension[extKeys[i]] === 'object'){
+            concat[extKeys[i]] = jsonConcat(base[extKeys[i]],extension[extKeys[i]]);
+          } else { //either from value to object or object from value we go with the extension
+            concat[extKeys[i]] = JSON.parse(JSON.stringify(extension[extKeys[i]]));
+          }
+        }
+      }
+      return concat;
+    }
+
+    function getConflictByGuid(conflict,guid){
+      var relids,i,result;
+      if(conflict.guid === guid){
+        return conflict;
+      }
+      relids = getDiffChildrenRelids(conflict);
+      for(i=0;i<relids.length;i++){
+        result = getConflictByGuid(conflict[relids[i]],guid);
+        if(result){
+          return result;
+        }
+      }
+      return null;
+    }
+    function getPathByGuid(conflict,guid,path){
+      var relids,i,result;
+      if(conflict.guid === guid){
+        return path;
+      }
+      relids = getDiffChildrenRelids(conflict);
+      for(i=0;i<relids.length;i++){
+        result = getPathByGuid(conflict[relids[i]],guid,path+'/'+relids[i]);
+        if(result){
+          return result;
+        }
+      }
+      return null;
+    }
+
+    function getGuidsOfDiff(diff){
+      var relids = getDiffChildrenRelids(diff),
+        i,
+        result = [diff.guid];
+      for(i=0;i<relids.length;i++){
+        result = result.concat(getGuidsOfDiff(diff[relids[i]]));
+      }
+      return result;
+    }
+
+    //now we try a different approach, which maybe more simple
+    function getCommonPathForConcat(path){
+      if(_concat_moves.getExtensionSourceFromDestination[path]){
+        path = _concat_moves.getExtensionSourceFromDestination[path];
+      }
+      if(_concat_moves.getBaseDestinationFromSource[path]){
+        path = _concat_moves.getBaseDestinationFromSource[path];
+      }
+      return path;
+    }
+    function getConcatBaseRemovals(diff){
+      var relids = getDiffChildrenRelids(diff),
+        i;
+      if(diff.removed !== true){
+        if(diff.movedFrom){
+          if(_concat_base_removals[diff.guid] !== undefined){
+            delete _concat_base_removals[diff.guid];
+          } else {
+            _concat_base_removals[diff.guid] = false;
+          }
+        }
+        for(i=0;i<relids.length;i++){
+          getConcatBaseRemovals(diff[relids[i]]);
+        }
+      } else {
+        if(_concat_base_removals[diff.guid] === false){
+          delete _concat_base_removals[diff.guid];
+        } else {
+          _concat_base_removals[diff.guid] = true;
+        }
+      }
+    }
+    function getObstructiveGuids(diffNode){
+      var result = [],
+        keys,i;
+      keys = Object.keys(diffNode.oGuids || {});
+      for(i=0;i<keys.length;i++){
+        if(_concat_base_removals[keys[i]]){
+          result.push(keys[i]);
+        }
+      }
+      keys = Object.keys(diffNode.ooGuids || {});
+      for(i=0;i<keys.length;i++){
+        if(_concat_base_removals[keys[i]]){
+          result.push(keys[i]);
+        }
+      }
+      return result;
+    }
+    function getWhomIObstructGuids(guid){
+      //this function is needed when the extension contains a deletion where the base did not delete the node
+      var guids = [],
+        checkNode = function(diffNode){
+          var relids,i;
+          if((diffNode.oGuids && diffNode.oGuids[guid]) || (diffNode.ooGuids && diffNode.ooGuids[guid])){
+            guids.push(diffNode.guid);
+          }
+
+          relids = getDiffChildrenRelids(diffNode);
+          for(i=0;i<relids.length;i++){
+            checkNode(diffNode[relids[i]]);
+          }
+        };
+      checkNode(_concat_base);
+      return guids;
+    }
+    function gatherFullNodeConflicts(diffNode,mine,path,opposingPath){
+      var conflict,
+        opposingConflict,
+        keys, i,
+        createSingleKeyValuePairConflicts = function(pathBase,data){
+        var keys, i;
+        keys = Object.keys(data);
+        for(i=0;i<keys.length;i++){
+          conflict[pathBase+'/'+keys[i]] = conflict[pathBase+'/'+keys[i]] || {value:data[keys[i]],conflictingPaths:{}};
+          conflict[pathBase+'/'+keys[i]].conflictingPaths[opposingPath] = true;
+          opposingConflict.conflictingPaths[pathBase+'/'+keys[i]] = true;
+        }
+      };
+
+      //setting the conflicts
+      if(mine === true){
+        conflict = _conflict_mine;
+        opposingConflict = _conflict_theirs[opposingPath];
+      } else {
+        conflict = _conflict_theirs;
+        opposingConflict = _conflict_mine[opposingPath];
+      }
+      ASSERT(opposingConflict);
+      //if the node was moved we should make a conflict for the whole node as well
+      if(diffNode.movedFrom){
+        conflict[path] = conflict[path] || {value:path,conflictingPaths:{}};
+        conflict[path].conflictingPaths[opposingPath] = true;
+        opposingConflict.conflictingPaths[path] = true;
+      }
+      createSingleKeyValuePairConflicts(path+'/attr',diffNode.attr || {});
+      createSingleKeyValuePairConflicts(path+'/reg',diffNode.reg || {});
+      createSingleKeyValuePairConflicts(path+'/pointer',diffNode.pointer || {});
+
+      if(diffNode.set){
+        if(diffNode.set === TODELETESTRING){
+          conflict[path+'/set'] = conflict[path+'/set'] || {value:TODELETESTRING,conflictingPaths:{}};
+          conflict[path+'/set'].conflictingPaths[opposingPath] = true;
+          opposingConflict.conflictingPaths[path+'/set'] = true;
+        } else {
+          keys = Object.keys(diffNode.set);
+          for(i=0;i<keys.length;i++){
+            if(diffNode.set[keys[i]] === TODELETESTRING){
+              conflict[path+'/set/'+keys[i]] = conflict[path+'/set/'+keys[i]] || {value:TODELETESTRING,conflictingPaths:{}};
+              conflict[path+'/set/'+keys[i]].conflictingPaths[opposingPath] = true;
+              opposingConflict.conflictingPaths[path+'/set/'+keys[i]] = true;
+            } else {
+              gatherFullSetConflicts(diffNode.set[keys[i]],mine,path+'/set/'+keys[i],opposingPath);
+            }
+          }
+        }
+      }
+
+      if(diffNode.meta){
+        gatherFullMetaConflicts(diffNode.meta,mine,path+'/meta',opposingPath);
+      }
+
+      //if the opposing item is theirs, we have to recursively go down in our changes
+      if(mine){
+        keys = getDiffChildrenRelids(diffNode);
+        for(i=0;i<keys.length;i++){
+          gatherFullNodeConflicts(diffNode[keys[i]],true,path+'/'+keys[i],opposingPath);
+        }
+      }
+
+    }
+    function gatherFullSetConflicts(diffSet,mine,path,opposingPath){
+      var relids = getDiffChildrenRelids(diffSet),
+        i,keys, j,conflict,opposingConflict;
+
+      //setting the conflicts
+      if(mine === true){
+        conflict = _conflict_mine;
+        opposingConflict = _conflict_theirs[opposingPath];
+      } else {
+        conflict = _conflict_theirs;
+        opposingConflict = _conflict_mine[opposingPath];
+      }
+      for(i=0;i<relids.length;i++){
+        if(diffSet[relids[i]] === TODELETESTRING){
+          //single conflict as the element was removed
+          conflict[path+'/'+relids[i]+'/'] = conflict[path+'/'+relids[i]+'/'] || {value:TODELETESTRING,conflictingPaths:{}};
+          conflict[path+'/'+relids[i]+'/'].conflictingPaths[opposingPath] = true;
+          opposingConflict.conflictingPaths[path+'/'+relids[i]+'/'] = true;
+        } else {
+          keys = Object.keys(diffSet[relids[i]].attr || {});
+          for(j=0;j<keys.length;j++){
+            conflict[path+'/'+relids[i]+'//attr/'+keys[j]] = conflict[path+'/'+relids[i]+'//attr/'+keys[j]] || {value:diffSet[relids[i]].attr[keys[j]],conflictingPaths:{}};
+            conflict[path+'/'+relids[i]+'//attr/'+keys[j]].conflictingPaths[opposingPath] = true;
+            opposingConflict.conflictingPaths[path+'/'+relids[i]+'//attr/'+keys[j]] = true;
+          }
+          keys = Object.keys(diffSet[relids[i]].reg || {});
+          for(j=0;j<keys.length;j++){
+            conflict[path+'/'+relids[i]+'//reg/'+keys[j]] = conflict[path+'/'+relids[i]+'//reg/'+keys[j]] || {value:diffSet[relids[i]].reg[keys[j]],conflictingPaths:{}};
+            conflict[path+'/'+relids[i]+'//reg/'+keys[j]].conflictingPaths[opposingPath] = true;
+            opposingConflict.conflictingPaths[path+'/'+relids[i]+'//reg/'+keys[j]] = true;
+          }
+        }
+      }
+    }
+    function concatSingleKeyValuePairs(path,base,extension){
+      var keys, i,temp;
+      keys = Object.keys(extension);
+      for(i=0;i<keys.length;i++){
+        temp = extension[keys[i]];
+        if(typeof temp === 'string' && temp !== TODELETESTRING){
+          temp = getCommonPathForConcat(temp);
+        }
+        if(base[keys[i]] && CANON.stringify(base[keys[i]]) !== CANON.stringify(temp)){
+          //conflict
+          _conflict_mine[path+'/'+keys[i]] = {value:base[keys[i]],conflictingPaths:{}};
+          _conflict_theirs[path+'/'+keys[i]] = {value:extension[keys[i]],conflictingPaths:{}};
+          _conflict_mine[path+'/'+keys[i]].conflictingPaths[path+'/'+keys[i]] = true;
+          _conflict_theirs[path+'/'+keys[i]].conflictingPaths[path+'/'+keys[i]] = true;
+        } else {
+          base[keys[i]] = extension[keys[i]];
+        }
+      }
+    }
+    function concatSet(path,base,extension){
+      var names = Object.keys(extension),
+        members, i, j,memberPath;
+
+      for(i=0;i<names.length;i++){
+        if(base[names[i]]){
+          if(base[names[i]] === TODELETESTRING){
+            if(extension[names[i]] !== TODELETESTRING){
+              //whole set conflict
+              _conflict_mine[path+'/'+names[i]]={value:TODELETESTRING,conflictingPaths:{}};
+              gatherFullSetConflicts(extension[names[i]],false,path+'/'+names[i],path+'/'+names[i]);
+            }
+          } else {
+            if(extension[names[i]] === TODELETESTRING){
+              //whole set conflict
+              _conflict_theirs[path+'/'+names[i]]={value:TODELETESTRING,conflictingPaths:{}};
+              gatherFullSetConflicts(base[names[i]],true,path+'/'+names[i],path+'/'+names[i]);
+            } else {
+              //now we can only have member or sub-member conflicts...
+              members = getDiffChildrenRelids(extension[names[i]]);
+              for(j=0;j<members.length;j++){
+                memberPath = getCommonPathForConcat(members[j]);
+                if(base[names[i]][memberPath]){
+                  if(base[names[i]][memberPath] === TODELETESTRING){
+                    if(extension[names[i]][members[j]] !== TODELETESTRING){
+                      //whole member conflict
+                      _conflict_mine[path+'/'+names[i]+'/'+memberPath+'//'] = {value:TODELETESTRING,conflictingPaths:{}};
+                      gatherFullNodeConflicts(extension[names[i]][members[j]],false,path+'/'+names[i]+'/'+memberPath+'//',path+'/'+names[i]+'/'+memberPath+'//');
+                    }
+                  } else {
+                    if(extension[names[i]][members[j]] === TODELETESTRING){
+                      //whole member conflict
+                      _conflict_theirs[path+'/'+names[i]+'/'+memberPath+'//'] = {value:TODELETESTRING,conflictingPaths:{}};
+                      gatherFullNodeConflicts(base[names[i]][memberPath],true,path+'/'+names[i]+'/'+memberPath+'//',path+'/'+names[i]+'/'+memberPath+'//');
+                    } else {
+                      if(extension[names[i]][members[j]].attr){
+                        if(base[names[i]][memberPath].attr){
+                          concatSingleKeyValuePairs(path+'/'+names[i]+'/'+memberPath+'/'+'/attr',base[names[i]][memberPath].attr,extension[names[i]][members[j]].attr);
+                        } else {
+                          base[names[i]][memberPath].attr = extension[names[i]][members[j]].attr;
+                        }
+                      }
+                      if(extension[names[i]][members[j]].reg){
+                        if(base[names[i]][memberPath].reg){
+                          concatSingleKeyValuePairs(path+'/'+names[i]+'/'+memberPath+'/'+'/reg',base[names[i]][memberPath].reg,extension[names[i]][members[j]].reg);
+                        } else {
+                          base[names[i]][memberPath].reg = extension[names[i]][members[j]].reg;
+                        }
+                      }
+
+                    }
+                  }
+                } else {
+                  //concat
+                  base[names[i]][memberPath] = extension[names[i]][members[j]];
+                }
+              }
+            }
+          }
+        } else {
+          //simple concatenation
+          //TODO the path for members should be replaced here as well...
+          base[names[i]] = extension[names[i]];
+        }
+      }
+    }
+    function gatherFullMetaConflicts(diffMeta,mine,path,opposingPath){
+      var conflict,opposingConflict,
+        relids, i, j, keys, tPath;
+
+      if(mine){
+        conflict = _conflict_mine;
+        opposingConflict = _conflict_theirs[opposingPath];
+      } else {
+        conflict = _conflict_theirs;
+        opposingConflict = _conflict_mine[opposingPath];
+      }
+
+      if(diffMeta === TODELETESTRING){
+        conflict[path] = conflict[path] || {value:TODELETESTRING,conflictingPaths:{}};
+        conflict[path].conflictingPaths[opposingPath] = true;
+        opposingConflict.conflictingPaths[path] = true;
+        return; //there is no other conflict
+      }
+
+      //children
+      if(diffMeta.children){
+        if(diffMeta.children === TODELETESTRING){
+          conflict[path+'/children'] = conflict[path+'/children'] || {value:TODELETESTRING,conflictingPaths:{}};
+          conflict[path+'/children'].conflictingPaths[opposingPath] = true;
+          opposingConflict.conflictingPaths[path+'/children'] = true;
+        } else {
+          if(diffMeta.children.max){
+            conflict[path+'/children/max'] = conflict[path+'/children/max'] || {value:diffMeta.children.max,conflictingPaths:{}};
+            conflict[path+'/children/max'].conflictingPaths[opposingPath] = true;
+            opposingConflict.conflictingPaths[path+'/children/max'] = true;
+          }
+          if(diffMeta.children.min){
+            conflict[path+'/children/min'] = conflict[path+'/children/min'] || {value:diffMeta.children.min,conflictingPaths:{}};
+            conflict[path+'/children/min'].conflictingPaths[opposingPath] = true;
+            opposingConflict.conflictingPaths[path+'/children/min'] = true;
+          }
+          relids = getDiffChildrenRelids(diffMeta.children);
+          for(i=0;i<relids.length;i++){
+            conflict[path+'/children/'+relids[i]] = conflict[path+'/children/'+relids[i]] || {value:diffMeta.children[relids[i]],conflictingPaths:{}};
+            conflict[path+'/children/'+relids[i]].conflictingPaths[opposingPath] = true;
+            opposingConflict.conflictingPaths[path+'/children/'+relids[i]] = true;
+          }
+        }
+      }
+      //attributes
+      if(diffMeta.attributes){
+        if(diffMeta.attributes === TODELETESTRING){
+          conflict[path+'/attributes'] = conflict[path+'/attributes'] || {value:TODELETESTRING,conflictingPaths:{}};
+          conflict[path+'/attributes'].conflictingPaths[opposingPath] = true;
+          opposingConflict.conflictingPaths[path+'/attributes'] = true;
+        } else {
+          keys = Object.keys(diffMeta.attributes);
+          for(i=0;i<keys.length;i++){
+            conflict[path+'/attributes/'+keys[i]] = conflict[path+'/attributes/'+keys[i]] || {value:diffMeta.attributes[keys[i]],conflictingPaths:{}};
+            conflict[path+'/attributes'].conflictingPaths[opposingPath] = true;
+            opposingConflict.conflictingPaths[path+'/attributes'] = true;
+          }
+        }
+      }
+      //pointers
+      if(diffMeta.pointers){
+        if(diffMeta.pointers === TODELETESTRING){
+          conflict[path+'/pointers'] = conflict[path+'/pointers'] || {value:TODELETESTRING,conflictingPaths:{}};
+          conflict[path+'/pointers'].conflictingPaths[opposingPath] = true;
+          opposingConflict.conflictingPaths[path+'/pointers'] = true;
+        } else {
+          keys = Object.keys(diffMeta.pointers);
+          for(i=0;i<keys.length;i++){
+            if(diffMeta.pointers[keys[i]] === TODELETESTRING){
+              conflict[path+'/pointers/'+keys[i]] = conflict[path+'/pointers/'+keys[i]] || {value:TODELETESTRING,conflictingPaths:{}};
+              conflict[path+'/pointers/'+keys[i]].conflictingPaths[opposingPath] = true;
+              opposingConflict.conflictingPaths[path+'/pointers/'+keys[i]] = true;
+            } else {
+              if(diffMeta.pointers[keys[i]].max){
+                conflict[path+'/pointers/'+keys[i]+'/max'] = conflict[path+'/pointers/'+keys[i]+'/max'] || {value:diffMeta.pointers[keys[i]].max,conflictingPaths:{}};
+                conflict[path+'/pointers/'+keys[i]+'/max'].conflictingPaths[opposingPath] = true;
+                opposingConflict.conflictingPaths[path+'/pointers/'+keys[i]+'/max'] = true;
+              }
+              if(diffMeta.pointers[keys[i]].min){
+                conflict[path+'/pointers/'+keys[i]+'/min'] = conflict[path+'/pointers/'+keys[i]+'/min'] || {value:diffMeta.pointers[keys[i]].min,conflictingPaths:{}};
+                conflict[path+'/pointers/'+keys[i]+'/min'].conflictingPaths[opposingPath] = true;
+                opposingConflict.conflictingPaths[path+'/pointers/'+keys[i]+'/min'] = true;
+              }
+              relids = getDiffChildrenRelids(diffMeta.pointers[keys[i]]);
+              for(j=0;j<relids.length;j++){
+                tPath = getCommonPathForConcat(relids[j]);
+                conflict[path+'/pointers/'+keys[i]+'/'+tPath+'//'] = conflict[path+'/pointers/'+keys[i]+'/'+tPath+'//'] || {value:diffMeta.pointers[keys[i]][relids[j]],conflictingPaths:{}};
+                conflict[path+'/pointers/'+keys[i]+'/'+tPath+'//'].conflictingPaths[opposingPath] = true;
+                opposingConflict.conflictingPaths[path+'/pointers/'+keys[i]+'/'+tPath+'//'] = true;
+              }
+            }
+          }
+        }
+      }
+      //aspects
+      //TODO
+    }
+    function concatMeta(path,base,extension){
+      var keys, i,tPath, j,paths,t2Path,
+          mergeMetaItems = function(bPath,bData,eData){
+            var bKeys,tKeys, i,tPath,t2Path;
+            //delete checks
+            if(bData === TODELETESTRING || eData === TODELETESTRING){
+              if(CANON.stringify(bData) !== CANON.stringify(eData)){
+                _conflict_mine[bPath] = _conflict_mine[bPath] || {value:bData,conflictingPaths:{}};
+                _conflict_mine[bPath].conflictingPaths[bPath] = true;
+                _conflict_theirs[bPath] = _conflict_theirs[bPath] || {value:eData,conflictingPaths:{}};
+                _conflict_theirs[bPath].conflictingPaths[bPath] = true;
+              }
+            } else {
+              //max
+              if(eData.max){
+                if(bData.max && bData.max !== eData.max){
+                  tPath = bPath+'/max';
+                  _conflict_mine[tPath] = _conflict_mine[tPath] || {value:bData.max,conflictingPaths:{}};
+                  _conflict_mine[tPath].conflictingPaths[tPath] = true;
+                  _conflict_theirs[tPath] = _conflict_theirs[tPath] || {value:eData.max,conflictingPaths:{}};
+                  _conflict_theirs[tPath].conflictingPaths[tPath] = true;
+                } else {
+                  bData.max = eData.max;
+                }
+              }
+              //min
+              if(eData.min) {
+                if (bData.min && bData.min !== eData.min) {
+                  tPath = bPath + '/min';
+                  _conflict_mine[tPath] = _conflict_mine[tPath] || {value: bData.min, conflictingPaths: {}};
+                  _conflict_mine[tPath].conflictingPaths[tPath] = true;
+                  _conflict_theirs[tPath] = _conflict_theirs[tPath] || {value: eData.min, conflictingPaths: {}};
+                  _conflict_theirs[tPath].conflictingPaths[tPath] = true;
+                } else {
+                  bData.max = eData.min;
+                }
+              }
+              //targets
+              bKeys = getDiffChildrenRelids(bData);
+              tKeys = getDiffChildrenRelids(eData);
+              for(i=0;i<tKeys.length;i++){
+                tPath = getCommonPathForConcat(tKeys[i]);
+                if(bKeys.indexOf(tPath) !== -1 && CANON.stringify(bData[tPath]) !== CANON.stringify(eData[tKeys[i]])){
+                  t2Path = tPath;
+                  tPath = bPath+'/'+tPath+'//';
+                  _conflict_mine[tPath] = _conflict_mine[tPath] || {value:bData[t2Path],conflictingPaths:{}};
+                  _conflict_mine[tPath].conflictingPaths[tPath] = true;
+                  _conflict_theirs[tPath] = _conflict_theirs[tPath] || {value:eData[tKeys[i]],conflictingPaths:{}};
+                  _conflict_theirs[tPath].conflictingPaths[tPath] = true;
+                } else {
+                  bData[tPath] = eData[tKeys[i]];
+                }
+              }
+            }
+          };
+      if(CANON.stringify(base) !== CANON.stringify(extension)){
+        if(base === TODELETESTRING){
+          _conflict_mine[path] = _conflict_mine[path] || {value:TODELETESTRING,conflictingPaths:{}};
+          gatherFullMetaConflicts(extension,false,path,path);
+        } else {
+          if(extension === TODELETESTRING){
+            _conflict_theirs[path] = _conflict_theirs[path] || {value:TODELETESTRING,conflictingPaths:{}};
+            gatherFullMetaConflicts(base,true,path,path);
+          } else {
+            //now check for sub-meta conflicts
+
+            //children
+            if(extension.children){
+              if(base.children){
+                mergeMetaItems(path+'/children',base.children,extension.children);
+              } else {
+                //we just simply merge the extension's
+                base.children = extension.children;
+              }
+            }
+            //pointers
+            if(extension.pointers){
+              if(base.pointers){
+                //complete deletion
+                if(base.pointers === TODELETESTRING || extension.pointers === TODELETESTRING){
+                  if(CANON.stringify(base.pointers) !== CANON.stringify(extension.pointers)){
+                    tPath = path+'/pointers';
+                    _conflict_mine[tPath] = _conflict_mine[tPath] || {value:base.pointers,conflictingPaths:{}};
+                    _conflict_mine[tPath].conflictingPaths[tPath] = true;
+                    _conflict_theirs[tPath] = _conflict_theirs[tPath] || {value:extension.pointers,conflictingPaths:{}};
+                    _conflict_theirs[tPath].conflictingPaths[tPath] = true;
+                  }
+                } else {
+                  keys = Object.keys(extension.pointers);
+                  for(i=0;i<keys.length;i++){
+                    if(base.pointers[keys[i]]){
+                      mergeMetaItems(path+'/pointers/'+keys[i],base.pointers[keys[i]],extension.pointers[keys[i]]);
+                    } else {
+                      base.pointers[keys[i]] = extension.pointers[keys[i]];
+                    }
+                  }
+                }
+              } else {
+                base.pointers = extension.pointers;
+              }
+            }
+            //attributes
+            if(extension.attributes){
+              if(base.attributes){
+                if(extension.attributes === TODELETESTRING || base.attributes == TODELETESTRING){
+                  if(CANON.stringify(base.attributes) !== CANON.stringify(extension.attributes)){
+                    tPath = path+'/attributes';
+                    _conflict_mine[tPath] = _conflict_mine[tPath] || {value:base.attributes,conflictingPaths:{}};
+                    _conflict_mine[tPath].conflictingPaths[tPath] = true;
+                    _conflict_theirs[tPath] = _conflict_theirs[tPath] || {value:extension.attributes,conflictingPaths:{}};
+                    _conflict_theirs[tPath].conflictingPaths[tPath] = true;
+                  }
+                } else {
+                  keys = Object.keys(extension.attributes);
+                  for(i=0;i<keys.length;i++){
+                    if(base.attributes[keys[i]]){
+                      if(extension.attributes[keys[i]] === TODELETESTRING || base.attributes[keys[i]] == TODELETESTRING){
+                        if(CANON.stringify(base.attributes[keys[i]]) !== CANON.stringify(extension.attributes[keys[i]])){
+                          tPath = path+'/attributes/'+[keys[i]];
+                          _conflict_mine[tPath] = _conflict_mine[tPath] || {value:base.attributes[keys[i]],conflictingPaths:{}};
+                          _conflict_mine[tPath].conflictingPaths[tPath] = true;
+                          _conflict_theirs[tPath] = _conflict_theirs[tPath] || {value:extension.attributes[keys[i]],conflictingPaths:{}};
+                          _conflict_theirs[tPath].conflictingPaths[tPath] = true;
+                        }
+                      } else {
+                        concatSingleKeyValuePairs(path+'/attributes/'+keys[i],base.attributes[keys[i]],extension.attributes[keys[i]]);
+                      }
+                    } else {
+                      base.attributes[keys[i]] = extension.attributes[keys[i]];
+                    }
+                  }
+
+                }
+              } else {
+                base.attributes = extension.attributes;
+              }
+            }
+
+            //aspects
+            if(extension.aspects){
+              if(base.aspects){
+                if(extension.aspects === TODELETESTRING || base.aspects == TODELETESTRING){
+                  if(CANON.stringify(base.aspects) !== CANON.stringify(extension.aspects)){
+                    tPath = path+'/aspects';
+                    _conflict_mine[tPath] = _conflict_mine[tPath] || {value:base.aspects,conflictingPaths:{}};
+                    _conflict_mine[tPath].conflictingPaths[tPath] = true;
+                    _conflict_theirs[tPath] = _conflict_theirs[tPath] || {value:extension.aspects,conflictingPaths:{}};
+                    _conflict_theirs[tPath].conflictingPaths[tPath] = true;
+                  }
+                } else {
+                  keys = Object.keys(extension.aspects);
+                  for(i=0;i<keys.length;i++){
+                    if(base.aspects[keys[i]]){
+                      if(extension.aspects[keys[i]] === TODELETESTRING || base.aspects[keys[i]] == TODELETESTRING){
+                        if(CANON.stringify(base.aspects[keys[i]]) !== CANON.stringify(extension.aspects[keys[i]])){
+                          tPath = path+'/aspects/'+keys[i];
+                          _conflict_mine[tPath] = _conflict_mine[tPath] || {value:base.aspects[keys[i]],conflictingPaths:{}};
+                          _conflict_mine[tPath].conflictingPaths[tPath] = true;
+                          _conflict_theirs[tPath] = _conflict_theirs[tPath] || {value:extension.aspects[keys[i]],conflictingPaths:{}};
+                          _conflict_theirs[tPath].conflictingPaths[tPath] = true;
+                        }
+                      } else {
+                        paths = Object.keys(extension.aspects[keys[i]]);
+                        for(j=0;j<paths.length;j++){
+                          tPath = getCommonPathForConcat(paths[j]);
+                          if(base.aspects[keys[i]][tPath]){
+                            if(CANON.stringify(base.aspects[keys[i]][tPath]) !== CANON.stringify(extension.aspects[keys[i]][paths[j]])){
+                              t2Path = tPath;
+                              tPath = path+'/aspects/'+keys[i]+'/'+tPath+'//';
+                              _conflict_mine[tPath] = _conflict_mine[tPath] || {value:base.aspects[keys[i]][t2Path],conflictingPaths:{}};
+                              _conflict_mine[tPath].conflictingPaths[tPath] = true;
+                              _conflict_theirs[tPath] = _conflict_theirs[tPath] || {value:extension.aspects[keys[i]][paths[j]],conflictingPaths:{}};
+                              _conflict_theirs[tPath].conflictingPaths[tPath] = true;
+                            }
+                          } else {
+                            base.aspects[keys[i]][tPath] = extension.aspects[keys[i]][paths[j]];
+                          }
+                        }
+                      }
+                    } else {
+                      base.aspects[keys[i]] = extension.aspects[keys[i]];
+                    }
+                  }
+                }
+              } else {
+                base.aspects = extension.aspects;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    function tryToConcatNodeChange(extNode,path){
+      var guid = extNode.guid,
+        oGuids =  getObstructiveGuids(extNode),
+        baseNode = getNodeByGuid(_concat_base,guid),
+        basePath = getPathByGuid(_concat_base,guid,''),
+        i,tPath,
+        relids = getDiffChildrenRelids(extNode);
+
+
+      if(extNode.removed === true){
+        if(baseNode && baseNode.removed !== true){
+          tPath = basePath+'/removed';
+          _conflict_theirs[tPath] = _conflict_theirs[tPath] || {value:true,conflictingPaths:{}};
+          oGuids = getWhomIObstructGuids(guid);
+          ASSERT(oGuids.length > 0);
+          for(i=0;i<oGuids.length;i++){
+            baseNode = getNodeByGuid(_concat_base,oGuids[i]);
+            basePath = getPathByGuid(_concat_base,oGuids[i],'');
+            gatherFullNodeConflicts(baseNode,true,basePath,tPath);
+          }
+        } else {
+          //we simply concat the deletion
+          insertAtPath(_concat_base,path,extNode);
+        }
+      } else {
+        if(oGuids.length > 0){
+            for(i=0;i<oGuids.length;i++){
+              baseNode = getNodeByGuid(_concat_base,oGuids[i]);
+              basePath = getPathByGuid(_concat_base,oGuids[i],'');
+              _conflict_mine[basePath+'/removed'] = _conflict_mine[basePath+'/removed'] || {value:true,conflictingPaths:{}};
+              gatherFullNodeConflicts(extNode,false,path,basePath+'/removed');
+            }
+        } else if(baseNode){
+          //here we are able to check the sub-node conflicts
+          //check double moves - we do not care if they moved under the same parent
+          if(extNode.movedFrom){
+            if(baseNode.movedFrom && path !== basePath){
+              _conflict_mine[basePath] = _conflict_mine[basePath] || {value:"move",conflictingPaths:{}};
+              _conflict_theirs[path] = _conflict_theirs[path] || {value:"move",conflictingPaths:{}};
+              _conflict_mine[basePath].conflictingPaths[path]=true;
+              _conflict_theirs[path].conflictingPaths[basePath] = true;
+              //we keep the node where it is, but synchronize the paths
+              path = basePath;
+            } else if(path !== basePath){
+              //first we move the base object to its new path
+              //we copy the moved from information right here
+              baseNode.movedFrom = extNode.movedFrom;
+              insertAtPath(_concat_base,path,baseNode);
+              removePathFromDiff(_concat_base,basePath);
+              baseNode = getNodeByGuid(_concat_base,guid);
+              basePath = getPathByGuid(_concat_base,guid,'');
+              ASSERT(path === basePath);
+            }
+          }
+
+          ASSERT(basePath === path || baseNode.movedFrom === path);
+          path = basePath; //the base was moved
+
+
+          //and now the sub-node conflicts
+          if(extNode.attr){
+            if(baseNode.attr){
+              concatSingleKeyValuePairs(path+'/attr',baseNode.attr,extNode.attr);
+            } else {
+              insertAtPath(_concat_base,path+'/attr',extNode.attr);
+            }
+          }
+          if(extNode.reg){
+            if(baseNode.reg){
+              concatSingleKeyValuePairs(path+'/reg',baseNode.reg,extNode.reg);
+            } else {
+              insertAtPath(_concat_base,path+'/reg',extNode.reg);
+            }
+          }
+          if(extNode.pointer){
+            if(baseNode.pointer){
+              concatSingleKeyValuePairs(path+'/pointer',baseNode.pointer,extNode.pointer);
+            } else {
+              insertAtPath(_concat_base,path+'/pointer',extNode.pointer);
+            }
+          }
+          if(extNode.set){
+            if(baseNode.set){
+              concatSet(path+'/set',baseNode.set,extNode.set);
+            } else {
+              insertAtPath(_concat_base,path+'/set',extNode.set);
+            }
+          }
+          if(extNode.meta){
+            if(baseNode.meta){
+              concatMeta(path+'/meta',baseNode.meta,extNode.meta);
+            } else {
+              insertAtPath(_concat_base,path+'/meta',extNode.meta);
+            }
+          }
+        } else {
+          //there is no basenode so we can concat the whole node
+          insertAtPath(_concat_base,path,getSingleNode(extNode));
+        }
+      }
+
+      //here comes the recursion
+      for(i=0;i<relids.length;i++){
+        tryToConcatNodeChange(extNode[relids[i]],path+'/'+relids[i]);
+      }
+
+    }
+
+    function generateConflictItems(){
+      var items = [],
+        keys, i, j,conflicts;
+      keys = Object.keys(_conflict_mine);
+
+      for(i=0;i<keys.length;i++){
+        conflicts = Object.keys(_conflict_mine[keys[i]].conflictingPaths || {});
+        ASSERT(conflicts.length > 0);
+        for(j=0;j<conflicts.length;j++){
+          items.push({
+            selected:"mine",
+            mine:{
+              path: keys[i],
+              info: keys[i].replace(/\//g," / "),
+              value: _conflict_mine[keys[i]].value
+            },
+            theirs:{
+              path:conflicts[j],
+              info:conflicts[j].replace(/\//g," / "),
+              value:_conflict_theirs[conflicts[j]].value
+            }
+          });
+        }
+      }
+      return items;
+    }
+    function harmonizeConflictPaths(diff){
+      var relids = getDiffChildrenRelids(diff),
+        keys, i,members,j;
+
+      keys = Object.keys(diff.pointer || {});
+      for(i=0;i<keys.length;i++){
+        diff.pointer[keys[i]] = getCommonPathForConcat(diff.pointer[keys[i]]);
+      }
+      keys = Object.keys(diff.set || {});
+      for(i=0;i<keys.length;i++){
+        members = Object.keys(diff.set[keys[i]] || {});
+        for(j=0;j<members.length;j++){
+          if(members[j] !== getCommonPathForConcat(members[j])){
+            diff.set[keys[i]][getCommonPathForConcat(members[j])] = diff.set[keys[i]][members[j]];
+            delete diff.set[keys[i]][members[j]];
+          }
+        }
+      }
+
+      //TODO we have to do the meta as well
+      for(i=0;i<relids.length;i++){
+        harmonizeConflictPaths(diff[relids[i]]);
+      }
+    }
+
+    _core.tryToConcatChanges = function(base,extension){
+      var result = {};
+      _conflict_items = [];
+      _conflict_mine = {};
+      _conflict_theirs = {};
+      _concat_base = base;
+      _concat_extension = extension;
+      _concat_base_removals = {};
+      _concat_moves = {
+        getBaseSourceFromDestination : {},
+        getBaseDestinationFromSource : {},
+        getExtensionSourceFromDestination : {},
+        getExtensionDestinationFromSource : {}
+      };
+      getMoveSources(base,'',_concat_moves.getBaseSourceFromDestination,_concat_moves.getBaseDestinationFromSource);
+      getMoveSources(extension,'',_concat_moves.getExtensionSourceFromDestination,_concat_moves.getExtensionDestinationFromSource);
+      getConcatBaseRemovals(base);
+      tryToConcatNodeChange(_concat_extension,'');
+
+      result.items = generateConflictItems();
+      result.mine = _conflict_mine;
+      result.theirs = _conflict_theirs;
+      result.merge = _concat_base;
+      harmonizeConflictPaths(result.merge);
+      return result;
+    };
+
+    function depthOfPath(path){
+      ASSERT(typeof path === "string");
+      return path.split('/').length;
+    }
+    function resolveMoves(resolveObject){
+      var i,moves = {},filteredItems=[],path,
+        moveBaseOfPath = function(path){
+          var keys = Object.keys(moves),
+            i,maxDepth = -1,base=null;
+          for(i=0;i<keys.length;i++){
+            if(path.indexOf(keys[i]) === 1 && depthOfPath(keys[i])>maxDepth){
+              base = keys[i];
+              maxDepth = depthOfPath(keys[i]);
+            }
+          }
+          return base;
+        };
+      for(i=0;i<resolveObject.items.length;i++){
+        if(resolveObject.items[i].selected === "theirs" && resolveObject.items[i].theirs.value === "move"){
+          moves[resolveObject.items[i].mine.path] = resolveObject.items[i].theirs.path;
+          //and we also make the move
+          insertAtPath(resolveObject.merge,resolveObject.items[i].theirs.path,getPathOfDiff(resolveObject.merge,resolveObject.items[i].mine.path));
+          removePathFromDiff(resolveObject.merge,resolveObject.items[i].mine.path);
+        } else {
+          filteredItems.push(resolveObject.items[i]);
+        }
+      }
+      resolveObject.items = filteredItems;
+
+      //in a second run we modify all sub-path of the moves paths
+      for(i=0;i<resolveObject.items.length;i++){
+        if(resolveObject.items[i].selected === "theirs"){
+          path = moveBaseOfPath(resolveObject.items[i].theirs.path);
+          if(path){
+            resolveObject.items[i].theirs.path = resolveObject.items[i].theirs.path.replace(path,moves[path]);
+          }
+          path = moveBaseOfPath(resolveObject.items[i].mine.path);
+          if(path){
+            resolveObject.items[i].mine.path = resolveObject.items[i].mine.path.replace(path,moves[path]);
+          }
+        }
+      }
+    }
+
+    _core.applyResolution = function(conflictObject){
+      //we apply conflict items to the merge and return it as a diff
+      var i;
+      resolveMoves(conflictObject);
+      for(i=0;i<conflictObject.items.length;i++){
+        if(conflictObject.items[i].selected !== "mine"){
+          removePathFromDiff(conflictObject.merge,conflictObject.items[i].mine.path);
+          insertAtPath(conflictObject.merge,conflictObject.items[i].theirs.path,conflictObject.items[i].theirs.value);
+        }
+      }
+
+      return conflictObject.merge;
+    };
+
+
+    //we remove some low level functions as they should not be used on high level
+    delete _core.overlayInsert;
+
+    return _core;
+  }
+
+  return diffCore;
+});
+
+/*
  * Copyright (C) 2012 Vanderbilt University, All rights reserved.
  *
  * Author: Tamas Kecskes
  */
 
-define('core/core',["core/corerel",'core/setcore','core/guidcore','core/nullpointercore','core/coreunwrap', 'core/descriptorcore', 'core/coretype', 'core/constraintcore', 'core/coretree', 'core/metacore', 'core/coretreeloader'],
-			function (CoreRel, Set, Guid, NullPtr, UnWrap, Descriptor, Type, Constraint, CoreTree, MetaCore, TreeLoader)
+define('core/core',[
+        "core/corerel",
+        'core/setcore',
+        'core/guidcore',
+        'core/nullpointercore',
+        'core/coreunwrap',
+        'core/coretype',
+        'core/constraintcore',
+        'core/coretree',
+        'core/metacore',
+        'core/coretreeloader',
+        'core/corediff'],
+    function (CoreRel, Set, Guid, NullPtr, UnWrap, Type, Constraint, CoreTree, MetaCore, TreeLoader, CoreDiff)
 {
     
 
@@ -9339,7 +10390,7 @@ define('core/core',["core/corerel",'core/setcore','core/guidcore','core/nullpoin
         options = options || {};
         options.usetype = options.usertype || 'nodejs';
 
-        var coreCon = new TreeLoader(new MetaCore(new Constraint(new Descriptor(new Guid(new Set(new NullPtr(new Type(new NullPtr(new CoreRel(new CoreTree(storage, options)))))))))));
+        var coreCon = new TreeLoader(new CoreDiff(new MetaCore(new Constraint(new Guid(new Set(new NullPtr(new Type(new NullPtr(new CoreRel(new CoreTree(storage, options)))))))))));
 
         if(options.usertype === 'tasync'){
             return coreCon;
@@ -9528,6 +10579,10 @@ define('storage/client',[ "util/assert", "util/guid" ], function (ASSERT, GUID) 
                                 }
                             });
                         }
+                    });
+
+                    socket.on('error', function (err) {
+                        callback(err);
                     });
 
                     socket.on('disconnect', function () {
@@ -9756,6 +10811,7 @@ define('storage/client',[ "util/assert", "util/guid" ], function (ASSERT, GUID) 
                                     setBranchHash: setBranchHash,
                                     getCommits: getCommits,
                                     makeCommit: makeCommit,
+                  getCommonAncestorCommit: getCommonAncestorCommit,
                                     ID_NAME: "_id"
                                 };
                                 callback(null, projects[project]);
@@ -10141,7 +11197,27 @@ define('storage/client',[ "util/assert", "util/guid" ], function (ASSERT, GUID) 
                     callback(new Error(ERROR_DISCONNECTED));
                 }
             }
+
+      function getCommonAncestorCommit(commitA, commitB, callback) {
+        ASSERT(typeof callback === 'function');
+        if (socketConnected) {
+          var guid = GUID();
+          callbacks[guid] = {
+            cb: callback,
+            to: setTimeout(callbackTimeout, options.timeout, guid)
+          };
+          socket.emit('getCommonAncestorCommit', project, commitA, commitB, function (err, commit) {
+            if (callbacks[guid]) {
+              clearTimeout(callbacks[guid].to);
+              delete callbacks[guid];
+              callback(err, commit);
         }
+          });
+        } else {
+          callback(new Error(ERROR_DISCONNECTED));
+        }
+      }
+    }
 
         function simpleRequest (parameters,callback){
             ASSERT(typeof callback === 'function');
@@ -10352,6 +11428,7 @@ define('storage/failsafe',["util/assert", "util/guid"], function (ASSERT, GUID) 
             setBranchHash: setBranchHash,
             getCommits: project.getCommits,
             makeCommit: project.makeCommit,
+            getCommonAncestorCommit: project.getCommonAncestorCommit,
             ID_NAME: project.ID_NAME
           });
         } else {
@@ -11052,6 +12129,7 @@ define('storage/cache',[ "util/assert" ], function (ASSERT) {
           //setBranchHash: project.setBranchHash,
 					getCommits: project.getCommits,
 					makeCommit: project.makeCommit,
+          getCommonAncestorCommit: project.getCommonAncestorCommit,
 					ID_NAME: project.ID_NAME
 				});
 			}
@@ -11117,6 +12195,7 @@ define('storage/commit',[ "util/assert", "util/key", "util/canon" ], function (A
 						getBranchHash: _project.getBranchHash,
 						setBranchHash: _project.setBranchHash,
 						getCommits: _project.getCommits,
+            getCommonAncestorCommit: _project.getCommonAncestorCommit,
 						makeCommit: makeCommit,
                         setUser: setUser,
 						ID_NAME: _project.ID_NAME
@@ -11264,6 +12343,7 @@ define('storage/log',[ "util/assert" ], function (ASSERT) {
 						getBranchHash: getBranchHash,
 						setBranchHash: setBranchHash,
 						getCommits: getCommits,
+            getCommonAncestorCommit: getCommonAncestorCommit,
 						makeCommit: makeCommit,
                         setUser: project.setUser,
 						ID_NAME: project.ID_NAME
@@ -11343,6 +12423,14 @@ define('storage/log',[ "util/assert" ], function (ASSERT) {
 				logger.debug(projectName + '.makeCommit(' + parents + ',' + roothash + ',' + msg + ')');
 				return project.makeCommit(parents, roothash, msg, callback);
 			}
+
+      function getCommonAncestorCommit(commitA, commitB, callback) {
+        logger.debug(projectName + '.getCommonAncestorCommit(' + commitA + ',' + commitB + ')');
+        project.getCommonAncestorCommit(commitA, commitB, function (err, commit) {
+          logger.debug(projectName + '.getCommonAncestorCommit(' + commitA + ',' + commitB + ') ->(' + JSON.stringify(err) + ',' + commit + ')');
+          callback(err, commit);
+        });
+		}
 		}
 
         function simpleRequest (parameters,callback){
@@ -15130,7 +16218,7 @@ define('coreclient/serialization',['util/assert'],function(ASSERT){
     };
 });
 
-/*globals define, _, requirejs, WebGMEGlobal*/
+/*globals define, _, requirejs, WebGMEGlobal, GME*/
 
 define('client',[
     'util/assert',
@@ -15291,6 +16379,9 @@ define('client',[
         _TOKEN = null,
         META = new BaseMeta(),
         _rootHash = null,
+        _previousRootHash = null,
+        _changeTree = null,
+        _inheritanceHash = {},
         _root = null,
         _gHash = 0,
         _addOns = {},
@@ -15499,12 +16590,13 @@ define('client',[
         if (_addOns[name] === undefined) {
           _addOns[name] = "loading";
           _database.simpleRequest({command: 'connectedWorkerStart', workerName: name, project: _projectName, branch: _branch}, function (err, id) {
-            console.log('started addon', err);
             if (err) {
+              logger.error('starting addon failed ' + err);
               delete _addOns[name];
               return logger.error(err);
             }
 
+            logger.debug('started addon ' + name + ' ' + id);
             _addOns[name] = id;
           });
         }
@@ -15551,7 +16643,7 @@ define('client',[
           keys = Object.keys(_addOns),
           callback = function (err) {
             if (err) {
-              console.log("stopAddOn", err);
+                logger.error("stopAddOn" + err);
             }
           };
         for (i = 0; i < keys.length; i++) {
@@ -15810,7 +16902,7 @@ define('client',[
                   _redoer.clean();
                   _redoer.addModification(newhash,"branch initial");
                   _selfCommits={};_selfCommits[newhash] = true;
-                }
+                };
                 var redoInfo = _redoer.checkStatus(),
                   canUndo = false,
                   canRedo = false;
@@ -16179,6 +17271,8 @@ define('client',[
           _patterns = {};
           _msg = "";
           _recentCommits = [];
+          _previousRootHash = null;
+          _rootHash = null;
           _viewer = false;
           _readOnlyProject = false;
           _loadNodes = {};
@@ -16234,6 +17328,85 @@ define('client',[
         return _gHash++;
       }
 
+        function getInheritanceChain(node){
+            var ancestors = [];
+            node = _core.getBase(node);
+            while(node){
+                ancestors.push(_core.getPath(node));
+                node = _core.getBase(node);
+            }
+            return ancestors;
+        }
+
+      function _getModifiedNodes(newerNodes){
+            var modifiedNodes = [];
+            for(var i in _nodes){
+                if(newerNodes[i]){
+                    if(newerNodes[i].hash !== _nodes[i].hash && _nodes[i].hash !== ""){
+                        modifiedNodes.push(i);
+                    }
+                }
+            }
+            return modifiedNodes;
+        }
+        function isInChangeTree(path){
+            var pathArray = path.split("/"),
+                diffObj = _changeTree,
+                index = 0,
+                found = false;
+
+            pathArray.shift();
+            if(pathArray.length === 0){
+                found = true;
+            }
+
+            if(!diffObj){
+                return false;
+            }
+
+            while(index<pathArray.length && !found){
+                if(diffObj[pathArray[index]]){
+                    diffObj = diffObj[pathArray[index]];
+                    if(++index === pathArray.length){
+                        found = true;
+                    }
+                } else {
+                    index = pathArray.length;
+                }
+            }
+
+            
+                if(found && diffObj){
+                  if(diffObj.removed !== undefined){
+                    return false;
+                  }
+                  if(diffObj.reg || diffObj.attr || diffObj.pointer || diffObj.set || diffObj.meta || diffObj.childrenListChanged){
+                      return true;
+                  }
+                }
+            
+
+            return false;
+        }
+        /*function getModifiedNodes(newerNodes){
+            var modifiedNodes = [],
+                keys = Object.keys(newerNodes),
+                i,found,
+                inheritanceArray;
+            for(i=0;i<keys.length;i++){
+                found = false;
+                inheritanceArray = getInheritanceChain(newerNodes[keys[i]].node);
+                inheritanceArray.unshift(keys[i]);
+                while(inheritanceArray.length > 0 && !found){
+                    if(isInChangeTree(inheritanceArray.shift())){
+                        found = true;
+                        modifiedNodes.push(keys[i]);
+                    }
+                }
+            }
+
+            return modifiedNodes;
+        }*/
       function getModifiedNodes(newerNodes) {
         var modifiedNodes = [];
         for (var i in _nodes) {
@@ -16245,6 +17418,7 @@ define('client',[
         }
         return modifiedNodes;
       }
+
 
       //this is just a first brute implementation it needs serious optimization!!!
       function fitsInPatternTypes(path, pattern) {
@@ -16300,6 +17474,7 @@ define('client',[
           }
         }
 
+
         //added items
         for (i in newPaths) {
           if (!_users[userId].PATHS[i]) {
@@ -16317,15 +17492,17 @@ define('client',[
         _users[userId].PATHS = newPaths;
 
 
+        //this is how the events should go
         if (events.length > 0) {
           if (_loadError > startErrorLevel) {
-            // TODO events.unshift({etype:'incomplete',eid:null});
+            events.unshift({etype: 'incomplete', eid: null});
           } else {
-            // TODO events.unshift({etype:'complete',eid:null});
+            events.unshift({etype: 'complete', eid: null});
           }
-
-          _users[userId].FN(events);
+        } else {
+          events.unshift({etype: 'complete', eid: null});
         }
+        _users[userId].FN(events);
       }
 
       function storeNode(node, basic) {
@@ -16337,6 +17514,7 @@ define('client',[
             //TODO we try to avoid this
           } else {
             _nodes[path] = {node: node, hash: ""/*,incomplete:true,basic:basic*/};
+            //_inheritanceHash[path] = getInheritanceChain(node); TODO this only needed when real eventing will be reintroduce
           }
           return path;
         }
@@ -16482,13 +17660,56 @@ define('client',[
         }
         return ordered;
       }
+      function getEventTree(oldRootHash,newRootHash,callback){
+                var error = null,
+                    sRoot = null,
+                    tRoot = null,
+                    start = new Date().getTime(),
+                    loadRoot = function(hash,root){
+                        _core.loadRoot(hash,function(err,r){
+                            error = error || err;
+                            if(sRoot === null && hash === oldRootHash){
+                                sRoot = r;
+                            } else {
+                                tRoot = r;
+                            }
+                            if(--needed === 0){
+                                rootsLoaded();
+                            }
+                        });
+
+                    },
+                    rootsLoaded = function(){
+                        if(error){
+                            return callback(error);
+                        }
+                        _core.generateLightTreeDiff(sRoot,tRoot,function(err,diff){
+              //console.log('genDiffTree',new Date().getTime()-start);
+              //console.log('diffTree',JSON.stringify(diff,null,2));
+                            callback(err,diff);
+                        });
+                    },
+                    needed = 2;
+                loadRoot(oldRootHash,sRoot);
+                loadRoot(newRootHash,tRoot);
+        }
 
       function loadRoot(newRootHash, callback) {
-        //with the newer approach we try to optimize a bit the mechanism of the loading and try to get rid of the paralellism behind it
+            //with the newer approach we try to optimize a bit the mechanizm of the loading and try to get rid of the paralellism behind it
         var patterns = {},
           orderedPatternIds = [],
           error = null,
-          i, j, keysi, keysj;
+                i, j,keysi,keysj,
+                loadNextPattern = function(index){
+                    if(index<orderedPatternIds.length){
+                        loadPattern(_core,orderedPatternIds[index],patterns[orderedPatternIds[index]],_loadNodes,function(err){
+                            error = error || err;
+                            loadNextPattern(index+1);
+                        });
+                    } else {
+                        callback(error);
+                    }
+                };
         _loadNodes = {};
         _loadError = 0;
 
@@ -16507,7 +17728,7 @@ define('client',[
             }
           }
         }
-        //getting an orderd keylist
+        //getting an ordered key list
         orderedPatternIds = Object.keys(patterns);
         orderedPatternIds = orderStringArrayByElementLength(orderedPatternIds);
 
@@ -16542,76 +17763,55 @@ define('client',[
 
       //this is just a first brute implementation it needs serious optimization!!!
       function loading(newRootHash, callback) {
-        callback = callback || function () {
-        };
-        var incomplete = false;
-        var modifiedPaths = {};
-        var missing = 2;
         var finalEvents = function () {
-          if (_loadError > 0) {
-            //we assume that our immediate load was only partial
+          var modifiedPaths;
             modifiedPaths = getModifiedNodes(_loadNodes);
             _nodes = _loadNodes;
             _loadNodes = {};
             for (var i in _users) {
               userEvents(i, modifiedPaths);
             }
-            _loadError = 0;
-          } else if (_loadNodes[ROOT_PATH]) {
-            //we left the stuff in the loading rack, probably because there were no _nodes beforehand
-            _nodes = _loadNodes;
-            _loadNodes = {};
-          }
           callback(null);
         };
-
-        _rootHash = newRootHash
+        callback = callback || function(err){};
+        _previousRootHash = _rootHash;
+        _rootHash = newRootHash;
+        /*if(_previousRootHash){
+          getEventTree(_previousRootHash,_rootHash,function(err,diffTree){
+            if(err){
+              _rootHash = null;
+              callback(err);
+            } else {
+              _changeTree = diffTree;
         loadRoot(newRootHash, function (err) {
           if (err) {
             _rootHash = null;
             callback(err);
           } else {
-            if (--missing === 0) {
               finalEvents();
             }
-          }
         });
-        //here we try to make an immediate event building
-        //TODO we should deal with the full unloading!!!
-        //TODO we should check not to hide any issue related to immediate loading!!!
-        var hasEnoughNodes = false;
-        var counter = 0;
-        var limit = 0;
-        for (var i in _nodes) {
-          counter++;
-        }
-        limit = counter / 2;
-        counter = 0;
-        for (i in _loadNodes) {
-          counter++;
-        }
-        hasEnoughNodes = limit <= counter;
-        if (/*hasEnoughNodes*/false) {
-          modifiedPaths = getModifiedNodes(_loadNodes);
-          _nodes = {};
-          for (i in _loadNodes) {
-            _nodes[i] = _loadNodes[i];
           }
-
-          for (i in _users) {
-            userEvents(i, modifiedPaths);
-          }
-
-          if (--missing === 0) {
-            finalEvents();
-          }
+          });
 
         } else {
-          _loadError++;
-          if (--missing === 0) {
+          loadRoot(newRootHash,function(err){
+            if(err){
+              _rootHash = null;
+              callback(err);
+            } else {
             finalEvents();
           }
-        }
+          });
+        }*/
+          loadRoot(newRootHash,function(err){
+              if(err){
+                  _rootHash = null;
+                  callback(err);
+        } else {
+            finalEvents();
+          }
+          });
       }
 
       function saveRoot(msg, callback) {
@@ -16695,7 +17895,7 @@ define('client',[
                   if (--wait === 0) {
                     callback(null, fullList);
                   }
-                })
+                });
               }
             } else {
               callback(null, {});
@@ -17457,48 +18657,6 @@ define('client',[
         }
       }
 
-      //Meta like descriptor functions
-      function setAttributeDescriptor(path, attributename, descriptor) {
-        if (_core && _nodes[path] && typeof _nodes[path].node === 'object') {
-          _core.setAttributeDescriptor(_nodes[path].node, attributename, descriptor);
-          saveRoot('setAttributeDescriptor(' + path + ',' + ',' + attributename + ')');
-        }
-      }
-
-      function delAttributeDescriptor(path, attributename) {
-        if (_core && _nodes[path] && typeof _nodes[path].node === 'object') {
-          _core.delAttributeDescriptor(_nodes[path].node, attributename);
-          saveRoot('delAttributeDescriptor(' + path + ',' + ',' + attributename + ')');
-        }
-      }
-
-      function setPointerDescriptor(path, pointername, descriptor) {
-        if (_core && _nodes[path] && typeof _nodes[path].node === 'object') {
-          _core.setPointerDescriptor(_nodes[path].node, pointername, descriptor);
-          saveRoot('setPointerDescriptor(' + path + ',' + ',' + pointername + ')');
-        }
-      }
-
-      function delPointerDescriptor(path, pointername) {
-        if (_core && _nodes[path] && typeof _nodes[path].node === 'object') {
-          _core.delPointerDescriptor(_nodes[path].node, pointername);
-          saveRoot('delPointerDescriptor(' + path + ',' + ',' + pointername + ')');
-        }
-      }
-
-      function setChildrenMetaDescriptor(path, descriptor) {
-        if (_core && _nodes[path] && typeof _nodes[path].node === 'object') {
-          _core.setNodeDescriptor(_nodes[path].node, descriptor);
-          saveRoot('setNodeDescriptor(' + path + ')');
-        }
-      }
-
-      function delChildrenMetaDescriptor(path) {
-        if (_core && _nodes[path] && typeof _nodes[path].node === 'object') {
-          _core.delNodeDescriptor(_nodes[path].node);
-          saveRoot('delNodeDescriptor(' + path + ')');
-        }
-      }
 
       function setBase(path, basepath) {
         /*if (_core && _nodes[path] && typeof _nodes[path].node === 'object') {
@@ -17766,36 +18924,6 @@ define('client',[
           //return getMemberIds('ValidChildren');
           return META.getValidChildrenTypes(_id);
         };
-        var getAttributeDescriptor = function (attributename) {
-          return _core.getAttributeDescriptor(_nodes[_id].node, attributename);
-        };
-        var getEditableAttributeDescriptor = function (attributename) {
-          var descriptor = _core.getAttributeDescriptor(_nodes[_id].node, attributename);
-          if (typeof descriptor === 'object') {
-            descriptor = JSON.parse(JSON.stringify(descriptor));
-          }
-          return descriptor;
-        };
-        var getPointerDescriptor = function (pointername) {
-          return _core.getPointerDescriptor(_nodes[_id].node, pointername);
-        };
-        var getEditablePointerDescriptor = function (pointername) {
-          var descriptor = _core.getPointerDescriptor(_nodes[_id].node, pointername);
-          if (typeof descriptor === 'object') {
-            descriptor = JSON.parse(JSON.stringify(descriptor));
-          }
-          return descriptor;
-        };
-        var getChildrenMetaDescriptor = function () {
-          return _core.getNodeDescriptor(_nodes[_id].node);
-        };
-        var getEditableChildrenMetaDescriptor = function () {
-          var descriptor = _core.getNodeDescriptor(_nodes[_id].node);
-          if (typeof descriptor === 'object') {
-            descriptor = JSON.parse(JSON.stringify(descriptor));
-          }
-          return descriptor;
-        };
 
 
         //constraint functions
@@ -17862,12 +18990,6 @@ define('client',[
 
             //META functions
             getValidChildrenTypes: getValidChildrenTypes,
-            getAttributeDescriptor: getAttributeDescriptor,
-            getEditableAttributeDescriptor: getEditableAttributeDescriptor,
-            getPointerDescriptor: getPointerDescriptor,
-            getEditablePointerDescriptor: getEditablePointerDescriptor,
-            getChildrenMetaDescriptor: getChildrenMetaDescriptor,
-            getEditableChildrenMetaDescriptor: getEditableChildrenMetaDescriptor,
 
             //constraint functions
             getConstraintNames: getConstraintNames,
@@ -17883,39 +19005,6 @@ define('client',[
         }
 
         return null;
-
-      }
-
-      //testing
-      function testMethod(testnumber) {
-        /*deleteBranchAsync("blabla",function(err){
-         getBranchesAsync(function(err,branches){
-         console.log('kecso');
-         });
-         /*setTimeout(function(){
-         getBranchesAsync(function(err,branches){
-         console.log('kecso');
-         });
-         },0);
-         });*/
-        //_database.getNextServerEvent("",function(err,guid,parameters){
-        //    console.log(err,guid,parameters);
-        //});
-        //connectToDatabaseAsync({open:true},function(err){
-        //    console.log('kecso connecting to database',err);
-        //});
-        //_self.addEventListener(_self.events.SERVER_BRANCH_UPDATED,function(client,data){
-        //    console.log(data);
-        //});
-        switch (testnumber) {
-          case 1:
-            break;
-          case 2:
-
-            break;
-          case 3:
-            break;
-        }
 
       }
 
@@ -17940,6 +19029,7 @@ define('client',[
           }
         });
       }
+
 
       function getExportItemsUrlAsync(paths, filename, callback) {
         _database.simpleRequest({command: 'dumpMoreNodes', name: _projectName, hash: _rootHash || _core.getHash(_nodes[ROOT_PATH].node), nodes: paths}, function (err, resId) {
@@ -18188,6 +19278,275 @@ define('client',[
         });
       }
 
+      //TODO probably it would be a good idea to put this functionality to server
+      function getBaseOfCommits(one,other,callback){
+        _project.getCommonAncestorCommit(one,other,callback);
+      }
+      //TODO probably this would also beneficial if this would work on server as well
+      function getDiffTree(from,to,callback){
+        var needed = 2,error = null,
+          core = getNewCore(_project),
+          fromRoot={root:{},commit:from},
+          toRoot={root:{},commit:to},
+          rootsLoaded = function(){
+            if(error){
+              return callback(error,{});
+            }
+            _core.generateTreeDiff(fromRoot.root,toRoot.root,callback);
+          },
+          loadRoot = function(root){
+            _project.loadObject(root.commit,function(err,c){
+              error = error || ( err || c ? null : new Error('no commit object was found'));
+              if(!err && c){
+                core.loadRoot(c.root,function(err,r){
+                  error = error || ( err || r ? null : new Error('no root was found'));
+                  root.root = r;
+                  if(--needed === 0){
+                    rootsLoaded();
+                  }
+                });
+              } else {
+                if(--needed === 0){
+                  rootsLoaded();
+                }
+              }
+            });
+          };
+        loadRoot(fromRoot);
+        loadRoot(toRoot);
+
+      }
+
+      function getConflictOfDiffs(base,extension){
+        return _core.tryToConcatChanges(base,extension);
+      }
+      function getResolve(resolveObject){
+        return _core.applyResolution(resolveObject);
+      }
+      //TODO move to server
+      function applyDiff(branch,baseCommitHash,branchCommitHash,parents,diff,callback){
+        _project.loadObject(baseCommitHash,function(err,cObject){
+          var core = getNewCore(_project);
+          if(!err && cObject){
+            core.loadRoot(cObject.root,function(err,root){
+              if(!err && root){
+                core.applyTreeDiff(root,diff,function(err){
+                  if(err){
+                    return callback(err);
+                  }
+
+                  core.persist(root,function(err){
+                    if(err){
+                      return callback(err);
+                    }
+
+                    var newHash = _project.makeCommit(parents,core.getHash(root),"merging",function(err){
+                      if(err){
+                        return callback(err);
+                      }
+                      _project.setBranchHash(branch,branchCommitHash,newHash,callback);
+                    });
+                  });
+                });
+              } else {
+                callback(err || new Error('no root was found'));
+              }
+            });
+          } else {
+            callback(err || new Error('no commit object was found'));
+          }
+        });
+      }
+
+      function merge(whereBranch,whatCommit,whereCommit,callback){
+        ASSERT(_project && typeof whatCommit === 'string' && typeof whereCommit === 'string' && typeof callback === 'function');
+        _project.getCommonAncestorCommit(whatCommit,whereCommit,function(err,baseCommit){
+          if(!err && baseCommit){
+            var base,what,where,baseToWhat,baseToWhere,rootNeeds = 3,error = null,
+            rootsLoaded = function(){
+                var needed = 2,error = null;
+                _core.generateTreeDiff(base,what,function(err,diff){
+                  error = error || err;
+                  baseToWhat = diff;
+                  if(--needed===0){
+                    if(!error){
+                      diffsGenerated();
+                    } else {
+                      callback(error);
+                    }
+                  }
+                });
+                _core.generateTreeDiff(base,where,function(err,diff){
+                  error = error || err;
+                  baseToWhere = diff;
+                  if(--needed===0){
+                    if(!error){
+                      diffsGenerated();
+                    } else {
+                      callback(error);
+                    }
+                  }
+                });
+              },
+              diffsGenerated = function(){
+                var conflict = _core.tryToConcatChanges(baseToWhere,baseToWhat);
+                console.log('conflict object',conflict);
+                if(conflict.items.length === 0){
+                  //no conflict
+                  callback(null,conflict);
+                  /*
+                  _core.applyTreeDiff(base,conflict.merge,function(err){
+                    if(err){
+                      return callback(err);
+                    }
+                    _core.persist(base,function(err){
+                      if(err){
+                        callback(err);
+                      } else {
+                        var newHash = _project.makeCommit([whatCommit,whereCommit],_core.getHash(base), "merging", function(err){
+                          if(err){
+                            callback(err);
+                          } else {
+                            _project.setBranchHash(whereBranch,whereCommit,newHash,callback);
+                          }
+                        });
+                      }
+                    });
+                  });*/
+                } else {
+                  callback(null,conflict);
+                }
+                /*var endingWhatDiff = _core.concatTreeDiff(baseToWhere,baseToWhat),
+                  endingWhereDiff = _core.concatTreeDiff(baseToWhat,baseToWhere);
+                console.log('kecso endingwhatdiff',endingWhatDiff);
+                console.log('kecso endingwherediff',endingWhereDiff);
+                if(_core.isEqualDifferences(endingWhereDiff,endingWhatDiff)){
+                  _core.applyTreeDiff(base,endingWhatDiff,function(err){
+                    if(err){
+                      callback(err);
+                    } else {
+                      _core.persist(base,function(err){
+                        if(err){
+                          callback(err);
+                        } else {
+                          var newHash = _project.makeCommit([whatCommit,whereCommit],_core.getHash(base), "merging", function(err){
+                            if(err){
+                              callback(err);
+                            } else {
+                              console.log('setting branch hash after merge');
+                              _project.setBranchHash(whereBranch,whereCommit,newHash,callback);
+                            }
+                          });
+                        }
+                      });
+                    }
+
+                  });
+                } else {
+                  callback(new Error('there is a conflict...'),{
+                    baseObject:base,
+                    baseCommit:baseCommit,
+                    branch: whereBranch,
+                    mine:endingWhereDiff,
+                    mineCommit: whereCommit,
+                    theirs:endingWhatDiff,
+                    theirsCommit:whatCommit,
+                    conflictItems:_core.getConflictItems(endingWhereDiff,endingWhatDiff)});
+                }*/
+              };
+
+              _project.loadObject(baseCommit,function(err,baseCommitObject){
+                error = error || err;
+                if(!error && baseCommitObject){
+                  _core.loadRoot(baseCommitObject.root,function(err,r){
+                    error = error || err;
+                    base = r;
+                    if(--rootNeeds === 0){
+                      if(!error){
+                        rootsLoaded();
+                      } else {
+                        callback(error);
+                      }
+                    }
+                  });
+                } else {
+                  error = error || new Error('cannot load common ancestor commit');
+                  if(--rootNeeds === 0){
+                    callback(error);
+                  }
+                }
+              });
+              _project.loadObject(whatCommit,function(err,whatCommitObject){
+                error = error || err;
+                if(!error && whatCommitObject){
+                  _core.loadRoot(whatCommitObject.root,function(err,r){
+                    error = error || err;
+                    what = r;
+                    if(--rootNeeds === 0){
+                      if(!error){
+                        rootsLoaded();
+                      } else {
+                        callback(error);
+                      }
+                    }
+                  });
+                } else {
+                  error = error || new Error('cannot load the commit to merge');
+                  if(--rootNeeds === 0){
+                    callback(error);
+                  }
+                }
+              });
+              _project.loadObject(whereCommit,function(err,whereCommitObject){
+                error = error || err;
+                if(!error && whereCommitObject){
+                  _core.loadRoot(whereCommitObject.root,function(err,r){
+                    error = error || err;
+                    where = r;
+                    if(--rootNeeds === 0){
+                      if(!error){
+                        rootsLoaded();
+                      } else {
+                        callback(error);
+                      }
+                    }
+                  });
+                } else {
+                  error = error || new Error('cannot load the commit to merge into');
+                  if(--rootNeeds === 0){
+                    callback(error);
+                  }
+                }
+              });
+          } else {
+            callback(err || new Error('we cannot locate common ancestor commit!!!'));
+          }
+        });
+      }
+
+      function resolve(baseObject,mineDiff,branch,mineCommit,theirsCommit,resolvedConflictItems,callback){
+        mineDiff = _core.applyResolution(mineDiff,resolvedConflictItems);
+        _core.applyTreeDiff(baseObject,mineDiff,function(err){
+          if(err){
+            callback(err);
+          } else {
+            _core.persist(baseObject,function(err){
+              if(err){
+                callback(err);
+              } else {
+                var newHash = _project.makeCommit([theirsCommit,mineCommit],_core.getHash(baseObject), "merging", function(err){
+                  if(err){
+                    callback(err);
+                  } else {
+                    console.log('setting branch hash after merge');
+                    _project.setBranchHash(branch,mineCommit,newHash,callback);
+                  }
+                });
+              }
+            });
+          }
+        });
+      }
       //initialization
       function initialize() {
         _database = newDatabase();
@@ -18302,13 +19661,6 @@ define('client',[
         createSet: createSet,
         deleteSet: deleteSet,
 
-        //desc and META
-        setAttributeDescriptor: setAttributeDescriptor,
-        delAttributeDescriptor: delAttributeDescriptor,
-        setPointerDescriptor: setPointerDescriptor,
-        delPointerDescriptor: delPointerDescriptor,
-        setChildrenMetaDescriptor: setChildrenMetaDescriptor,
-        delChildrenMetaDescriptor: delChildrenMetaDescriptor,
         setBase: setBase,
         delBase: delBase,
 
@@ -18400,9 +19752,14 @@ define('client',[
         undo: _redoer.undo,
         redo: _redoer.redo,
 
-        //testing
-        testMethod: testMethod
-
+        //merge
+        getBaseOfCommits: getBaseOfCommits,
+        getDiffTree: getDiffTree,
+        getConflictOfDiffs: getConflictOfDiffs,
+        applyDiff: applyDiff,
+        merge: merge,
+        getResolve: getResolve,
+        resolve: resolve
       };
     }
 
@@ -18497,14 +19854,15 @@ define('blob/BlobMetadata',['blob/BlobConfig'], function(BlobConfig){
 
     return BlobMetadata
 });
+/*globals define*/
+/*jshint browser: true, node:true*/
+
 /*
- * Copyright (C) 2014 Vanderbilt University, All rights reserved.
- *
- * Author: Zsolt Lattmann
+ * @author lattmann / https://github.com/lattmann
  */
 
 define('blob/Artifact',['blob/BlobMetadata', 'blob/BlobConfig', 'core/tasync'], function (BlobMetadata, BlobConfig, tasync) {
-
+    
     /**
      * Creates a new instance of artifact, i.e. complex object, in memory. This object can be saved in the storage.
      * @param {string} name Artifact's name without extension
@@ -18567,6 +19925,69 @@ define('blob/Artifact',['blob/BlobMetadata', 'blob/BlobConfig', 'core/tasync'], 
     };
 
     /**
+     * Adds a hash to the artifact using the given file path.
+     * @param {string} name Path to the file in the artifact. Note: 'a/b/c.txt'
+     * @param {string} hash Metadata hash that has to be added.
+     * @param callback
+     */
+    Artifact.prototype.addObjectHash = function (name, hash, callback) {
+        var self = this;
+
+        if (BlobConfig.hashRegex.test(hash) === false) {
+            callback('Blob hash is invalid');
+            return;
+        }
+
+        self.blobClientGetMetadata.call(self.blobClient, hash, function (err, metadata) {
+            if (err) {
+                callback(err);
+                return;
+            }
+
+            if (self.descriptor.content.hasOwnProperty(name)) {
+                callback('Another content with the same name was already added. ' + JSON.stringify(self.descriptor.content[name]));
+
+            } else {
+                self.descriptor.size += metadata.size;
+
+                self.descriptor.content[name] = {
+                    content: metadata.content,
+                    contentType: BlobMetadata.CONTENT_TYPES.OBJECT
+                };
+                callback(null, hash);
+            }
+        });
+    };
+
+    Artifact.prototype.addMetadataHash = function (name, hash, callback) {
+        var self = this;
+
+        if (BlobConfig.hashRegex.test(hash) === false) {
+            callback('Blob hash is invalid');
+            return;
+        }
+        self.blobClientGetMetadata.call(self.blobClient, hash, function (err, metadata) {
+            if (err) {
+                callback(err);
+                return;
+            }
+
+            if (self.descriptor.content.hasOwnProperty(name)) {
+                callback('Another content with the same name was already added. ' + JSON.stringify(self.descriptor.content[name]));
+
+            } else {
+                self.descriptor.size += metadata.size;
+
+                self.descriptor.content[name] = {
+                    content: hash,
+                    contentType: BlobMetadata.CONTENT_TYPES.SOFT_LINK
+                };
+                callback(null, hash);
+            }
+        });
+    };
+
+    /**
      * Adds multiple files.
      * @param {Object.<string, Blob>} files files to add
      * @param callback
@@ -18599,7 +20020,6 @@ define('blob/Artifact',['blob/BlobMetadata', 'blob/BlobConfig', 'core/tasync'], 
             self.addFile(fileNames[i], files[fileNames[i]], counterCallback);
         }
     };
-
 
     /**
      * Adds multiple files as soft-links.
@@ -18636,36 +20056,6 @@ define('blob/Artifact',['blob/BlobMetadata', 'blob/BlobConfig', 'core/tasync'], 
     };
 
     /**
-     * Adds a hash to the artifact using the given file path.
-     * @param {string} name Path to the file in the artifact. Note: 'a/b/c.txt'
-     * @param {string} hash Metadata hash that has to be added.
-     * @param callback
-     */
-    Artifact.prototype.addObjectHash = function (name, hash, callback) {
-        var self = this;
-
-        self.blobClientGetMetadata.call(self.blobClient, hash, function (err, metadata) {
-            if (err) {
-                callback(err);
-                return;
-            }
-
-            if (self.descriptor.content.hasOwnProperty(name)) {
-                callback('Another content with the same name was already added. ' + JSON.stringify(self.descriptor.content[name]));
-
-            } else {
-                self.descriptor.size += metadata.size;
-
-                self.descriptor.content[name] = {
-                    content: metadata.content,
-                    contentType: BlobMetadata.CONTENT_TYPES.OBJECT
-                };
-                callback(null, hash);
-            }
-        });
-    };
-
-    /**
      * Adds hashes to the artifact using the given file paths.
      * @param {object.<string, string>} objectHashes - Keys are file paths and values object hashes.
      * @param callback
@@ -18697,34 +20087,6 @@ define('blob/Artifact',['blob/BlobMetadata', 'blob/BlobConfig', 'core/tasync'], 
         for (i = 0; i < fileNames.length; i += 1) {
             self.addObjectHash(fileNames[i], objectHashes[fileNames[i]], counterCallback);
         }
-    };
-
-    Artifact.prototype.addMetadataHash = function (name, hash, callback) {
-        var self = this;
-
-        if (BlobConfig.hashRegex.test(hash) === false) {
-            callback("Blob hash is invalid");
-            return;
-        }
-        self.blobClientGetMetadata.call(self.blobClient, hash, function (err, metadata) {
-            if (err) {
-                callback(err);
-                return;
-            }
-
-            if (self.descriptor.content.hasOwnProperty(name)) {
-                callback('Another content with the same name was already added. ' + JSON.stringify(self.descriptor.content[name]));
-
-            } else {
-                self.descriptor.size += metadata.size;
-
-                self.descriptor.content[name] = {
-                    content: hash,
-                    contentType: BlobMetadata.CONTENT_TYPES.SOFT_LINK
-                };
-                callback(null, hash);
-            }
-        });
     };
 
     /**
@@ -20236,13 +21598,15 @@ require.alias("superagent/lib/client.js", "superagent/index.js");if (typeof expo
 } else {
   this["superagent"] = require("superagent");
 }})();
+/*globals define*/
+/*jshint browser: true, node:true*/
 /*
- * Copyright (C) 2014 Vanderbilt University, All rights reserved.
- *
- * Author: Zsolt Lattmann
+ * @author lattmann / https://github.com/lattmann
+ * @author ksmyth / https://github.com/ksmyth
  */
 
 define('blob/BlobClient',['./Artifact', 'blob/BlobMetadata', 'superagent'], function (Artifact, BlobMetadata, superagent) {
+    
 
     var BlobClient = function (parameters) {
         this.artifacts = [];
@@ -20294,8 +21658,8 @@ define('blob/BlobClient',['./Artifact', 'blob/BlobMetadata', 'superagent'], func
         }
     };
 
-
     BlobClient.prototype.putFile = function (name, data, callback) {
+        var contentLength;
         function toArrayBuffer(buffer) {
             var ab = new ArrayBuffer(buffer.length);
             var view = new Uint8Array(ab);
@@ -20314,9 +21678,10 @@ define('blob/BlobClient',['./Artifact', 'blob/BlobMetadata', 'superagent'], func
                 data = '';
             }
         }
+        contentLength = data.hasOwnProperty('length') ? data.length : data.byteLength;
         superagent.post(this.getCreateURL(name))
             .set('Content-Type', 'application/octet-stream')
-            .set('Content-Length', data.length)
+            .set('Content-Length', contentLength)
             .send(data)
             .end(function (err, res) {
                 if (err || res.status > 399) {
@@ -20363,38 +21728,39 @@ define('blob/BlobClient',['./Artifact', 'blob/BlobMetadata', 'superagent'], func
     };
 
     BlobClient.prototype.putFiles = function (o, callback) {
-        var self = this;
+        var self = this,
+            error = '',
+            filenames = Object.keys(o),
+            remaining = filenames.length,
+            hashes = {},
+            putFile;
+        if (remaining === 0) {
+            callback(null, hashes);
+        }
+        putFile = function(filename, data) {
+            self.putFile(filename, data, function (err, hash) {
+                remaining -= 1;
 
-        var filenames = Object.keys(o);
-        var remaining = filenames.length;
+                hashes[filename] = hash;
 
-        var hashes = {};
+                if (err) {
+                    error += 'putFile error: ' + err.toString();
+                }
+
+                if (remaining === 0) {
+                    callback(error, hashes);
+                }
+            });
+        };
 
         for (var j = 0; j < filenames.length; j += 1) {
-            (function(filename, data) {
-
-                self.putFile(filename, data, function (err, hash) {
-                    remaining -= 1;
-
-                    hashes[filename] = hash;
-
-                    if (err) {
-                        // TODO: log/handle error
-                        return;
-                    }
-
-                    if (remaining === 0) {
-                        callback(null, hashes);
-                    }
-                });
-
-            })(filenames[j], o[filenames[j]]);
+            putFile(filenames[j], o[filenames[j]]);
         }
     };
 
     BlobClient.prototype.getSubObject = function (hash, subpath, callback) {
         return this.getObject(hash, callback, subpath);
-    }
+    };
 
     BlobClient.prototype.getObject = function (hash, callback, subpath) {
         superagent.parse['application/zip'] = function (obj, parseCallback) {
@@ -20403,21 +21769,21 @@ define('blob/BlobClient',['./Artifact', 'blob/BlobMetadata', 'superagent'], func
             } else {
                 return obj;
             }
-        }
+        };
         //superagent.parse['application/json'] = superagent.parse['application/zip'];
 
         var req = superagent.get(this.getViewURL(hash, subpath));
         if (req.pipe) {
             // running on node
             var Writable = require('stream').Writable;
-            require('util').inherits(BuffersWritable, Writable);
-
-            function BuffersWritable(options) {
+            var BuffersWritable = function (options) {
                 Writable.call(this, options);
 
                 var self = this;
                 self.buffers = [];
-            }
+            };
+            require('util').inherits(BuffersWritable, Writable);
+
             BuffersWritable.prototype._write = function(chunk, encoding, callback) {
                 this.buffers.push(chunk);
                 callback();
@@ -20445,10 +21811,10 @@ define('blob/BlobClient',['./Artifact', 'blob/BlobMetadata', 'superagent'], func
                 } else {
                     var contentType = req.xhr.getResponseHeader('content-type');
                     var response = req.xhr.response; // response is an arraybuffer
-                    if (contentType == 'application/json') {
-                        function utf8ArrayToString(uintArray) {
+                    if (contentType === 'application/json') {
+                        var utf8ArrayToString = function (uintArray) {
                             return decodeURIComponent(escape(String.fromCharCode.apply(null, uintArray)));
-                        }
+                        };
                         response = JSON.parse(utf8ArrayToString(new Uint8Array(response)));
                     }
                     callback(null, response);
@@ -20497,40 +21863,45 @@ define('blob/BlobClient',['./Artifact', 'blob/BlobMetadata', 'superagent'], func
     };
 
     BlobClient.prototype.saveAllArtifacts = function (callback) {
-        var remaining = this.artifacts.length;
-        var hashes = [];
+        var remaining = this.artifacts.length,
+            hashes = [],
+            error = '',
+            saveCallback;
 
         if (remaining === 0) {
             callback(null, hashes);
         }
 
+        saveCallback = function(err, hash) {
+            remaining -= 1;
+
+            hashes.push(hash);
+
+            if (err) {
+                error += 'artifact.save err: ' + err.toString();
+            }
+            if (remaining === 0) {
+                callback(error, hashes);
+            }
+        };
+
         for (var i = 0; i < this.artifacts.length; i += 1) {
 
-            this.artifacts[i].save(function(err, hash) {
-                remaining -= 1;
-
-                hashes.push(hash);
-
-                if (err) {
-                    // TODO: log/handle errors
-                    return;
-                }
-                if (remaining === 0) {
-                    callback(null, hashes);
-                }
-            });
+            this.artifacts[i].save(saveCallback);
         }
     };
 
     return BlobClient;
 });
+/*globals define, WebGMEGlobal, require*/
 /**
- * Created by Zsolt on 5/21/2014.
- *
+ * @author lattmann / https://github.com/lattmann
+ * @author ksmyth / https://github.com/ksmyth
  */
 
 
 define('executor/ExecutorClient',['superagent'], function (superagent) {
+    
 
     var ExecutorClient = function (parameters) {
         parameters = parameters || {};
@@ -20557,7 +21928,7 @@ define('executor/ExecutorClient',['superagent'], function (superagent) {
             this.executorUrl = (this.httpsecure ? 'https://' : 'http://') + this.server + ':' + this.serverPort;
         }
         // TODO: TOKEN???
-        this.executorUrl = this.executorUrl + '/rest/external/executor/'; // TODO: any ways to ask for this or get it from the configuration?
+        this.executorUrl = this.executorUrl + '/rest/executor/'; // TODO: any ways to ask for this or get it from the configuration?
         if (parameters.executorNonce) {
             this.executorNonce = parameters.executorNonce;
         } else if (typeof WebGMEGlobal !== "undefined" && typeof WebGMEGlobal.getConfig !== "undefined") {
@@ -22026,22 +23397,27 @@ define('js/Utils/InterpreterManager',['core/core',
     return InterpreterManager;
 });
 
-/*globals define, document, console, eval, GME*/
+/*globals define, document, console, window, eval, GME, docReady, setTimeout*/
 
 define('webgme.classes',
     [
         'client',
         'blob/BlobClient',
         'executor/ExecutorClient',
-        'js/Utils/InterpreterManager'
-    ], function (Client, BlobClient, ExecutorClient, InterpreterManager) {
+        'js/Utils/InterpreterManager',
+        'core/core',
+        'storage/clientstorage'
+    ], function (Client, BlobClient, ExecutorClient, InterpreterManager, Core, Storage) {
 
+        
         // Setting global classes
 
         GME.classes.Client = Client;
         GME.classes.BlobClient = BlobClient;
         GME.classes.ExecutorClient = ExecutorClient;
         GME.classes.InterpreterManager = InterpreterManager;
+        GME.classes.Core = Core;
+        GME.classes.Storage = Storage;
 
         // Pure JavaScript equivalent to jQuery's $.ready() from https://github.com/jfriend00/docReady
 

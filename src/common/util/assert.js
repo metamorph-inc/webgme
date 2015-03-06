@@ -11,8 +11,10 @@ define(function () {
 		if( !cond ) {
 			var error = new Error(msg || "ASSERT failed");
 
+			if (typeof TESTING === 'undefined') {
 			console.log("Throwing", error.stack);
 			console.log();
+			}
 			
 			debugger;
 			throw error;

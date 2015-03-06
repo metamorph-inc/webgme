@@ -1,24 +1,24 @@
-/*globals require, describe, it, before, WebGMEGlobal*/
+/*globals require*/
+/*jshint node:true, mocha:true*/
 /**
  * @author lattmann / https://github.com/lattmann
  */
 
-require('../../_globals.js');
-var should = require('chai').should(),
-    requirejs = require('requirejs'),
-    config = WebGMEGlobal.getConfig(),
-
-    CoreTree = requirejs('common/core/coretree'),
-
-    // TODO: replace with in memory storage
-
-    storage = new global.Storage({});
-
+var testFixture = require('../../_globals.js');
 
 describe('CoreTree', function () {
     "use strict";
 
-    var coreTree;
+    var should = require('chai').should(),
+        requirejs = require('requirejs'),
+
+        CoreTree = requirejs('common/core/coretree'),
+
+    // TODO: replace with in memory storage
+
+        storage = new testFixture.StorageLocal({}),
+
+        coreTree;
 
     before(function (done) {
         storage.openDatabase(function (err) {
@@ -113,9 +113,7 @@ describe('CoreTree', function () {
 
     describe('core.getPath', function () {
         it('should return with the path of the root', function () {
-            var root = {parent: null, relid: null},
-                child = {parent: root, relid: '1'},
-                grandChild = {parent: child, relid: '2'};
+            var root = {parent: null, relid: null};
 
             coreTree.getPath(root).should.be.equal('');
         });

@@ -3,7 +3,6 @@ define(['logManager',
     'fs',
     'express',
     'auth/gmeauth',
-    'auth/vehicleforgeauth',
     'auth/sessionstore',
     'passport',
     'passport-google',
@@ -18,13 +17,13 @@ define(['logManager',
     'blob/BlobFSBackend',
     'blob/BlobS3Backend',
     'blob/BlobServer',
-    'util/guid'
+    'util/guid',
+    'url'
 ], function (LogManager,
              Storage,
              FS,
              Express,
              GMEAUTH,
-             VFAUTH,
              SSTORE,
              Passport,
              PassGoogle,
@@ -39,8 +38,8 @@ define(['logManager',
              BlobFSBackend,
              BlobS3Backend,
              BlobServer,
-             GUID) {
-    'use strict';
+             GUID,
+             URL) {
     'use strict';
     function StandAloneServer(CONFIG) {
         // if the config is not set we use the global
@@ -77,8 +76,10 @@ define(['logManager',
                 __storageOptions.session = true;
                 __storageOptions.sessioncheck = __sessionStore.check;
                 __storageOptions.secret = CONFIG.sessioncookiesecret;
+                __storageOptions.authentication = CONFIG.authentication;
                 __storageOptions.authorization = globalAuthorization;
-                __storageOptions.authInfo = __gmeAuth.getAuthorizationInfo;
+                __storageOptions.auth_deleteProject = __gmeAuth.deleteProject;
+                __storageOptions.getAuthorizationInfo = __gmeAuth.getProjectAuthorizationBySession;
             }
 
             __storageOptions.host = CONFIG.mongoip;
@@ -119,10 +120,22 @@ define(['logManager',
                 if (!err && data) {
                     switch (data.userType) {
                         case 'GME':
-                            __gmeAuth.authorize(sessionId, projectName, type, callback);
-                            break;
-                        case 'vehicleForge':
-                            __forgeAuth.authorize(sessionId, projectName, type, callback);
+                            if (type === 'create') {
+                                __gmeAuth.getAllUserAuthInfoBySession(sessionId)
+                                    .then(function (authInfo) {
+                                        if (authInfo.canCreate !== true) {
+                                            return false;
+                                        }
+                                        return __gmeAuth.authorize(sessionId, projectName, 'create')
+                                            .then(function () {
+                                                return true;
+                                            });
+                                }).nodeify(callback);
+                            } else {
+                                __gmeAuth.getProjectAuthorizationBySession(sessionId, projectName, function (err, authInfo) {
+                                    callback(err, authInfo[type] === true);
+                                });
+                            }
                             break;
                         default:
                             callback('unknown user type', false);
@@ -220,24 +233,18 @@ define(['logManager',
                                 res.send(400); //no use for redirecting in this case
                             }
                         });
+                    } else if (CONFIG.guest) {
+                        req.session.authenticated = true;
+                        req.session.udmId = 'anonymous';
+                        req.session.userType = 'GME';
+                        res.cookie('webgme', req.session.udmId);
+                        return next();
                     } else {
                         res.redirect('/login'+getRedirectUrlParameter(req));
                     }
                 }
             } else {
                 return next();
-            }
-        }
-
-        function checkVF(req, res, next) {
-            if (req.isAuthenticated() || (req.session && true === req.session.authenticated)) {
-                return next();
-            } else {
-                if (req.cookies['isisforge']) {
-                    res.redirect('/login/forge');
-                } else {
-                    return next();
-                }
             }
         }
 
@@ -351,7 +358,6 @@ define(['logManager',
             __storage = null,
             __storageOptions = {},
             __gmeAuth = null,
-            __forgeAuth = null,
             __secureSiteInfo = {},
             __app = null,
             __sessionStore,
@@ -394,7 +400,6 @@ define(['logManager',
             guest: CONFIG.guest,
             collection: CONFIG.usercollection
         });
-        __forgeAuth = new VFAUTH({session: __sessionStore});
 
         __logger.info("initializing passport module for user management");
         //TODO in the long run this also should move to some database
@@ -453,11 +458,20 @@ define(['logManager',
             __app.use(Passport.initialize());
             __app.use(Passport.session());
 
+            if (CONFIG.enableExecutor) {
+                var executorRest = requirejs('executor/Executor');
+                __app.use('/rest/executor', executorRest(CONFIG));
+                __logger.info('Executor listening at rest/executor');
+            } else {
+                __logger.info('Executor not enabled. Add "enableExecutor: true" to config.js for activation.');
+            }
+
             setupExternalRestModules();
+
         });
 
         __logger.info("creating login routing rules for the static server");
-        __app.get('/',checkVF,ensureAuthenticated,function(req,res){
+        __app.get('/',ensureAuthenticated,function(req,res){
             /*res.sendfile(__clientBaseDir+'/index.html',{user:req.user},function(err){
              if (err) {
              console.log('fuck',err);
@@ -471,14 +485,29 @@ define(['logManager',
             res.clearCookie('isisforge'); //todo is this really needed
             req.logout();
             req.session.authenticated = false;
-            req.session.userType = 'unknown';
+            req.session.userType = 'loggedout';
             res.redirect(__logoutUrl);
         });
         __app.get('/login',function(req,res){
             res.location('/login');
             expressFileSending(res, __clientBaseDir + '/login.html');
         });
-        __app.post('/login',__gmeAuth.authenticate,function(req,res){
+        __app.post('/login', function(req, res, next) {
+            var queryParams = [];
+            var url = URL.parse(req.url, true);
+            if (req.body && req.body.username) {
+                queryParams.push('username=' + encodeURIComponent(req.body.username));
+            }
+            if (url && url.query && url.query.redirect) {
+                queryParams.push('redirect=' + encodeURIComponent(req.query.redirect));
+            }
+            req.__gmeAuthFailUrl__ = '/login';
+            if (queryParams.length) {
+                req.__gmeAuthFailUrl__ += '?' + queryParams.join('&');
+            }
+            req.__gmeAuthFailUrl__ += '#failed';
+            next();
+        }, __gmeAuth.authenticate, function(req,res){
             res.cookie('webgme', req.session.udmId);
             redirectUrl(req,res);
         });
@@ -495,15 +524,11 @@ define(['logManager',
             res.cookie('webgme', req.session.udmId);
             redirectUrl(req,res);
         });
-        __app.get('/login/forge',__forgeAuth.authenticate,function(req,res){
-            res.cookie('webgme', req.session.udmId);
-            redirectUrl(req,res);
-        });
 
         __logger.info("creating decorator specific routing rules");
         __app.get('/bin/getconfig.js', ensureAuthenticated, function (req, res) {
             res.status(200);
-            res.setHeader('Content-type', 'application/json');
+            res.setHeader('Content-type', 'application/javascript');
             res.end("define([],function(){ return " + JSON.stringify(CONFIG) + ";});");
         });
         __logger.info("creating decorator specific routing rules");
@@ -581,7 +606,7 @@ define(['logManager',
 
         //TODO remove this part as this is only temporary!!!
         __app.get('/docs/*', function (req, res) {
-            expressFileSending(res, Path.join(__baseDir, req.path));
+            expressFileSending(res, Path.join(__baseDir, '..', req.path));
         });
 
 
@@ -622,7 +647,7 @@ define(['logManager',
             }
         });
         __app.get('/checktoken/:token', function (req, res) {
-            if (CONFIG.authenticated == true) {
+            if (CONFIG.authenticated == true) { // FIXME do we need to check CONFIG.authentication or session.authenticated?
                 if (__canCheckToken == true) {
                     setTimeout(function () {
                         __canCheckToken = true;
@@ -655,7 +680,7 @@ define(['logManager',
                         res.header("Access-Control-Allow-Origin", "*");
                         res.header("Access-Control-Allow-Headers", "X-Requested-With");
                         if (req.params.command === __REST.command.etf) {
-                            if (httpStatus === _HTTPError.ok) {
+                            if (httpStatus === 200) {
                                 var filename = 'exportedNode.json';
                                 if (req.query.output) {
                                     filename = req.query.output;
@@ -723,7 +748,7 @@ define(['logManager',
                 }
             }
             res.status(200);
-            res.setHeader('Content-type', 'application/json');
+            res.setHeader('Content-type', 'application/javascript');
             //res.end("define([],function(){ return "+JSON.stringify(names)+";});");
             res.end("(function(){ WebGMEGlobal.allDecorators = " + JSON.stringify(names) + ";}());");
         });
@@ -742,14 +767,14 @@ define(['logManager',
                 }
             }
             res.status(200);
-            res.setHeader('Content-type', 'application/json');
+            res.setHeader('Content-type', 'application/javascript');
             //res.end("define([],function(){ return "+JSON.stringify(names)+";});");
             res.end("(function(){ WebGMEGlobal.allPlugins = " + JSON.stringify(names) + ";}());");
         });
         __app.get('/listAllVisualizerDescriptors', ensureAuthenticated, function (req, res) {
             var allVisualizerDescriptors = getVisualizersDescriptor();
             res.status(200);
-            res.setHeader('Content-type', 'application/json');
+            res.setHeader('Content-type', 'application/javascript');
             res.end("define([],function(){ return " + JSON.stringify(allVisualizerDescriptors) + ";});");
         });
 

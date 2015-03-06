@@ -177,6 +177,10 @@ define([ "util/assert", "util/guid" ], function (ASSERT, GUID) {
                         }
                     });
 
+                    socket.on('error', function (err) {
+                        callback(err);
+                    });
+
                     socket.on('disconnect', function () {
                         status = STATUS_NETWORK_DISCONNECTED;
                         socketConnected = false;
@@ -403,6 +407,7 @@ define([ "util/assert", "util/guid" ], function (ASSERT, GUID) {
                                     setBranchHash: setBranchHash,
                                     getCommits: getCommits,
                                     makeCommit: makeCommit,
+                  getCommonAncestorCommit: getCommonAncestorCommit,
                                     ID_NAME: "_id"
                                 };
                                 callback(null, projects[project]);
@@ -788,7 +793,27 @@ define([ "util/assert", "util/guid" ], function (ASSERT, GUID) {
                     callback(new Error(ERROR_DISCONNECTED));
                 }
             }
+
+      function getCommonAncestorCommit(commitA, commitB, callback) {
+        ASSERT(typeof callback === 'function');
+        if (socketConnected) {
+          var guid = GUID();
+          callbacks[guid] = {
+            cb: callback,
+            to: setTimeout(callbackTimeout, options.timeout, guid)
+          };
+          socket.emit('getCommonAncestorCommit', project, commitA, commitB, function (err, commit) {
+            if (callbacks[guid]) {
+              clearTimeout(callbacks[guid].to);
+              delete callbacks[guid];
+              callback(err, commit);
         }
+          });
+        } else {
+          callback(new Error(ERROR_DISCONNECTED));
+        }
+      }
+    }
 
         function simpleRequest (parameters,callback){
             ASSERT(typeof callback === 'function');

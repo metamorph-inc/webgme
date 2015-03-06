@@ -1,11 +1,12 @@
 bin
 !src/bin
+!test/bin
 
 */.settings
 */.idea
 *.class
 
-/node_modules
+node_modules
 
 *.log
 .idea
@@ -32,3 +33,6 @@ blob-local-storage
 
 dist/webgme.classes.build.js.map
 webgme-*.tgz
+
+jobList.nedb
+workerList.nedb

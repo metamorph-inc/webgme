@@ -1,567 +1,549 @@
+/* globals define, require, console */
 /*
  * Copyright (C) 2013 Vanderbilt University, All rights reserved.
  *
  * Author: Tamas Kecskes
  */
 
-define(["storage/mongo", "storage/commit", "core/core", "util/guid"],function(Mongo,Commit,Core,GUID){
-    function GMEAuth(_options){
-        var _collection = _options.collection || 'users',
+define(['mongodb', 'q', 'util/guid', 'bcrypt'], function (Mongodb, Q, GUID, bcrypt) {
+    function GMEAuth(_options) {
+        var _collectionName = _options.collection || '_users',
+            _organizationCollectionName = '_organizations',
             _session = _options.session,
-            _validity = _options.validity || 60000,
             _userField = _options.user || 'username',
             _passwordField = _options.password || 'password',
-            _tokenExpiration = _options.tokenTime || 0;
-            _guest = _options.guest === true ? true : false,
-            _storage = new Commit(new Mongo(
-                {
-                    host: _options.host || '127.0.0.1',
-                    port: _options.port || 27017,
-                    database: _options.database || 'test'
-                }),{}),
-            _project = null,
-            _core = null,
-            _cachedUserData = {};
+            _tokenExpiration = _options.tokenTime || 0,
+            db,
+            collectionDeferred = Q.defer(),
+            collection = collectionDeferred.promise,
+            organizationCollectionDeferred = Q.defer(),
+            organizationCollection = organizationCollectionDeferred.promise;
 
-        function isTokenValid (creationTime){
-            if(_tokenExpiration === 0){
-                return true;
-            }
-
-            if(creationTime+_tokenExpiration < (new Date()).getDate()){
-                return true;
-            }
-
-            return false;
-        }
-        function getProjectId (userId,projectName){
-            return ""+userId+"/"+projectName;
-        }
-        function clearData(id){
-            if(_cachedUserData[id]){
-                delete _cachedUserData[id];
-            }
-        }
-        function getLatestCommit(callback){
-            var hasEverything = function(){
-                _project.getBranchHash('master','#hack',function(err,commithash){
-                    if(!err && commithash){
-                        _project.loadObject(commithash,function(err,commit){
-                            if(!err && commit){
-                                callback(null,commit);
-                            } else {
-                                err = err || 'invalid latest database info';
-                                callback(err);
-                            }
-                        });
-                    } else {
-                        err = err || 'no valid branch found';
-                        callback(err);
-                    }
+        /**
+         * 'users' collection has these fields:
+         * _id: username
+         * email:
+         * passwordHash: bcrypt hash of password
+         * canCreate: authorized to create new projects
+         * tokenId: token associated with account
+         * tokenCreation: time of token creation (they may be configured to expire)
+         * projects: map from project name to object {read:, write:, delete: }
+         * orgs: array of orgIds
+         */
+        /**
+         * '_organizations' collection has these fields:
+         * _id: username
+         * projects: map from project name to object {read:, write:, delete: }
+         */
+        function addMongoOpsToPromize(collection) {
+            collection.findOne = function () {
+                var args = arguments;
+                return collection.then(function (c) {
+                    return Q.npost(c, 'findOne', args);
                 });
             };
-            if(_project === null){
-                _storage.openDatabase(function(err){
-                    if(!err){
-                        _storage.openProject(_collection,function(err,proj){
-                            if(!err && proj){
-                                _project = proj;
-                                _core = new Core(_project);
-                                hasEverything();
-                            } else {
-                                err = err || 'cannot open project';
-                                callback(err);
-                            }
-                        })
-                    } else {
-                        callback(err);
-                    }
+            collection.find = function (query, projection) {
+                var args = arguments;
+                return collection.then(function (c) {
+                    return Q.npost(c, 'find', args);
                 });
-            } else {
-                if(_core === null){
-                    _core = new Core(_project);
-                }
+            };
+            collection.update = function (query, update, options) {
+                var args = arguments;
+                return collection.then(function (c) {
+                    return Q.npost(c, 'update', args);
+                });
+            };
+            collection.insert = function (data, options) {
+                var args = arguments;
+                return collection.then(function (c) {
+                    return Q.npost(c, 'insert', args);
+                });
+            };
+            collection.remove = function (query, options) {
+                var args = arguments;
+                return collection.then(function (c) {
+                    return Q.npost(c, 'remove', args)
+                        .then(function (num) {
+                            // depending on mongodb hasWriteCommands, remove calls back with (num) or (num, backWardsCompatibiltyResults)
+                            if (Array.isArray(num)) {
+                                return num[0];
+                            }
+                            return num;
+                        });
+                });
+            };
+        }
+        addMongoOpsToPromize(collection);
+        addMongoOpsToPromize(organizationCollection);
 
-                hasEverything();
+        (function connect() {
+            var userString = '';
+            if(_options.user && _options.pwd){
+                userString = _options.user + ':' + _options.pwd + '@';
             }
-        }
-        function getUserNode(id,callback){
-            getLatestCommit(function(err,commit){
-                if(!err && commit){
-                    _core.loadRoot(commit.root,function(err,root){
-                        if(!err && root){
-                            _core.loadChildren(root,function(err,children){
-                                if(!err && children && children.length>0){
-                                    for(var i=0;i<children.length;i++){
-                                        var name = _core.getAttribute(children[i],'name');
-                                        if(id === name){
-                                            return callback(null,children[i]);
-                                        }
-                                    }
-                                    err = err || 'no such user found';
-                                    callback(err);
-                                } else {
-                                    err = err || 'no such user found';
-                                    callback(err);
-                                }
-                            });
-                        } else {
-                            err = err || 'cannot find user manager\'s root';
-                            callback(err);
-                        }
-                    });
-                } else {
-                    err = err || 'cannot open user data';
-                    callback(err);
+            Q.ninvoke(Mongodb.MongoClient, 'connect', 'mongodb://' + userString + _options.host + ':' + _options.port + '/' + _options.database, {
+                'w': 1,
+                'native-parser': true,
+                'auto_reconnect': true,
+                'poolSize': 20,
+                socketOptions: {keepAlive: 1}
+            }).then(function (db_) {
+                db = db_;
+                return Q.ninvoke(db, 'collection', _collectionName);
+            }).then(function (collection_) {
+                collectionDeferred.resolve(collection_);
+                if (_options.guest) {
+                    collection.findOne({_id: 'anonymous'})
+                        .then(function (userData) {
+                            if (!userData) {
+                                console.error('User "anonymous" not found. Create it with src/bin/usermanager.js or anonymous access will not work. ' +
+                                'Disable anonymous access by setting config.guest = false');
+                            }
+                        });
                 }
+                return Q.ninvoke(db, 'collection', _organizationCollectionName);
+            }).then(function (organizationCollection_) {
+                organizationCollectionDeferred.resolve(organizationCollection_);
+            })
+            .catch(function (err) {
+                // TODO better logging
+                console.error(err);
+                collectionDeferred.reject(err);
             });
-        }
-        function getUserNodeByEmail(email,callback){
-            getLatestCommit(function(err,commit){
-                if(!err && commit){
-                    _core.loadRoot(commit.root,function(err,root){
-                        if(!err && root){
-                            _core.loadChildren(root,function(err,children){
-                                var guest = null;
-                                if(!err && children && children.length>0){
-                                    for(var i=0;i<children.length;i++){
-                                        var name = _core.getRegistry(children[i],'email');
-                                        if(email === name){
-                                            return callback(null,children[i]);
-                                        }
-                                        if('guest' === _core.getAttribute(children[i],'name')){
-                                            guest = children[i];
-                                        }
-                                    }
-                                    if(_guest && guest !== null){
-                                        return callback(null,guest);
-                                    } else {
-                                        return callback('no such user found');
-                                    }
-                                } else {
-                                    err = err || 'no user found';
-                                    return callback(err);
-                                }
-                            })
-                        } else {
-                            err = err || 'cannot find user manager\'s root';
-                            return callback(err);
-                        }
-                    });
-                } else {
-                    err = err || 'cannot open user data';
-                    return callback(err);
-                }
-            });
-        }
-        function getUserNodeByToken(tokenId,callback){
-            getLatestCommit(function(err,commit){
-                if(!err && commit){
-                    _core.loadRoot(commit.root,function(err,root){
-                        if(!err && root){
-                            _core.loadChildren(root,function(err,children){
-                                if(!err && children && children.length>0){
-                                    for(var i=0;i<children.length;i++){
-                                        var token = _core.getAttribute(children[i],'token');
-                                        if(token !== undefined && token !== null){
-                                            if(tokenId === token.id && isTokenValid(token.created) === true){
-                                                callback(null,children[i]);
-                                                return;
-                                            }
-                                        }
-                                    }
-                                    err = err || 'no such user found';
-                                    callback(err);
-                                } else {
-                                    err = err || 'no such user found';
-                                    callback(err);
-                                }
-                            });
-                        } else {
-                            err = err || 'cannot find user manager\'s root';
-                            callback(err);
-                        }
-                    });
-                } else {
-                    err = err || 'cannot open user data';
-                    callback(err);
-                }
-            });
-        }
-        function getUser(id,callback){
-            if(_cachedUserData[id]){
-                callback(null,_cachedUserData[id]);
-            } else {
-                getUserNode(id,function(err,node){
-                    if(!err){
-                        _cachedUserData[id] = {create:_core.getRegistry(node,'create')};
-                        setTimeout(clearData,_validity,id);
-                        return callback(null,_cachedUserData[id]);
-                    } else {
-                        callback(err);
-                    }
+        })();
+
+        function unload(callback) {
+            return collection
+                .finally(function () {
+                    return Q.ninvoke(db, 'close');
                 })
-            }
+                .nodeify(callback);
         }
-        function getUserProject(id,projectName,callback){
-            var pId = getProjectId(id,projectName);
-            if(_cachedUserData[pId]){
-                callback(null,_cachedUserData[pId]);
-            } else {
-                getUserNode(id,function(err,node){
-                    if(!err){
-                        _cachedUserData[pId] = _core.getRegistry(node,'projects')[projectName];
-                        setTimeout(clearData,_validity,pId);
-                        return callback(null,_cachedUserData[pId]);
-                    } else {
-                        callback(err);
-                    }
+
+        function getUserProject(id, projectName, callback) {
+            return collection.findOne({_id: id})
+                .then(function (userData) {
+                    return userData.projects[projectName];
                 })
-            }
+                .nodeify(callback);
         }
 
-        function addProjectToUser(userId,projectName,callback){
-            getUserNode(userId,function(err,userNode){
-                if(!err && userNode){
-                    var userProjects = _core.getRegistry(userNode,'projects');
-                    if(userProjects === null || userProjects === undefined){
-                        userProjects = {};
-                    } else {
-                        userProjects = JSON.parse(JSON.stringify(userProjects));
-                    }
-                    userProjects[projectName] = {read:true,write:true,delete:true};
-                    _core.setRegistry(userNode,'projects',userProjects);
-                    var root = _core.getRoot(userNode);
-                    _core.persist(root,function(){});
-                    var newHash = _core.getHash(root);
-                    getLatestCommit(function(err,oldCommit){
-                        if(!err && oldCommit){
-                            var newCommitHash = _project.makeCommit([oldCommit.root],newHash,'user '+userId+'have created '+projectName+' project',function(err){});
-                            _project.setBranchHash('master',oldCommit['_id'],newCommitHash,function(err){
-                                if(!err){
-                                    _cachedUserData[getProjectId(userId,projectName)] = {read:true,write:true,delete:true};
-                                    callback(null);
-                                } else {
-                                    callback(err);
-                                }
-                            });
-                        } else {
-                            callback(err);
-                        }
-                    });
-                } else {
-                    callback(err);
-                }
-            });
-        }
-
-        function removeProjectFromUser(userId,projectName,callback){
-            getUserNode(userId,function(err,userNode){
-                if(!err && userNode){
-                    var userProjects = _core.getRegistry(userNode,'projects');
-                    if(userProjects === null || userProjects === undefined){
-                        userProjects = {};
-                    } else {
-                        userProjects = JSON.parse(JSON.stringify(userProjects));
-                    }
-                    delete userProjects[projectName];
-                    _core.setRegistry(userNode,'projects',userProjects);
-                    var root = _core.getRoot(userNode);
-                    _core.persist(root,function(){});
-                    var newHash = _core.getHash(root);
-                    getLatestCommit(function(err,oldCommit){
-                        if(!err && oldCommit){
-                            var newCommitHash = _project.makeCommit([oldCommit.root],newHash,'user '+userId+'have created '+projectName+' project',function(err){});
-                            _project.setBranchHash('master',oldCommit['_id'],newCommitHash,function(err){
-                                if(!err){
-                                    delete _cachedUserData[getProjectId(userId,projectName)];
-                                    callback(null);
-                                } else {
-                                    callback(err);
-                                }
-                            });
-                        } else {
-                            callback(err);
-                        }
-                    });
-                } else {
-                    callback(err);
-                }
-            });
-        }
-
-        function authenticate(req,res,next){
+        function authenticate(req, res, next) {
             var userId = req.body[_userField],
                 password = req.body[_passwordField],
                 gmail = false,
-                returnUrl = req.__gmeAuthFailUrl__ || "/";
+                returnUrl = req.__gmeAuthFailUrl__ || '/';
             delete req.__gmeAuthFailUrl__;
             //gmail based authentication - no authentication just user search
-            if(userId === null || userId === undefined){
+            if (userId === null || userId === undefined) {
                 userId = req.query['openid.ext1.value.email'];
                 password = null;
                 gmail = true;
+                if (userId === null || userId === undefined) {
+                    res.redirect(returnUrl);
+                    return;
+                }
             }
-            var haveUser = function(err,node){
-                if(!err){
-                    if(gmail){
-                        req.session.udmId = _core.getAttribute(node,'name');
+
+            var query = {};
+            if (userId.indexOf('@') > 0) {
+                query.email = userId;
+            } else {
+                query._id = userId;
+            }
+            collection.findOne(query)
+                .then(function (userData) {
+                    if (!userData) {
+                        return Q.reject('no such user');
+                    }
+                    if (gmail) {
+                        req.session.udmId = userData._id;
                         req.session.authenticated = true;
                         req.session.userType = 'GME';
                         next(null);
                     } else {
-                        if(password = _core.getRegistry(node,'pass')){
-                            req.session.udmId = _core.getAttribute(node,'name');
-                            req.session.authenticated = true;
-                            req.session.userType = 'GME';
-                            next(null);
-                        } else {
-                            res.redirect(returnUrl);
-                        }
+                        return Q.ninvoke(bcrypt, 'compare', password, userData.passwordHash)
+                            .then(function(hash_res) {
+                                if (!hash_res) {
+                                    return Q.reject('incorrect password');
+                                } else {
+                                    req.session.udmId = userData._id;
+                                    req.session.authenticated = true;
+                                    req.session.userType = 'GME';
+                                    next(null);
+                                }
+                            });
                     }
-                } else {
+                })
+                .catch(function (err) {
                     res.redirect(returnUrl);
-                }
-            };
-            if(userId.indexOf('@')>0){
-                getUserNodeByEmail(userId,haveUser);
+                });
+        }
+
+        // type: 'create' 'delete'
+        // rights: {read: true, write: true, delete: true}
+        function authorizeByUserId(userId, projectName, type, rights, callback) {
+            if (type === 'create' || type === 'set') {
+                var update = { $set: {} };
+                update['$set']['projects.' + projectName] = rights;
+                return collection.update({_id: userId}, update)
+                    .spread(function(numUpdated) {
+                        return numUpdated === 1;
+                    })
+                    .nodeify(callback);
+            } else if (type === 'delete') {
+                var update = { $unset: {} };
+                update['$unset']['projects.' + projectName] = '';
+                return collection.update({_id: userId}, update)
+                    .spread(function(numUpdated) {
+                        // FIXME this is always true. Try findAndUpdate instead
+                        return numUpdated === 1;
+                    })
+                    .nodeify(callback);
             } else {
-                getUserNode(userId,haveUser);
+                return Q.reject('unknown type ' + type)
+                    .nodeify(callback);
             }
         }
-        function authorize(sessionId,projectName,type,callback){
-            _session.getSessionUser(sessionId,function(err,userID){
-                if(!err && userID){
-                    var projId = getProjectId(userID,projectName);
-                    if(type === 'create'){
-                        if(_cachedUserData[userID]){
-                            if(_cachedUserData[userID].create === true){
-                                addProjectToUser(userID,projectName,function(err){
-                                    if(!err){
-                                        callback(null,true);
-                                    } else {
-                                        callback('cannot update user rights',false);
-                                    }
-                                });
-                            } else {
-                                callback(null,false);
-                            }
-                        } else {
-                            getUser(userID,function(err,userData){
-                                if(!err && userData){
-                                    if(userData.create === true){
-                                        addProjectToUser(userID,projectName,function(err){
-                                            if(!err){
-                                                callback(null,true);
-                                            } else {
-                                                callback('cannot update user rights',false);
-                                            }
-                                        });
-                                    } else {
-                                        callback(null,false);
-                                    }
-                                } else {
-                                    err = err || 'no valid user permissions found';
-                                    callback(err,false);
-                                }
-                            });
-                        }
-                    } else if (type === 'delete'){
-                        if(_cachedUserData[projId]){
-                            if(_cachedUserData[projId]['delete'] === true){
-                                removeProjectFromUser(userID,projectName,function(err){
-                                    if(err){
-                                        callback(err,false);
-                                    } else {
-                                        callback(null,true);
-                                    }
-                                });
-                            } else {
-                                callback('no valid user permissions found',false);
-                            }
-                        } else {
-                            getUserProject(userID,projectName,function(err,userData){
-                                if(!err && userData){
-                                    if(userData['delete'] === true){
-                                        removeProjectFromUser(userID,projectName,function(err){
-                                            if(err){
-                                                callback(err,false);
-                                            } else {
-                                                callback(null,true);
-                                            }
-                                        });
-                                    } else {
-                                        callback('no valid user permissions found',false);
-                                    }
-                                } else {
-                                    err = err || 'no valid user permissions found';
-                                    callback(err,false);
-                                }
-                            });
-                        }
-                    } else {
-                        if(_cachedUserData[projId]){
-                            callback(null,_cachedUserData[projId][type] === true);
-                        } else {
-                            getUserProject(userID,projectName,function(err,userData){
-                                if(!err && userData){
-                                    callback(null,userData[type] === true);
-                                } else {
-                                    err = err || 'no valid user permissions found';
-                                    callback(err,false);
-                                }
-                            });
-                        }
-                    }
 
-                } else {
-                    err = err || 'not valid session';
-                    callback(err,false);
-                }
-            });
+        function authorizeBySession(sessionId, projectName, type, callback) {
+            return Q.ninvoke(_session, 'getSessionUser', sessionId)
+                .then(function (userId) {
+                    if (!userId) {
+                        throw 'invalid session';
+                    }
+                    return authorizeByUserId(userId, projectName, type, {read: true, write: true, delete: true});
+                })
+                .nodeify(callback);
         }
 
-        function getAuthorizationInfo(sessionId,projectName,callback){
-            _session.getSessionUser(sessionId,function(err,userID){
-                if(!err && userID){
-                    var projId = getProjectId(userID,projectName);
-                    if(_cachedUserData[projId]){
-                        callback(null,_cachedUserData[projId]);
+        function getAuthorizationInfoByUserId(userId, projectName, callback) {
+            var projection = {};
+            projection['projects.' + projectName] = 1;
+            return collection.findOne({_id: userId}, projection)
+                .then(function (userData) {
+                    return userData.projects[projectName] || {read: false, write: false, delete: false};
+                })
+                .nodeify(callback);
+        }
+
+        function _getProjection(/*args*/) {
+            var ret = {};
+            for (var i = 0; i < arguments.length; i += 1) {
+                ret[arguments[i]] = 1;
+            }
+            return ret;
+        }
+
+        function getProjectAuthorizationByUserId(userId, projectName, callback) {
+            var ops = ['read', 'write', 'delete'];
+            return collection.findOne({_id: userId}, _getProjection('orgs', 'projects.' + projectName))
+                .then(function (userData) {
+                    if (!userData) {
+                        return Q.reject('No such user');
+                    }
+                    userData.orgs = userData.orgs || [];
+                    return [userData.projects[projectName] || {},
+                        Q.all(ops.map(function (op) {
+                            if ((userData.projects[projectName] || {})[op]) {
+                                return 1;
+                            }
+                            var query = { _id: { $in: userData.orgs } };
+                            query['projects.' + projectName + '.' + op] = true;
+                            return organizationCollection.findOne(query, {_id: 1});
+                        }))];
+                }).spread(function(user, rwd) {
+                    var ret = {};
+                    ops.forEach(function (op, i) {
+                        ret[op] = (user[op] || rwd[i]) ? true : false;
+                    });
+                    return ret;
+                })
+                .nodeify(callback);
+        }
+
+        function getProjectAuthorizationBySession(sessionId, projectName, callback) {
+            return Q.ninvoke(_session, 'getSessionUser', sessionId)
+                .then(function (userId) {
+                    return getProjectAuthorizationByUserId(userId, projectName);
+                })
+                .nodeify(callback);
+        }
+
+        function tokenAuthorization(tokenId, projectName, callback) { //TODO currently we expect only reads via token usage
+            var query = { tokenId: tokenId };
+            query['projects.' + projectName + '.read'] = true;
+            return collection.findOne(query)
+                .then(function (userData) {
+                    return Q(userData ? userData.projects[projectName].read : false);
+                })
+                .nodeify(callback);
+        }
+
+        function generateTokenByUserId(userId, callback) {
+            var token = GUID() + 'token';
+            return collection.update({_id: userId}, { $set: { tokenId: token, tokenCreated: (new Date()).getDate()} } )
+                .spread(function () { return token; })
+                .nodeify(callback);
+        }
+
+        function generateTokenBySession(sessionId, callback) {
+            return Q.ninvoke(_session, 'getSessionUser', sessionId)
+                .then(function (userId) {
+                    return generateTokenByUserId(userId, callback);
+                })
+                .nodeify(callback);
+        }
+
+        function getToken(sessionId, callback) {
+            return Q.ninvoke(_session, 'getSessionUser', sessionId)
+                .then(function (userId) {
+                    if (!userId) {
+                        return Q(null);
+                    }
+                    return collection.findOne({_id: userId})
+                        .then(function (userData) {
+                            if (_tokenExpiration === 0 ||
+                                (new Date()).getDate() - _tokenExpiration < userData.tokenCreated) {
+                                return userData.tokenId;
+                            }
+                            return generateTokenBySession(sessionId);
+                        });
+                })
+                .nodeify(callback);
+        }
+
+        function checkToken(token, callback) {
+            return collection.findOne({tokenId: token})
+                .then(function (userData) {
+                    if (!userData) {
+                        return false;
+                    }
+                    return true;
+                })
+                .nodeify(callback);
+        }
+
+        function tokenAuth(token, callback) {
+            return collection.findOne({tokenId: token})
+                .then(function (userData) {
+                    if (!userData) {
+                        return [false, null];
+                    }
+                    return [true, userData._id];
+                })
+                .spread()
+                .nodeify(callback);
+        }
+
+        function getUserAuthInfo(userId, callback) {
+            return collection.findOne({_id: userId})
+                .then(function (userData) {
+                    if (!userData) {
+                        return Q.reject('no such user');
+                    }
+                    return userData.projects;
+                })
+                .nodeify(callback);
+        }
+
+        function getAllUserAuthInfo(userId, callback) {
+            return collection.findOne({_id: userId})
+                .then(function (userData) {
+                    if (!userData) {
+                        return Q.reject('no such user');
+                    }
+                    delete userData.passwordHash;
+                    return userData;
+                })
+                .nodeify(callback);
+        }
+        function getAllUserAuthInfoBySession(sessionId, callback) {
+            return Q.ninvoke(_session, 'getSessionUser', sessionId)
+                .then(function (userId) {
+                    if (!userId) {
+                        throw 'invalid session';
+                    }
+                    return getAllUserAuthInfo(userId);
+                })
+                .nodeify(callback);
+        }
+
+        function deleteProject(projectName, callback) {
+            var update = { $unset: {} };
+            update['$unset']['projects.' + projectName] = '';
+            return collection.update({}, update, { multi: true })
+                .then(function () {
+                    return organizationCollection.update({}, update, { multi: true });
+                })
+                .spread(function(/*numUpdated*/) {
+                    return true;
+                })
+                .nodeify(callback);
+        }
+
+        function removeUserByUserId(userId, callback) {
+            return collection.remove({_id: userId})
+                .nodeify(callback);
+        }
+
+        function addUser(userId, email, password, canCreate, options, callback) {
+            var data = {_id: userId, email: email, canCreate: canCreate, projects: {}, orgs: [] };
+            return Q.ninvoke(bcrypt, 'hash', password, 10 /* TODO: make this configurable */)
+                .then(function (hash) {
+                    data.passwordHash = hash;
+                    if (!options.overwrite) {
+                        return collection.insert(data);
                     } else {
-                        getUserProject(userID,projectName,function(err,userData){
-                            if(!err && userData){
-                                callback(null,_cachedUserData[projId]);
-                            } else {
-                                callback(null,{read:false,write:false,delete:false});
+                        return collection.update({_id: userId}, data, {upsert: true});
+                    }
+                })
+                .nodeify(callback);
+        }
+
+        function _getProjectNames(callback) {
+            return collection.then(function() {
+                return Q.ninvoke(db, 'getCollectionNames');
+            }).nodeify(callback);
+        }
+
+        function addOrganization(orgId, callback) {
+            return organizationCollection.insert({ _id: orgId, projects: {} })
+                .nodeify(callback);
+        }
+
+        function getOrganization(orgId, callback) {
+            return organizationCollection.findOne({ _id: orgId })
+                .then(function (org) {
+                    if (!org) {
+                        return Q.reject('No such organization');
+                    }
+                    return [org, collection.find({ orgs: orgId }, { _id: 1 })];
+                })
+                .spread(function (org, users) {
+                    return [org, Q.ninvoke(users, 'toArray')];
+                })
+                .spread(function (org, users) {
+                    org.users = users.map(function (user) { return user._id; });
+                    return org;
+                })
+                .nodeify(callback);
+        }
+
+        function removeOrganizationByOrgId(orgId, callback) {
+            return organizationCollection.remove({ _id: orgId })
+                .then(function (count) {
+                    if (count === 0) {
+                        return Q.reject('No such organization');
+                    }
+                    return collection.update({ orgs: orgId }, { $pull: { orgs: orgId } }, { multi: true });
+                })
+                .nodeify(callback);
+        }
+
+        function addUserToOrganization(userId, orgId, callback) {
+            return organizationCollection.findOne({ _id: orgId })
+                .then(function (org) {
+                    if (!org) {
+                        return Q.reject('No such organization');
+                    }
+                })
+                .then(function () {
+                    return collection.update({ _id: userId }, { $addToSet: { orgs: orgId } })
+                        .spread(function (count) {
+                            if (count === 0) {
+                                return Q.reject('No such user');
                             }
                         });
+                })
+                .nodeify(callback);
+        }
+
+        function removeUserFromOrganization(userId, orgId, callback) {
+            return organizationCollection.findOne({ _id: orgId })
+                .then(function (org) {
+                    if (!org) {
+                        return Q.reject('No such organization');
                     }
-                } else {
-                    callback(null,{read:false,write:false,delete:false});
-                }
-            });
+                })
+                .then(function () {
+                    collection.update({ _id: userId }, { orgs: { $pull: orgId } });
+                })
+                .nodeify(callback);
         }
 
-        function tokenAuthorization(tokenId,projectName,callback){ //TODO currently we expect only reads via token usage!!!
-            getUserNodeByToken(tokenId,function(err,userNode){
-                if(err){
-                    callback(err,false);
-                } else {
-                    var userId = _core.getAttribute(userNode,'name');
-                    if(typeof userId === 'string'){
-                        getUserProject(userId,projectName,function(err,projInfo){
-                            if(err){
-                                callback(err,false);
-                            } else {
-                                if(projInfo){
-                                    callback(null,projInfo['read'] || false);
-                                } else {
-                                    callback(null,false);
-                                }
-                            }
-                        });
+        // type: 'create' 'delete' or 'read'
+        // rights: {read: true, write: true, delete: true}
+        function authorizeOrganization(orgId, projectName, type, rights, callback) {
+            if (type === 'create' || type === 'set') {
+                var update = { $set: {} };
+                update['$set']['projects.' + projectName] = rights;
+                return organizationCollection.update({_id: orgId}, update)
+                    .spread(function(numUpdated) {
+                        if (numUpdated !== 1) {
+                            return Q.reject('No such organization \'' + orgId + '\'');
+                        }
+                        return numUpdated === 1;
+                    })
+                    .nodeify(callback);
+            } else if (type === 'delete') {
+                var update = { $unset: {} };
+                update['$unset']['projects.' + projectName] = '';
+                return organizationCollection.update({_id: orgId}, update)
+                    .spread(function(numUpdated) {
+                        // FIXME this is always true. Try findAndUpdate instead
+                        return numUpdated === 1;
+                    })
+                    .nodeify(callback);
+            } else {
+                return Q.reject('invalid type ' + type);
+            }
+        }
 
+        function getAuthorizationInfoByOrgId(orgId, projectName, callback) {
+            var projection = {};
+            projection['projects.' + projectName] = 1;
+            return organizationCollection.findOne({_id: orgId}, projection)
+                .then(function (userData) {
+                    if (!userData) {
+                        return Q.reject('No such organization');
                     }
-                }
-            });
+                    return userData.projects[projectName] || {};
+                })
+                .nodeify(callback);
         }
 
-        function generateToken(sessionId,callback){
-            _session.getSessionUser(sessionId,function(err,userID){
-                if(!err && userID){
-                    getUserNode(userID,function(err,userNode){
-                        if(!err && userNode){
-                            var token = GUID()+'token';
-                            _core.setAttribute(userNode,'token',{id:token,created:(new Date()).getDate()});
-                            _core.persist(_core.getRoot(userNode),function(){});
-                            var newHash = _core.getHash(_core.getRoot(userNode));
-                            getLatestCommit(function(err,oldCommit){
-                                if(!err && oldCommit){
-                                    var newCommitHash = _project.makeCommit([oldCommit.root],newHash,'token for user '+userID+' have been created',function(err){});
-                                    _project.setBranchHash('master',oldCommit['_id'],newCommitHash,function(err){
-                                        if(!err){
-                                            callback(null,token);
-                                        } else {
-                                            callback(err,null);
-                                        }
-                                    });
-                                } else {
-                                    callback(err);
-                                }
-                            });
-                        } else {
-                            callback(err,null);
-                        }
-                    });
-                } else {
-                    callback(err,null);
-                }
-            });
-        }
-        function getToken(sessionId,callback){
-            _session.getSessionUser(sessionId,function(err,userID){
-                if(!err && userID){
-                    getUserNode(userID,function(err,userNode){
-                        if(!err && userNode){
-                            var token = _core.getAttribute(userNode,'token');
-                            if(token !== null && token !== undefined){
-                                if(isTokenValid(token.created) === true){
-                                    callback(null,token.id);
-                                } else {
-                                    generateToken(sessionId,callback);
-                                }
-                            } else {
-                                generateToken(sessionId,callback);
-                            }
-                        } else {
-                            callback(err,null);
-                        }
-                    });
-                } else {
-                    callback(err,null);
-                }
-            });
-        }
-        function checkToken(token,callback){
-            getUserNodeByToken(token,function(err,user){
-                if(!err){
-                    callback(true);
-                } else {
-                    callback(false);
-                }
-            });
-        }
-        function tokenAuth(token,callback){
-            getUserNodeByToken(token,function(err,user){
-                if(!err){
-                    callback(true,_core.getAttribute(user,'name'));
-                } else {
-                    callback(false,null);
-                }
-            });
-        }
-
-        function getUserAuthInfo(userID,callback){
-            //TODO No session storage support here yet
-            getUserNode(userID,function(err,userNode){
-                if(err || !userNode){
-                    return callback(err || new Error('no such user'));
-                }
-
-                callback(null,_core.getRegistry(userNode,'projects') || {});
-            });
-        }
 
         return {
             authenticate: authenticate,
-            authorize: authorize,
-            getAuthorizationInfo: getAuthorizationInfo,
+            authorize: authorizeBySession,
+            deleteProject: deleteProject,
+            getProjectAuthorizationBySession: getProjectAuthorizationBySession,
+            getProjectAuthorizationByUserId: getProjectAuthorizationByUserId,
             tokenAuthorization: tokenAuthorization,
-            generateToken: generateToken,
+            generateToken: generateTokenBySession,
+            generateTokenForUserId: generateTokenByUserId,
             getToken: getToken,
             checkToken: checkToken,
             tokenAuth: tokenAuth,
-            getUserAuthInfo: getUserAuthInfo
+            getUserAuthInfo: getUserAuthInfo,
+            getAllUserAuthInfo: getAllUserAuthInfo,
+            getAllUserAuthInfoBySession: getAllUserAuthInfoBySession,
+            authorizeByUserId: authorizeByUserId,
+            removeUserByUserId: removeUserByUserId,
+            getAuthorizationInfoByUserId: getAuthorizationInfoByUserId,
+            addUser: addUser,
+            unload: unload,
+            _getProjectNames: _getProjectNames,
+
+            addOrganization: addOrganization,
+            getOrganization: getOrganization,
+            removeOrganizationByOrgId: removeOrganizationByOrgId,
+            addUserToOrganization: addUserToOrganization,
+            removeUserFromOrganization: removeUserFromOrganization,
+            authorizeOrganization: authorizeOrganization,
+            getAuthorizationInfoByOrgId: getAuthorizationInfoByOrgId
         };
     }
 

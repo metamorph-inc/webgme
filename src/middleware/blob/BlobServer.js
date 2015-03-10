@@ -16,6 +16,7 @@ define(['logManager',
                     res.send(err);
                 } else {
                     res.status(200);
+                    res.setHeader('Content-type', 'application/json');
                     res.end(JSON.stringify(metadata, null, 4));
 
                 }
@@ -140,6 +141,9 @@ define(['logManager',
 
                     blobBackend.getFile(metadataHash, subpartPath, res, function (err, hash) {
                         if (err) {
+                            // chrome gives error code: ERR_INVALID_RESPONSE if we don't do this:
+                            res.removeHeader('Content-disposition');
+                            res.removeHeader('Content-type');
                             // give more precise description about the error type and message. Resource if not available etc.
                             res.send(500);
                         } else {

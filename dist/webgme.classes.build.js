@@ -11810,7 +11810,7 @@ define('storage/failsafe',["util/assert", "util/guid"], function (ASSERT, GUID) 
 
 /*
  * Copyright (C) 2012-2013 Vanderbilt University, All rights reserved.
- * 
+ *
  * Author: Miklos Maroti
  */
 
@@ -12111,27 +12111,22 @@ define('storage/cache',[ "util/assert" ], function (ASSERT) {
 			function reopenProject (callback) {
 				ASSERT(project !== null && refcount >= 0 && typeof callback === "function");
 
-				++refcount;
-				callback(null, {
-					fsyncDatabase: project.fsyncDatabase,
-					getDatabaseStatus: project.getDatabaseStatus,
-					closeProject: closeProject,
-					loadObject: loadObject,
-					insertObject: insertObject,
-					getInfo: project.getInfo,
-					setInfo: project.setInfo,
-					findHash: project.findHash,
-					dumpObjects: project.dumpObjects,
-					getBranchNames: project.getBranchNames,
-					getBranchHash: getBranchHash,
-					setBranchHash: setBranchHash,
-          //getBranchHash: project.getBranchHash,
-          //setBranchHash: project.setBranchHash,
-					getCommits: project.getCommits,
-					makeCommit: project.makeCommit,
-          getCommonAncestorCommit: project.getCommonAncestorCommit,
-					ID_NAME: project.ID_NAME
-				});
+                var cacheProject = {};
+                for (var key in project) {
+                    if (project.hasOwnProperty(key)) {
+                        cacheProject[key] = project[key];
+                    }
+                }
+                if (options.cache !== 0) {
+                    cacheProject.loadObject = loadObject;
+                    cacheProject.insertObject = insertObject;
+                }
+                cacheProject.getBranchHash = getBranchHash;
+                cacheProject.setBranchHash = setBranchHash;
+                cacheProject.closeProject = closeProject;
+
+                ++refcount;
+                callback(null, cacheProject);
 			}
 
 			return {
@@ -16398,13 +16393,13 @@ define('client',[
           _configuration.host = "";
         }
       }
-      if(typeof WebGMEGlobal !== 'undefined') {
+      if(typeof TESTING === 'undefined') {
         require([_configuration.host + '/listAllDecorators', _configuration.host + '/listAllPlugins'], function (d, p) {
           AllDecorators = WebGMEGlobal.allDecorators;
           AllPlugins = WebGMEGlobal.allPlugins;
         });
       } else {
-        console.warn('WebGMEGlobal not defined - cannot get plugins.');
+        console.warn('TESTING is defined - we are not getting plugins and decorators.');
       }
 
 

@@ -11686,7 +11686,7 @@ define('storage/failsafe',["util/assert", "util/guid"], function (ASSERT, GUID) 
         var returnFunction = function (err) {
           if (!err) {
             var index = branchObj.local.indexOf(newhash);
-            ASSERT(index !== -1 || branchObj.state === BRANCH_STATES.SYNC);
+            // setBranchHash may return out of order, so this will not hold: ASSERT(index !== -1 || branchObj.state === BRANCH_STATES.SYNC);
             if (index !== -1) {
               branchObj.local.splice(index, branchObj.local.length - index);
             }
@@ -17831,9 +17831,11 @@ define('client',[
             _selfCommits[newCommitHash] = true;
             _redoer.addModification(newCommitHash,"");
             _project.setBranchHash(_branch, _recentCommits[1], _recentCommits[0], function (err) {
-              //TODO now what??? - could we screw up?
-              loading(newRootHash);
-              callback(err);
+                //TODO now what??? - could we screw up
+                lock.lock(function () {
+                    loading(newRootHash, lock.unlock);
+                });
+                callback(err);
             });
             //loading(newRootHash);
           }

@@ -1616,9 +1616,11 @@ define([
             _selfCommits[newCommitHash] = true;
             _redoer.addModification(newCommitHash,"");
             _project.setBranchHash(_branch, _recentCommits[1], _recentCommits[0], function (err) {
-              //TODO now what??? - could we screw up?
-              loading(newRootHash);
-              callback(err);
+                //TODO now what??? - could we screw up
+                lock.lock(function () {
+                    loading(newRootHash, lock.unlock);
+                });
+                callback(err);
             });
             //loading(newRootHash);
           }

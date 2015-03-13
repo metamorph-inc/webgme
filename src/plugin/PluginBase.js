@@ -38,6 +38,7 @@ define(['plugin/PluginConfig',
 
             this.result = null;
             this.isConfigured = false;
+            this.gmeConfig = null;
         };
 
         //--------------------------------------------------------------------------------------------------------------
@@ -284,39 +285,24 @@ define(['plugin/PluginConfig',
 
                 // FIXME: what if master branch is already in a different state?
 
-                self.project.getBranchNames(function (err, branchNames) {
-                    if (branchNames.hasOwnProperty(self.branchName)) {
-                        var branchHash = branchNames[self.branchName];
-                        if (branchHash === self.branchHash) {
-                            // the branch does not have any new commits
-                            // try to fast forward branch to the current commit
-                            self.project.setBranchHash(self.branchName, self.branchHash, self.currentHash, function (err) {
-                                if (err) {
-                                    // fast forward failed
-                                    self.logger.error(err);
-                                    self.logger.info('"' + self.branchName + '" was NOT updated');
-                                    self.logger.info('Project was saved to ' + self.currentHash + ' commit.');
-                                } else {
-                                    // successful fast forward of branch to the new commit
-                                    self.logger.info('"' + self.branchName + '" was updated to the new commit.');
-                                    // roll starting point on success
-                                    self.branchHash = self.currentHash;
-                                }
-                                callback(err);
-                            });
-                        } else {
-                            // branch has changes a merge is required
-                            // TODO: try auto-merge, if fails ...
-                            self.logger.warn('Cannot fast forward "' + self.branchName + '" branch. Merge is required but not supported yet.');
-                            self.logger.info('Project was saved to ' + self.currentHash + ' commit.');
-                            callback(null);
-                        }
-                    } else {
-                        // branch was deleted or not found, do nothing
+                // try to fast forward branch to the current commit
+                self.project.setBranchHash(self.branchName, self.branchHash, self.currentHash, function (err) {
+                    if (err) {
+                        // fast forward failed
+                        // TODO: try auto-merge
+
+                        self.logger.error(err);
+                        self.logger.info('"' + self.branchName + '" was NOT updated');
                         self.logger.info('Project was saved to ' + self.currentHash + ' commit.');
-                        callback(null);
+                    } else {
+                        // successful fast forward of branch to the new commit
+                        self.logger.info('"' + self.branchName + '" was updated to the new commit.');
+                        // roll starting point on success
+                        self.branchHash = self.currentHash;
                     }
+                    callback(err);
                 });
+
                 // FIXME: is this call async??
                 // FIXME: we are not tracking all commits that we make
 
@@ -405,15 +391,20 @@ define(['plugin/PluginConfig',
          *
          * @param {logManager} logger - logging capability to console (or file) based on PluginManager configuration
          * @param {blob.BlobClient} blobClient - virtual file system where files can be generated then saved as a zip file.
+         * @param {object} gmeConfig - global configuration for webGME.
          */
-        PluginBase.prototype.initialize = function (logger, blobClient) {
+        PluginBase.prototype.initialize = function (logger, blobClient, gmeConfig) {
             if (logger) {
                 this.logger = logger;
             } else {
                 this.logger = console;
             }
-
+            if (!gmeConfig) {
+                // TODO: Remove this check at some point
+                throw new Error('gmeConfig was not provided to Plugin.initialize!');
+            }
             this.blobClient = blobClient;
+            this.gmeConfig = gmeConfig;
 
             this._currentConfig = null;
             // initialize default configuration

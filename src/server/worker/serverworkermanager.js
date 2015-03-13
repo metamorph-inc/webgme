@@ -6,10 +6,8 @@ function(ASSERT,Child, process, CONSTANTS){
             _workerCount = 0,
             _myWorkers = {},
             _idToPid = {},
-           _waitingRequests = [];
-
-        _parameters = _parameters || {};
-        _parameters.maxworkers = _parameters.maxworkers || 10;
+            _waitingRequests = [],
+            gmeConfig = _parameters.globConf;
 
         //helping functions
         //TODO always check if this works properly
@@ -18,7 +16,7 @@ function(ASSERT,Child, process, CONSTANTS){
         }
 
         function reserveWorker(){
-            if(_workerCount < _parameters.maxworkers){
+            if(_workerCount < gmeConfig.server.maxWorkers){
                 var worker = Child.fork(getBaseDir()+'/server/worker/simpleworker.js', [],
                     { execArgv: process.execArgv.filter(function (arg) { return arg.indexOf('--debug-brk') !== 0 }) });
                 _myWorkers[worker.pid] = {worker:worker,state:CONSTANTS.workerStates.initializing,type:null,cb:null};
@@ -54,7 +52,17 @@ function(ASSERT,Child, process, CONSTANTS){
                 }
             } else {
                 //there is no need for the worker so we simply kill it
-                freeWorker(workerPid);
+                var firstIdleWorker = undefined;
+                var idleWorkerCount = 0;
+                Object.getOwnPropertyNames(_myWorkers).forEach(function (pid) {
+                    if (_myWorkers[pid].state === CONSTANTS.workerStates.free) {
+                        if (firstIdleWorker === undefined) {
+                            firstIdleWorker = _myWorkers[pid];
+                        } else {
+                            freeWorker(pid);
+                        }
+                    }
+                });
             }
         }
         function messageHandling(msg){
@@ -107,13 +115,7 @@ function(ASSERT,Child, process, CONSTANTS){
                         //this arrives when the worker seems ready for initialization
                         worker.worker.send({
                             command:CONSTANTS.workerCommands.initialize,
-                            ip:_parameters.mongoip,
-                            port:_parameters.mongoport,
-                            db:_parameters.mongodb,
-                            serverPort:_parameters.serverPort,
-                            paths: _parameters.globConf.paths || WebGMEGlobal.getConfig().paths,
-                            auth: _parameters.auth,
-                            globConf : _parameters.globConf || WebGMEGlobal.getConfig()
+                            gmeConfig: gmeConfig
                         });
                         break;
                     case CONSTANTS.msgTypes.initialized:
@@ -136,11 +138,16 @@ function(ASSERT,Child, process, CONSTANTS){
         }
 
         function request(parameters,callback){
-            if(_workerCount<_parameters.maxworkers){
+            if(_workerCount<gmeConfig.server.maxWorkers){
                 //there is resource for worker
                 reserveWorker();
             }
             _waitingRequests.push({request:parameters,cb:callback});
+            Object.getOwnPropertyNames(_myWorkers).forEach(function (pid) {
+                if (_myWorkers[pid].state === CONSTANTS.workerStates.free) {
+                    assignRequest(pid);
+                }
+            });
         }
         function result(id,callback){
             var worker,message = null;
@@ -179,6 +186,7 @@ function(ASSERT,Child, process, CONSTANTS){
                 callback('wrong request identification');
             }
         }
+        reserveWorker();
 
         return {
             request : request,

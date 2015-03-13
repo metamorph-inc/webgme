@@ -8,16 +8,14 @@ define([ "util/assert","util/guid","util/url","socket.io","worker/serverworkerma
 
     var server = function(_database,options){
         ASSERT(typeof _database === 'object');
-        options = options || {};
-        options.port = options.port || 80;
-        options.secret = options.secret || 'this is WEBGME!!!';
-        options.cookieID = options.cookieID || 'webgme';
-        options.authentication = options.authentication;
+        var gmeConfig = options.globConf;
+
+        // Functions passed via options
         options.authorization = options.authorization || function(sessionID,projectName,type,callback){callback(null,true);};
         options.auth_deleteProject = options.auth_deleteProject || function() {};
         options.sessioncheck = options.sessioncheck || function(sessionID,callback){callback(null,true);};
         options.getAuthorizationInfo = options.getAuthorizationInfo || function(sessionID,projectName,callback){callback(null,{'read':true,'write':true,'delete':true});};
-        options.webServerPort = options.webServerPort || 80;
+
         options.log = options.log || {
             debug: function (msg) {
                 console.log("DEBUG - " + msg);
@@ -48,19 +46,19 @@ define([ "util/assert","util/guid","util/url","socket.io","worker/serverworkerma
             };
 
         function getSessionID(handshakeData){
-            if(handshakeData && handshakeData.query && handshakeData.query.webGMESessionId && handshakeData.query.webGMESessionId !== 'undefined'){
-                return handshakeData.query.webGMESessionId;
+            var sessionId;
+            if (handshakeData) {
+                if (handshakeData.query && handshakeData.query.webGMESessionId && handshakeData.query.webGMESessionId !== 'undefined') {
+                    // TODO: Isn't this branch deprecated?
+                    sessionId = handshakeData.query.webGMESessionId;
+                } else if (handshakeData.query && handshakeData.query[gmeConfig.server.sessionCookieId] && handshakeData.query[gmeConfig.server.sessionCookieId] !== 'undefined') {
+                    sessionId = COOKIE.signedCookie(handshakeData.query[gmeConfig.server.sessionCookieId], gmeConfig.server.sessionCookieSecret);
+                } else if (gmeConfig.server.sessionCookieId && gmeConfig.server.sessionCookieSecret && handshakeData.headers && handshakeData.headers.cookie) {
+                    //we try to dig it from the signed cookie
+                    sessionId = COOKIE.signedCookie(URL.parseCookie(handshakeData.headers.cookie)[gmeConfig.server.sessionCookieId], gmeConfig.server.sessionCookieSecret);
+                }
             }
-
-            if(handshakeData && handshakeData.query && handshakeData.query[options.cookieID] && handshakeData.query[options.cookieID] !== 'undefined'){
-                return COOKIE.signedCookie(handshakeData.query[options.cookieID],options.secret);
-            }
-
-            //we try to dig it from the signed cookie
-            if(options.cookieID && options.secret && handshakeData && handshakeData.headers && handshakeData.headers.cookie) {
-                return COOKIE.signedCookie(URL.parseCookie(handshakeData.headers.cookie)[options.cookieID],options.secret);
-            }
-            return undefined;
+            return sessionId;
         }
 
         function checkDatabase(callback){
@@ -168,39 +166,16 @@ define([ "util/assert","util/guid","util/url","socket.io","worker/serverworkerma
         }
 
         function open(){
-            _socket = IO.listen(options.combined ? options.combined : options.port,{
-                'transports': [
-                    'websocket'
-                ]
+            _socket = IO.listen(options.combined ? options.combined : gmeConfig.server.port, {
+                'transports': gmeConfig.socketIO.transports
             });
 
             _socket.use(function(socket, next) {
                 var handshakeData = socket.handshake;
                 //either the html header contains some webgme signed cookie with the sessionID
                 // or the data has a webGMESession member which should also contain the sessionID - currently the same as the cookie
-                if (options.session === true){
-                    var sessionID;
-                    /*if(data.webGMESessionId === undefined){
-                        if(data.query && data.query.webGMESessionId && data.query.webGMESessionId !== 'undefined'){
-                            sessionID = data.query.webGMESessionId;
-                        }
-                    }
-                    if(sessionID === null || sessionID === undefined){
-                        if(data.headers.cookie){
-                            var cookie = URL.parseCookie(data.headers.cookie);
-                            if(cookie[options.cookieID] !== undefined || cookie[options.cookieID] !== null){
-                                sessionID = require('connect').utils.parseSignedCookie(cookie[options.cookieID],options.secret);
-                                data.query = data.query || {};
-                                data.query.webGMESessionId = sessionID;
-                                data.webGMESessionId = sessionID;
-                            }
-                        } else {
-                            console.log('DEBUG COOKIE INFO', JSON.stringify(data.headers));
-                            console.log('DEBUG HANDSHAKE INFO', JSON.stringify(data.query));
-                            return accept(null,false);
-                        }
-                    }*/
-                    sessionID = getSessionID(handshakeData);
+                if (gmeConfig.authentication.enable === true){
+                    var sessionID = getSessionID(handshakeData);
                     options.sessioncheck(sessionID,function(err,isOk){
                         if(!err && isOk === true){
                             return next();
@@ -656,7 +631,7 @@ define([ "util/assert","util/guid","util/url","socket.io","worker/serverworkerma
                     };
 
                     parameters.webGMESessionId = getSessionID(socket.handshake) || null;
-                    if (!options.authentication) {
+                    if (gmeConfig.authentication.enable === false) {
                         request();
                     } else {
                         options.sessionToUser(parameters.webGMESessionId, function (err, userId) {
@@ -695,16 +670,8 @@ define([ "util/assert","util/guid","util/url","socket.io","worker/serverworkerma
             });
 
             _workerManager = new SWM({
-                basedir:options.basedir,
-                mongoip:options.host,
-                mongoport:options.port,
-                mongodb:options.database,
-                intoutdir:options.intoutdir,
-                pluginBasePaths:options.pluginBasePaths,
-                serverPort:options.webServerPort,
-                sessionToUser:options.sessionToUser,
-                auth:options.auth,
-                globConf:options.globConf
+                sessionToUser: options.sessionToUser,
+                globConf: gmeConfig
             });
         }
 

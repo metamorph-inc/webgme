@@ -29,6 +29,8 @@ src/bin/*.xme
 # ignore file system blob storage files
 blob-local-storage
 
+config/config.dev*.js
+
 *.swp
 
 dist/webgme.classes.build.js.map

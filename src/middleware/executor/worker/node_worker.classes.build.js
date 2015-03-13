@@ -3033,14 +3033,15 @@ define('blob/BlobMetadata',['blob/BlobConfig'], function(BlobConfig){
 	}
 }());
 
+/*globals define*/
+/*jshint browser: true, node:true*/
+
 /*
- * Copyright (C) 2014 Vanderbilt University, All rights reserved.
- *
- * Author: Zsolt Lattmann
+ * @author lattmann / https://github.com/lattmann
  */
 
 define('blob/Artifact',['blob/BlobMetadata', 'blob/BlobConfig', 'core/tasync'], function (BlobMetadata, BlobConfig, tasync) {
-
+    
     /**
      * Creates a new instance of artifact, i.e. complex object, in memory. This object can be saved in the storage.
      * @param {string} name Artifact's name without extension
@@ -3103,6 +3104,69 @@ define('blob/Artifact',['blob/BlobMetadata', 'blob/BlobConfig', 'core/tasync'], 
     };
 
     /**
+     * Adds a hash to the artifact using the given file path.
+     * @param {string} name Path to the file in the artifact. Note: 'a/b/c.txt'
+     * @param {string} hash Metadata hash that has to be added.
+     * @param callback
+     */
+    Artifact.prototype.addObjectHash = function (name, hash, callback) {
+        var self = this;
+
+        if (BlobConfig.hashRegex.test(hash) === false) {
+            callback('Blob hash is invalid');
+            return;
+        }
+
+        self.blobClientGetMetadata.call(self.blobClient, hash, function (err, metadata) {
+            if (err) {
+                callback(err);
+                return;
+            }
+
+            if (self.descriptor.content.hasOwnProperty(name)) {
+                callback('Another content with the same name was already added. ' + JSON.stringify(self.descriptor.content[name]));
+
+            } else {
+                self.descriptor.size += metadata.size;
+
+                self.descriptor.content[name] = {
+                    content: metadata.content,
+                    contentType: BlobMetadata.CONTENT_TYPES.OBJECT
+                };
+                callback(null, hash);
+            }
+        });
+    };
+
+    Artifact.prototype.addMetadataHash = function (name, hash, callback) {
+        var self = this;
+
+        if (BlobConfig.hashRegex.test(hash) === false) {
+            callback('Blob hash is invalid');
+            return;
+        }
+        self.blobClientGetMetadata.call(self.blobClient, hash, function (err, metadata) {
+            if (err) {
+                callback(err);
+                return;
+            }
+
+            if (self.descriptor.content.hasOwnProperty(name)) {
+                callback('Another content with the same name was already added. ' + JSON.stringify(self.descriptor.content[name]));
+
+            } else {
+                self.descriptor.size += metadata.size;
+
+                self.descriptor.content[name] = {
+                    content: hash,
+                    contentType: BlobMetadata.CONTENT_TYPES.SOFT_LINK
+                };
+                callback(null, hash);
+            }
+        });
+    };
+
+    /**
      * Adds multiple files.
      * @param {Object.<string, Blob>} files files to add
      * @param callback
@@ -3135,7 +3199,6 @@ define('blob/Artifact',['blob/BlobMetadata', 'blob/BlobConfig', 'core/tasync'], 
             self.addFile(fileNames[i], files[fileNames[i]], counterCallback);
         }
     };
-
 
     /**
      * Adds multiple files as soft-links.
@@ -3172,36 +3235,6 @@ define('blob/Artifact',['blob/BlobMetadata', 'blob/BlobConfig', 'core/tasync'], 
     };
 
     /**
-     * Adds a hash to the artifact using the given file path.
-     * @param {string} name Path to the file in the artifact. Note: 'a/b/c.txt'
-     * @param {string} hash Metadata hash that has to be added.
-     * @param callback
-     */
-    Artifact.prototype.addObjectHash = function (name, hash, callback) {
-        var self = this;
-
-        self.blobClientGetMetadata.call(self.blobClient, hash, function (err, metadata) {
-            if (err) {
-                callback(err);
-                return;
-            }
-
-            if (self.descriptor.content.hasOwnProperty(name)) {
-                callback('Another content with the same name was already added. ' + JSON.stringify(self.descriptor.content[name]));
-
-            } else {
-                self.descriptor.size += metadata.size;
-
-                self.descriptor.content[name] = {
-                    content: metadata.content,
-                    contentType: BlobMetadata.CONTENT_TYPES.OBJECT
-                };
-                callback(null, hash);
-            }
-        });
-    };
-
-    /**
      * Adds hashes to the artifact using the given file paths.
      * @param {object.<string, string>} objectHashes - Keys are file paths and values object hashes.
      * @param callback
@@ -3233,34 +3266,6 @@ define('blob/Artifact',['blob/BlobMetadata', 'blob/BlobConfig', 'core/tasync'], 
         for (i = 0; i < fileNames.length; i += 1) {
             self.addObjectHash(fileNames[i], objectHashes[fileNames[i]], counterCallback);
         }
-    };
-
-    Artifact.prototype.addMetadataHash = function (name, hash, callback) {
-        var self = this;
-
-        if (BlobConfig.hashRegex.test(hash) === false) {
-            callback("Blob hash is invalid");
-            return;
-        }
-        self.blobClientGetMetadata.call(self.blobClient, hash, function (err, metadata) {
-            if (err) {
-                callback(err);
-                return;
-            }
-
-            if (self.descriptor.content.hasOwnProperty(name)) {
-                callback('Another content with the same name was already added. ' + JSON.stringify(self.descriptor.content[name]));
-
-            } else {
-                self.descriptor.size += metadata.size;
-
-                self.descriptor.content[name] = {
-                    content: hash,
-                    contentType: BlobMetadata.CONTENT_TYPES.SOFT_LINK
-                };
-                callback(null, hash);
-            }
-        });
     };
 
     /**
@@ -3308,13 +3313,15 @@ define('blob/Artifact',['blob/BlobMetadata', 'blob/BlobConfig', 'core/tasync'], 
     return Artifact;
 });
 
+/*globals define*/
+/*jshint browser: true, node:true*/
 /*
- * Copyright (C) 2014 Vanderbilt University, All rights reserved.
- *
- * Author: Zsolt Lattmann
+ * @author lattmann / https://github.com/lattmann
+ * @author ksmyth / https://github.com/ksmyth
  */
 
 define('blob/BlobClient',['./Artifact', 'blob/BlobMetadata', 'superagent'], function (Artifact, BlobMetadata, superagent) {
+    
 
     var BlobClient = function (parameters) {
         this.artifacts = [];
@@ -3323,6 +3330,7 @@ define('blob/BlobClient',['./Artifact', 'blob/BlobMetadata', 'superagent'], func
             this.server = parameters.server || this.server;
             this.serverPort = parameters.serverPort || this.serverPort;
             this.httpsecure = (parameters.httpsecure !== undefined) ? parameters.httpsecure : this.httpsecure;
+            this.webgmeclientsession = parameters.webgmeclientsession;
         }
         this.blobUrl = '';
         if (this.httpsecure !== undefined && this.server && this.serverPort) {
@@ -3366,8 +3374,9 @@ define('blob/BlobClient',['./Artifact', 'blob/BlobMetadata', 'superagent'], func
         }
     };
 
-
     BlobClient.prototype.putFile = function (name, data, callback) {
+        var contentLength,
+            req;
         function toArrayBuffer(buffer) {
             var ab = new ArrayBuffer(buffer.length);
             var view = new Uint8Array(ab);
@@ -3386,9 +3395,13 @@ define('blob/BlobClient',['./Artifact', 'blob/BlobMetadata', 'superagent'], func
                 data = '';
             }
         }
-        superagent.post(this.getCreateURL(name))
-            .set('Content-Type', 'application/octet-stream')
-            .set('Content-Length', data.length)
+        contentLength = data.hasOwnProperty('length') ? data.length : data.byteLength;
+        req = superagent.post(this.getCreateURL(name));
+        if (this.webgmeclientsession) {
+            req.set('webgmeclientsession', this.webgmeclientsession);
+        }
+        req.set('Content-Type', 'application/octet-stream')
+            .set('Content-Length', contentLength)
             .send(data)
             .end(function (err, res) {
                 if (err || res.status > 399) {
@@ -3403,12 +3416,11 @@ define('blob/BlobClient',['./Artifact', 'blob/BlobMetadata', 'superagent'], func
     };
 
     BlobClient.prototype.putMetadata = function (metadataDescriptor, callback) {
-        var self = this;
-        var metadata = new BlobMetadata(metadataDescriptor);
-
+        var metadata = new BlobMetadata(metadataDescriptor),
+            blob,
+            contentLength,
+            req;
         // FIXME: in production mode do not indent the json file.
-        var blob;
-        var contentLength;
         if (typeof Blob !== 'undefined') {
             blob = new Blob([JSON.stringify(metadata.serialize(), null, 4)], {type: 'text/plain'});
             contentLength = blob.size;
@@ -3417,8 +3429,11 @@ define('blob/BlobClient',['./Artifact', 'blob/BlobMetadata', 'superagent'], func
             contentLength = blob.length;
         }
 
-        superagent.post(this.getCreateURL(metadataDescriptor.name, true))
-            .set('Content-Type', 'application/octet-stream')
+        req = superagent.post(this.getCreateURL(metadataDescriptor.name, true));
+        if (this.webgmeclientsession) {
+            req.set('webgmeclientsession', this.webgmeclientsession);
+        }
+        req.set('Content-Type', 'application/octet-stream')
             .set('Content-Length', contentLength)
             .send(blob)
             .end(function (err, res) {
@@ -3435,38 +3450,39 @@ define('blob/BlobClient',['./Artifact', 'blob/BlobMetadata', 'superagent'], func
     };
 
     BlobClient.prototype.putFiles = function (o, callback) {
-        var self = this;
+        var self = this,
+            error = '',
+            filenames = Object.keys(o),
+            remaining = filenames.length,
+            hashes = {},
+            putFile;
+        if (remaining === 0) {
+            callback(null, hashes);
+        }
+        putFile = function(filename, data) {
+            self.putFile(filename, data, function (err, hash) {
+                remaining -= 1;
 
-        var filenames = Object.keys(o);
-        var remaining = filenames.length;
+                hashes[filename] = hash;
 
-        var hashes = {};
+                if (err) {
+                    error += 'putFile error: ' + err.toString();
+                }
+
+                if (remaining === 0) {
+                    callback(error, hashes);
+                }
+            });
+        };
 
         for (var j = 0; j < filenames.length; j += 1) {
-            (function(filename, data) {
-
-                self.putFile(filename, data, function (err, hash) {
-                    remaining -= 1;
-
-                    hashes[filename] = hash;
-
-                    if (err) {
-                        // TODO: log/handle error
-                        return;
-                    }
-
-                    if (remaining === 0) {
-                        callback(null, hashes);
-                    }
-                });
-
-            })(filenames[j], o[filenames[j]]);
+            putFile(filenames[j], o[filenames[j]]);
         }
     };
 
     BlobClient.prototype.getSubObject = function (hash, subpath, callback) {
         return this.getObject(hash, callback, subpath);
-    }
+    };
 
     BlobClient.prototype.getObject = function (hash, callback, subpath) {
         superagent.parse['application/zip'] = function (obj, parseCallback) {
@@ -3475,21 +3491,24 @@ define('blob/BlobClient',['./Artifact', 'blob/BlobMetadata', 'superagent'], func
             } else {
                 return obj;
             }
-        }
+        };
         //superagent.parse['application/json'] = superagent.parse['application/zip'];
 
         var req = superagent.get(this.getViewURL(hash, subpath));
+        if (this.webgmeclientsession) {
+            req.set('webgmeclientsession', this.webgmeclientsession);
+        }
         if (req.pipe) {
             // running on node
             var Writable = require('stream').Writable;
-            require('util').inherits(BuffersWritable, Writable);
-
-            function BuffersWritable(options) {
+            var BuffersWritable = function (options) {
                 Writable.call(this, options);
 
                 var self = this;
                 self.buffers = [];
-            }
+            };
+            require('util').inherits(BuffersWritable, Writable);
+
             BuffersWritable.prototype._write = function(chunk, encoding, callback) {
                 this.buffers.push(chunk);
                 callback();
@@ -3517,10 +3536,10 @@ define('blob/BlobClient',['./Artifact', 'blob/BlobMetadata', 'superagent'], func
                 } else {
                     var contentType = req.xhr.getResponseHeader('content-type');
                     var response = req.xhr.response; // response is an arraybuffer
-                    if (contentType == 'application/json') {
-                        function utf8ArrayToString(uintArray) {
+                    if (contentType === 'application/json') {
+                        var utf8ArrayToString = function (uintArray) {
                             return decodeURIComponent(escape(String.fromCharCode.apply(null, uintArray)));
-                        }
+                        };
                         response = JSON.parse(utf8ArrayToString(new Uint8Array(response)));
                     }
                     callback(null, response);
@@ -3531,14 +3550,17 @@ define('blob/BlobClient',['./Artifact', 'blob/BlobMetadata', 'superagent'], func
     };
 
     BlobClient.prototype.getMetadata = function (hash, callback) {
-        superagent.get(this.getMetadataURL(hash))
-            .end(function (err, res) {
-                if (err || res.status > 399) {
-                    callback(err || res.status);
-                } else {
-                    callback(null, JSON.parse(res.text));
-                }
-            });
+        var req = superagent.get(this.getMetadataURL(hash));
+        if (this.webgmeclientsession) {
+            req.set('webgmeclientsession', this.webgmeclientsession);
+        }
+        req.end(function (err, res) {
+            if (err || res.status > 399) {
+                callback(err || res.status);
+            } else {
+                callback(null, JSON.parse(res.text));
+            }
+        });
     };
 
     BlobClient.prototype.createArtifact = function (name) {
@@ -3569,28 +3591,31 @@ define('blob/BlobClient',['./Artifact', 'blob/BlobMetadata', 'superagent'], func
     };
 
     BlobClient.prototype.saveAllArtifacts = function (callback) {
-        var remaining = this.artifacts.length;
-        var hashes = [];
+        var remaining = this.artifacts.length,
+            hashes = [],
+            error = '',
+            saveCallback;
 
         if (remaining === 0) {
             callback(null, hashes);
         }
 
+        saveCallback = function(err, hash) {
+            remaining -= 1;
+
+            hashes.push(hash);
+
+            if (err) {
+                error += 'artifact.save err: ' + err.toString();
+            }
+            if (remaining === 0) {
+                callback(error, hashes);
+            }
+        };
+
         for (var i = 0; i < this.artifacts.length; i += 1) {
 
-            this.artifacts[i].save(function(err, hash) {
-                remaining -= 1;
-
-                hashes.push(hash);
-
-                if (err) {
-                    // TODO: log/handle errors
-                    return;
-                }
-                if (remaining === 0) {
-                    callback(null, hashes);
-                }
-            });
+            this.artifacts[i].save(saveCallback);
         }
     };
 
@@ -3827,14 +3852,9 @@ define('executor/ExecutorClient',['superagent'], function (superagent) {
         parameters = parameters || {};
         this.isNodeJS = (typeof window === 'undefined') && (typeof process === "object");
         this.isNodeWebkit = (typeof window === 'object') && (typeof process === "object");
-
         //console.log(isNode);
         if (this.isNodeJS) {
-            var config = WebGMEGlobal.getConfig();
             this.server = '127.0.0.1';
-            this.serverPort = config.port;
-            this.httpsecure = config.httpsecure;
-
             this._clientSession = null; // parameters.sessionId;;
         }
         this.server = parameters.server || this.server;
@@ -3851,11 +3871,6 @@ define('executor/ExecutorClient',['superagent'], function (superagent) {
         this.executorUrl = this.executorUrl + '/rest/executor/'; // TODO: any ways to ask for this or get it from the configuration?
         if (parameters.executorNonce) {
             this.executorNonce = parameters.executorNonce;
-        } else if (typeof WebGMEGlobal !== "undefined" && typeof WebGMEGlobal.getConfig !== "undefined") {
-            var webGMEConfig = WebGMEGlobal.getConfig();
-            if (webGMEConfig.executorNonce) {
-                this.executorNonce = webGMEConfig.executorNonce;
-            }
         }
     };
 

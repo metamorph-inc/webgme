@@ -2449,19 +2449,8 @@ define('util/key',[
         return result;
     }
 
-    return function KeyGenerator(object) {
-        if (keyType === null) {
-            if (typeof WebGMEGlobal !== 'undefined' && WebGMEGlobal.config && typeof WebGMEGlobal.config.keyType === 'string') {
-                keyType = WebGMEGlobal.config.keyType;
-            } else if (typeof WebGMEGlobal !== 'undefined' && typeof WebGMEGlobal.getConfig === 'function') {
-                keyType = WebGMEGlobal.getConfig().storageKeyType || 'plainSHA1';
-            } else if (typeof GME !== 'undefined' && GME.config && typeof GME.config.keyType === 'string') {
-                keyType = GME.config.keyType;
-            } else {
-                keyType = 'plainSHA1';
-            }
-        }
-
+    return function KeyGenerator(object, gmeConfig) {
+        keyType = gmeConfig.storage.keyType;
         ASSERT(typeof keyType === 'string');
 
         switch (keyType) {
@@ -3664,10 +3653,10 @@ define('core/coretree',[ "util/assert", "util/key", "core/future", "core/tasync"
 	var rootCounter = 0;
 
 	return function (storage, options) {
-		var MAX_AGE = (options && options.maxage) || 3;
-		var MAX_TICKS = (options && options.maxticks) || 2000;
-		var MAX_MUTATE = (options && options.maxmutate) || 30000;
-		var autopersist = (options && options.autopersist) || false;
+        var gmeConfig = options.globConf;
+		var MAX_AGE = 3; // MAGIC NUMBER
+		var MAX_TICKS = 2000; // MAGIC NUMBER
+		var MAX_MUTATE = 30000; // MAGIC NUMBER
 
 		var ID_NAME = storage.ID_NAME;
 		var EMPTY_DATA = {};
@@ -4078,7 +4067,7 @@ define('core/coretree',[ "util/assert", "util/key", "core/future", "core/tasync"
 			}
 
 			// TODO: infinite cycle if MAX_MUTATE is smaller than depth!
-			if (autopersist && ++mutateCount > MAX_MUTATE) {
+			if (gmeConfig.storage.autoPersist && ++mutateCount > MAX_MUTATE) {
 				mutateCount = 0;
 
 				for (var i = 0; i < roots.length; ++i) {
@@ -4348,7 +4337,7 @@ define('core/coretree',[ "util/assert", "util/key", "core/future", "core/tasync"
 				ASSERT(hash === "" || typeof hash === "undefined");
 
 				if (hash === "") {
-					hash = "#" + GENKEY(data);
+					hash = "#" + GENKEY(data, gmeConfig);
 					data[ID_NAME] = hash;
 
 					done = FUTURE.join(done, storage.insertObject(data));
@@ -4829,29 +4818,6 @@ define('core/corerel',[ "util/assert", "core/coretree", "core/tasync", "util/can
 			return node;
 		}
 
-		function getDataForSingleHash(node) {
-			ASSERT(isValidNode(node));
-
-			var data = {
-				attributes: coretree.getProperty(node, ATTRIBUTES),
-				registry: coretree.getProperty(node, REGISTRY),
-				children: coretree.getKeys(node)
-			};
-			var prefix = "";
-
-			while (node) {
-				var overlays = coretree.getChild(node, OVERLAYS);
-				var rels = coretree.getProperty(overlays, prefix);
-				data[prefix] = rels;
-
-				prefix = "/" + coretree.getRelid(node) + prefix;
-				node = coretree.getParent(node);
-			}
-
-			data = JSON.stringify(data);
-			return data;
-		}
-
 		function deleteNode(node) {
 			ASSERT(isValidNode(node));
 
@@ -5264,9 +5230,9 @@ define('core/corerel',[ "util/assert", "core/coretree", "core/tasync", "util/can
 				var child = coretree.getProperty(coretree.getChild(node, OVERLAYS), target);
 				if (child) {
 					for (var name in child) {
-						if (!isPointerName(name)) {
+						if (!isPointerName(name) && name !== '_mutable') {
 							name = name.slice(0, -COLLSUFFIX.length);
-							if (names.indexOf(name) < 0) {
+							if (isPointerName(name) && names.indexOf(name) < 0) {
 								names.push(name);
 							}
 						}
@@ -5430,8 +5396,6 @@ define('core/corerel',[ "util/assert", "core/coretree", "core/tasync", "util/can
 		corerel.getCollectionNames = getCollectionNames;
 		corerel.getCollectionPaths = getCollectionPaths;
 		corerel.loadCollection = loadCollection;
-
-        corerel.getDataForSingleHash = getDataForSingleHash;
 
 		corerel.getCoreTree = function() {
 			return coretree;
@@ -6697,7 +6661,18 @@ define('core/coretype',[ "util/assert", "core/core", "core/tasync" ], function(A
                 ASSERT(node);
                 target = coretree.joinPaths(oldcore.getPath(node), target);
             }
-            return target || basePath || (hasNullTarget ? null : undefined);
+
+            if(typeof target === 'string'){
+                return target;
+            }
+            if(typeof basePath === 'string'){
+                return basePath;
+            }
+            if(hasNullTarget === true){
+                return null;
+            }
+            return undefined;
+
         };
         core.getOwnPointerPath = function(node,name){
             oldcore.getPointerPath(node,name);
@@ -6823,16 +6798,6 @@ define('core/coretype',[ "util/assert", "core/core", "core/tasync" ], function(A
 
 
             return copiedNodes;
-        };
-
-        core.getDataForSingleHash = function(node){
-            ASSERT(isValidNode(node));
-            var datas = [];
-            while(node){
-                datas.push(oldcore.getDataForSingleHash(node));
-                node = core.getBase(node);
-            }
-            return datas;
         };
 
         core.getChildrenPaths = function(node){
@@ -7818,11 +7783,11 @@ define('core/metacore',[ "util/assert", "core/core", "core/tasync", "util/jjv", 
             var validNames = core.getPointerNames(MetaNode(node)) || [],
                 i,
                 validPointerNames = [],
-                metaPointerNode;
-
+                metaPointerNode, max;
             for(i=0;i<validNames.length;i++){
                 metaPointerNode = MetaPointerNode(node,validNames[i]);
-                if(metaPointerNode.max === 1){ //TODO specify what makes something a pointer and what a set??? - can you extend a pointer to a set????
+                max = core.getAttribute(metaPointerNode,'max');
+                if(max === 1){ //TODO specify what makes something a pointer and what a set??? - can you extend a pointer to a set????
                     validPointerNames.push(validNames[i]);
                 }
             }
@@ -7834,11 +7799,12 @@ define('core/metacore',[ "util/assert", "core/core", "core/tasync", "util/jjv", 
             var validNames = core.getPointerNames(MetaNode(node)) || [],
                 i,
                 validSetNames = [],
-                metaPointerNode;
+                metaPointerNode, max;
 
             for(i=0;i<validNames.length;i++){
                 metaPointerNode = MetaPointerNode(node,validNames[i]);
-                if(metaPointerNode.max === undefined || metaPointerNode.max === -1 || metaPointerNode.max > 1){ //TODO specify what makes something a pointer and what a set??? - can you extend a pointer to a set????
+                max = core.getAttribute(metaPointerNode,'max');
+                if(max === undefined || max === -1 || max > 1){ //TODO specify what makes something a pointer and what a set??? - can you extend a pointer to a set????
                     validSetNames.push(validNames[i]);
                 }
             }
@@ -8146,8 +8112,8 @@ define('core/metacore',[ "util/assert", "core/core", "core/tasync", "util/jjv", 
             }
         };
         core.delPointerMeta = function(node,name){
+            core.deleteNode(_MetaPointerNode(node,name),true);
             core.deletePointer(MetaNode(node),name);
-            core.deleteNode(_MetaPointerNode(node,name));
         };
 
         core.setAspectMetaTarget = function(node,name,target){
@@ -8160,8 +8126,8 @@ define('core/metacore',[ "util/assert", "core/core", "core/tasync", "util/jjv", 
             }
         };
         core.delAspectMeta = function(node,name){
+            core.deleteNode(_MetaAspectNode(node,name),true);
             core.deletePointer(MetaAspectsNode(node),name);
-            core.deleteNode(_MetaAspectNode(node,name));
         };
 
         //type related extra query functions
@@ -10388,7 +10354,7 @@ define('core/core',[
 
     function core(storage,options){
         options = options || {};
-        options.usetype = options.usertype || 'nodejs';
+        options.usertype = options.usertype || 'nodejs'; // FIXME: why this is nodejs???
 
         var coreCon = new TreeLoader(new CoreDiff(new MetaCore(new Constraint(new Guid(new Set(new NullPtr(new Type(new NullPtr(new CoreRel(new CoreTree(storage, options)))))))))));
 
@@ -10412,16 +10378,16 @@ define('storage/client',[ "util/assert", "util/guid" ], function (ASSERT, GUID) 
     
 
     function Database (options) {
+        var gmeConfig = options.globConf;
         ASSERT(typeof options === "object");
 
         options.type = options.type || "browser";
-        options.timeout = options.timeout || 100000;
 
         var _hostAddress = null;
         if(options.type === "browser") {
             _hostAddress = options.host || window.location.protocol + '//' + window.location.host;
         } else {
-            _hostAddress = options.host + (options.port ? ':'+options.port : "");
+            _hostAddress = options.host + ':' + gmeConfig.server.port;
         }
 
 
@@ -10531,18 +10497,15 @@ define('storage/client',[ "util/assert", "util/guid" ], function (ASSERT, GUID) 
                 var guid = GUID(), firstConnection = true;
                 callbacks[guid] = {
                     cb: callback,
-                    to: setTimeout(callbackTimeout, options.timeout, guid)
+                    to: setTimeout(callbackTimeout, gmeConfig.storage.timeout, guid)
                 };
 
                 var IOReady = function () {
-                    socket = IO.connect(_hostAddress,{
-                        'connect timeout': 10,
-                        'reconnection delay': 1,
-                        'force new connection': true,
-                        'reconnect': false, // FIXME: should we set it to true?
-                        'query':"webGMESessionId="+options.webGMESessionId, //this option is only used when some user initiated server function connects to the webgme server
-                        'transports': ['websocket']
-                    });
+                    var socketIoOpts = JSON.parse(JSON.stringify(gmeConfig.socketIO)); // Copy these values.
+                    if (options.webGMESessionId) {
+                        socketIoOpts.query = 'webGMESessionId=' + options.webGMESessionId; //FIXME this will be undefined in some cases
+                    }
+                    socket = IO.connect(_hostAddress, socketIoOpts);
 
                     socket.on('connect', function () {
                         socketConnected = true;
@@ -10615,7 +10578,7 @@ define('storage/client',[ "util/assert", "util/guid" ], function (ASSERT, GUID) 
                 var guid = GUID();
                 callbacks[guid] = {
                     cb: callback,
-                    to: setTimeout(callbackTimeout, options.timeout, guid)
+                    to: setTimeout(callbackTimeout, gmeConfig.storage.timeout, guid)
                 };
                 socket.emit('closeDatabase', function (err) {
                     if(callbacks[guid]){
@@ -10635,7 +10598,7 @@ define('storage/client',[ "util/assert", "util/guid" ], function (ASSERT, GUID) 
                 var guid = GUID();
                 callbacks[guid] = {
                     cb: callback,
-                    to: setTimeout(callbackTimeout, options.timeout, guid)
+                    to: setTimeout(callbackTimeout, gmeConfig.storage.timeout, guid)
                 };
                 socket.emit('fsyncDatabase', projectName, function (err) {
                     if(callbacks[guid]){
@@ -10657,7 +10620,7 @@ define('storage/client',[ "util/assert", "util/guid" ], function (ASSERT, GUID) 
                 var guid = GUID();
                 getDbStatusCallbacks[guid] = {
                     cb: callback,
-                    to: setTimeout(callbackTimeout, options.timeout, guid)
+                    to: setTimeout(callbackTimeout, gmeConfig.storage.timeout, guid)
                 };
                 if (status !== STATUS_NETWORK_DISCONNECTED) {
                     socket.emit('getDatabaseStatus', oldstatus, function (err, newstatus) {
@@ -10688,7 +10651,7 @@ define('storage/client',[ "util/assert", "util/guid" ], function (ASSERT, GUID) 
                 var guid = GUID();
                 callbacks[guid] = {
                     cb: callback,
-                    to: setTimeout(callbackTimeout, options.timeout, guid)
+                    to: setTimeout(callbackTimeout, gmeConfig.storage.timeout, guid)
                 };
                 socket.emit('getProjectNames', function (err, names) {
                     if(callbacks[guid]){
@@ -10708,7 +10671,7 @@ define('storage/client',[ "util/assert", "util/guid" ], function (ASSERT, GUID) 
                 var guid = GUID();
                 callbacks[guid] = {
                     cb: callback,
-                    to: setTimeout(callbackTimeout, options.timeout, guid)
+                    to: setTimeout(callbackTimeout, gmeConfig.storage.timeout, guid)
                 };
                 socket.emit('getAllowedProjectNames', function (err, names) {
                     if(callbacks[guid]){
@@ -10727,7 +10690,7 @@ define('storage/client',[ "util/assert", "util/guid" ], function (ASSERT, GUID) 
                 var guid = GUID();
                 callbacks[guid] = {
                     cb: callback,
-                    to: setTimeout(callbackTimeout, options.timeout, guid)
+                    to: setTimeout(callbackTimeout, gmeConfig.storage.timeout, guid)
                 };
                 socket.emit('getAuthorizationInfo', name, function (err, authInfo) {
                     if(callbacks[guid]){
@@ -10747,7 +10710,7 @@ define('storage/client',[ "util/assert", "util/guid" ], function (ASSERT, GUID) 
                 var guid = GUID();
                 callbacks[guid] = {
                     cb: callback,
-                    to: setTimeout(callbackTimeout, options.timeout, guid)
+                    to: setTimeout(callbackTimeout, gmeConfig.storage.timeout, guid)
                 };
                 socket.emit('deleteProject', project, function (err) {
                     if(callbacks[guid]){
@@ -10766,7 +10729,7 @@ define('storage/client',[ "util/assert", "util/guid" ], function (ASSERT, GUID) 
                 var guid = GUID();
                 callbacks[guid] = {
                     cb: callback,
-                    to: setTimeout(callbackTimeout,options.timeout, guid)
+                    to: setTimeout(callbackTimeout, gmeConfig.storage.timeout, guid)
                 };
                 socket.emit('getNextServerEvent',latestGuid,function(err,newGuid,eventParams){
                     if(callbacks[guid]){
@@ -10788,7 +10751,7 @@ define('storage/client',[ "util/assert", "util/guid" ], function (ASSERT, GUID) 
                     var guid = GUID();
                     callbacks[guid] = {
                         cb: callback,
-                        to: setTimeout(callbackTimeout, options.timeout, guid)
+                        to: setTimeout(callbackTimeout, gmeConfig.storage.timeout, guid)
                     };
                     socket.emit('openProject', project, function (err) {
                         if (!err) {
@@ -10832,7 +10795,7 @@ define('storage/client',[ "util/assert", "util/guid" ], function (ASSERT, GUID) 
                     var guid = GUID();
                     callbacks[guid] = {
                         cb: callback,
-                        to: setTimeout(callbackTimeout, options.timeout, guid)
+                        to: setTimeout(callbackTimeout, gmeConfig.storage.timeout, guid)
                     };
                     flushSaveBucket();
                     socket.emit('fsyncDatabase', project, function (err) {
@@ -10855,7 +10818,7 @@ define('storage/client',[ "util/assert", "util/guid" ], function (ASSERT, GUID) 
                     var guid = GUID();
                     getDbStatusCallbacks[guid] = {
                         cb: callback,
-                        to: setTimeout(callbackTimeout, options.timeout, guid)
+                        to: setTimeout(callbackTimeout, gmeConfig.storage.timeout, guid)
                     };
                     if (socketConnected) {
                         socket.emit('getDatabaseStatus', oldstatus, function (err, newstatus) {
@@ -10879,7 +10842,7 @@ define('storage/client',[ "util/assert", "util/guid" ], function (ASSERT, GUID) 
                     var guid = GUID();
                     callbacks[guid] = {
                         cb: callback,
-                        to: setTimeout(callbackTimeout, options.timeout, guid)
+                        to: setTimeout(callbackTimeout, gmeConfig.storage.timeout, guid)
                     };
                     socket.emit('closeProject', project, function (err) {
                         if (callbacks[guid]) {
@@ -10996,7 +10959,7 @@ define('storage/client',[ "util/assert", "util/guid" ], function (ASSERT, GUID) 
                     var guid = GUID();
                     callbacks[guid] = {
                         cb: callback,
-                        to: setTimeout(callbackTimeout, options.timeout, guid)
+                        to: setTimeout(callbackTimeout, gmeConfig.storage.timeout, guid)
                     };
                     socket.emit('insertObject', project, object, function (err) {
                         if (callbacks[guid]) {
@@ -11015,7 +10978,7 @@ define('storage/client',[ "util/assert", "util/guid" ], function (ASSERT, GUID) 
                     var guid = GUID();
                     callbacks[guid] = {
                         cb: callback,
-                        to: setTimeout(callbackTimeout, options.timeout, guid)
+                        to: setTimeout(callbackTimeout, gmeConfig.storage.timeout, guid)
                     };
                     socket.emit('getInfo', project, function (err,info) {
                         if (callbacks[guid]) {
@@ -11034,7 +10997,7 @@ define('storage/client',[ "util/assert", "util/guid" ], function (ASSERT, GUID) 
                     var guid = GUID();
                     callbacks[guid] = {
                         cb: callback,
-                        to: setTimeout(callbackTimeout, options.timeout, guid)
+                        to: setTimeout(callbackTimeout, gmeConfig.storage.timeout, guid)
                     };
                     socket.emit('setInfo', project, info, function (err) {
                         if (callbacks[guid]) {
@@ -11054,7 +11017,7 @@ define('storage/client',[ "util/assert", "util/guid" ], function (ASSERT, GUID) 
                     var guid = GUID();
                     callbacks[guid] = {
                         cb: callback,
-                        to: setTimeout(callbackTimeout, options.timeout, guid)
+                        to: setTimeout(callbackTimeout, gmeConfig.storage.timeout, guid)
                     };
                     socket.emit('findHash', project, beginning, function (err) {
                         if (callbacks[guid]) {
@@ -11074,7 +11037,7 @@ define('storage/client',[ "util/assert", "util/guid" ], function (ASSERT, GUID) 
                     var guid = GUID();
                     callbacks[guid] = {
                         cb: callback,
-                        to: setTimeout(callbackTimeout, options.timeout, guid)
+                        to: setTimeout(callbackTimeout, gmeConfig.storage.timeout, guid)
                     };
                     socket.emit('dumpObjects', project, function (err) {
                         if (callbacks[guid]) {
@@ -11094,7 +11057,7 @@ define('storage/client',[ "util/assert", "util/guid" ], function (ASSERT, GUID) 
                     var guid = GUID();
                     callbacks[guid] = {
                         cb: callback,
-                        to: setTimeout(callbackTimeout, options.timeout, guid)
+                        to: setTimeout(callbackTimeout, gmeConfig.storage.timeout, guid)
                     };
                     socket.emit('getBranchNames', project, function (err, names) {
                         if (callbacks[guid]) {
@@ -11118,7 +11081,7 @@ define('storage/client',[ "util/assert", "util/guid" ], function (ASSERT, GUID) 
                 } else {
                     getBranchHashCallbacks[guid] = {
                         cb: callback,
-                        to: setTimeout(callbackTimeout, options.timeout, guid),
+                        to: setTimeout(callbackTimeout, gmeConfig.storage.timeout, guid),
                         branch: branch,
                         oldhash: oldhash,
                         project: project
@@ -11143,7 +11106,7 @@ define('storage/client',[ "util/assert", "util/guid" ], function (ASSERT, GUID) 
                     var guid = GUID();
                     callbacks[guid] = {
                         cb: callback,
-                        to: setTimeout(callbackTimeout, options.timeout, guid)
+                        to: setTimeout(callbackTimeout, gmeConfig.storage.timeout, guid)
                     };
                     flushSaveBucket();
                     socket.emit('setBranchHash', project, branch, oldhash, newhash, function (err) {
@@ -11164,7 +11127,7 @@ define('storage/client',[ "util/assert", "util/guid" ], function (ASSERT, GUID) 
                     var guid = GUID();
                     callbacks[guid] = {
                         cb: callback,
-                        to: setTimeout(callbackTimeout, options.timeout, guid)
+                        to: setTimeout(callbackTimeout, gmeConfig.storage.timeout, guid)
                     };
                     socket.emit('getCommits', project, before, number, function (err, commits) {
                         if (callbacks[guid]) {
@@ -11184,7 +11147,7 @@ define('storage/client',[ "util/assert", "util/guid" ], function (ASSERT, GUID) 
                     var guid = GUID();
                     callbacks[guid] = {
                         cb: callback,
-                        to: setTimeout(callbackTimeout, options.timeout, guid)
+                        to: setTimeout(callbackTimeout, gmeConfig.storage.timeout, guid)
                     };
                     socket.emit('makeCommit', project, parents, roothash, msg, function (err) {
                         if (callbacks[guid]) {
@@ -11204,7 +11167,7 @@ define('storage/client',[ "util/assert", "util/guid" ], function (ASSERT, GUID) 
           var guid = GUID();
           callbacks[guid] = {
             cb: callback,
-            to: setTimeout(callbackTimeout, options.timeout, guid)
+            to: setTimeout(callbackTimeout, gmeConfig.storage.timeout, guid)
           };
           socket.emit('getCommonAncestorCommit', project, commitA, commitB, function (err, commit) {
             if (callbacks[guid]) {
@@ -11225,7 +11188,7 @@ define('storage/client',[ "util/assert", "util/guid" ], function (ASSERT, GUID) 
                 var guid = GUID();
                 callbacks[guid] = {
                     cb: callback,
-                    to: setTimeout(callbackTimeout,100*options.timeout, guid)
+                    to: setTimeout(callbackTimeout,100*gmeConfig.storage.timeout, guid)
                 };
                 socket.emit('simpleRequest',parameters,function(err,resId){
                     if(callbacks[guid]){
@@ -11244,7 +11207,7 @@ define('storage/client',[ "util/assert", "util/guid" ], function (ASSERT, GUID) 
                 var guid = GUID();
                 callbacks[guid] = {
                     cb: callback,
-                    to: setTimeout(callbackTimeout,100*options.timeout, guid)
+                    to: setTimeout(callbackTimeout,100*gmeConfig.storage.timeout, guid)
                 };
                 socket.emit('simpleResult',resultId,function(err,result){
                     if(callbacks[guid]){
@@ -11263,7 +11226,7 @@ define('storage/client',[ "util/assert", "util/guid" ], function (ASSERT, GUID) 
                 var guid = GUID();
                 callbacks[guid] = {
                     cb: callback,
-                    to: setTimeout(callbackTimeout,100*options.timeout, guid)
+                    to: setTimeout(callbackTimeout,100*gmeConfig.storage.timeout, guid)
                 };
                 socket.emit('simpleQuery',workerId,parameters,function(err,result){
                     if(callbacks[guid]){
@@ -11282,7 +11245,7 @@ define('storage/client',[ "util/assert", "util/guid" ], function (ASSERT, GUID) 
                 var guid = GUID();
                 callbacks[guid] = {
                     cb: callback,
-                    to: setTimeout(callbackTimeout,100*options.timeout, guid)
+                    to: setTimeout(callbackTimeout,100*gmeConfig.storage.timeout, guid)
                 };
                 socket.emit('getToken',function(err,result){
                     if(callbacks[guid]){
@@ -11327,8 +11290,8 @@ define('storage/client',[ "util/assert", "util/guid" ], function (ASSERT, GUID) 
 
 define('storage/failsafe',["util/assert", "util/guid"], function (ASSERT, GUID) {
   
-  var BRANCH_OBJ_ID = '*branch*';
-  var BRANCH_STATES = {
+  var BRANCH_OBJ_ID = '*branch*'; // MAGIC CONSTANT
+  var BRANCH_STATES = {  // MAGIC CONSTANT
     SYNC: 'sync',
     FORKED: 'forked',
     DISCONNECTED: 'disconnected',
@@ -11337,11 +11300,15 @@ define('storage/failsafe',["util/assert", "util/guid"], function (ASSERT, GUID) 
 
   function Database(_database, options) {
     ASSERT(typeof options === "object" && typeof _database === "object");
-    options.failsafe = options.failsafe || "memory";
-    options.failsafefrequency = options.failsafefrequency || 10000;
-    options.timeout = options.timeout || 10000;
+    var gmeConfig = options.globConf;
 
-    var exceptionErrors = [], fsId = "FS", dbId = options.database || "noID", SEPARATOR = "$", STATUS_CONNECTED = "connected", pendingStorage = {}, storage = null;
+    var exceptionErrors = [],
+        fsId = "FS", // MAGIC CONSTANT
+        dbId = "noID", // MAGIC CONSTANT
+        SEPARATOR = "$", // MAGIC CONSTANT
+        STATUS_CONNECTED = "connected", // MAGIC CONSTANT
+        pendingStorage = {},
+        storage = null;
 
     function loadPending() {
       for (var i = 0; i < storage.length; i++) {
@@ -11369,11 +11336,11 @@ define('storage/failsafe',["util/assert", "util/guid"], function (ASSERT, GUID) 
     }
 
     function openDatabase(callback) {
-      if (options.failsafe === "local" && localStorage) {
+      if (gmeConfig.storage.failSafe === "local" && localStorage) {
         storage = localStorage;
-      } else if (options.failsafe === "session" && sessionStorage) {
+      } else if (gmeConfig.storage.failSafe === "session" && sessionStorage) {
         storage = sessionStorage;
-      } else if (options.failsafe === "memory") {
+      } else if (gmeConfig.storage.failSafe === "memory") {
         storage = {
           length: 0,
           keys: [],
@@ -11396,7 +11363,7 @@ define('storage/failsafe',["util/assert", "util/guid"], function (ASSERT, GUID) 
 
       if (storage) {
         loadPending();
-        setInterval(savePending, options.failsafefrequency);
+        setInterval(savePending, gmeConfig.storage.failSafeFrequency);
         _database.openDatabase(callback);
       } else {
         callback(new Error('cannot initialize fail safe storage'));
@@ -11664,7 +11631,7 @@ define('storage/failsafe',["util/assert", "util/guid"], function (ASSERT, GUID) 
           if (myhash === oldhash) {
             setTimeout(function () {
               callback(null, oldhash, branchObj.fork);
-            }, options.timeout);
+            }, gmeConfig.storage.timeout);
           } else {
             callback(null, myhash, branchObj.fork);
           }
@@ -11839,9 +11806,8 @@ define('storage/cache',[ "util/assert" ], function (ASSERT) {
 	};
 
 	var Database = function (database, options) {
-		ASSERT(typeof database === "object" && typeof options === "object");
-
-		options.cache = options.cache || 2000;
+        var gmeConfig = options.globConf;
+		ASSERT(typeof database === "object" && typeof gmeConfig === "object");
 
 		var projects = {};
 		var dlock = new Lock();
@@ -11924,7 +11890,7 @@ define('storage/cache',[ "util/assert" ], function (ASSERT) {
 					maybeFreeze(obj[key]);
 				}
 			};
-			if (typeof WebGMEGlobal !== 'undefined' && typeof WebGMEGlobal.getConfig !== 'undefined' && !WebGMEGlobal.getConfig().debug) {
+			if (gmeConfig.debug === false) {
 				deepFreeze = function () { };
 			}
 
@@ -11934,7 +11900,7 @@ define('storage/cache',[ "util/assert" ], function (ASSERT) {
 				deepFreeze(obj);
 				cache[key] = obj;
 
-				if (++cacheSize >= options.cache) {
+				if (++cacheSize >= gmeConfig.storage.cache) {
 					backup = cache;
 					cache = {};
 					cacheSize = 0;
@@ -12117,7 +12083,7 @@ define('storage/cache',[ "util/assert" ], function (ASSERT) {
                         cacheProject[key] = project[key];
                     }
                 }
-                if (options.cache !== 0) {
+                if (gmeConfig.storage.cache !== 0) {
                     cacheProject.loadObject = loadObject;
                     cacheProject.insertObject = insertObject;
                 }
@@ -12168,8 +12134,10 @@ define('storage/commit',[ "util/assert", "util/key", "util/canon" ], function (A
 	var HASH_REGEXP = new RegExp("^#[0-9a-zA-Z_]*$");
 
 	function Database (_database,_options) {
-        _options = _options || {};
+        var gmeConfig = _options.globConf;
 		ASSERT(typeof _database === "object");
+		ASSERT(typeof _options === "object");
+		ASSERT(typeof gmeConfig.storage.keyType === "string");
 
 		function openProject (projectName, callback) {
 
@@ -12216,7 +12184,7 @@ define('storage/commit',[ "util/assert", "util/key", "util/canon" ], function (A
 					type: "commit"
 				};
 
-				var id = '#' + GENKEY(commitObj);
+				var id = '#' + GENKEY(commitObj, gmeConfig);
 				commitObj[_project.ID_NAME] = id;
 
 				_project.insertObject(commitObj, function (err) {
@@ -16261,9 +16229,10 @@ define('client',[
     }
 
 
-    function getNewCore(project) {
+    function getNewCore(project, gmeConfig) {
       //return new NullPointerCore(new DescriptorCore(new SetCore(new GuidCore(new Core(project)))));
-      var options = {autopersist: true, usertype: 'nodejs'};
+        // FIXME: why usertype is nodejs when it is running from the browser?
+      var options = {usertype: 'nodejs', globConf: gmeConfig};
       return Core(project, options);
     }
 
@@ -16347,7 +16316,7 @@ define('client',[
 
     }
 
-    function Client(_configuration) {
+    function Client(gmeConfig) {
       var _self = this,
         logger = LogManager.create("client"),
         _database = null,
@@ -16383,22 +16352,22 @@ define('client',[
         _constraintCallback = null,
         _redoer = null,
         _selfCommits = {},
+        _configuration = {},
         AllPlugins, AllDecorators;
 
 
-      if (!_configuration.host) {
-        if (window) {
-          _configuration.host = window.location.protocol + "//" + window.location.host;
-        } else {
-          _configuration.host = "";
-        }
-      }
       if(typeof TESTING === 'undefined') {
+          if (window) {
+              _configuration.host = window.location.protocol + '//' + window.location.host;
+          } else {
+              _configuration.host = '';
+          }
         require([_configuration.host + '/listAllDecorators', _configuration.host + '/listAllPlugins'], function (d, p) {
           AllDecorators = WebGMEGlobal.allDecorators;
           AllPlugins = WebGMEGlobal.allPlugins;
         });
       } else {
+        _configuration.host = ' ';
         console.warn('TESTING is defined - we are not getting plugins and decorators.');
       }
 
@@ -16423,21 +16392,11 @@ define('client',[
       }
 
       //default configuration
-      _configuration = _configuration || {};
-      _configuration.autoreconnect = _configuration.autoreconnect === null || _configuration.autoreconnect === undefined ? true : _configuration.autoreconnect;
-      _configuration.reconndelay = _configuration.reconndelay || 1000;
-      _configuration.reconnamount = _configuration.reconnamount || 1000;
-      _configuration.autostart = _configuration.autostart === null || _configuration.autostart === undefined ? false : _configuration.autostart;
-
-      if( typeof GME !== 'undefined'){
-        GME.config = GME.config || {};
-        GME.config.keyType = _configuration.storageKeyType;
-      }
-
-      if( typeof WebGMEGlobal !== 'undefined'){
-        WebGMEGlobal.config = WebGMEGlobal.config || {};
-        WebGMEGlobal.config.keyType = _configuration.storageKeyType;
-      }
+        //FIXME: Are these gme options or not??
+      _configuration.autoreconnect = true; // MAGIC NUMBERS
+      _configuration.reconndelay = 1000; // MAGIC NUMBERS
+      _configuration.reconnamount = 1000; // MAGIC NUMBERS
+      _configuration.autostart = false; // MAGIC NUMBERS
 
       //TODO remove the usage of jquery
       //$.extend(_self, new EventDispatcher());
@@ -16481,15 +16440,18 @@ define('client',[
       }
 
       function newDatabase() {
-        var storageOptions ={log: LogManager.create('client-storage'), host: _configuration.host};
-        if(typeof WebGMEGlobal !== 'undefined' && WebGMEGlobal.TESTING === true){
+        var storageOptions ={log: LogManager.create('client-storage'), host: _configuration.host},
+            protocolStr;
+        if(typeof TESTING !== 'undefined'){
+          protocolStr = gmeConfig.server.https.enable ? 'https' : 'http';
+
           storageOptions.type = 'node';
-          storageOptions.host = 'http://localhost';
-          storageOptions.port = _configuration.port;
-          storageOptions.user = "TEST";
+          storageOptions.host = protocolStr + '://127.0.0.1';
+          storageOptions.user = 'TEST';
         } else {
           storageOptions.user = getUserId();
         }
+        storageOptions.globConf = gmeConfig;
         return Storage(storageOptions);
       }
 
@@ -16988,9 +16950,10 @@ define('client',[
       function networkWatcher() {
         _networkStatus = "";
         var running = true;
-        var autoReconnect = _configuration.autoreconnect ? true : false;
-        var reConnDelay = _configuration.reconndelay || 1000;
-        var reConnAmount = _configuration.reconnamount || 1000;
+        //FIXME: Are these gme options or not??
+        var autoReconnect = _configuration.autoreconnect;
+        var reConnDelay = _configuration.reconndelay;
+        var reConnAmount = _configuration.reconnamount;
         var reconnecting = function () {
           var counter = 0;
           var timerId = setInterval(function () {
@@ -17182,7 +17145,7 @@ define('client',[
                   _inTransaction = false;
                   _nodes = {};
                   _metaNodes = {};
-                  _core = getNewCore(_project);
+                  _core = getNewCore(_project, gmeConfig);
                   META.initialize(_core, _metaNodes, saveRoot);
                   if (_commitCache) {
                     _commitCache.clearCache();
@@ -17299,7 +17262,7 @@ define('client',[
       }
 
       function createEmptyProject(project, callback) {
-        var core = getNewCore(project),
+        var core = getNewCore(project, gmeConfig),
           root = core.createNode(),
           rootHash = '',
           commitHash = '';
@@ -19282,7 +19245,7 @@ define('client',[
       //TODO probably this would also beneficial if this would work on server as well
       function getDiffTree(from,to,callback){
         var needed = 2,error = null,
-          core = getNewCore(_project),
+          core = getNewCore(_project, gmeConfig),
           fromRoot={root:{},commit:from},
           toRoot={root:{},commit:to},
           rootsLoaded = function(){
@@ -19323,7 +19286,7 @@ define('client',[
       //TODO move to server
       function applyDiff(branch,baseCommitHash,branchCommitHash,parents,diff,callback){
         _project.loadObject(baseCommitHash,function(err,cObject){
-          var core = getNewCore(_project);
+          var core = getNewCore(_project, gmeConfig);
           if(!err && cObject){
             core.loadRoot(cObject.root,function(err,root){
               if(!err && root){
@@ -19554,6 +19517,7 @@ define('client',[
             _database.getProjectNames(function (err, names) {
               if (!err && names && names.length > 0) {
                 var projectName = null;
+                  //FIXME: Who sets this project?
                 if (_configuration.project && names.indexOf(_configuration.project) !== -1) {
                   projectName = _configuration.project;
                 } else {
@@ -19573,7 +19537,7 @@ define('client',[
           }
         });
       }
-
+      //FIXME: Who sets this configuration?
       if (_configuration.autostart) {
         initialize();
       }
@@ -21612,6 +21576,7 @@ define('blob/BlobClient',['./Artifact', 'blob/BlobMetadata', 'superagent'], func
             this.server = parameters.server || this.server;
             this.serverPort = parameters.serverPort || this.serverPort;
             this.httpsecure = (parameters.httpsecure !== undefined) ? parameters.httpsecure : this.httpsecure;
+            this.webgmeclientsession = parameters.webgmeclientsession;
         }
         this.blobUrl = '';
         if (this.httpsecure !== undefined && this.server && this.serverPort) {
@@ -21656,7 +21621,8 @@ define('blob/BlobClient',['./Artifact', 'blob/BlobMetadata', 'superagent'], func
     };
 
     BlobClient.prototype.putFile = function (name, data, callback) {
-        var contentLength;
+        var contentLength,
+            req;
         function toArrayBuffer(buffer) {
             var ab = new ArrayBuffer(buffer.length);
             var view = new Uint8Array(ab);
@@ -21676,8 +21642,11 @@ define('blob/BlobClient',['./Artifact', 'blob/BlobMetadata', 'superagent'], func
             }
         }
         contentLength = data.hasOwnProperty('length') ? data.length : data.byteLength;
-        superagent.post(this.getCreateURL(name))
-            .set('Content-Type', 'application/octet-stream')
+        req = superagent.post(this.getCreateURL(name));
+        if (this.webgmeclientsession) {
+            req.set('webgmeclientsession', this.webgmeclientsession);
+        }
+        req.set('Content-Type', 'application/octet-stream')
             .set('Content-Length', contentLength)
             .send(data)
             .end(function (err, res) {
@@ -21693,12 +21662,11 @@ define('blob/BlobClient',['./Artifact', 'blob/BlobMetadata', 'superagent'], func
     };
 
     BlobClient.prototype.putMetadata = function (metadataDescriptor, callback) {
-        var self = this;
-        var metadata = new BlobMetadata(metadataDescriptor);
-
+        var metadata = new BlobMetadata(metadataDescriptor),
+            blob,
+            contentLength,
+            req;
         // FIXME: in production mode do not indent the json file.
-        var blob;
-        var contentLength;
         if (typeof Blob !== 'undefined') {
             blob = new Blob([JSON.stringify(metadata.serialize(), null, 4)], {type: 'text/plain'});
             contentLength = blob.size;
@@ -21707,8 +21675,11 @@ define('blob/BlobClient',['./Artifact', 'blob/BlobMetadata', 'superagent'], func
             contentLength = blob.length;
         }
 
-        superagent.post(this.getCreateURL(metadataDescriptor.name, true))
-            .set('Content-Type', 'application/octet-stream')
+        req = superagent.post(this.getCreateURL(metadataDescriptor.name, true));
+        if (this.webgmeclientsession) {
+            req.set('webgmeclientsession', this.webgmeclientsession);
+        }
+        req.set('Content-Type', 'application/octet-stream')
             .set('Content-Length', contentLength)
             .send(blob)
             .end(function (err, res) {
@@ -21770,6 +21741,9 @@ define('blob/BlobClient',['./Artifact', 'blob/BlobMetadata', 'superagent'], func
         //superagent.parse['application/json'] = superagent.parse['application/zip'];
 
         var req = superagent.get(this.getViewURL(hash, subpath));
+        if (this.webgmeclientsession) {
+            req.set('webgmeclientsession', this.webgmeclientsession);
+        }
         if (req.pipe) {
             // running on node
             var Writable = require('stream').Writable;
@@ -21822,14 +21796,17 @@ define('blob/BlobClient',['./Artifact', 'blob/BlobMetadata', 'superagent'], func
     };
 
     BlobClient.prototype.getMetadata = function (hash, callback) {
-        superagent.get(this.getMetadataURL(hash))
-            .end(function (err, res) {
-                if (err || res.status > 399) {
-                    callback(err || res.status);
-                } else {
-                    callback(null, JSON.parse(res.text));
-                }
-            });
+        var req = superagent.get(this.getMetadataURL(hash));
+        if (this.webgmeclientsession) {
+            req.set('webgmeclientsession', this.webgmeclientsession);
+        }
+        req.end(function (err, res) {
+            if (err || res.status > 399) {
+                callback(err || res.status);
+            } else {
+                callback(null, JSON.parse(res.text));
+            }
+        });
     };
 
     BlobClient.prototype.createArtifact = function (name) {
@@ -21904,14 +21881,9 @@ define('executor/ExecutorClient',['superagent'], function (superagent) {
         parameters = parameters || {};
         this.isNodeJS = (typeof window === 'undefined') && (typeof process === "object");
         this.isNodeWebkit = (typeof window === 'object') && (typeof process === "object");
-
         //console.log(isNode);
         if (this.isNodeJS) {
-            var config = WebGMEGlobal.getConfig();
             this.server = '127.0.0.1';
-            this.serverPort = config.port;
-            this.httpsecure = config.httpsecure;
-
             this._clientSession = null; // parameters.sessionId;;
         }
         this.server = parameters.server || this.server;
@@ -21928,11 +21900,6 @@ define('executor/ExecutorClient',['superagent'], function (superagent) {
         this.executorUrl = this.executorUrl + '/rest/executor/'; // TODO: any ways to ask for this or get it from the configuration?
         if (parameters.executorNonce) {
             this.executorNonce = parameters.executorNonce;
-        } else if (typeof WebGMEGlobal !== "undefined" && typeof WebGMEGlobal.getConfig !== "undefined") {
-            var webGMEConfig = WebGMEGlobal.getConfig();
-            if (webGMEConfig.executorNonce) {
-                this.executorNonce = webGMEConfig.executorNonce;
-            }
         }
     };
 
@@ -22448,6 +22415,7 @@ define('plugin/PluginBase',['plugin/PluginConfig',
 
             this.result = null;
             this.isConfigured = false;
+            this.gmeConfig = null;
         };
 
         //--------------------------------------------------------------------------------------------------------------
@@ -22694,39 +22662,24 @@ define('plugin/PluginBase',['plugin/PluginConfig',
 
                 // FIXME: what if master branch is already in a different state?
 
-                self.project.getBranchNames(function (err, branchNames) {
-                    if (branchNames.hasOwnProperty(self.branchName)) {
-                        var branchHash = branchNames[self.branchName];
-                        if (branchHash === self.branchHash) {
-                            // the branch does not have any new commits
-                            // try to fast forward branch to the current commit
-                            self.project.setBranchHash(self.branchName, self.branchHash, self.currentHash, function (err) {
-                                if (err) {
-                                    // fast forward failed
-                                    self.logger.error(err);
-                                    self.logger.info('"' + self.branchName + '" was NOT updated');
-                                    self.logger.info('Project was saved to ' + self.currentHash + ' commit.');
-                                } else {
-                                    // successful fast forward of branch to the new commit
-                                    self.logger.info('"' + self.branchName + '" was updated to the new commit.');
-                                    // roll starting point on success
-                                    self.branchHash = self.currentHash;
-                                }
-                                callback(err);
-                            });
-                        } else {
-                            // branch has changes a merge is required
-                            // TODO: try auto-merge, if fails ...
-                            self.logger.warn('Cannot fast forward "' + self.branchName + '" branch. Merge is required but not supported yet.');
-                            self.logger.info('Project was saved to ' + self.currentHash + ' commit.');
-                            callback(null);
-                        }
-                    } else {
-                        // branch was deleted or not found, do nothing
+                // try to fast forward branch to the current commit
+                self.project.setBranchHash(self.branchName, self.branchHash, self.currentHash, function (err) {
+                    if (err) {
+                        // fast forward failed
+                        // TODO: try auto-merge
+
+                        self.logger.error(err);
+                        self.logger.info('"' + self.branchName + '" was NOT updated');
                         self.logger.info('Project was saved to ' + self.currentHash + ' commit.');
-                        callback(null);
+                    } else {
+                        // successful fast forward of branch to the new commit
+                        self.logger.info('"' + self.branchName + '" was updated to the new commit.');
+                        // roll starting point on success
+                        self.branchHash = self.currentHash;
                     }
+                    callback(err);
                 });
+
                 // FIXME: is this call async??
                 // FIXME: we are not tracking all commits that we make
 
@@ -22815,15 +22768,20 @@ define('plugin/PluginBase',['plugin/PluginConfig',
          *
          * @param {logManager} logger - logging capability to console (or file) based on PluginManager configuration
          * @param {blob.BlobClient} blobClient - virtual file system where files can be generated then saved as a zip file.
+         * @param {object} gmeConfig - global configuration for webGME.
          */
-        PluginBase.prototype.initialize = function (logger, blobClient) {
+        PluginBase.prototype.initialize = function (logger, blobClient, gmeConfig) {
             if (logger) {
                 this.logger = logger;
             } else {
                 this.logger = console;
             }
-
+            if (!gmeConfig) {
+                // TODO: Remove this check at some point
+                throw new Error('gmeConfig was not provided to Plugin.initialize!');
+            }
             this.blobClient = blobClient;
+            this.gmeConfig = gmeConfig;
 
             this._currentConfig = null;
             // initialize default configuration
@@ -22886,6 +22844,7 @@ define('plugin/PluginBase',['plugin/PluginConfig',
 
         return PluginBase;
     });
+
 /*
  * Copyright (C) 2014 Vanderbilt University, All rights reserved.
  *
@@ -22936,12 +22895,18 @@ define('plugin/PluginManagerBase',[
         'logManager'],
     function (PluginBase, PluginContext, LogManager) {
 
-        var PluginManagerBase = function (storage, Core, plugins) {
+        var PluginManagerBase = function (storage, Core, plugins, gmeConfig) {
+            this.gmeConfig = gmeConfig; // global configuration of webgme
             this.logger = LogManager.create("PluginManager");
             this._Core = Core;       // webgme core class is used to operate on objects
             this._storage = storage; // webgme storage
             this._plugins = plugins; // key value pair of pluginName: pluginType - plugins are already loaded/downloaded
             this._pluginConfigs = {}; // keeps track of the current configuration for each plugins by name
+
+            if (!this.gmeConfig) {
+                // TODO: this error check is temporary
+                throw new Error('PluginManagerBase takes gmeConfig as parameter!');
+            }
 
             var pluginNames = Object.keys(this._plugins);
             for (var i = 0; i < pluginNames.length; i += 1) {
@@ -23056,7 +23021,7 @@ define('plugin/PluginManagerBase',[
 
             pluginContext.project = this._storage;
             pluginContext.projectName = managerConfiguration.project;
-            pluginContext.core = new self._Core(pluginContext.project);
+            pluginContext.core = new self._Core(pluginContext.project, {globConf: self.gmeConfig});
             pluginContext.commitHash = managerConfiguration.commit;
             pluginContext.activeNode = null;    // active object
             pluginContext.activeSelection = []; // selected objects
@@ -23075,10 +23040,9 @@ define('plugin/PluginManagerBase',[
 
                                 if (err) {
                                     self.logger.error('unable to load active selection: ' + activeNodePath);
-                                    return;
+                                } else {
+                                    pluginContext.activeSelection.push(activeNode);
                                 }
-
-                                pluginContext.activeSelection.push(activeNode);
 
                                 if (remaining === 0) {
                                     // all nodes from active selection are loaded
@@ -23156,7 +23120,7 @@ define('plugin/PluginManagerBase',[
 
             var pluginLogger = LogManager.create('Plugin.' + name);
 
-            plugin.initialize(pluginLogger, managerConfiguration.blobClient);
+            plugin.initialize(pluginLogger, managerConfiguration.blobClient, self.gmeConfig);
 
             plugin.setCurrentConfig(this._pluginConfigs[name]);
             for (var key in managerConfiguration.pluginConfig) {
@@ -23225,9 +23189,10 @@ define('js/Utils/InterpreterManager',['core/core',
                                                PluginConfigDialog) {
     
 
-    var InterpreterManager = function (client) {
+    var InterpreterManager = function (client, gmeConfig) {
         this._client = client;
         //this._manager = new PluginManagerBase();
+        this.gmeConfig = gmeConfig;
         this._savedConfigs = {};
     };
 
@@ -23263,7 +23228,8 @@ define('js/Utils/InterpreterManager',['core/core',
                 var plugins = {},
                     runWithConfiguration;
                 plugins[name] = plugin;
-                var pluginManager = new PluginManagerBase(self._client.getProjectObject(), Core, plugins);
+                var pluginManager = new PluginManagerBase(self._client.getProjectObject(), Core, plugins,
+                    self.gmeConfig);
                 pluginManager.initialize(null, function (pluginConfigs, configSaveCallback) {
                     //#1: display config to user
                     var hackedConfig = {

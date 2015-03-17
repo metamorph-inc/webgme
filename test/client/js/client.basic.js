@@ -26,6 +26,7 @@ describe('Client tests', function () {
         testTerritory;
 
     gmeConfig.server.port = 9003;
+    gmeConfig.addOn.enable = true;
 
     requirejs.config({
         paths: {
@@ -159,10 +160,13 @@ describe('Client tests', function () {
     });
 
     after(function (done) {
+        this.timeout(5000);
         client.deleteProjectAsync(projectName, function (err) {
-            server.stop(function (serverError) {
-                done(err || serverError);
-            });
+            //client.closeDatabase(function (err) {
+                server.stop(function (serverError) {
+                    done(err || serverError);
+                });
+            //});
         });
     });
 

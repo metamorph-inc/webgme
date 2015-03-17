@@ -6,106 +6,110 @@
 
 var path = require('path'),
     config = {
-    debug: false,
-
-    server: {
-        port: 8888,
-        maxWorkers: 10,
-        sessionCookieId: 'webgmeSid',
-        sessionCookieSecret: 'meWebGMEez',
-        https: {
+        addOn: {
             enable: false,
-            certificateFile: path.join(__dirname, '../certificates/sample-cert.pem'),
-            keyFile: path.join(__dirname, '../certificates/sample-key.pem')
-        }
-    },
+            basePaths: [path.join(__dirname, '../src/addon/core')]
+        },
 
-    client: {
-        appDir: path.join(__dirname, '../src/client'),
-        // Used in client/WebGME.js to load initial project.
-        defaultProject: {
-            name: null,
-            branch: null,
-            node: null
-        }
-    },
+        authentication: {
+            enable: false,
+            allowGuests: false,
+            guestAccount: 'anonymous',
+            logOutUrl: '/',
+            salts: 10
+        },
 
-    mongo: {
-        uri: 'mongodb://127.0.0.1:27017/multi',
-        options: {
-            w: 1,
-            'native-parser': true,
-            auto_reconnect: true,
-            poolSize: 20,
-            socketOptions: {keepAlive: 1}
-        }
-    },
+        blob: {
+            type: 'FS', //'FS', 'S3'
+            fsDir: './blob-local-storage',
+            s3: {}
+        },
 
-    socketIO: {
-        reconnect: false,
-        'connect timeout': 10,
-        'reconnection delay': 1,
-        'force new connection': true,
-        transports: ['websocket']
-    },
+        client: {
+            appDir: path.join(__dirname, '../src/client'),
+            // Used in client/WebGME.js to load initial project.
+            defaultProject: {
+                name: null,
+                branch: null,
+                node: null
+            }
+        },
 
-    log: {
-        level: 1, // 5 = ALL, 4 = DEBUG, 3 = INFO, 2 = WARNING, 1 = ERROR, 0 = OFF
-        file: 'server.log'
-    },
+        debug: false,
 
-    authentication: {
-        enable: false,
-        salts: 10,
-        allowGuests: false,
-        logOutUrl: '/',
-        guestAccount: 'anonymous'
-    },
+        executor: {
+            enable: false,
+            nonce: null,
+            outputDir: './',
+            workerRefreshInterval: 5000
+        },
 
-    blob: {
-        type: 'FS', //'FS', 'S3'
-        fsDir: './blob-local-storage',
-        s3: {}
-    },
+        log: {
+            level: 1, // 5 = ALL, 4 = DEBUG, 3 = INFO, 2 = WARNING, 1 = ERROR, 0 = OFF
+            file: 'server.log'
+        },
 
-    executor: {
-        enable: false,
-        outputDir: './',
-        nonce: null,
-        workerRefreshInterval: 5000
-    },
+        mongo: {
+            uri: 'mongodb://127.0.0.1:27017/multi',
+            options: {
+                db: {
+                    w: 1,
+                    native_parser: true
+                },
+                server: {
+                    auto_reconnect: true,
+                    socketOptions: {keepAlive: 1},
+                    poolSize: 20
+                }
+            }
+        },
 
-    plugin: {
-        allowServerExecution: false,
-        basePaths: [path.join(__dirname, '../src/plugin/coreplugins')]
-    },
+        plugin: {
+            allowServerExecution: false,
+            basePaths: [path.join(__dirname, '../src/plugin/coreplugins')]
+        },
 
-    rest: {
-        secure: false,
-        components: {}
-    },
+        requirejsPaths: {},
 
-    addOn: {
-        enable: true,
-        basePaths: [path.join(__dirname, '../src/addon/core')]
-    },
+        rest: {
+            secure: false,
+            components: {}
+        },
 
-    visualization: {
-        decoratorPaths: [path.join(__dirname, '../src/client/decorators')],
-        visualizerDescriptors: [path.join(__dirname, '../src/client/js/Visualizers.json')]
-    },
+        server: {
+            port: 8888,
+            maxWorkers: 10,
+            sessionCookieId: 'webgmeSid',
+            sessionCookieSecret: 'meWebGMEez',
+            https: {
+                enable: false,
+                certificateFile: path.join(__dirname, '../certificates/sample-cert.pem'),
+                keyFile: path.join(__dirname, '../certificates/sample-key.pem')
+            }
+        },
 
-    storage: {
-        autoPersist: true, // core setting
-        cache: 2000,
+        socketIO: {
+            reconnect: false,
+            'connect timeout': 10,
+            'reconnection delay': 1,
+            'force new connection': true,
+            transports: ['websocket']
+        },
+
+        storage: {
+            autoPersist: true, // core setting
+            cache: 2000,
         clientCacheSize: 2000, // overwrites cache on client
-        keyType: 'plainSHA1', // 'rand160Bits', 'ZSSHA', 'plainSHA1',
-        timeout: 10000,
-        failSafe: 'memory',
-        failSafeFrequency: 10000
-    },
+            keyType: 'plainSHA1', // 'rand160Bits', 'ZSSHA', 'plainSHA1',
+            failSafe: 'memory',
+            failSafeFrequency: 10000,
+            timeout: 10000
+        },
 
-    requirejsPaths: {}
-};
+        visualization: {
+            decoratorPaths: [path.join(__dirname, '../src/client/decorators')],
+            visualizerDescriptors: [path.join(__dirname, '../src/client/js/Visualizers.json')]
+        }
+    };
 
 module.exports = config;

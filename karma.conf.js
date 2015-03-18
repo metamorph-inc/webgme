@@ -7,13 +7,25 @@ process.env.NODE_ENV = 'test';
 
 // load gme configuration
 var gmeConfig = require('./config'),
-    webgme = require('./webgme');
+    webgme = require('./webgme'),
+    importCli = require('./src/bin/import'),
+    testFixture = require('./test/_globals');
 
 webgme.addToRequireJsPaths(gmeConfig);
 
 var server = webgme.standaloneServer(gmeConfig);
+
 server.start(function () {
     console.log('webgme server started');
+
+    importCli.import(
+        gmeConfig.mongo.uri,
+        'ProjectAndBranchOperationsTest',
+        JSON.parse(testFixture.fs.readFileSync('./test/asset/sm_basic.json', 'utf8')), //TODO create specific project
+        'master',
+        function(err){
+        console.log('simlple project imported', err);
+    });
 });
 
 module.exports = function (config) {
@@ -32,6 +44,7 @@ module.exports = function (config) {
         files: [
             {pattern: 'src/**/*.js', included: false},
             {pattern: 'test-karma/**/*.spec.js', included: false},
+            //{pattern: 'test-karma/client/**/*.spec.js', included: false},
             'test-main.js'
         ],
 

@@ -26,6 +26,14 @@ server.start(function () {
         function(err){
         console.log('simlple project imported', err);
     });
+    importCli.import(
+        gmeConfig.mongo.uri,
+        'metaQueryAndManipulationTest',
+        JSON.parse(testFixture.fs.readFileSync('./test-karma/client/js/client/metaTestProject.json', 'utf8')), //TODO create specific project
+        'master',
+        function(err){
+            console.log('project for meta tests imported', err);
+        });
 });
 
 module.exports = function (config) {
@@ -43,8 +51,8 @@ module.exports = function (config) {
         // list of files / patterns to load in the browser
         files: [
             {pattern: 'src/**/*.js', included: false},
-            {pattern: 'test-karma/**/*.spec.js', included: false},
-            //{pattern: 'test-karma/client/**/*.spec.js', included: false},
+            //{pattern: 'test-karma/**/*.spec.js', included: false},
+            {pattern: 'test-karma/client/**/*.spec.js', included: false},
             'test-main.js'
         ],
 

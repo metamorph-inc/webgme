@@ -611,40 +611,155 @@ describe('Browser Client', function () {
     });
 
 //TODO add only proxied functions
-    it.skip('should return the meta rules of the given node in a json format', function () {
-        // getMeta
+    describe('meta rule query and setting tests', function () {
+        var Client,
+            gmeConfig,
+            client,
+            projectName = 'ProjectAndBranchOperationsTest';
 
-    });
+        before(function (done) {
+            this.timeout(10000);
+            requirejs(['js/client', 'text!gmeConfig.json'], function (Client_, gmeConfigJSON) {
+                Client = Client_;
+                gmeConfig = JSON.parse(gmeConfigJSON);
+                client = new Client(gmeConfig);
 
-    it.skip('should set the meta rules of the given node, according the specified json object', function () {
+                client.connectToDatabaseAsync({}, function (err) {
+                    expect(err).to.equal(null);
+                    client.selectProjectAsync('metaQueryAndManipulationTest', function (err) {
+                        expect(err).to.equal(null);
 
-    });
+                        //now we should load all necessary node, possibly in one step to allow the synchronous execution
+                        //we handle only the first incoming set of events to not cause any confusion
+                        var alreadyHandled = false;
+                        client.updateTerritory(client.addUI({}, function (events) {
+                            if (!alreadyHandled) {
+                                expect(events).to.have.length(12);
+                                expect(events[0]).to.contain.keys('eid', 'etype');
+                                expect(events[0].etype).to.equal('complete');
 
-    it.skip('should return the \'children\' portion of the meta rules of the node', function () {
-        // getChildrenMeta
+                                alreadyHandled = true;
+                                done();
+                            }
+                        }), {'': {children: 1}});
+                    });
+                });
+            });
+        });
 
-    });
+        it('should return the meta rules of the given node in a json format', function () {
+            // getMeta
+            expect(client.getMeta('/1')).to.deep.equal({
+                'attributes': {
+                    'name': {
+                        'type': 'string'
+                    }
+                },
+                'children': {
+                    'minItems': [],
+                    'maxItems': [],
+                    'items': [],
+                    'min': undefined,
+                    'max': undefined
+                },
+                'pointers': {},
+                'aspects': {}
+            });
+        });
 
-    it.skip('should set the \'children\' portion of the meta rules of the node according the given json', function () {
-        // setChildrenMeta
+        it('should return the flattened meta rules of a node in json format', function () {
+            console.log(client.getMeta('/1865460677').aspects.onlyOne.items);
+            expect(client.getMeta('/1865460677')).to.deep.equal({
+                'attributes': {
+                    'name': {
+                        'type': 'string'
+                    }
+                },
+                'children': {
+                    'items': [
+                        {$ref: '/1687616515'},
+                        {$ref: '/1730437907'}
+                    ],
+                    'minItems': [
+                        -1,
+                        -1
+                    ],
+                    'maxItems': [
+                        -1,
+                        -1
+                    ],
+                    'min': undefined,
+                    'max': undefined
+                },
+                'aspects': {
+                    'onlyOne': {
+                        'items': [
+                            {$ref: '/1730437907'}
+                        ]
+                    }
+                },
+                'pointers': {}
+            });
+        });
 
-    });
+        it('should return null if the object is not loaded', function () {
+            expect(client.getMeta('/42/42')).to.equal(null);
+        });
 
-    it.skip('should return a specific parameter of the children rules', function () {
-        // getChildrenMetaAttributes
-        //not used - like global min and max
+        it('should keep the meta intact if we set an empty object as meta for a node who do not have rules', function () {
+            var old = client.getMeta('/1730437907');
+            client.setMeta('/1730437907', {});
+            expect(client.getMeta('/1730437907')).to.deep.equal(old);
+        });
 
-    });
-    it.skip('should set a specific parameter of the children rules', function () {
-        // setChildrenMetaAttribute
-        // not used
+        it('should add meta rules to the given node, according the specified json object', function () {
+            var old = client.getMeta('/1730437907'),
+                newAttribute = {'type': 'string'};
+            client.setMeta('/1730437907', {'attributes': {'newAttr': newAttribute}});
+            //we extend our json format as well
+            old.attributes.newAttr = newAttribute;
+            expect(client.getMeta('/1730437907')).to.deep.equal(old);
+        });
 
-    });
+        it('should remove meta rules from the given node, according the specified json object', function () {
+            var old = client.getMeta('/1730437907'),
+                newAttribute = {'type': 'string'};
+            client.setMeta('/1730437907', {'attributes': {'newAttr': newAttribute}});
+            old.attributes.newAttr = newAttribute;
 
-    it.skip('should return the directory of valid child types of the node', function () {
-        // getValidChildrenItems
+            //now we clear the meta rule we just added
+            client.setMeta('/1730437907', {});
+            delete old.attributes.newAttr;
 
-    });
+            expect(client.getMeta('/1730437907')).to.deep.equal(old);
+        });
+
+
+        it.skip('should return the \'children\' portion of the meta rules of the node', function () {
+            // getChildrenMeta
+
+        });
+
+        it.skip('should set the \'children\' portion of the meta rules of the node according the given json', function () {
+            // setChildrenMeta
+
+        });
+
+        it.skip('should return a specific parameter of the children rules', function () {
+            // getChildrenMetaAttributes
+            //not used - like global min and max
+
+        });
+        it.skip('should set a specific parameter of the children rules', function () {
+            // setChildrenMetaAttribute
+            // not used
+
+        });
+
+        it.skip('should return the directory of valid child types of the node', function () {
+            // getValidChildrenItems
+
+        });
 //    updateValidChildrenItem: META.updateValidChildrenItem,
 //    removeValidChildrenItem: META.removeValidChildrenItem,
 //    getAttributeSchema: META.getAttributeSchema,
@@ -674,6 +789,8 @@ describe('Browser Client', function () {
 //    setMetaAspect: META.setMetaAspect,
 //    deleteMetaAspect: META.deleteMetaAspect,
 //    getAspectTerritoryPattern: META.getAspectTerritoryPattern,
+
+    });
 
 
 //TODO add also client/node API tests

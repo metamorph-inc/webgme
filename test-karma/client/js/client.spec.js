@@ -49,38 +49,70 @@ describe('Browser Client', function () {
             });
         });
 
-        it.skip('should close a project', function () {
-            // closeOpenedProject
-
+        it('should return null as textual id if there is no opened test', function () {
+            // getActiveProjectName
+            expect(client.getActiveProjectName()).to.equal(null);
         });
 
-        it.skip('should allow to close project multiple times without error', function () {
-            // closeOpenedProject
+        it('should return the valid textual id of the opened test', function (done) {
+            // getActiveProjectName
+            client.selectProjectAsync(projectName, function (err) {
+                expect(err).to.equal(null);
+
+                expect(client.getActiveProjectName()).to.equal(projectName);
+                done();
+            });
         });
 
-        it.skip('should create an empty project', function () {
-            // createEmptyProject
-
-        });
-
-        it.skip('should return the textual id of the opened project', function () {
-            // getActiveProject
-
-        });
-
-        it.skip('should return the list of textual ids of available projects', function () {
+        it('should return the list of textual ids of available projects', function (done) {
             // getAvailableProjectsAsync
+            client.getAvailableProjectsAsync(function (err, names) {
+                expect(err).to.equal(null);
 
+                expect(names).to.have.length.least(1);
+                expect(names).to.include(projectName);
+                done();
+            });
         });
 
-        it.skip('should return a filtered list of textual project id, where the user have read access', function () {
+        it('should return a filtered list of textual project id, where the user have read access', function (done) {
             // getViewableProjectsAsync
+            client.getViewableProjectsAsync(function (err, names) {
+                expect(err).to.equal(null);
 
+                expect(names).to.have.length.least(1);
+                expect(names).to.include(projectName);
+                done();
+            });
         });
 
-        it.skip('should return the authorization info of a given project', function () {
-            // getProjectAuthInfoAsync
+        it('list of viewable projects should be equal to list of all projects without authentication', function (done) {
+            client.getAvailableProjectsAsync(function (err, allNames) {
+                expect(err).to.equal(null);
 
+                client.getViewableProjectsAsync(function (err, viewableNames) {
+                    expect(err).to.equal(null);
+
+                    expect(viewableNames).to.deep.equal(allNames);
+                    done();
+                });
+            });
+        });
+
+        it('should return the authorization info of a given project', function (done) {
+            // getProjectAuthInfoAsync
+            client.getProjectAuthInfoAsync(projectName, function (err, authInfo) {
+                expect(err).to.equal(null);
+                expect(authInfo).to.deep.equal({read: true, write: true, delete: true});
+                done();
+            });
+        });
+
+        it('should return unknown project error for an unknown project', function (done){
+            client.getProjectAuthInfoAsync('unknown_project', function (err) {
+                expect(err).not.to.equal(null);
+                done();
+            });
         });
 
         it('should return the complete project list, with branches and authorization info', function (done) {

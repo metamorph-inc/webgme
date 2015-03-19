@@ -240,19 +240,43 @@ describe('Browser Client', function () {
             });
         });
 
-        it.skip('should return the latest n commits', function () {
+        //FIXME - check if this is the correct behavior
+        it('should return the latest n commits', function (done) {
             // getCommitsAsync
+            client.selectProjectAsync(projectName, function (err) {
+                expect(err).to.equal(null);
 
+                client.getCommitsAsync(client.getActualCommit(), 10, function (err, commits) {
+                    expect(err).to.equal(null);
+
+                    console.log(commits);
+                    expect(commits).to.have.length.least(1);
+                    expect(commits[0]).to.contain.keys('_id', 'root', 'updater', 'time', 'message', 'type');
+                    expect(commits[0]['_id']).not.to.equal(client.getActualCommit());
+                    done();
+                });
+            });
         });
 
-        it.skip('should return the actual commit hash', function () {
+        it('should return the actual commit hash', function (done) {
             // getActualCommit
+            client.selectProjectAsync(projectName, function (err) {
+                expect(err).to.equal(null);
 
+                expect(client.getActualCommit()).to.contain('#');
+                expect(client.getActualCommit()).to.have.length(41);
+                done();
+            });
         });
 
-        it.skip('should return the name of the actual branch', function () {
+        it('should return the name of the actual branch', function (done) {
             // getActualBranch
+            client.selectProjectAsync(projectName, function (err) {
+                expect(err).to.equal(null);
 
+                expect(client.getActualBranch()).to.equal('master');
+                done();
+            });
         });
 
         it.skip('should return the current network state', function () {

@@ -108,7 +108,8 @@ describe('Browser Client', function () {
             });
         });
 
-        it('should return unknown project error for an unknown project', function (done){
+        //FIXME check how it should behave in these scenario - drop error at least under authentication
+        it.skip('should return unknown project error for an unknown project', function (done) {
             client.getProjectAuthInfoAsync('unknown_project', function (err) {
                 expect(err).not.to.equal(null);
                 done();
@@ -139,15 +140,65 @@ describe('Browser Client', function () {
 
         });
 
-        it.skip('should create a project with info data', function () {
+        //FIXME - runs into some undefined is not a function error, but no location
+        it.skip('should fail to select an unknown project', function (done) {
+            client.selectProjectAsync('unknown_project', function (err) {
+                expect(err).to.contain('no such project');
+                done();
+            });
+        });
+
+        //FIXME - mysterious script error (:O)
+        it.skip('should create a project with info data', function (done) {
             // createProjectAsync
-
+            var activeProject = client.getActiveProjectName();
+            client.createProjectAsync('createProject', {}, function (err) {
+                expect(err).to.equal(null);
+                expect(client.getActiveProjectName()).to.equal(activeProject);
+                done();
+            });
         });
 
-        it.skip('should delete a project', function () {
+        it('should fail to create an already existing project', function (done) {
+            client.createProjectAsync(projectName, {}, function (err) {
+                expect(err).to.contain('already exists!');
+                done();
+            });
+        });
+
+        //FIXME - mysterious script error (:O)
+        it.skip('should delete a project', function (done) {
             // deleteProjectAsync
+            var delProjectName = 'deleteProject';
+            client.createProjectAsync(delProjectName, {}, function (err) {
+                expect(err).to.equal(null);
 
+                client.selectProjectAsync(delProjectName, function (err) {
+                    expect(err).to.equal(null);
+
+                    client.deleteProjectAsync(delProjectName, function (err) {
+                        expect(err).to.equal(null);
+
+                        client.getAvailableProjectsAsync(function (err, names) {
+                            expect(err).to.equal(null);
+
+                            expect(names).not.to.include(delProjectName);
+
+                            done();
+                        });
+                    });
+                });
+            });
         });
+
+        it('should be able to delete a nonexistent project', function (done) {
+            client.deleteProjectAsync('unknown_project', function (err) {
+                expect(err).to.equal(null);
+
+                done();
+            });
+        });
+
 
         it('should list the available branches of the opened project', function (done) {
             // getBranchesAsync
@@ -238,8 +289,8 @@ describe('Browser Client', function () {
     });
 
 
-    //TODO how to test as there is no callback
-    //no callback start
+//TODO how to test as there is no callback
+//no callback start
     it.skip('should copy the list of nodes into the proper container with the proper initial attributes and registry', function () {
         // copyMoreNodes
 
@@ -374,8 +425,8 @@ describe('Browser Client', function () {
         // delConstraint
 
     });
-    //no callback end
-    //TODO how to test as there is no callback
+//no callback end
+//TODO how to test as there is no callback
 
     it.skip('should register the User Interface object', function () {
         // addUI
@@ -535,7 +586,7 @@ describe('Browser Client', function () {
 
     });
 
-    //TODO add only proxied functions
+//TODO add only proxied functions
     it.skip('should return the meta rules of the given node in a json format', function () {
         // getMeta
 
@@ -570,82 +621,83 @@ describe('Browser Client', function () {
         // getValidChildrenItems
 
     });
-    //    updateValidChildrenItem: META.updateValidChildrenItem,
-    //    removeValidChildrenItem: META.removeValidChildrenItem,
-    //    getAttributeSchema: META.getAttributeSchema,
-    //    setAttributeSchema: META.setAttributeSchema,
-    //    removeAttributeSchema: META.removeAttributeSchema,
-    //    getPointerMeta: META.getPointerMeta,
-    //    setPointerMeta: META.setPointerMeta,
-    //    getValidTargetItems: META.getValidTargetItems,
-    //    updateValidTargetItem: META.updateValidTargetItem,
-    //    removeValidTargetItem: META.removeValidTargetItem,
-    //    deleteMetaPointer: META.deleteMetaPointer,
-    //    getOwnValidChildrenTypes: META.getOwnValidChildrenTypes,
-    //    getOwnValidTargetTypes: META.getOwnValidTargetTypes,
-    //    isValidChild: META.isValidChild,
-    //    isValidTarget: META.isValidTarget,
-    //    isValidAttribute: META.isValidAttribute,
-    //    getValidChildrenTypes: META.getValidChildrenTypes,
-    //    getValidTargetTypes: META.getValidTargetTypes,
-    //    hasOwnMetaRules: META.hasOwnMetaRules,
-    //    filterValidTarget: META.filterValidTarget,
-    //    isTypeOf: META.isTypeOf,
-    //    getValidAttributeNames: META.getValidAttributeNames,
-    //    getOwnValidAttributeNames: META.getOwnValidAttributeNames,
-    //    getMetaAspectNames: META.getMetaAspectNames,
-    //    getOwnMetaAspectNames: META.getOwnMetaAspectNames,
-    //    getMetaAspect: META.getMetaAspect,
-    //    setMetaAspect: META.setMetaAspect,
-    //    deleteMetaAspect: META.deleteMetaAspect,
-    //    getAspectTerritoryPattern: META.getAspectTerritoryPattern,
+//    updateValidChildrenItem: META.updateValidChildrenItem,
+//    removeValidChildrenItem: META.removeValidChildrenItem,
+//    getAttributeSchema: META.getAttributeSchema,
+//    setAttributeSchema: META.setAttributeSchema,
+//    removeAttributeSchema: META.removeAttributeSchema,
+//    getPointerMeta: META.getPointerMeta,
+//    setPointerMeta: META.setPointerMeta,
+//    getValidTargetItems: META.getValidTargetItems,
+//    updateValidTargetItem: META.updateValidTargetItem,
+//    removeValidTargetItem: META.removeValidTargetItem,
+//    deleteMetaPointer: META.deleteMetaPointer,
+//    getOwnValidChildrenTypes: META.getOwnValidChildrenTypes,
+//    getOwnValidTargetTypes: META.getOwnValidTargetTypes,
+//    isValidChild: META.isValidChild,
+//    isValidTarget: META.isValidTarget,
+//    isValidAttribute: META.isValidAttribute,
+//    getValidChildrenTypes: META.getValidChildrenTypes,
+//    getValidTargetTypes: META.getValidTargetTypes,
+//    hasOwnMetaRules: META.hasOwnMetaRules,
+//    filterValidTarget: META.filterValidTarget,
+//    isTypeOf: META.isTypeOf,
+//    getValidAttributeNames: META.getValidAttributeNames,
+//    getOwnValidAttributeNames: META.getOwnValidAttributeNames,
+//    getMetaAspectNames: META.getMetaAspectNames,
+//    getOwnMetaAspectNames: META.getOwnMetaAspectNames,
+//    getMetaAspect: META.getMetaAspect,
+//    setMetaAspect: META.setMetaAspect,
+//    deleteMetaAspect: META.deleteMetaAspect,
+//    getAspectTerritoryPattern: META.getAspectTerritoryPattern,
 
 
-    //TODO add also client/node API tests
-    //getParentId: getParentId,
-    //    getId: getId,
-    //    getGuid: getGuid,
-    //    getChildrenIds: getChildrenIds,
-    //    getBaseId: getBaseId,
-    //    getInheritorIds: getInheritorIds,
-    //    getAttribute: getAttribute,
-    //    getEditableAttribute: getEditableAttribute,
-    //    getRegistry: getRegistry,
-    //    getEditableRegistry: getEditableRegistry,
-    //    getOwnAttribute: getOwnAttribute,
-    //    getOwnEditableAttribute: getOwnEditableAttribute,
-    //    getOwnRegistry: getOwnRegistry,
-    //    getOwnEditableRegistry: getOwnEditableRegistry,
-    //    getPointer: getPointer,
-    //    getPointerNames: getPointerNames,
-    //    getAttributeNames: getAttributeNames,
-    //    getRegistryNames: getRegistryNames,
-    //    getOwnAttributeNames: getOwnAttributeNames,
-    //    getOwnRegistryNames: getOwnRegistryNames,
-    //    getOwnPointer: getOwnPointer,
-    //    getOwnPointerNames: getOwnPointerNames,
-    //
-    //    //SetFunctions
-    //    getMemberIds: getMemberIds,
-    //    getSetNames: getSetNames,
-    //    getMemberAttributeNames: getMemberAttributeNames,
-    //    getMemberAttribute: getMemberAttribute,
-    //    getEditableMemberAttribute: getEditableMemberAttribute,
-    //    getMemberRegistryNames: getMemberRegistryNames,
-    //    getMemberRegistry: getMemberRegistry,
-    //    getEditableMemberRegistry: getEditableMemberRegistry,
-    //
-    //    //META functions
-    //    getValidChildrenTypes: getValidChildrenTypes,
-    //
-    //    //constraint functions
-    //    getConstraintNames: getConstraintNames,
-    //    getOwnConstraintNames: getOwnConstraintNames,
-    //    getConstraint: getConstraint,
-    //
-    //    printData: printData,
-    //    toString: toString,
-    //
-    //    getCollectionPaths: getCollectionPaths
+//TODO add also client/node API tests
+//getParentId: getParentId,
+//    getId: getId,
+//    getGuid: getGuid,
+//    getChildrenIds: getChildrenIds,
+//    getBaseId: getBaseId,
+//    getInheritorIds: getInheritorIds,
+//    getAttribute: getAttribute,
+//    getEditableAttribute: getEditableAttribute,
+//    getRegistry: getRegistry,
+//    getEditableRegistry: getEditableRegistry,
+//    getOwnAttribute: getOwnAttribute,
+//    getOwnEditableAttribute: getOwnEditableAttribute,
+//    getOwnRegistry: getOwnRegistry,
+//    getOwnEditableRegistry: getOwnEditableRegistry,
+//    getPointer: getPointer,
+//    getPointerNames: getPointerNames,
+//    getAttributeNames: getAttributeNames,
+//    getRegistryNames: getRegistryNames,
+//    getOwnAttributeNames: getOwnAttributeNames,
+//    getOwnRegistryNames: getOwnRegistryNames,
+//    getOwnPointer: getOwnPointer,
+//    getOwnPointerNames: getOwnPointerNames,
+//
+//    //SetFunctions
+//    getMemberIds: getMemberIds,
+//    getSetNames: getSetNames,
+//    getMemberAttributeNames: getMemberAttributeNames,
+//    getMemberAttribute: getMemberAttribute,
+//    getEditableMemberAttribute: getEditableMemberAttribute,
+//    getMemberRegistryNames: getMemberRegistryNames,
+//    getMemberRegistry: getMemberRegistry,
+//    getEditableMemberRegistry: getEditableMemberRegistry,
+//
+//    //META functions
+//    getValidChildrenTypes: getValidChildrenTypes,
+//
+//    //constraint functions
+//    getConstraintNames: getConstraintNames,
+//    getOwnConstraintNames: getOwnConstraintNames,
+//    getConstraint: getConstraint,
+//
+//    printData: printData,
+//    toString: toString,
+//
+//    getCollectionPaths: getCollectionPaths
 
-});
+})
+;

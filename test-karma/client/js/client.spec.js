@@ -664,7 +664,7 @@ describe('Browser Client', function () {
 
         });
 
-        it.only('should return the flattened meta rules of a node in json format', function (done) {
+        it('should return the flattened meta rules of a node in json format', function (done) {
             prepareBranchForTest('inheritedGet', function (err) {
                 expect(err).to.equal(null);
                 var metaRules = client.getMeta('/1865460677');

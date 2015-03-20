@@ -1,3 +1,4 @@
+/*globals requirejs, expect, console*/
 /* jshint browser: true, mocha: true */
 /**
  * @author lattmann / https://github.com/lattmann
@@ -663,11 +664,12 @@ describe('Browser Client', function () {
 
         });
 
-        it('should return the flattened meta rules of a node in json format', function (done) {
+        it.only('should return the flattened meta rules of a node in json format', function (done) {
             prepareBranchForTest('inheritedGet', function (err) {
                 expect(err).to.equal(null);
-
-                expect(client.getMeta('/1865460677')).to.deep.equal({
+                var metaRules = client.getMeta('/1865460677');
+                //console.log(metaRules); //FIXME: this fails on my machine /patrik
+                expect(metaRules).to.deep.equal({
                     'attributes': {
                         'name': {
                             'type': 'string'

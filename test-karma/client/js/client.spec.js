@@ -615,7 +615,9 @@ describe('Browser Client', function () {
         var Client,
             gmeConfig,
             client,
-            projectName = 'ProjectAndBranchOperationsTest';
+            projectName = 'ProjectAndBranchOperationsTest',
+            baseCommitHash;
+
 
         before(function (done) {
             this.timeout(10000);
@@ -629,109 +631,125 @@ describe('Browser Client', function () {
                     client.selectProjectAsync('metaQueryAndManipulationTest', function (err) {
                         expect(err).to.equal(null);
 
-                        //now we should load all necessary node, possibly in one step to allow the synchronous execution
-                        //we handle only the first incoming set of events to not cause any confusion
-                        var alreadyHandled = false;
-                        client.updateTerritory(client.addUI({}, function (events) {
-                            if (!alreadyHandled) {
-                                expect(events).to.have.length(12);
-                                expect(events[0]).to.contain.keys('eid', 'etype');
-                                expect(events[0].etype).to.equal('complete');
-
-                                alreadyHandled = true;
-                                done();
-                            }
-                        }), {'': {children: 1}});
+                        baseCommitHash = client.getActualCommit();
+                        done();
                     });
                 });
             });
         });
 
-        it('should return the meta rules of the given node in a json format', function () {
-            // getMeta
-            expect(client.getMeta('/1')).to.deep.equal({
-                'attributes': {
-                    'name': {
-                        'type': 'string'
-                    }
-                },
-                'children': {
-                    'minItems': [],
-                    'maxItems': [],
-                    'items': [],
-                    'min': undefined,
-                    'max': undefined
-                },
-                'pointers': {},
-                'aspects': {}
+        it('should return the meta rules of the given node in a json format', function (done) {
+            prepareBranchForTest('simpleGet', function (err) {
+                expect(err).to.equal(null);
+
+                expect(client.getMeta('/1')).to.deep.equal({
+                    'attributes': {
+                        'name': {
+                            'type': 'string'
+                        }
+                    },
+                    'children': {
+                        'minItems': [],
+                        'maxItems': [],
+                        'items': [],
+                        'min': undefined,
+                        'max': undefined
+                    },
+                    'pointers': {},
+                    'aspects': {}
+                });
+                done();
             });
+
         });
 
-        it('should return the flattened meta rules of a node in json format', function () {
-            console.log(client.getMeta('/1865460677').aspects.onlyOne.items);
-            expect(client.getMeta('/1865460677')).to.deep.equal({
-                'attributes': {
-                    'name': {
-                        'type': 'string'
-                    }
-                },
-                'children': {
-                    'items': [
-                        {$ref: '/1687616515'},
-                        {$ref: '/1730437907'}
-                    ],
-                    'minItems': [
-                        -1,
-                        -1
-                    ],
-                    'maxItems': [
-                        -1,
-                        -1
-                    ],
-                    'min': undefined,
-                    'max': undefined
-                },
-                'aspects': {
-                    'onlyOne': {
+        it('should return the flattened meta rules of a node in json format', function (done) {
+            prepareBranchForTest('inheritedGet', function (err) {
+                expect(err).to.equal(null);
+
+                expect(client.getMeta('/1865460677')).to.deep.equal({
+                    'attributes': {
+                        'name': {
+                            'type': 'string'
+                        }
+                    },
+                    'children': {
                         'items': [
+                            {$ref: '/1687616515'},
                             {$ref: '/1730437907'}
-                        ]
-                    }
-                },
-                'pointers': {}
+                        ],
+                        'minItems': [
+                            -1,
+                            -1
+                        ],
+                        'maxItems': [
+                            -1,
+                            -1
+                        ],
+                        'min': undefined,
+                        'max': undefined
+                    },
+                    'aspects': {
+                        'onlyOne': {
+                            'items': [
+                                {$ref: '/1730437907'}
+                            ]
+                        }
+                    },
+                    'pointers': {}
+                });
+                done();
             });
         });
 
-        it('should return null if the object is not loaded', function () {
-            expect(client.getMeta('/42/42')).to.equal(null);
+        it('should return null if the object is not loaded', function (done) {
+            prepareBranchForTest('unknownGet', function (err) {
+                expect(err).to.equal(null);
+
+                expect(client.getMeta('/42/42')).to.equal(null);
+                done();
+            });
         });
 
-        it('should keep the meta intact if we set an empty object as meta for a node who do not have rules', function () {
-            var old = client.getMeta('/1730437907');
-            client.setMeta('/1730437907', {});
-            expect(client.getMeta('/1730437907')).to.deep.equal(old);
+        it('modify an empty ruleset to empty', function (done) {
+            prepareBranchForTest('noChangeSet', function (err) {
+                expect(err).to.equal(null);
+
+                var old = client.getMeta('/1730437907');
+                client.setMeta('/1730437907', {});
+                expect(client.getMeta('/1730437907')).to.deep.equal(old);
+                done();
+            });
+
         });
 
-        it('should add meta rules to the given node, according the specified json object', function () {
-            var old = client.getMeta('/1730437907'),
-                newAttribute = {'type': 'string'};
-            client.setMeta('/1730437907', {'attributes': {'newAttr': newAttribute}});
-            //we extend our json format as well
-            old.attributes.newAttr = newAttribute;
-            expect(client.getMeta('/1730437907')).to.deep.equal(old);
+        it('add some rule via setMeta', function (done) {
+            prepareBranchForTest('addWithSet', function (err) {
+                expect(err).to.equal(null);
+
+                var old = client.getMeta('/1730437907'),
+                    newAttribute = {'type': 'string'};
+                client.setMeta('/1730437907', {'attributes': {'newAttr': newAttribute}});
+                //we extend our json format as well
+                old.attributes.newAttr = newAttribute;
+                expect(client.getMeta('/1730437907')).to.deep.equal(old);
+                done();
+            });
         });
 
-        it('should remove meta rules from the given node, according the specified json object', function () {
-            var old = client.getMeta('/1730437907'),
-                newAttribute = {'type': 'string'};
-            client.setMeta('/1730437907', {'attributes': {'newAttr': newAttribute}});
-            old.attributes.newAttr = newAttribute;
+        it('remove some rule via setMeta', function () {
+            prepareBranchForTest('removeWithSet', function (err) {
+                expect(err).to.equal(null);
 
-            //now we clear the meta rule we just added
-            client.setMeta('/1730437907', {});
-            delete old.attributes.newAttr;
+                var meta = client.getMeta('/1');
 
-            expect(client.getMeta('/1730437907')).to.deep.equal(old);
+                expect(meta.attributes).to.contain.keys('name');
+                delete meta.attributes.name;
+                client.setMeta('/1', meta);
+                expect(client.getMeta('/1').attributes).not.to.include.keys('name');
+                done();
+
+            });
         });
 
 
@@ -760,6 +778,31 @@ describe('Browser Client', function () {
             // getValidChildrenItems
 
         });
+
+        function prepareBranchForTest(branchName, next) {
+            //creates a branch then a UI for it, finally waits for the nodes to load
+            client.createBranchAsync(branchName, baseCommitHash, function (err) {
+                expect(err).to.equal(null);
+
+                client.selectBranchAsync(branchName, function (err) {
+                    expect(err).to.equal(null);
+
+                    //now we should load all necessary node, possibly in one step to allow the synchronous execution
+                    //we handle only the first incoming set of events to not cause any confusion
+                    var alreadyHandled = false;
+                    client.updateTerritory(client.addUI({}, function (events) {
+                        if (!alreadyHandled) {
+                            expect(events).to.have.length(12);
+                            expect(events[0]).to.contain.keys('eid', 'etype');
+                            expect(events[0].etype).to.equal('complete');
+
+                            alreadyHandled = true;
+                            next(null);
+                        }
+                    }), {'': {children: 1}});
+                });
+            });
+        }
 //    updateValidChildrenItem: META.updateValidChildrenItem,
 //    removeValidChildrenItem: META.removeValidChildrenItem,
 //    getAttributeSchema: META.getAttributeSchema,

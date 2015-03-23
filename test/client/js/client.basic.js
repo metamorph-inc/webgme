@@ -25,7 +25,6 @@ describe('Client tests', function () {
 
         testTerritory;
 
-    gmeConfig.server.port = 9003;
     gmeConfig.addOn.enable = true;
 
     requirejs.config({
@@ -268,6 +267,7 @@ describe('Client tests', function () {
                     if (i > 30) {
                         clearInterval(interval);
                         done('addon load timed out');
+                        return;
                     }
                     if (client.getRunningAddOnNames().length === 1) {
                         clearInterval(interval);

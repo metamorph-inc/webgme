@@ -15,34 +15,29 @@ webgme.addToRequireJsPaths(gmeConfig);
 
 var server = webgme.standaloneServer(gmeConfig);
 
+var importProject = function (projectName, filePath) {
+    importCli.import(
+        gmeConfig.mongo.uri,
+        projectName,
+        JSON.parse(testFixture.fs.readFileSync(filePath, 'utf8')),
+        'master',
+        function (err) {
+            console.log(projectName, 'have been imported: ', err);
+        });
+}, projectsToImport = [
+    {name: 'ProjectAndBranchOperationsTest', path: './test/asset/sm_basic.json'},
+    {name: 'metaQueryAndManipulationTest', path: './test-karma/client/js/client/metaTestProject.json'},
+    {name: 'ClientNodeInquiryTests', path: './test-karma/client/js/client/clientNodeTestProject.json'},
+    {name: 'nodeManipulationProject', path: './test-karma/client/js/client/clientNodeTestProject.json'}
+];
 server.start(function () {
     console.log('webgme server started');
 
-    //TODO refactor and put it into some function
-    importCli.import(
-        gmeConfig.mongo.uri,
-        'ProjectAndBranchOperationsTest',
-        JSON.parse(testFixture.fs.readFileSync('./test/asset/sm_basic.json', 'utf8')), //TODO create specific project
-        'master',
-        function (err) {
-            console.log('simlple project imported', err);
-        });
-    importCli.import(
-        gmeConfig.mongo.uri,
-        'metaQueryAndManipulationTest',
-        JSON.parse(testFixture.fs.readFileSync('./test-karma/client/js/client/metaTestProject.json', 'utf8')),
-        'master',
-        function (err) {
-            console.log('project for meta tests imported', err);
-        });
-    importCli.import(
-        gmeConfig.mongo.uri,
-        'ClientNodeInquiryTests',
-        JSON.parse(testFixture.fs.readFileSync('./test-karma/client/js/client/clientNodeTestProject.json', 'utf8')),
-        'master',
-        function (err) {
-            console.log('project for client node tests imported', err);
-        });
+    var i;
+
+    for (i = 0; i < projectsToImport.length; i++) {
+        importProject(projectsToImport[i].name, projectsToImport[i].path);
+    }
 });
 
 module.exports = function (config) {

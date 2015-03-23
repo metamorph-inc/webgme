@@ -312,6 +312,229 @@ describe('Browser Client', function () {
         });
     });
 
+    describe('node manipulations', function () {
+        //MGA
+        //startTransaction: startTransaction,
+        //    completeTransaction: completeTransaction,
+        //    copyMoreNodes: copyMoreNodes,
+        //    moveMoreNodes: moveMoreNodes,
+        //    createChild: createChild,
+        //    createChildren: createChildren,
+        //    makePointer: makePointer,
+        //    delPointer: delPointer,
+        //    addMember: addMember,
+        //    removeMember: removeMember,
+        //    setMemberAttribute: setMemberAttribute,
+        //    delMemberAttribute: delMemberAttribute,
+        //    setMemberRegistry: setMemberRegistry,
+        //    delMemberRegistry: delMemberRegistry,
+        //    createSet: createSet,
+        //    deleteSet: deleteSet,
+        //
+        //    setBase: setBase,
+        //    delBase: delBase,
+        var Client,
+            gmeConfig,
+            client,
+            projectName = 'nodeManipulationProject',
+            baseCommitHash;
+
+
+        before(function (done) {
+            this.timeout(10000);
+            requirejs(['js/client', 'text!gmeConfig.json'], function (Client_, gmeConfigJSON) {
+                Client = Client_;
+                gmeConfig = JSON.parse(gmeConfigJSON);
+                client = new Client(gmeConfig);
+
+                client.connectToDatabaseAsync({}, function (err) {
+                    expect(err).to.equal(null);
+                    client.selectProjectAsync(projectName, function (err) {
+                        expect(err).to.equal(null);
+
+                        baseCommitHash = client.getActualCommit();
+                        done();
+                    });
+                });
+            });
+        });
+
+        it('should modify the attribute of the given node', function (done) {
+            var testState = 'init',
+                testId = 'basicSetAttribute',
+                node;
+            buildUpForTest(testId, {'/323573539': {children: 0}}, function (events) {
+                switch (testState) {
+                    case 'init':
+                        testState = 'checking';
+
+                        expect(events).to.have.length(2);
+                        expect(events[1]).to.deep.equal({eid: '/323573539', etype: 'load'});
+
+                        node = client.getNode(events[1].eid);
+                        expect(node).not.to.equal(null);
+                        expect(node.getAttribute('name')).to.equal('check');
+
+                        client.setAttributes(events[1].eid, 'name', 'checkModified', 'basic set attribute test');
+                        break;
+                    case 'checking':
+                        expect(events).to.have.length(2);
+                        expect(events[1]).to.deep.equal({eid: '/323573539', etype: 'update'});
+
+                        node = client.getNode(events[1].eid);
+                        expect(node).not.to.equal(null);
+                        expect(node.getAttribute('name')).to.equal('checkModified');
+
+                        client.removeUI(testId);
+                        done();
+                        break;
+                }
+            });
+        });
+
+        it('should delete the given attribute of the node', function (done) {
+            var testState = 'init',
+                testId = 'basicDelAttribute',
+                node;
+            buildUpForTest(testId, {'/323573539': {children: 0}}, function (events) {
+                switch (testState) {
+                    case 'init':
+                        testState = 'checking';
+
+                        expect(events).to.have.length(2);
+                        expect(events[1]).to.deep.equal({eid: '/323573539', etype: 'load'});
+
+                        node = client.getNode(events[1].eid);
+                        expect(node).not.to.equal(null);
+                        expect(node.getAttribute('name')).to.equal('check');
+
+                        client.delAttributes(events[1].eid, 'name', 'basic delete attribute test');
+                        break;
+                    case 'checking':
+                        expect(events).to.have.length(2);
+                        expect(events[1]).to.deep.equal({eid: '/323573539', etype: 'update'});
+
+                        node = client.getNode(events[1].eid);
+                        expect(node).not.to.equal(null);
+                        expect(node.getAttribute('name')).to.equal('node');
+
+                        client.removeUI(testId);
+                        done();
+                        break;
+                }
+            });
+        });
+
+        it('should sets the given registry entry of the node', function (done) {
+            var testState = 'init',
+                testId = 'basicSetRegistry',
+                node;
+            buildUpForTest(testId, {'/323573539': {children: 0}}, function (events) {
+                switch (testState) {
+                    case 'init':
+                        testState = 'checking';
+
+                        expect(events).to.have.length(2);
+                        expect(events[1]).to.deep.equal({eid: '/323573539', etype: 'load'});
+
+                        node = client.getNode(events[1].eid);
+                        expect(node).not.to.equal(null);
+                        expect(node.getRegistry('position')).to.deep.equal({x: 300, y: 466});
+
+                        client.setRegistry(events[1].eid, 'position', {x: 100, y: 100}, 'basic set registry test');
+                        break;
+                    case 'checking':
+                        expect(events).to.have.length(2);
+                        expect(events[1]).to.deep.equal({eid: '/323573539', etype: 'update'});
+
+                        node = client.getNode(events[1].eid);
+                        expect(node).not.to.equal(null);
+                        expect(node.getRegistry('position')).to.deep.equal({x: 100, y: 100});
+
+                        client.removeUI(testId);
+                        done();
+                        break;
+                }
+            });
+        });
+
+        it('should remove the given registry key of the node', function (done) {
+            var testState = 'init',
+                testId = 'basicDelRegistry',
+                node;
+            buildUpForTest(testId, {'/323573539': {children: 0}}, function (events) {
+                switch (testState) {
+                    case 'init':
+                        testState = 'checking';
+
+                        expect(events).to.have.length(2);
+                        expect(events[1]).to.deep.equal({eid: '/323573539', etype: 'load'});
+
+                        node = client.getNode(events[1].eid);
+                        expect(node).not.to.equal(null);
+                        expect(node.getRegistry('position')).to.deep.equal({x: 300, y: 466});
+
+                        client.delRegistry(events[1].eid, 'position', 'basic del registry test');
+                        break;
+                    case 'checking':
+                        expect(events).to.have.length(2);
+                        expect(events[1]).to.deep.equal({eid: '/323573539', etype: 'update'});
+
+                        node = client.getNode(events[1].eid);
+                        expect(node).not.to.equal(null);
+                        expect(node.getRegistry('position')).to.deep.equal({x: 371, y: 213});
+
+                        client.removeUI(testId);
+                        done();
+                        break;
+                }
+            });
+        });
+
+        it('should remove the given node', function (done) {
+            var testState = 'init',
+                testId = 'basicDelNode',
+                node;
+            buildUpForTest(testId, {'/323573539': {children: 0}}, function (events) {
+                switch (testState) {
+                    case 'init':
+                        testState = 'checking';
+
+                        expect(events).to.have.length(2);
+                        expect(events[1]).to.deep.equal({eid: '/323573539', etype: 'load'});
+
+                        node = client.getNode(events[1].eid);
+                        expect(node).not.to.equal(null);
+
+                        client.delMoreNodes([events[1].eid], 'basic delete node test');
+                        break;
+                    case 'checking':
+                        expect(events).to.have.length(2);
+                        expect(events[1]).to.deep.equal({eid: '/323573539', etype: 'unload'});
+
+                        node = client.getNode(events[1].eid);
+                        expect(node).to.equal(null);
+
+                        client.removeUI(testId);
+                        done();
+                        break;
+                }
+            });
+        });
+
+        function buildUpForTest(branchName, patternObject, eventCallback) {
+            //creates a branch then a UI for it, finally waits for the nodes to load
+            client.createBranchAsync(branchName, baseCommitHash, function (err) {
+                expect(err).to.equal(null);
+
+                client.selectBranchAsync(branchName, function (err) {
+                    expect(err).to.equal(null);
+
+                    client.updateTerritory(client.addUI({}, eventCallback, branchName), patternObject);
+                });
+            });
+        }
+    });
 
 //TODO how to test as there is no callback
 //no callback start
@@ -342,36 +565,6 @@ describe('Browser Client', function () {
 
     it.skip('should complete a transaction and commit the changes', function () {
         // completeTransaction
-
-    });
-
-    it.skip('should modify the attribute of the given node', function () {
-        // setAttributes
-
-    });
-
-    it.skip('should delete the given attribute of the node', function () {
-        // delAttributes
-
-    });
-
-    it.skip('should sets the given registry entry of the node', function () {
-        // setRegistry
-
-    });
-
-    it.skip('should remove the given registry key of the node', function () {
-        // delRegistry
-
-    });
-
-    it.skip('should remove the given node', function () {
-        // deleteNode
-
-    });
-
-    it.skip('should remove the given list of nodes', function () {
-        // delMoreNodes
 
     });
 
@@ -761,6 +954,7 @@ describe('Browser Client', function () {
             //not used - like global min and max
 
         });
+
         it.skip('should set a specific parameter of the children rules', function () {
             // setChildrenMetaAttribute
             // not used

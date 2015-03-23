@@ -250,7 +250,6 @@ describe('Browser Client', function () {
                 client.getCommitsAsync(client.getActualCommit(), 10, function (err, commits) {
                     expect(err).to.equal(null);
 
-                    console.log(commits);
                     expect(commits).to.have.length.least(1);
                     expect(commits[0]).to.contain.keys('_id', 'root', 'updater', 'time', 'message', 'type');
                     expect(commits[0]['_id']).not.to.equal(client.getActualCommit());
@@ -668,38 +667,30 @@ describe('Browser Client', function () {
             prepareBranchForTest('inheritedGet', function (err) {
                 expect(err).to.equal(null);
                 var metaRules = client.getMeta('/1865460677');
-                //console.log(metaRules); //FIXME: this fails on my machine /patrik
-                expect(metaRules).to.deep.equal({
-                    'attributes': {
-                        'name': {
-                            'type': 'string'
-                        }
-                    },
-                    'children': {
-                        'items': [
-                            {$ref: '/1687616515'},
-                            {$ref: '/1730437907'}
-                        ],
-                        'minItems': [
-                            -1,
-                            -1
-                        ],
-                        'maxItems': [
-                            -1,
-                            -1
-                        ],
-                        'min': undefined,
-                        'max': undefined
-                    },
-                    'aspects': {
-                        'onlyOne': {
-                            'items': [
-                                {$ref: '/1730437907'}
-                            ]
-                        }
-                    },
-                    'pointers': {}
+                //FIXME: this fails on my machine /patrik
+
+                expect(metaRules).to.have.keys('attributes', 'aspects', 'pointers', 'children');
+                expect(metaRules.attributes).to.deep.equal({
+                    'name': {
+                        'type': 'string'
+                    }
                 });
+                expect(metaRules.pointers).to.deep.equal({});
+                expect(metaRules.aspects).to.deep.equal({
+                    'onlyOne': {
+                        'items': [
+                            {$ref: '/1730437907'}
+                        ]
+                    }
+                });
+                expect(metaRules.children).to.have.keys('items', 'minItems', 'maxItems', 'min', 'max');
+                expect(metaRules.children.min).to.equal(undefined);
+                expect(metaRules.children.max).to.equal(undefined);
+                expect(metaRules.children.maxItems).to.deep.equal([-1, -1]);
+                expect(metaRules.children.minItems).to.deep.equal([-1, -1]);
+                expect(metaRules.children.items).to.have.length(2);
+                expect(metaRules.children.items).to.include({$ref: '/1730437907'});
+                expect(metaRules.children.items).to.include({$ref: '/1687616515'});
                 done();
             });
         });
@@ -998,32 +989,96 @@ describe('Browser Client', function () {
         it('should return the path of the target of the pointer defined on the given level', function () {
             expect(clientNode.getOwnPointer('ptr')).to.deep.equal({to: undefined, from: []});
         });
+
+        it('should return the list of available sets', function () {
+            expect(clientNode.getSetNames()).to.deep.equal(['set']);
+        });
+
+        it('should return the list of paths of set members', function () {
+            var members = clientNode.getMemberIds('set');
+
+            expect(members).to.have.length(2);
+            expect(members).to.include('/1697300825');
+            expect(members).to.include('/1400778473');
+        });
+
+        it('should return an empty array for an unknown set', function () {
+            expect(clientNode.getMemberIds('unknown_set')).to.empty();
+        });
+
+        it('should return a list of available attributes of the set containment', function () {
+            expect(clientNode.getMemberAttributeNames('set', '/1400778473')).to.empty();
+        });
+
+        it('should return the value of the attribute of the set containment', function () {
+            expect(clientNode.getMemberAttribute('set', '/1400778473', 'no_attribute')).to.equal(undefined);
+        });
+
+        it('should return a copy of the value of the attribute of the set containment', function () {
+            expect(clientNode.getEditableMemberAttribute('set', '/1400778473', 'no_attribute')).to.equal(null);
+        });
+
+        it('should return a list of available registry entries of the set containment', function () {
+            expect(clientNode.getMemberRegistryNames('set', '/1400778473')).to.deep.equal(['position']);
+        });
+
+        it('should return the value of the registry entry of the set containment', function () {
+            expect(clientNode.getMemberRegistry('set', '/1400778473', 'position')).to.deep.equal({x: 172, y: 207});
+        });
+
+        it('should return a copy of the value of the registry entry of the set containment', function () {
+            expect(clientNode.getEditableMemberRegistry('set', '/1400778473', 'position')).to.deep.equal({
+                x: 172,
+                y: 207
+            });
+        });
+
+        it('should return a list of paths of the possible child node types', function () {
+            expect(clientNode.getValidChildrenTypes()).to.deep.equal(['/701504349']);
+        });
+
+        it('should list the names of the defined constraints', function () {
+            expect(clientNode.getConstraintNames()).to.deep.equal(['constraint', 'meta']);
+        });
+
+        it('should list the names of the constraints defined on this level of inheritance', function () {
+            expect(clientNode.getOwnConstraintNames()).to.empty();
+        });
+
+        it('should return the constraint object of the given name', function () {
+            var constraint = clientNode.getConstraint('constraint');
+
+            expect(constraint).to.have.keys('info', 'script', 'priority');
+            expect(constraint.info).to.contain('just a');
+        });
+
+        it('should return the list of nodes that have this node as a target of the given pointer', function () {
+            var collectionPaths = clientNode.getCollectionPaths('ptr');
+
+            expect(collectionPaths).to.have.length(2);
+            expect(collectionPaths).to.include('/1697300825');
+            expect(collectionPaths).to.include('/1400778473');
+        });
+
+        //TODO refactor this function or remove if no need for it
+        it('should print the content of the node to the console', function (done) {
+            var oldConsoleLog = console.log;
+            console.log = function (txt1, err, txt2, jNode) {
+                console.log = oldConsoleLog;
+                expect(jNode).to.have.ownProperty('attributes');
+                expect(jNode).to.have.ownProperty('pointers');
+                expect(jNode).to.have.ownProperty('children');
+                expect(jNode.attributes).to.have.ownProperty('name');
+                expect(jNode.attributes.name).to.equal('check');
+                done();
+            };
+            clientNode.printData();
+        });
+
+        it('should return a textual identification of the node', function () {
+            expect(clientNode.toString()).to.contain('check');
+            expect(clientNode.toString()).to.contain('/323573539');
+        });
     });
 
-//TODO add also client/node API tests
-
-//    //SetFunctions
-//    getMemberIds: getMemberIds,
-//    getSetNames: getSetNames,
-//    getMemberAttributeNames: getMemberAttributeNames,
-//    getMemberAttribute: getMemberAttribute,
-//    getEditableMemberAttribute: getEditableMemberAttribute,
-//    getMemberRegistryNames: getMemberRegistryNames,
-//    getMemberRegistry: getMemberRegistry,
-//    getEditableMemberRegistry: getEditableMemberRegistry,
-//
-//    //META functions
-//    getValidChildrenTypes: getValidChildrenTypes,
-//
-//    //constraint functions
-//    getConstraintNames: getConstraintNames,
-//    getOwnConstraintNames: getOwnConstraintNames,
-//    getConstraint: getConstraint,
-//
-//    printData: printData,
-//    toString: toString,
-//
-//    getCollectionPaths: getCollectionPaths
-
-})
-;
+});

@@ -2091,42 +2091,43 @@ define([
         }
       }
 
-      function _copyMoreNodes(parameters) {
-        //now we will use the multiple copy function of the core
-        var nodes = [],
-          copiedNodes,
-          i, j, paths, keys,
-          parent = _nodes[parameters.parentId].node,
-          resultMap = {};
-        keys = Object.keys(parameters);
-        keys.splice(keys.indexOf('parentId'), 1);
-        paths = keys;
-        for (i = 0; i < paths.length; i++) {
-          nodes.push(_nodes[paths[i]].node);
-        }
-
-        copiedNodes = _core.copyNodes(nodes, parent);
-
-        for (i = 0; i < paths.length; i++) {
-          keys = Object.keys(parameters[paths[i]].attributes || {});
-          for (j = 0; j < keys.length; j++) {
-            _core.setAttribute(copiedNodes[i], keys[j], parameters[paths[i]].attributes[keys[j]]);
-          }
-
-          keys = Object.keys(parameters[paths[i]].registry || {});
-          for (j = 0; j < keys.length; j++) {
-            _core.setRegistry(copiedNodes[i], keys[j], parameters[paths[i]].registry[keys[j]]);
-          }
-        }
-
-
-        //creating the result map and storing the nodes to our cache, so the user will know which path became which
-        for (i = 0; i < paths.length; i++) {
-          resultMap[paths[i]] = storeNode(copiedNodes[i]);
-        }
-
-        return resultMap;
-      }
+        //TODO should be removed if the copyMoreNodes is functioning right now
+      //function _copyMoreNodes(parameters) {
+      //  //now we will use the multiple copy function of the core
+      //  var nodes = [],
+      //    copiedNodes,
+      //    i, j, paths, keys,
+      //    parent = _nodes[parameters.parentId].node,
+      //    resultMap = {};
+      //  keys = Object.keys(parameters);
+      //  keys.splice(keys.indexOf('parentId'), 1);
+      //  paths = keys;
+      //  for (i = 0; i < paths.length; i++) {
+      //    nodes.push(_nodes[paths[i]].node);
+      //  }
+      //
+      //  copiedNodes = _core.copyNodes(nodes, parent);
+      //
+      //  for (i = 0; i < paths.length; i++) {
+      //    keys = Object.keys(parameters[paths[i]].attributes || {});
+      //    for (j = 0; j < keys.length; j++) {
+      //      _core.setAttribute(copiedNodes[i], keys[j], parameters[paths[i]].attributes[keys[j]]);
+      //    }
+      //
+      //    keys = Object.keys(parameters[paths[i]].registry || {});
+      //    for (j = 0; j < keys.length; j++) {
+      //      _core.setRegistry(copiedNodes[i], keys[j], parameters[paths[i]].registry[keys[j]]);
+      //    }
+      //  }
+      //
+      //
+      //  //creating the result map and storing the nodes to our cache, so the user will know which path became which
+      //  for (i = 0; i < paths.length; i++) {
+      //    resultMap[paths[i]] = storeNode(copiedNodes[i]);
+      //  }
+      //
+      //  return resultMap;
+      //}
 
       function moveMoreNodes(parameters) {
         var pathsToMove = [],
@@ -2276,14 +2277,15 @@ define([
         }
       }
 
-      function deleteNode(path, msg) {
-        if (_core && _nodes[path] && typeof _nodes[path].node === 'object') {
-          _core.deleteNode(_nodes[path].node);
-          //delete _nodes[path];
-          msg = msg || 'deleteNode(' + path + ')';
-          saveRoot(msg);
-        }
-      }
+        //TODO should be removed as there is no user or public API related to this function
+      //function deleteNode(path, msg) {
+      //  if (_core && _nodes[path] && typeof _nodes[path].node === 'object') {
+      //    _core.deleteNode(_nodes[path].node);
+      //    //delete _nodes[path];
+      //    msg = msg || 'deleteNode(' + path + ')';
+      //    saveRoot(msg);
+      //  }
+      //}
 
       function delMoreNodes(paths, msg) {
         if (_core) {

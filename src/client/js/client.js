@@ -2338,7 +2338,7 @@ define([
 
       function delPointer(path, name, msg) {
         if (_core && _nodes[path] && typeof _nodes[path].node === 'object') {
-          _core.setPointer(_nodes[path].node, name, undefined);
+          _core.deletePointer(_nodes[path].node, name);
           msg = msg || 'delPointer(' + path + ',' + name + ')';
           saveRoot(msg);
         }

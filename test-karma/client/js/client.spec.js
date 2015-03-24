@@ -320,8 +320,6 @@ describe('Browser Client', function () {
         //    moveMoreNodes: moveMoreNodes,
         //    createChild: createChild,
         //    createChildren: createChildren,
-        //    makePointer: makePointer,
-        //    delPointer: delPointer,
         //    addMember: addMember,
         //    removeMember: removeMember,
         //    setMemberAttribute: setMemberAttribute,
@@ -535,20 +533,342 @@ describe('Browser Client', function () {
                 }
             });
         });
+        //    makePointer: makePointer,
+        //    delPointer: delPointer,
+        it('should set the given pointer of the node to the specified target', function (done) {
+            var testState = 'init',
+                testId = 'basicMakePointer',
+                node;
+            buildUpForTest(testId, {'/323573539': {children: 0}, '/1': {children: 0}}, function (events) {
+                if (testState === 'init') {
+                    testState = 'checking';
+
+                    expect(events).to.have.length(3);
+                    expect(events).to.include({eid: '/323573539', etype: 'load'});
+                    expect(events).to.include({eid: '/1', etype: 'load'});
+
+                    node = client.getNode(events[1].eid);
+                    expect(node).not.to.equal(null);
+
+                    client.makePointer('/323573539', 'ptr', '/1', 'basic make pointer test');
+                    return;
+                }
+
+                if (testState === 'checking') {
+                    expect(events).to.have.length(3);
+                    expect(events).to.include({eid: '/323573539', etype: 'update'});
+                    expect(events).to.include({eid: '/1', etype: 'update'});
+
+                    node = client.getNode('/323573539');
+                    expect(node).not.to.equal(null);
+                    expect(node.getPointer('ptr')).to.deep.equal({to: '/1', from: []});
+
+                    client.removeUI(testId);
+                    done();
+                }
+            });
+        });
+
+        it.skip('should remove the given pointer of the node', function () {
+            var testState = 'init',
+                testId = 'basicDelPointer',
+                node;
+            buildUpForTest(testId, {'/1697300825': {children: 0}}, function (events) {
+                if (testState === 'init') {
+                    testState = 'checking';
+
+                    expect(events).to.have.length(2);
+                    expect(events[1]).to.deep.equal({eid: '/1697300825', etype: 'load'});
+
+                    node = client.getNode(events[1].eid);
+                    expect(node).not.to.equal(null);
+
+                    expect(node.getPointer('ptr')).to.deep.equal({to: '/323573539', from: []});
+
+                    client.delPointer([events[1].eid], 'ptr', 'basic delete pointer test');
+                    return;
+                }
+
+                if (testState === 'checking') {
+                    expect(events).to.have.length(2);
+                    expect(events[1]).to.deep.equal({eid: '/1697300825', etype: 'update'});
+
+                    node = client.getNode(events[1].eid);
+                    expect(node).not.to.equal(null);
+
+                    expect(node.getPointer()).to.deep.equal({to: null, from: []});
+
+                    client.removeUI(testId);
+                    done();
+                }
+            });
+        });
+
+        it('should copy the nodes under the given parent', function (done) {
+            var testState = 'init',
+                testId = 'basicCopyNodes',
+                node,
+                initialPaths = [],
+                newPaths = [],
+                i;
+            buildUpForTest(testId, {'': {children: 1}}, function (events) {
+                if (testState === 'init') {
+                    testState = 'checking';
+
+                    expect(events).to.have.length(8);
+                    expect(events).to.include({eid: '/1697300825', etype: 'load'});
+                    expect(events).to.include({eid: '/1400778473', etype: 'load'});
+
+                    //save the paths of the initial nodes so that we can figure out the new nodes later
+                    for (i = 1; i < events.length; i++) {
+                        initialPaths.push(events[i].eid);
+                    }
+
+                    node = client.getNode('/1697300825');
+                    expect(node).not.to.equal(null);
+                    expect(node.getPointer('ptr')).to.deep.equal({to: '/323573539', from: []});
+
+                    node = client.getNode('/1400778473');
+                    expect(node).not.to.equal(null);
+                    expect(node.getPointer('ptr')).to.deep.equal({to: '/323573539', from: []});
+
+                    client.copyMoreNodes({
+                            parentId: '',
+                            '/1697300825': {attributes: {name: 'member2copy'}},
+                            '/1400778473': {attributes: {name: 'member1copy'}}
+                        },
+                        'basic copy nodes test');
+                    return;
+                }
+
+                if (testState === 'checking') {
+                    //FIXME why the update events missing about the source nodes - it works correctly with single node copying
+                    expect(events).to.have.length(8);
+
+                    //find out the new node paths
+                    for (i = 1; i < events.length; i++) {
+                        if (initialPaths.indexOf(events[i].eid) === -1) {
+                            expect(events[i].etype).to.equal('load');
+                            newPaths.push(events[i].eid);
+                        }
+                    }
+
+                    expect(newPaths).to.have.length(2);
+
+                    //old nodes remain untouched
+                    node = client.getNode('/1697300825');
+                    expect(node).not.to.equal(null);
+                    expect(node.getPointer('ptr')).to.deep.equal({to: '/323573539', from: []});
+
+                    node = client.getNode('/1400778473');
+                    expect(node).not.to.equal(null);
+                    expect(node.getPointer('ptr')).to.deep.equal({to: '/323573539', from: []});
+
+                    //the copies keep the target
+                    node = client.getNode(newPaths[0]);
+                    expect(node).not.to.equal(null);
+                    expect(node.getAttribute('name')).to.contain('copy');
+                    expect(node.getPointer('ptr')).to.deep.equal({to: '/323573539', from: []});
+
+                    node = client.getNode(newPaths[1]);
+                    expect(node).not.to.equal(null);
+                    expect(node.getAttribute('name')).to.contain('copy');
+                    expect(node.getPointer('ptr')).to.deep.equal({to: '/323573539', from: []});
+
+                    client.removeUI(testId);
+                    done();
+                }
+            });
+        });
+
+        it('copied nodes should keep copy-internal relations', function (done) {
+            var testState = 'init',
+                testId = 'internalRelationCopyNodes',
+                node,
+                initialPaths = [],
+                newPaths = [],
+                i,
+                newTarget = null;
+            buildUpForTest(testId, {'': {children: 1}}, function (events) {
+                if (testState === 'init') {
+                    testState = 'checking';
+
+                    expect(events).to.have.length(8);
+                    expect(events).to.include({eid: '/323573539', etype: 'load'});
+                    expect(events).to.include({eid: '/1697300825', etype: 'load'});
+                    expect(events).to.include({eid: '/1400778473', etype: 'load'});
+
+                    //save the paths of the initial nodes so that we can figure out the new nodes later
+                    for (i = 1; i < events.length; i++) {
+                        initialPaths.push(events[i].eid);
+                    }
+
+                    node = client.getNode('/1697300825');
+                    expect(node).not.to.equal(null);
+                    expect(node.getPointer('ptr')).to.deep.equal({to: '/323573539', from: []});
+
+                    node = client.getNode('/1400778473');
+                    expect(node).not.to.equal(null);
+                    expect(node.getPointer('ptr')).to.deep.equal({to: '/323573539', from: []});
+
+                    node = client.getNode('/323573539');
+                    expect(node).not.to.equal(null);
+                    expect(node.getAttribute('name')).to.equal('check');
+
+
+                    client.copyMoreNodes({
+                            parentId: '',
+                            '/1697300825': {attributes: {name: 'member2copy'}},
+                            '/1400778473': {attributes: {name: 'member1copy'}},
+                            '/323573539': {attributes: {name: 'check-copy'}, registry: {position: {x: 100, y: 100}}}
+                        },
+                        'basic copy nodes test');
+                    return;
+                }
+
+                if (testState === 'checking') {
+                    expect(events).to.have.length(8);
+
+                    //find out the new node paths
+                    for (i = 1; i < events.length; i++) {
+                        if (initialPaths.indexOf(events[i].eid) === -1) {
+                            expect(events[i].etype).to.equal('load');
+                            if (client.getNode(events[i].eid).getAttribute('name') === 'check-copy') {
+                                newTarget = events[i].eid;
+                            } else {
+                                newPaths.push(events[i].eid);
+                            }
+                        }
+                    }
+
+                    expect(newPaths).to.have.length(2);
+                    expect(newTarget).not.to.equal(null);
+
+                    //the source nodes should be intact
+                    node = client.getNode('/1697300825');
+                    expect(node).not.to.equal(null);
+                    expect(node.getPointer('ptr')).to.deep.equal({to: '/323573539', from: []});
+
+                    node = client.getNode('/1400778473');
+                    expect(node).not.to.equal(null);
+                    expect(node.getPointer('ptr')).to.deep.equal({to: '/323573539', from: []});
+
+                    node = client.getNode('/323573539');
+                    expect(node).not.to.equal(null);
+                    expect(node.getAttribute('name')).to.equal('check');
+
+                    //the copies keep the target
+                    node = client.getNode(newPaths[0]);
+                    expect(node).not.to.equal(null);
+                    expect(node.getAttribute('name')).to.contain('copy');
+                    expect(node.getPointer('ptr')).to.deep.equal({to: newTarget, from: []});
+
+                    node = client.getNode(newPaths[1]);
+                    expect(node).not.to.equal(null);
+                    expect(node.getAttribute('name')).to.contain('copy');
+                    expect(node.getPointer('ptr')).to.deep.equal({to: newTarget, from: []});
+
+                    node = client.getNode(newTarget);
+                    expect(node).not.to.equal(null);
+                    expect(node.getAttribute('name')).to.contain('copy');
+                    expect(node.getRegistry('position')).to.deep.equal({x: 100, y: 100});
+
+                    client.removeUI(testId);
+                    done();
+                }
+            });
+        });
+
+        it('should copy the node under the given parent', function (done) {
+            var testState = 'init',
+                testId = 'copySingleNode',
+                node,
+                initialPaths = [],
+                newPaths = [],
+                i;
+            buildUpForTest(testId, {'': {children: 1}}, function (events) {
+                if (testState === 'init') {
+                    testState = 'checking';
+
+                    expect(events).to.have.length(8);
+                    expect(events).to.include({eid: '/1400778473', etype: 'load'});
+
+                    //save the paths of the initial nodes so that we can figure out the new nodes later
+                    for (i = 1; i < events.length; i++) {
+                        initialPaths.push(events[i].eid);
+                    }
+
+                    node = client.getNode('/1400778473');
+                    expect(node).not.to.equal(null);
+                    expect(node.getPointer('ptr')).to.deep.equal({to: '/323573539', from: []});
+
+                    client.copyMoreNodes({
+                            parentId: '',
+                            '/1400778473': {attributes: {name: 'member1copy'}, registry: {position: {x: 100, y: 100}}}
+                        },
+                        'copy single node test');
+                    return;
+                }
+
+                if (testState === 'checking') {
+                    expect(events).to.have.length(9);
+
+                    //find out the new node paths
+                    for (i = 1; i < events.length; i++) {
+                        if (initialPaths.indexOf(events[i].eid) === -1) {
+                            expect(events[i].etype).to.equal('load');
+                            newPaths.push(events[i].eid);
+                        }
+                    }
+
+                    expect(newPaths).to.have.length(1);
+
+                    //old nodes remain untouched
+                    node = client.getNode('/1400778473');
+                    expect(node).not.to.equal(null);
+                    expect(node.getPointer('ptr')).to.deep.equal({to: '/323573539', from: []});
+
+                    //the copies keep the target
+                    node = client.getNode(newPaths[0]);
+                    expect(node).not.to.equal(null);
+                    expect(node.getAttribute('name')).to.contain('copy');
+                    expect(node.getRegistry('position')).to.deep.equal({x: 100, y: 100});
+                    expect(node.getPointer('ptr')).to.deep.equal({to: '/323573539', from: []});
+
+                    client.removeUI(testId);
+                    done();
+                }
+            });
+        });
+
+        it('should put an error to the console if the container is wrongly given or missing', function (done) {
+            var testId = 'copyFailureTests',
+                failures = 0,
+                wantedFailures = 2,
+                oldConsoleLog = console.log; //TODO awkward but probably should be changed in the code as well
+
+            buildUpForTest(testId, {'': {children: 1}}, function (events) {
+                expect(events).to.have.length(8);
+
+                console.log = function (txt) {
+                    expect(txt).to.contain('wrong');
+                    if (++failures === wantedFailures) {
+                        console.log = oldConsoleLog;
+                        done();
+                    }
+                }
+
+                client.copyMoreNodes({}, 'try to copy without parentId');
+                client.copyMoreNodes({parentId: '/42/42'}, 'try to copy with unknown parentId');
+                return;
+            });
+        });
+
     });
 
 //TODO how to test as there is no callback
 //no callback start
-    it.skip('should copy the list of nodes into the proper container with the proper initial attributes and registry',
-        function () {
-            // copyMoreNodes
 
-        });
-
-    it.skip('should copy the given list of nodes in an asyncronous manner', function () {
-        // copyMoreNodesAsync
-
-    });
 
     it.skip('should move the given nodes into the given container', function () {
         // moveMoreNodes
@@ -573,15 +893,6 @@ describe('Browser Client', function () {
     it.skip('should create a single child according to the given parameters', function () {
         // createChild
 
-    });
-
-    it.skip('should set the given pointer of the node to the specified target', function () {
-        // makePointer
-
-    });
-
-    it.skip('should remove the given pointer of the node', function () {
-        // delPointer
     });
 
     it.skip('should add the given node as a new member to the specified set of our node', function () {

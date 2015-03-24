@@ -312,6 +312,264 @@ describe('Browser Client', function () {
         });
     });
 
+    describe('client/node tests', function () {
+        var Client,
+            gmeConfig,
+            client,
+            projectName = 'ClientNodeInquiryTests',
+            clientNode;
+
+
+        before(function (done) {
+            this.timeout(10000);
+            requirejs(['js/client', 'text!gmeConfig.json'], function (Client_, gmeConfigJSON) {
+                Client = Client_;
+                gmeConfig = JSON.parse(gmeConfigJSON);
+                client = new Client(gmeConfig);
+
+                client.connectToDatabaseAsync({}, function (err) {
+                    expect(err).to.equal(null);
+                    client.selectProjectAsync(projectName, function (err) {
+                        expect(err).to.equal(null);
+
+                        var alreadyHandled = false;
+                        client.updateTerritory(client.addUI({}, function (events) {
+                            if (!alreadyHandled) {
+                                //expect(events).to.have.length(12);
+                                expect(events[0]).to.contain.keys('eid', 'etype');
+                                expect(events[0].etype).to.equal('complete');
+
+                                alreadyHandled = true;
+                                clientNode = client.getNode('/323573539');
+                                expect(clientNode).not.to.equal(null);
+                                done();
+                            }
+                        }), {'/323573539': {children: 0}});
+                    });
+                });
+            });
+        });
+
+        it('should return the path as identification of the node', function () {
+            expect(clientNode.getId()).to.equal('/323573539');
+        });
+
+        it('should return the path of the container node', function () {
+            expect(clientNode.getParentId()).to.equal('');
+        });
+
+        it('should return GUID of the node', function () {
+            expect(clientNode.getGuid()).to.equal('b4c59092-3c77-ace8-cc52-66cd724c00f0');
+        });
+
+        it('should return the paths of the children nodes as an array', function () {
+            var childrenIds = clientNode.getChildrenIds();
+
+            expect(childrenIds).to.have.length(3);
+            expect(childrenIds).to.contain('/323573539/1235767287', '/323573539/564787551', '/323573539/416651281');
+        });
+
+        it('should return the path of the base node', function () {
+            expect(clientNode.getBaseId()).to.equal('/701504349');
+        });
+
+        //TODO not implemented, do we need it???
+        it('should return the paths of the instances of the node', function () {
+            //expect(clientNode.getInheritorIds()).to.deep.equal(['/5185791']);
+            expect(clientNode.getInheritorIds()).to.be.empty();
+        });
+
+        it('should return the list of available attribute names of the node', function () {
+            var names = clientNode.getAttributeNames();
+            expect(names).to.have.length(2);
+            expect(names).to.include('name');
+            expect(names).to.include('value');
+        });
+
+        it('should return the list of attribute names that has value defined on this level oof inheritance',
+            function () {
+                var names = clientNode.getOwnAttributeNames();
+                expect(names).to.have.length(1);
+                expect(names).to.contain('name');
+            });
+
+        it('should return the value of the attribute under the defined name', function () {
+            expect(clientNode.getAttribute('name')).to.equal('check');
+            expect(clientNode.getAttribute('value')).to.equal(10);
+        });
+
+        it('in case of unknown attribute the result should be undefined', function () {
+            expect(clientNode.getAttribute('unknown_attribute')).to.equal(undefined);
+        });
+
+        //TODO right now the object freezing is disabled so we cannot test that the ordinary getAttribute not allows the modification if the attribute is complex
+        it('should return an editable copy of the attribute', function () {
+            expect(clientNode.getEditableAttribute('name')).to.equal('check');
+            expect(clientNode.getEditableAttribute('value')).to.equal(10);
+        });
+
+        it('should return the attribute value defined on this level of inheritance', function () {
+            expect(clientNode.getOwnAttribute('name')).to.equal('check');
+            expect(clientNode.getOwnAttribute('value')).to.equal(undefined);
+        });
+
+        it('should return the copy of attribute value defined on this level of inheritance', function () {
+            expect(clientNode.getOwnEditableAttribute('name')).to.equal('check');
+            expect(clientNode.getOwnEditableAttribute('value')).to.equal(undefined);
+        });
+
+        it('should return the list of available registry names of the node', function () {
+            var names = clientNode.getRegistryNames();
+            expect(names).to.have.length(7);
+            expect(names).to.include('position');
+        });
+
+        it('should return the list of registry names that has value defined on this level oof inheritance',
+            function () {
+                var names = clientNode.getOwnRegistryNames();
+                expect(names).to.have.length(1);
+                expect(names).to.include('position');
+            });
+
+        it('should return the value of the registry under the defined name', function () {
+            expect(clientNode.getRegistry('position')).to.deep.equal({x: 300, y: 466});
+        });
+
+        it('in case of unknown attribute the result should be undefined', function () {
+            expect(clientNode.getRegistry('unknown_registry')).to.equal(undefined);
+        });
+
+        //TODO right now the object freezing is disabled so we cannot test that the ordinary getRegistry not allows the modification if the attribute is complex
+        it('should return an editable copy of the registry', function () {
+            expect(clientNode.getEditableRegistry('position')).to.deep.equal({x: 300, y: 466});
+        });
+
+        it('should return the registry value defined on this level of inheritance', function () {
+            expect(clientNode.getOwnRegistry('position')).to.deep.equal({x: 300, y: 466});
+        });
+
+        it('should return the copy of registry value defined on this level of inheritance', function () {
+            expect(clientNode.getOwnEditableRegistry('position')).to.deep.equal({x: 300, y: 466});
+        });
+
+        it('should return the names of available pointers', function () {
+            var names = clientNode.getPointerNames();
+            expect(names).to.have.length(2);
+            expect(names).to.include('ptr');
+            expect(names).to.include('base');
+        });
+
+        it('should return the names of available pointers which has a target on this inheritance level', function () {
+            var names = clientNode.getOwnPointerNames();
+            expect(names).to.have.length(1);
+            expect(names).to.include('base');
+        });
+
+        //TODO this format should be refactored as it is not used, not completely implemented, and way to awkward
+        it('should return the path of the target of the pointer', function () {
+            expect(clientNode.getPointer('base')).to.deep.equal({to: '/701504349', from: []});
+            expect(clientNode.getPointer('ptr')).to.deep.equal({to: null, from: []});
+        });
+
+        it('should return the path of the target of the pointer defined on the given level', function () {
+            expect(clientNode.getOwnPointer('ptr')).to.deep.equal({to: undefined, from: []});
+        });
+
+        it('should return the list of available sets', function () {
+            expect(clientNode.getSetNames()).to.deep.equal(['set']);
+        });
+
+        it('should return the list of paths of set members', function () {
+            var members = clientNode.getMemberIds('set');
+
+            expect(members).to.have.length(2);
+            expect(members).to.include('/1697300825');
+            expect(members).to.include('/1400778473');
+        });
+
+        it('should return an empty array for an unknown set', function () {
+            expect(clientNode.getMemberIds('unknown_set')).to.empty();
+        });
+
+        it('should return a list of available attributes of the set containment', function () {
+            expect(clientNode.getMemberAttributeNames('set', '/1400778473')).to.empty();
+        });
+
+        it('should return the value of the attribute of the set containment', function () {
+            expect(clientNode.getMemberAttribute('set', '/1400778473', 'no_attribute')).to.equal(undefined);
+        });
+
+        it('should return a copy of the value of the attribute of the set containment', function () {
+            expect(clientNode.getEditableMemberAttribute('set', '/1400778473', 'no_attribute')).to.equal(null);
+        });
+
+        it('should return a list of available registry entries of the set containment', function () {
+            expect(clientNode.getMemberRegistryNames('set', '/1400778473')).to.deep.equal(['position']);
+        });
+
+        it('should return the value of the registry entry of the set containment', function () {
+            expect(clientNode.getMemberRegistry('set', '/1400778473', 'position')).to.deep.equal({x: 172, y: 207});
+        });
+
+        it('should return a copy of the value of the registry entry of the set containment', function () {
+            expect(clientNode.getEditableMemberRegistry('set', '/1400778473', 'position')).to.deep.equal({
+                x: 172,
+                y: 207
+            });
+        });
+
+        it('should return null as copy of the value of unknown set registry item', function () {
+            expect(clientNode.getEditableMemberRegistry('set', '/1400778473', 'no_registry')).to.equal(null);
+        });
+
+        it('should return a list of paths of the possible child node types', function () {
+            expect(clientNode.getValidChildrenTypes()).to.deep.equal(['/701504349']);
+        });
+
+        it('should list the names of the defined constraints', function () {
+            expect(clientNode.getConstraintNames()).to.deep.equal(['constraint', 'meta']);
+        });
+
+        it('should list the names of the constraints defined on this level of inheritance', function () {
+            expect(clientNode.getOwnConstraintNames()).to.empty();
+        });
+
+        it('should return the constraint object of the given name', function () {
+            var constraint = clientNode.getConstraint('constraint');
+
+            expect(constraint).to.have.keys('info', 'script', 'priority');
+            expect(constraint.info).to.contain('just a');
+        });
+
+        it('should return the list of nodes that have this node as a target of the given pointer', function () {
+            var collectionPaths = clientNode.getCollectionPaths('ptr');
+
+            expect(collectionPaths).to.have.length(2);
+            expect(collectionPaths).to.include('/1697300825');
+            expect(collectionPaths).to.include('/1400778473');
+        });
+
+        //TODO refactor this function or remove if no need for it
+        it('should print the content of the node to the console', function (done) {
+            var oldConsoleLog = console.log;
+            console.log = function (txt1, err, txt2, jNode) {
+                console.log = oldConsoleLog;
+                expect(jNode).to.have.ownProperty('attributes');
+                expect(jNode).to.have.ownProperty('pointers');
+                expect(jNode).to.have.ownProperty('children');
+                expect(jNode.attributes).to.have.ownProperty('name');
+                expect(jNode.attributes.name).to.equal('check');
+                done();
+            };
+            clientNode.printData();
+        });
+
+        it('should return a textual identification of the node', function () {
+            expect(clientNode.toString()).to.contain('check');
+            expect(clientNode.toString()).to.contain('/323573539');
+        });
+    });
+
     describe('node manipulations', function () {
         //MGA
         //startTransaction: startTransaction,
@@ -1374,7 +1632,7 @@ describe('Browser Client', function () {
                     expect(node).not.to.equal(null);
                     expect(node.getMemberIds('set')).to.include('/1697300825');
                     expect(node.getMemberAttributeNames('set', '/1697300825')).to.include('name');
-                    expect(node.getMemberAttribute('set', '/1697300825', 'name')).to.equal('set member');
+                    expect(node.getEditableMemberAttribute('set', '/1697300825', 'name')).to.equal('set member');
 
                     client.removeUI(testId);
                     done();
@@ -2030,259 +2288,4 @@ describe('Browser Client', function () {
 //    getAspectTerritoryPattern: META.getAspectTerritoryPattern,
 
     });
-
-    describe('client/node tests', function () {
-        var Client,
-            gmeConfig,
-            client,
-            projectName = 'ClientNodeInquiryTests',
-            clientNode;
-
-
-        before(function (done) {
-            this.timeout(10000);
-            requirejs(['js/client', 'text!gmeConfig.json'], function (Client_, gmeConfigJSON) {
-                Client = Client_;
-                gmeConfig = JSON.parse(gmeConfigJSON);
-                client = new Client(gmeConfig);
-
-                client.connectToDatabaseAsync({}, function (err) {
-                    expect(err).to.equal(null);
-                    client.selectProjectAsync(projectName, function (err) {
-                        expect(err).to.equal(null);
-
-                        var alreadyHandled = false;
-                        client.updateTerritory(client.addUI({}, function (events) {
-                            if (!alreadyHandled) {
-                                //expect(events).to.have.length(12);
-                                expect(events[0]).to.contain.keys('eid', 'etype');
-                                expect(events[0].etype).to.equal('complete');
-
-                                alreadyHandled = true;
-                                clientNode = client.getNode('/323573539');
-                                expect(clientNode).not.to.equal(null);
-                                done();
-                            }
-                        }), {'/323573539': {children: 0}});
-                    });
-                });
-            });
-        });
-
-        it('should return the path as identification of the node', function () {
-            expect(clientNode.getId()).to.equal('/323573539');
-        });
-
-        it('should return the path of the container node', function () {
-            expect(clientNode.getParentId()).to.equal('');
-        });
-
-        it('should return GUID of the node', function () {
-            expect(clientNode.getGuid()).to.equal('b4c59092-3c77-ace8-cc52-66cd724c00f0');
-        });
-
-        it('should return the paths of the children nodes as an array', function () {
-            var childrenIds = clientNode.getChildrenIds();
-
-            expect(childrenIds).to.have.length(3);
-            expect(childrenIds).to.contain('/323573539/1235767287', '/323573539/564787551', '/323573539/416651281');
-        });
-
-        it('should return the path of the base node', function () {
-            expect(clientNode.getBaseId()).to.equal('/701504349');
-        });
-
-        //TODO not implemented, do we need it???
-        it('should return the paths of the instances of the node', function () {
-            //expect(clientNode.getInheritorIds()).to.deep.equal(['/5185791']);
-            expect(clientNode.getInheritorIds()).to.be.empty();
-        });
-
-        it('should return the list of available attribute names of the node', function () {
-            var names = clientNode.getAttributeNames();
-            expect(names).to.have.length(2);
-            expect(names).to.include('name');
-            expect(names).to.include('value');
-        });
-
-        it('should return the list of attribute names that has value defined on this level oof inheritance',
-            function () {
-                var names = clientNode.getOwnAttributeNames();
-                expect(names).to.have.length(1);
-                expect(names).to.contain('name');
-            });
-
-        it('should return the value of the attribute under the defined name', function () {
-            expect(clientNode.getAttribute('name')).to.equal('check');
-            expect(clientNode.getAttribute('value')).to.equal(10);
-        });
-
-        it('in case of unknown attribute the result should be undefined', function () {
-            expect(clientNode.getAttribute('unknown_attribute')).to.equal(undefined);
-        });
-
-        //TODO right now the object freezing is disabled so we cannot test that the ordinary getAttribute not allows the modification if the attribute is complex
-        it('should return an editable copy of the attribute', function () {
-            expect(clientNode.getEditableAttribute('name')).to.equal('check');
-            expect(clientNode.getEditableAttribute('value')).to.equal(10);
-        });
-
-        it('should return the attribute value defined on this level of inheritance', function () {
-            expect(clientNode.getOwnAttribute('name')).to.equal('check');
-            expect(clientNode.getOwnAttribute('value')).to.equal(undefined);
-        });
-
-        it('should return the copy of attribute value defined on this level of inheritance', function () {
-            expect(clientNode.getOwnEditableAttribute('name')).to.equal('check');
-            expect(clientNode.getOwnEditableAttribute('value')).to.equal(undefined);
-        });
-
-        it('should return the list of available registry names of the node', function () {
-            var names = clientNode.getRegistryNames();
-            expect(names).to.have.length(7);
-            expect(names).to.include('position');
-        });
-
-        it('should return the list of registry names that has value defined on this level oof inheritance',
-            function () {
-                var names = clientNode.getOwnRegistryNames();
-                expect(names).to.have.length(1);
-                expect(names).to.include('position');
-            });
-
-        it('should return the value of the registry under the defined name', function () {
-            expect(clientNode.getRegistry('position')).to.deep.equal({x: 300, y: 466});
-        });
-
-        it('in case of unknown attribute the result should be undefined', function () {
-            expect(clientNode.getRegistry('unknown_registry')).to.equal(undefined);
-        });
-
-        //TODO right now the object freezing is disabled so we cannot test that the ordinary getRegistry not allows the modification if the attribute is complex
-        it('should return an editable copy of the registry', function () {
-            expect(clientNode.getEditableRegistry('position')).to.deep.equal({x: 300, y: 466});
-        });
-
-        it('should return the registry value defined on this level of inheritance', function () {
-            expect(clientNode.getOwnRegistry('position')).to.deep.equal({x: 300, y: 466});
-        });
-
-        it('should return the copy of registry value defined on this level of inheritance', function () {
-            expect(clientNode.getOwnEditableRegistry('position')).to.deep.equal({x: 300, y: 466});
-        });
-
-        it('should return the names of available pointers', function () {
-            var names = clientNode.getPointerNames();
-            expect(names).to.have.length(2);
-            expect(names).to.include('ptr');
-            expect(names).to.include('base');
-        });
-
-        it('should return the names of available pointers which has a target on this inheritance level', function () {
-            var names = clientNode.getOwnPointerNames();
-            expect(names).to.have.length(1);
-            expect(names).to.include('base');
-        });
-
-        //TODO this format should be refactored as it is not used, not completely implemented, and way to awkward
-        it('should return the path of the target of the pointer', function () {
-            expect(clientNode.getPointer('base')).to.deep.equal({to: '/701504349', from: []});
-            expect(clientNode.getPointer('ptr')).to.deep.equal({to: null, from: []});
-        });
-
-        it('should return the path of the target of the pointer defined on the given level', function () {
-            expect(clientNode.getOwnPointer('ptr')).to.deep.equal({to: undefined, from: []});
-        });
-
-        it('should return the list of available sets', function () {
-            expect(clientNode.getSetNames()).to.deep.equal(['set']);
-        });
-
-        it('should return the list of paths of set members', function () {
-            var members = clientNode.getMemberIds('set');
-
-            expect(members).to.have.length(2);
-            expect(members).to.include('/1697300825');
-            expect(members).to.include('/1400778473');
-        });
-
-        it('should return an empty array for an unknown set', function () {
-            expect(clientNode.getMemberIds('unknown_set')).to.empty();
-        });
-
-        it('should return a list of available attributes of the set containment', function () {
-            expect(clientNode.getMemberAttributeNames('set', '/1400778473')).to.empty();
-        });
-
-        it('should return the value of the attribute of the set containment', function () {
-            expect(clientNode.getMemberAttribute('set', '/1400778473', 'no_attribute')).to.equal(undefined);
-        });
-
-        it('should return a copy of the value of the attribute of the set containment', function () {
-            expect(clientNode.getEditableMemberAttribute('set', '/1400778473', 'no_attribute')).to.equal(null);
-        });
-
-        it('should return a list of available registry entries of the set containment', function () {
-            expect(clientNode.getMemberRegistryNames('set', '/1400778473')).to.deep.equal(['position']);
-        });
-
-        it('should return the value of the registry entry of the set containment', function () {
-            expect(clientNode.getMemberRegistry('set', '/1400778473', 'position')).to.deep.equal({x: 172, y: 207});
-        });
-
-        it('should return a copy of the value of the registry entry of the set containment', function () {
-            expect(clientNode.getEditableMemberRegistry('set', '/1400778473', 'position')).to.deep.equal({
-                x: 172,
-                y: 207
-            });
-        });
-
-        it('should return a list of paths of the possible child node types', function () {
-            expect(clientNode.getValidChildrenTypes()).to.deep.equal(['/701504349']);
-        });
-
-        it('should list the names of the defined constraints', function () {
-            expect(clientNode.getConstraintNames()).to.deep.equal(['constraint', 'meta']);
-        });
-
-        it('should list the names of the constraints defined on this level of inheritance', function () {
-            expect(clientNode.getOwnConstraintNames()).to.empty();
-        });
-
-        it('should return the constraint object of the given name', function () {
-            var constraint = clientNode.getConstraint('constraint');
-
-            expect(constraint).to.have.keys('info', 'script', 'priority');
-            expect(constraint.info).to.contain('just a');
-        });
-
-        it('should return the list of nodes that have this node as a target of the given pointer', function () {
-            var collectionPaths = clientNode.getCollectionPaths('ptr');
-
-            expect(collectionPaths).to.have.length(2);
-            expect(collectionPaths).to.include('/1697300825');
-            expect(collectionPaths).to.include('/1400778473');
-        });
-
-        //TODO refactor this function or remove if no need for it
-        it('should print the content of the node to the console', function (done) {
-            var oldConsoleLog = console.log;
-            console.log = function (txt1, err, txt2, jNode) {
-                console.log = oldConsoleLog;
-                expect(jNode).to.have.ownProperty('attributes');
-                expect(jNode).to.have.ownProperty('pointers');
-                expect(jNode).to.have.ownProperty('children');
-                expect(jNode.attributes).to.have.ownProperty('name');
-                expect(jNode.attributes.name).to.equal('check');
-                done();
-            };
-            clientNode.printData();
-        });
-
-        it('should return a textual identification of the node', function () {
-            expect(clientNode.toString()).to.contain('check');
-            expect(clientNode.toString()).to.contain('/323573539');
-        });
-    });
-
 });

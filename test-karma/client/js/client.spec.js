@@ -339,6 +339,18 @@ describe('Browser Client', function () {
             projectName = 'nodeManipulationProject',
             baseCommitHash;
 
+        function buildUpForTest(branchName, patternObject, eventCallback) {
+            //creates a branch then a UI for it, finally waits for the nodes to load
+            client.createBranchAsync(branchName, baseCommitHash, function (err) {
+                expect(err).to.equal(null);
+
+                client.selectBranchAsync(branchName, function (err) {
+                    expect(err).to.equal(null);
+
+                    client.updateTerritory(client.addUI({}, eventCallback, branchName), patternObject);
+                });
+            });
+        }
 
         before(function (done) {
             this.timeout(10000);
@@ -364,30 +376,30 @@ describe('Browser Client', function () {
                 testId = 'basicSetAttribute',
                 node;
             buildUpForTest(testId, {'/323573539': {children: 0}}, function (events) {
-                switch (testState) {
-                    case 'init':
-                        testState = 'checking';
+                if (testState === 'init') {
+                    testState = 'checking';
 
-                        expect(events).to.have.length(2);
-                        expect(events[1]).to.deep.equal({eid: '/323573539', etype: 'load'});
+                    expect(events).to.have.length(2);
+                    expect(events[1]).to.deep.equal({eid: '/323573539', etype: 'load'});
 
-                        node = client.getNode(events[1].eid);
-                        expect(node).not.to.equal(null);
-                        expect(node.getAttribute('name')).to.equal('check');
+                    node = client.getNode(events[1].eid);
+                    expect(node).not.to.equal(null);
+                    expect(node.getAttribute('name')).to.equal('check');
 
-                        client.setAttributes(events[1].eid, 'name', 'checkModified', 'basic set attribute test');
-                        break;
-                    case 'checking':
-                        expect(events).to.have.length(2);
-                        expect(events[1]).to.deep.equal({eid: '/323573539', etype: 'update'});
+                    client.setAttributes(events[1].eid, 'name', 'checkModified', 'basic set attribute test');
+                    return;
+                }
 
-                        node = client.getNode(events[1].eid);
-                        expect(node).not.to.equal(null);
-                        expect(node.getAttribute('name')).to.equal('checkModified');
+                if (testState === 'checking') {
+                    expect(events).to.have.length(2);
+                    expect(events[1]).to.deep.equal({eid: '/323573539', etype: 'update'});
 
-                        client.removeUI(testId);
-                        done();
-                        break;
+                    node = client.getNode(events[1].eid);
+                    expect(node).not.to.equal(null);
+                    expect(node.getAttribute('name')).to.equal('checkModified');
+
+                    client.removeUI(testId);
+                    done();
                 }
             });
         });
@@ -397,30 +409,30 @@ describe('Browser Client', function () {
                 testId = 'basicDelAttribute',
                 node;
             buildUpForTest(testId, {'/323573539': {children: 0}}, function (events) {
-                switch (testState) {
-                    case 'init':
-                        testState = 'checking';
+                if (testState === 'init') {
+                    testState = 'checking';
 
-                        expect(events).to.have.length(2);
-                        expect(events[1]).to.deep.equal({eid: '/323573539', etype: 'load'});
+                    expect(events).to.have.length(2);
+                    expect(events[1]).to.deep.equal({eid: '/323573539', etype: 'load'});
 
-                        node = client.getNode(events[1].eid);
-                        expect(node).not.to.equal(null);
-                        expect(node.getAttribute('name')).to.equal('check');
+                    node = client.getNode(events[1].eid);
+                    expect(node).not.to.equal(null);
+                    expect(node.getAttribute('name')).to.equal('check');
 
-                        client.delAttributes(events[1].eid, 'name', 'basic delete attribute test');
-                        break;
-                    case 'checking':
-                        expect(events).to.have.length(2);
-                        expect(events[1]).to.deep.equal({eid: '/323573539', etype: 'update'});
+                    client.delAttributes(events[1].eid, 'name', 'basic delete attribute test');
+                    return;
+                }
 
-                        node = client.getNode(events[1].eid);
-                        expect(node).not.to.equal(null);
-                        expect(node.getAttribute('name')).to.equal('node');
+                if (testState === 'checking') {
+                    expect(events).to.have.length(2);
+                    expect(events[1]).to.deep.equal({eid: '/323573539', etype: 'update'});
 
-                        client.removeUI(testId);
-                        done();
-                        break;
+                    node = client.getNode(events[1].eid);
+                    expect(node).not.to.equal(null);
+                    expect(node.getAttribute('name')).to.equal('node');
+
+                    client.removeUI(testId);
+                    done();
                 }
             });
         });
@@ -430,30 +442,31 @@ describe('Browser Client', function () {
                 testId = 'basicSetRegistry',
                 node;
             buildUpForTest(testId, {'/323573539': {children: 0}}, function (events) {
-                switch (testState) {
-                    case 'init':
-                        testState = 'checking';
+                if (testState === 'init') {
+                    testState = 'checking';
 
-                        expect(events).to.have.length(2);
-                        expect(events[1]).to.deep.equal({eid: '/323573539', etype: 'load'});
+                    expect(events).to.have.length(2);
+                    expect(events[1]).to.deep.equal({eid: '/323573539', etype: 'load'});
 
-                        node = client.getNode(events[1].eid);
-                        expect(node).not.to.equal(null);
-                        expect(node.getRegistry('position')).to.deep.equal({x: 300, y: 466});
+                    node = client.getNode(events[1].eid);
+                    expect(node).not.to.equal(null);
+                    expect(node.getRegistry('position')).to.deep.equal({x: 300, y: 466});
 
-                        client.setRegistry(events[1].eid, 'position', {x: 100, y: 100}, 'basic set registry test');
-                        break;
-                    case 'checking':
-                        expect(events).to.have.length(2);
-                        expect(events[1]).to.deep.equal({eid: '/323573539', etype: 'update'});
+                    client.setRegistry(events[1].eid, 'position', {x: 100, y: 100}, 'basic set registry test');
+                    return;
+                }
 
-                        node = client.getNode(events[1].eid);
-                        expect(node).not.to.equal(null);
-                        expect(node.getRegistry('position')).to.deep.equal({x: 100, y: 100});
+                if (testState === 'checking') {
+                    expect(events).to.have.length(2);
+                    expect(events[1]).to.deep.equal({eid: '/323573539', etype: 'update'});
 
-                        client.removeUI(testId);
-                        done();
-                        break;
+                    node = client.getNode(events[1].eid);
+                    expect(node).not.to.equal(null);
+                    expect(node.getRegistry('position')).to.deep.equal({x: 100, y: 100});
+
+                    client.removeUI(testId);
+                    done();
+
                 }
             });
         });
@@ -463,30 +476,31 @@ describe('Browser Client', function () {
                 testId = 'basicDelRegistry',
                 node;
             buildUpForTest(testId, {'/323573539': {children: 0}}, function (events) {
-                switch (testState) {
-                    case 'init':
-                        testState = 'checking';
+                if (testState === 'init') {
+                    testState = 'checking';
 
-                        expect(events).to.have.length(2);
-                        expect(events[1]).to.deep.equal({eid: '/323573539', etype: 'load'});
+                    expect(events).to.have.length(2);
+                    expect(events[1]).to.deep.equal({eid: '/323573539', etype: 'load'});
 
-                        node = client.getNode(events[1].eid);
-                        expect(node).not.to.equal(null);
-                        expect(node.getRegistry('position')).to.deep.equal({x: 300, y: 466});
+                    node = client.getNode(events[1].eid);
+                    expect(node).not.to.equal(null);
+                    expect(node.getRegistry('position')).to.deep.equal({x: 300, y: 466});
 
-                        client.delRegistry(events[1].eid, 'position', 'basic del registry test');
-                        break;
-                    case 'checking':
-                        expect(events).to.have.length(2);
-                        expect(events[1]).to.deep.equal({eid: '/323573539', etype: 'update'});
+                    client.delRegistry(events[1].eid, 'position', 'basic del registry test');
+                    return;
+                }
 
-                        node = client.getNode(events[1].eid);
-                        expect(node).not.to.equal(null);
-                        expect(node.getRegistry('position')).to.deep.equal({x: 371, y: 213});
+                if (testState === 'checking') {
+                    expect(events).to.have.length(2);
+                    expect(events[1]).to.deep.equal({eid: '/323573539', etype: 'update'});
 
-                        client.removeUI(testId);
-                        done();
-                        break;
+                    node = client.getNode(events[1].eid);
+                    expect(node).not.to.equal(null);
+                    expect(node.getRegistry('position')).to.deep.equal({x: 371, y: 213});
+
+                    client.removeUI(testId);
+                    done();
+
                 }
             });
         });
@@ -496,52 +510,40 @@ describe('Browser Client', function () {
                 testId = 'basicDelNode',
                 node;
             buildUpForTest(testId, {'/323573539': {children: 0}}, function (events) {
-                switch (testState) {
-                    case 'init':
-                        testState = 'checking';
+                if (testState === 'init') {
+                    testState = 'checking';
 
-                        expect(events).to.have.length(2);
-                        expect(events[1]).to.deep.equal({eid: '/323573539', etype: 'load'});
+                    expect(events).to.have.length(2);
+                    expect(events[1]).to.deep.equal({eid: '/323573539', etype: 'load'});
 
-                        node = client.getNode(events[1].eid);
-                        expect(node).not.to.equal(null);
+                    node = client.getNode(events[1].eid);
+                    expect(node).not.to.equal(null);
 
-                        client.delMoreNodes([events[1].eid], 'basic delete node test');
-                        break;
-                    case 'checking':
-                        expect(events).to.have.length(2);
-                        expect(events[1]).to.deep.equal({eid: '/323573539', etype: 'unload'});
+                    client.delMoreNodes([events[1].eid], 'basic delete node test');
+                    return;
+                }
 
-                        node = client.getNode(events[1].eid);
-                        expect(node).to.equal(null);
+                if (testState === 'checking') {
+                    expect(events).to.have.length(2);
+                    expect(events[1]).to.deep.equal({eid: '/323573539', etype: 'unload'});
 
-                        client.removeUI(testId);
-                        done();
-                        break;
+                    node = client.getNode(events[1].eid);
+                    expect(node).to.equal(null);
+
+                    client.removeUI(testId);
+                    done();
                 }
             });
         });
-
-        function buildUpForTest(branchName, patternObject, eventCallback) {
-            //creates a branch then a UI for it, finally waits for the nodes to load
-            client.createBranchAsync(branchName, baseCommitHash, function (err) {
-                expect(err).to.equal(null);
-
-                client.selectBranchAsync(branchName, function (err) {
-                    expect(err).to.equal(null);
-
-                    client.updateTerritory(client.addUI({}, eventCallback, branchName), patternObject);
-                });
-            });
-        }
     });
 
 //TODO how to test as there is no callback
 //no callback start
-    it.skip('should copy the list of nodes into the proper container with the proper initial attributes and registry', function () {
-        // copyMoreNodes
+    it.skip('should copy the list of nodes into the proper container with the proper initial attributes and registry',
+        function () {
+            // copyMoreNodes
 
-    });
+        });
 
     it.skip('should copy the given list of nodes in an asyncronous manner', function () {
         // copyMoreNodesAsync
@@ -944,10 +946,11 @@ describe('Browser Client', function () {
 
         });
 
-        it.skip('should set the \'children\' portion of the meta rules of the node according the given json', function () {
-            // setChildrenMeta
+        it.skip('should set the \'children\' portion of the meta rules of the node according the given json',
+            function () {
+                // setChildrenMeta
 
-        });
+            });
 
         it.skip('should return a specific parameter of the children rules', function () {
             // getChildrenMetaAttributes
@@ -1097,11 +1100,12 @@ describe('Browser Client', function () {
             expect(names).to.include('value');
         });
 
-        it('should return the list of attribute names that has value defined on this level oof inheritance', function () {
-            var names = clientNode.getOwnAttributeNames();
-            expect(names).to.have.length(1);
-            expect(names).to.contain('name');
-        });
+        it('should return the list of attribute names that has value defined on this level oof inheritance',
+            function () {
+                var names = clientNode.getOwnAttributeNames();
+                expect(names).to.have.length(1);
+                expect(names).to.contain('name');
+            });
 
         it('should return the value of the attribute under the defined name', function () {
             expect(clientNode.getAttribute('name')).to.equal('check');
@@ -1134,11 +1138,12 @@ describe('Browser Client', function () {
             expect(names).to.include('position');
         });
 
-        it('should return the list of registry names that has value defined on this level oof inheritance', function () {
-            var names = clientNode.getOwnRegistryNames();
-            expect(names).to.have.length(1);
-            expect(names).to.include('position');
-        });
+        it('should return the list of registry names that has value defined on this level oof inheritance',
+            function () {
+                var names = clientNode.getOwnRegistryNames();
+                expect(names).to.have.length(1);
+                expect(names).to.include('position');
+            });
 
         it('should return the value of the registry under the defined name', function () {
             expect(clientNode.getRegistry('position')).to.deep.equal({x: 300, y: 466});

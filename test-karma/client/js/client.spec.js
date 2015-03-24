@@ -316,9 +316,7 @@ describe('Browser Client', function () {
         //MGA
         //startTransaction: startTransaction,
         //    completeTransaction: completeTransaction,
-        //    copyMoreNodes: copyMoreNodes,
         //    moveMoreNodes: moveMoreNodes,
-        //    createChild: createChild,
         //    createChildren: createChildren,
         //    addMember: addMember,
         //    removeMember: removeMember,
@@ -533,8 +531,7 @@ describe('Browser Client', function () {
                 }
             });
         });
-        //    makePointer: makePointer,
-        //    delPointer: delPointer,
+
         it('should set the given pointer of the node to the specified target', function (done) {
             var testState = 'init',
                 testId = 'basicMakePointer',
@@ -569,7 +566,40 @@ describe('Browser Client', function () {
             });
         });
 
-        it.skip('should remove the given pointer of the node', function () {
+        it('should set a null target', function (done) {
+            var testState = 'init',
+                testId = 'makeNullPointer',
+                node;
+            buildUpForTest(testId, {'/1697300825': {children: 0}}, function (events) {
+                if (testState === 'init') {
+                    testState = 'checking';
+
+                    expect(events).to.have.length(2);
+                    expect(events).to.include({eid: '/1697300825', etype: 'load'});
+
+                    node = client.getNode(events[1].eid);
+                    expect(node).not.to.equal(null);
+                    expect(node.getPointer('ptr')).to.deep.equal({to: '/323573539', from: []});
+
+                    client.makePointer('/1697300825', 'ptr', null, 'make null pointer test');
+                    return;
+                }
+
+                if (testState === 'checking') {
+                    expect(events).to.have.length(2);
+                    expect(events).to.include({eid: '/1697300825', etype: 'update'});
+
+                    node = client.getNode('/1697300825');
+                    expect(node).not.to.equal(null);
+                    expect(node.getPointer('ptr')).to.deep.equal({to: null, from: []});
+
+                    client.removeUI(testId);
+                    done();
+                }
+            });
+        });
+
+        it('should remove the given pointer of the node', function (done) {
             var testState = 'init',
                 testId = 'basicDelPointer',
                 node;
@@ -596,7 +626,7 @@ describe('Browser Client', function () {
                     node = client.getNode(events[1].eid);
                     expect(node).not.to.equal(null);
 
-                    expect(node.getPointer()).to.deep.equal({to: null, from: []});
+                    expect(node.getPointer('ptr')).to.deep.equal({to: null, from: []});
 
                     client.removeUI(testId);
                     done();
@@ -779,7 +809,7 @@ describe('Browser Client', function () {
             });
         });
 
-        it('should copy the node under the given parent', function (done) {
+        it('should copy a single node', function (done) {
             var testState = 'init',
                 testId = 'copySingleNode',
                 node,
@@ -848,15 +878,15 @@ describe('Browser Client', function () {
                 oldConsoleLog = console.log; //TODO awkward but probably should be changed in the code as well
 
             buildUpForTest(testId, {'': {children: 1}}, function (events) {
-                expect(events).to.have.length(8);
 
                 console.log = function (txt) {
                     expect(txt).to.contain('wrong');
                     if (++failures === wantedFailures) {
                         console.log = oldConsoleLog;
+                        console.log('we are back to normal logging');
                         done();
                     }
-                }
+                };
 
                 client.copyMoreNodes({}, 'try to copy without parentId');
                 client.copyMoreNodes({parentId: '/42/42'}, 'try to copy with unknown parentId');
@@ -864,21 +894,308 @@ describe('Browser Client', function () {
             });
         });
 
+        it('should create a child', function (done) {
+            var testState = 'init',
+                testId = 'basicCreateChild',
+                node,
+                newId = null,
+                initialPaths = [],
+                i;
+            buildUpForTest(testId, {'': {children: 1}}, function (events) {
+                if (testState === 'init') {
+                    testState = 'checking';
+
+                    expect(events).to.have.length(8);
+                    expect(events).to.include({eid: '/323573539', etype: 'load'});
+                    expect(events).to.include({eid: '', etype: 'load'});
+
+                    //save the paths of the initial nodes so that we can figure out the new nodes later
+                    for (i = 1; i < events.length; i++) {
+                        initialPaths.push(events[i].eid);
+                    }
+
+                    client.createChild({parentId: '', baseId: '/323573539', position: {x: 200, y: 300}});
+                    return;
+                }
+
+                if (testState === 'checking') {
+                    expect(events).to.have.length(9);
+                    expect(events).to.include({eid: '', etype: 'update'});
+
+                    for (i = 1; i < events.length; i++) {
+                        if (initialPaths.indexOf(events[i].eid) === -1) {
+                            expect(events[i].etype).to.equal('load');
+                            if (newId === null) {
+                                newId = events[i].eid;
+                            } else {
+                                done(new Error('there should be only one new element in the territory!'));
+                                return;
+                            }
+                        }
+                    }
+
+                    node = client.getNode(newId);
+                    expect(node).not.to.equal(null);
+                    expect(node.getAttribute('name')).to.equal('check');
+                    expect(node.getRegistry('position')).to.deep.equal({x: 200, y: 300});
+                    expect(node.getChildrenIds()).to.have.length(3);
+
+                    client.removeUI(testId);
+                    done();
+                }
+            });
+        });
+
+        it('should create a child at default position', function (done) {
+            var testState = 'init',
+                testId = 'createChildDefaultPosition',
+                node,
+                newId = null,
+                initialPaths = [],
+                i;
+            buildUpForTest(testId, {'': {children: 1}}, function (events) {
+                if (testState === 'init') {
+                    testState = 'checking';
+
+                    expect(events).to.have.length(8);
+                    expect(events).to.include({eid: '/323573539', etype: 'load'});
+                    expect(events).to.include({eid: '', etype: 'load'});
+
+                    //save the paths of the initial nodes so that we can figure out the new nodes later
+                    for (i = 1; i < events.length; i++) {
+                        initialPaths.push(events[i].eid);
+                    }
+
+                    client.createChild({parentId: '', baseId: '/323573539'});
+                    return;
+                }
+
+                if (testState === 'checking') {
+                    expect(events).to.have.length(9);
+                    expect(events).to.include({eid: '', etype: 'update'});
+
+                    for (i = 1; i < events.length; i++) {
+                        if (initialPaths.indexOf(events[i].eid) === -1) {
+                            expect(events[i].etype).to.equal('load');
+                            if (newId === null) {
+                                newId = events[i].eid;
+                            } else {
+                                done(new Error('there should be only one new element in the territory!'));
+                                return;
+                            }
+                        }
+                    }
+
+                    node = client.getNode(newId);
+                    expect(node).not.to.equal(null);
+                    expect(node.getAttribute('name')).to.equal('check');
+                    expect(node.getRegistry('position')).to.deep.equal({x: 100, y: 100});
+                    expect(node.getChildrenIds()).to.have.length(3);
+
+                    client.removeUI(testId);
+                    done();
+                }
+            });
+        });
+
+        it('should create children', function (done) {
+            var testState = 'init',
+                testId = 'basicCreateChildren',
+                node,
+                initialPaths = [],
+                newPaths = [],
+                i,
+                newTarget = null;
+            buildUpForTest(testId, {'': {children: 1}}, function (events) {
+                if (testState === 'init') {
+                    testState = 'checking';
+
+                    expect(events).to.have.length(8);
+                    expect(events).to.include({eid: '/323573539', etype: 'load'});
+                    expect(events).to.include({eid: '/1697300825', etype: 'load'});
+                    expect(events).to.include({eid: '/1400778473', etype: 'load'});
+
+                    //save the paths of the initial nodes so that we can figure out the new nodes later
+                    for (i = 1; i < events.length; i++) {
+                        initialPaths.push(events[i].eid);
+                    }
+
+                    node = client.getNode('/1697300825');
+                    expect(node).not.to.equal(null);
+                    expect(node.getPointer('ptr')).to.deep.equal({to: '/323573539', from: []});
+
+                    node = client.getNode('/1400778473');
+                    expect(node).not.to.equal(null);
+                    expect(node.getPointer('ptr')).to.deep.equal({to: '/323573539', from: []});
+
+                    node = client.getNode('/323573539');
+                    expect(node).not.to.equal(null);
+                    expect(node.getAttribute('name')).to.equal('check');
+
+
+                    client.createChildren({
+                            parentId: '',
+                            '/1697300825': {attributes: {name: 'member2copy'}},
+                            '/1400778473': {attributes: {name: 'member1copy'}},
+                            '/323573539': {attributes: {name: 'check-copy'}, registry: {position: {x: 400, y: 400}}}
+                        },
+                        'basic copy nodes test');
+                    return;
+                }
+
+                if (testState === 'checking') {
+                    expect(events).to.have.length(11);
+
+                    //find out the new node paths
+                    for (i = 1; i < events.length; i++) {
+                        if (initialPaths.indexOf(events[i].eid) === -1) {
+                            expect(events[i].etype).to.equal('load');
+                            if (client.getNode(events[i].eid).getAttribute('name') === 'check-copy') {
+                                newTarget = events[i].eid;
+                            } else {
+                                newPaths.push(events[i].eid);
+                            }
+                        }
+                    }
+
+                    expect(newPaths).to.have.length(2);
+                    expect(newTarget).not.to.equal(null);
+
+                    //the source nodes should be intact
+                    node = client.getNode('/1697300825');
+                    expect(node).not.to.equal(null);
+                    expect(node.getPointer('ptr')).to.deep.equal({to: '/323573539', from: []});
+
+                    node = client.getNode('/1400778473');
+                    expect(node).not.to.equal(null);
+                    expect(node.getPointer('ptr')).to.deep.equal({to: '/323573539', from: []});
+
+                    node = client.getNode('/323573539');
+                    expect(node).not.to.equal(null);
+                    expect(node.getAttribute('name')).to.equal('check');
+
+                    //the copies keep the target
+                    node = client.getNode(newPaths[0]);
+                    expect(node).not.to.equal(null);
+                    expect(node.getAttribute('name')).to.contain('copy');
+                    expect(node.getPointer('ptr')).to.deep.equal({to: newTarget, from: []});
+
+                    node = client.getNode(newPaths[1]);
+                    expect(node).not.to.equal(null);
+                    expect(node.getAttribute('name')).to.contain('copy');
+                    expect(node.getPointer('ptr')).to.deep.equal({to: newTarget, from: []});
+
+                    node = client.getNode(newTarget);
+                    expect(node).not.to.equal(null);
+                    expect(node.getAttribute('name')).to.contain('copy');
+                    expect(node.getRegistry('position')).to.deep.equal({x: 400, y: 400});
+                    expect(node.getBaseId()).to.equal('/323573539');
+
+                    client.removeUI(testId);
+                    done();
+                }
+            });
+        });
+
+        it('should move the given nodes', function (done) {
+            var testState = 'init',
+                testId = 'basicMoveNodes',
+                node,
+                containerId = null,
+                initialPaths = [],
+                extendedTerritory,
+                i;
+            buildUpForTest(testId, {'': {children: 1}}, function (events) {
+                if (testState === 'init') {
+                    testState = 'containerCreated';
+
+                    expect(events).to.have.length(8);
+                    expect(events).to.include({eid: '/1697300825', etype: 'load'});
+                    expect(events).to.include({eid: '/1400778473', etype: 'load'});
+                    expect(events).to.include({eid: '/701504349', etype: 'load'});
+
+                    for (i = 1; i < events.length; i++) {
+                        initialPaths.push(events[i].eid);
+                    }
+
+                    client.createChild({
+                        parentId: '',
+                        baseId: '/701504349'
+                    }, 'move nodes test - create container');
+                    return;
+                }
+
+                if (testState === 'containerCreated') {
+                    testState = 'territoryExtended';
+
+                    expect(events).to.have.length(9);
+
+                    for (i = 1; i < events.length; i++) {
+                        if (initialPaths.indexOf(events[i].eid) === -1) {
+                            expect(events[i].etype).to.equal('load');
+                            if (containerId === null) {
+                                containerId = events[i].eid;
+                            } else {
+                                done(new Error('only one new element is expected!!'));
+                                return;
+                            }
+                        }
+                    }
+
+                    extendedTerritory = {'': {children: 1}};
+                    extendedTerritory[containerId] = {children: 1};
+                    client.updateTerritory(testId, extendedTerritory);
+                    return;
+                }
+
+                if (testState === 'territoryExtended') {
+                    testState = 'final';
+
+                    expect(events).to.have.length(1);
+
+                    client.startTransaction();
+                    client.moveMoreNodes({
+                        parentId: containerId,
+                        '/1697300825': {attributes: {name: 'member1moved'}, registry: {position: {x: 500, y: 600}}},
+                        '/1400778473': {attributes: {name: 'member2moved'}}
+                    });
+                    client.completeTransaction('move nodes test - move nodes', function (err) {
+
+                        //this callback is called after we handled the events
+                        //TODO should we fix it??? how???
+                        done();
+                    });
+                    return;
+                }
+
+                if (testState === 'final') {
+
+                    expect(events).to.have.length(11);
+                    expect(events).to.include({eid: '/1697300825', etype: 'unload'});
+                    expect(events).to.include({eid: '/1400778473', etype: 'unload'});
+                    expect(events).to.include({eid: containerId + '/1697300825', etype: 'load'});
+                    expect(events).to.include({eid: containerId + '/1400778473', etype: 'load'});
+
+                    node = client.getNode(containerId + '/1697300825');
+                    expect(node).not.to.equal(null);
+                    expect(node.getPointer('ptr')).to.deep.equal({to:'/323573539',from:[]});
+                    expect(node.getAttribute('name')).to.contain('moved');
+                    expect(node.getRegistry('position')).to.deep.equal({x: 500, y: 600});
+
+                    node = client.getNode(containerId + '/1400778473');
+                    expect(node).not.to.equal(null);
+                    expect(node.getPointer('ptr')).to.deep.equal({to:'/323573539',from:[]});
+                    expect(node.getAttribute('name')).to.contain('moved');
+                    expect(node.getRegistry('position')).to.deep.equal({x: 79, y: 704});
+
+                    return;
+                }
+            });
+        });
     });
 
 //TODO how to test as there is no callback
 //no callback start
-
-
-    it.skip('should move the given nodes into the given container', function () {
-        // moveMoreNodes
-
-    });
-
-    it.skip('should create children with the given parameters', function () {
-        // createChildren
-
-    });
 
     it.skip('should start a transaction', function () {
         // startTransaction
@@ -890,10 +1207,6 @@ describe('Browser Client', function () {
 
     });
 
-    it.skip('should create a single child according to the given parameters', function () {
-        // createChild
-
-    });
 
     it.skip('should add the given node as a new member to the specified set of our node', function () {
         // addMember

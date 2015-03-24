@@ -316,14 +316,6 @@ describe('Browser Client', function () {
         //MGA
         //startTransaction: startTransaction,
         //    completeTransaction: completeTransaction,
-        //    moveMoreNodes: moveMoreNodes,
-        //    createChildren: createChildren,
-        //    addMember: addMember,
-        //    removeMember: removeMember,
-        //    setMemberAttribute: setMemberAttribute,
-        //    delMemberAttribute: delMemberAttribute,
-        //    setMemberRegistry: setMemberRegistry,
-        //    delMemberRegistry: delMemberRegistry,
         //    createSet: createSet,
         //    deleteSet: deleteSet,
         //
@@ -1163,6 +1155,7 @@ describe('Browser Client', function () {
 
                         //this callback is called after we handled the events
                         //TODO should we fix it??? how???
+                        client.removeUI(testId);
                         done();
                     });
                     return;
@@ -1178,13 +1171,13 @@ describe('Browser Client', function () {
 
                     node = client.getNode(containerId + '/1697300825');
                     expect(node).not.to.equal(null);
-                    expect(node.getPointer('ptr')).to.deep.equal({to:'/323573539',from:[]});
+                    expect(node.getPointer('ptr')).to.deep.equal({to: '/323573539', from: []});
                     expect(node.getAttribute('name')).to.contain('moved');
                     expect(node.getRegistry('position')).to.deep.equal({x: 500, y: 600});
 
                     node = client.getNode(containerId + '/1400778473');
                     expect(node).not.to.equal(null);
-                    expect(node.getPointer('ptr')).to.deep.equal({to:'/323573539',from:[]});
+                    expect(node.getPointer('ptr')).to.deep.equal({to: '/323573539', from: []});
                     expect(node.getAttribute('name')).to.contain('moved');
                     expect(node.getRegistry('position')).to.deep.equal({x: 79, y: 704});
 
@@ -1192,7 +1185,443 @@ describe('Browser Client', function () {
                 }
             });
         });
+
+        it('should add or modify a constraint', function (done) {
+            var testState = 'init',
+                testId = 'basicSetConstraint',
+                node,
+                constraint = null;
+            buildUpForTest(testId, {'/1400778473': {children: 0}}, function (events) {
+                if (testState === 'init') {
+                    testState = 'checking';
+
+                    expect(events).to.have.length(2);
+                    expect(events).to.include({eid: '/1400778473', etype: 'load'});
+
+                    node = client.getNode('/1400778473');
+                    expect(node).not.to.equal(null);
+                    expect(node.getConstraintNames()).to.deep.equal(['constraint', 'meta']);
+                    expect(node.getOwnConstraintNames()).to.empty();
+
+                    client.setConstraint('/1400778473', 'myNewConstraint', {
+                        info: 'just a plain constraint',
+                        script: 'function(core,node,callback){callback(new Error(\'not implemented\'};',
+                        priority: 11
+                    });
+                    return;
+                }
+
+                if (testState === 'checking') {
+                    expect(events).to.have.length(2);
+                    expect(events).to.include({eid: '/1400778473', etype: 'update'});
+
+                    //the copies keep the target
+                    node = client.getNode(events[1].eid);
+                    expect(node).not.to.equal(null);
+                    expect(node.getConstraintNames()).to.include('myNewConstraint');
+                    expect(node.getOwnConstraintNames()).to.deep.equal(['myNewConstraint']);
+
+                    constraint = node.getConstraint('myNewConstraint');
+                    expect(constraint).not.to.equal(null);
+                    expect(constraint).to.deep.equal({
+                        info: 'just a plain constraint',
+                        script: 'function(core,node,callback){callback(new Error(\'not implemented\'};',
+                        priority: 11
+                    });
+
+                    client.removeUI(testId);
+                    done();
+                }
+            });
+        });
+
+        it('should remove the constraint from the node data', function (done) {
+            // delConstraint 701504349
+            var testState = 'init',
+                testId = 'basicDelConstraint',
+                node,
+                constraint = null;
+            buildUpForTest(testId, {'/701504349': {children: 0}}, function (events) {
+                if (testState === 'init') {
+                    testState = 'checking';
+
+                    expect(events).to.have.length(2);
+                    expect(events).to.include({eid: '/701504349', etype: 'load'});
+
+                    node = client.getNode('/701504349');
+                    expect(node).not.to.equal(null);
+                    expect(node.getConstraintNames()).to.deep.equal(['constraint', 'meta']);
+                    expect(node.getOwnConstraintNames()).to.deep.equal(['constraint']);
+
+                    client.delConstraint('/701504349', 'constraint');
+                    return;
+                }
+
+                if (testState === 'checking') {
+                    expect(events).to.have.length(2);
+                    expect(events).to.include({eid: '/701504349', etype: 'update'});
+
+                    //the copies keep the target
+                    node = client.getNode(events[1].eid);
+                    expect(node).not.to.equal(null);
+                    expect(node.getConstraintNames()).not.to.include('constraint');
+                    expect(node.getOwnConstraintNames()).to.empty();
+
+                    client.removeUI(testId);
+                    done();
+                }
+            });
+        });
+
+        it('should add the given node as a new member to the specified set of our node', function (done) {
+            var testState = 'init',
+                testId = 'basicAddMember',
+                node;
+            buildUpForTest(testId, {'/323573539': {children: 0}, '/1697300825': {children: 0}}, function (events) {
+                if (testState === 'init') {
+                    testState = 'checking';
+
+                    expect(events).to.have.length(3);
+                    expect(events).to.include({eid: '/323573539', etype: 'load'});
+                    expect(events).to.include({eid: '/1697300825', etype: 'load'});
+
+                    node = client.getNode('/323573539');
+                    expect(node).not.to.equal(null);
+                    expect(node.getMemberIds('newSet')).to.empty();
+
+
+                    client.addMember('/323573539', '/1697300825', 'newSet', 'basic add member test');
+                    return;
+                }
+
+                if (testState === 'checking') {
+                    expect(events).to.have.length(3);
+
+                    node = client.getNode('/323573539');
+                    expect(node).not.to.equal(null);
+                    expect(node.getMemberIds('newSet')).to.deep.equal(['/1697300825']);
+
+                    client.removeUI(testId);
+                    done();
+                }
+            });
+        });
+
+        it('should remove the given member of the specified set of the node', function (done) {
+            var testState = 'init',
+                testId = 'basicRemoveMember',
+                node;
+            buildUpForTest(testId, {'/323573539': {children: 0}, '/1697300825': {children: 0}}, function (events) {
+                if (testState === 'init') {
+                    testState = 'checking';
+
+                    expect(events).to.have.length(3);
+                    expect(events).to.include({eid: '/323573539', etype: 'load'});
+                    expect(events).to.include({eid: '/1697300825', etype: 'load'});
+
+                    node = client.getNode('/323573539');
+                    expect(node).not.to.equal(null);
+                    expect(node.getMemberIds('set')).to.include('/1697300825');
+
+
+                    client.removeMember('/323573539', '/1697300825', 'set', 'basic remove member test');
+                    return;
+                }
+
+                if (testState === 'checking') {
+                    expect(events).to.have.length(3);
+
+                    node = client.getNode('/323573539');
+                    expect(node).not.to.equal(null);
+                    expect(node.getMemberIds('set')).not.to.include('/1697300825');
+
+                    client.removeUI(testId);
+                    done();
+                }
+            });
+        });
+
+        it('should set the given attribute of the specified member of the set', function (done) {
+            var testState = 'init',
+                testId = 'basicSetMemberAttribute',
+                node;
+            buildUpForTest(testId, {'/323573539': {children: 0}, '/1697300825': {children: 0}}, function (events) {
+                if (testState === 'init') {
+                    testState = 'checking';
+
+                    expect(events).to.have.length(3);
+                    expect(events).to.include({eid: '/323573539', etype: 'load'});
+                    expect(events).to.include({eid: '/1697300825', etype: 'load'});
+
+                    node = client.getNode('/323573539');
+                    expect(node).not.to.equal(null);
+                    expect(node.getMemberIds('set')).to.include('/1697300825');
+
+
+                    client.setMemberAttribute('/323573539',
+                        '/1697300825',
+                        'set',
+                        'name',
+                        'set member',
+                        'basic set member attribute test');
+                    return;
+                }
+
+                if (testState === 'checking') {
+                    expect(events).to.have.length(3);
+
+                    node = client.getNode('/323573539');
+                    expect(node).not.to.equal(null);
+                    expect(node.getMemberIds('set')).to.include('/1697300825');
+                    expect(node.getMemberAttributeNames('set', '/1697300825')).to.include('name');
+                    expect(node.getMemberAttribute('set', '/1697300825', 'name')).to.equal('set member');
+
+                    client.removeUI(testId);
+                    done();
+                }
+            });
+        });
+
+        it('should remove the specific attribute of the set member', function (done) {
+            var testState = 'init',
+                testId = 'basicDelMemberAttribute',
+                node;
+            buildUpForTest(testId, {'/323573539': {children: 0}, '/1697300825': {children: 0}}, function (events) {
+                if (testState === 'init') {
+                    testState = 'add';
+
+                    expect(events).to.have.length(3);
+                    expect(events).to.include({eid: '/323573539', etype: 'load'});
+                    expect(events).to.include({eid: '/1697300825', etype: 'load'});
+
+                    node = client.getNode('/323573539');
+                    expect(node).not.to.equal(null);
+                    expect(node.getMemberIds('set')).to.include('/1697300825');
+
+
+                    client.setMemberAttribute('/323573539',
+                        '/1697300825',
+                        'set',
+                        'name',
+                        'set member',
+                        'basic del member attribute test - set');
+                    return;
+                }
+
+                if (testState === 'add') {
+                    testState = 'del'
+                    expect(events).to.have.length(3);
+
+                    node = client.getNode('/323573539');
+                    expect(node).not.to.equal(null);
+                    expect(node.getMemberIds('set')).to.include('/1697300825');
+                    expect(node.getMemberAttributeNames('set', '/1697300825')).to.include('name');
+                    expect(node.getMemberAttribute('set', '/1697300825', 'name')).to.equal('set member');
+
+
+                    client.delMemberAttribute('/323573539',
+                        '/1697300825',
+                        'set',
+                        'name',
+                        'basic del member attribute test - del');
+                    return;
+                }
+
+                if (testState === 'del') {
+                    expect(events).to.have.length(3);
+
+                    node = client.getNode('/323573539');
+                    expect(node).not.to.equal(null);
+                    expect(node.getMemberIds('set')).to.include('/1697300825');
+                    expect(node.getMemberAttributeNames('set', '/1697300825')).not.to.include('name');
+                    expect(node.getMemberAttribute('set', '/1697300825', 'name')).to.equal(undefined);
+
+                    client.removeUI(testId);
+                    done();
+                }
+            });
+        });
+
+        it('should set the given registry key of the set member', function (done) {
+            var testState = 'init',
+                testId = 'basicSetMemberRegistry',
+                node;
+            buildUpForTest(testId, {'/323573539': {children: 0}, '/1697300825': {children: 0}}, function (events) {
+                if (testState === 'init') {
+                    testState = 'checking';
+
+                    expect(events).to.have.length(3);
+                    expect(events).to.include({eid: '/323573539', etype: 'load'});
+                    expect(events).to.include({eid: '/1697300825', etype: 'load'});
+
+                    node = client.getNode('/323573539');
+                    expect(node).not.to.equal(null);
+                    expect(node.getMemberIds('set')).to.include('/1697300825');
+
+
+                    client.setMemberRegistry('/323573539',
+                        '/1697300825',
+                        'set',
+                        'name',
+                        'set member',
+                        'basic set member registry test');
+                    return;
+                }
+
+                if (testState === 'checking') {
+                    expect(events).to.have.length(3);
+
+                    node = client.getNode('/323573539');
+                    expect(node).not.to.equal(null);
+                    expect(node.getMemberIds('set')).to.include('/1697300825');
+                    expect(node.getMemberRegistryNames('set', '/1697300825')).to.include('name');
+                    expect(node.getMemberRegistry('set', '/1697300825', 'name')).to.equal('set member');
+
+                    client.removeUI(testId);
+                    done();
+                }
+            });
+        });
+
+        it('should remove the specified registry key of the set member', function (done) {
+            var testState = 'init',
+                testId = 'basicDelMemberRegistry',
+                node;
+            buildUpForTest(testId, {'/323573539': {children: 0}, '/1697300825': {children: 0}}, function (events) {
+                if (testState === 'init') {
+                    testState = 'add';
+
+                    expect(events).to.have.length(3);
+                    expect(events).to.include({eid: '/323573539', etype: 'load'});
+                    expect(events).to.include({eid: '/1697300825', etype: 'load'});
+
+                    node = client.getNode('/323573539');
+                    expect(node).not.to.equal(null);
+                    expect(node.getMemberIds('set')).to.include('/1697300825');
+
+
+                    client.setMemberRegistry('/323573539',
+                        '/1697300825',
+                        'set',
+                        'name',
+                        'set member',
+                        'basic del member registry test - set');
+                    return;
+                }
+
+                if (testState === 'add') {
+                    testState = 'del'
+                    expect(events).to.have.length(3);
+
+                    node = client.getNode('/323573539');
+                    expect(node).not.to.equal(null);
+                    expect(node.getMemberIds('set')).to.include('/1697300825');
+                    expect(node.getMemberRegistryNames('set', '/1697300825')).to.include('name');
+                    expect(node.getMemberRegistry('set', '/1697300825', 'name')).to.equal('set member');
+
+
+                    client.delMemberRegistry('/323573539',
+                        '/1697300825',
+                        'set',
+                        'name',
+                        'basic del member registry test - del');
+                    return;
+                }
+
+                if (testState === 'del') {
+                    expect(events).to.have.length(3);
+
+                    node = client.getNode('/323573539');
+                    expect(node).not.to.equal(null);
+                    expect(node.getMemberIds('set')).to.include('/1697300825');
+                    expect(node.getMemberRegistryNames('set', '/1697300825')).not.to.include('name');
+                    expect(node.getMemberRegistry('set', '/1697300825', 'name')).to.equal(undefined);
+
+                    client.removeUI(testId);
+                    done();
+                }
+            });
+        });
+
+        it('should create an empty set for the node with the given name', function (done) {
+            var testState = 'init',
+                testId = 'basicCreateSet',
+                node;
+            buildUpForTest(testId, {'/323573539': {children: 0}}, function (events) {
+                if (testState === 'init') {
+                    testState = 'checking';
+
+                    expect(events).to.have.length(2);
+                    expect(events).to.include({eid: '/323573539', etype: 'load'});
+
+                    node = client.getNode('/323573539');
+                    expect(node).not.to.equal(null);
+                    expect(node.getSetNames()).not.to.include('newSet');
+
+                    client.createSet('/323573539', 'newSet', 'basic create set test');
+                    return;
+                }
+
+                if (testState === 'checking') {
+                    expect(events).to.have.length(2);
+
+                    node = client.getNode('/323573539');
+                    expect(node).not.to.equal(null);
+                    expect(node.getSetNames()).to.include('newSet');
+                    expect(node.getMemberIds('newSet')).to.empty();
+
+                    client.removeUI(testId);
+                    done();
+                }
+            });
+        });
+
+        it('should remove the given set of the node', function (done) {
+            var testState = 'init',
+                testId = 'basicDeleteSet',
+                node;
+            buildUpForTest(testId, {'/323573539': {children: 0}, '/701504349': {children: 0}}, function (events) {
+                if (testState === 'init') {
+                    testState = 'checking';
+
+                    expect(events).to.have.length(3);
+                    expect(events).to.include({eid: '/323573539', etype: 'load'});
+                    expect(events).to.include({eid: '/701504349', etype: 'load'});
+
+                    node = client.getNode('/323573539');
+                    expect(node).not.to.equal(null);
+                    expect(node.getSetNames()).to.include('set');
+                    expect(node.getMemberIds('set')).not.to.empty();
+
+                    node = client.getNode('/701504349');
+                    expect(node).not.to.equal(null);
+                    expect(node.getSetNames()).to.include('set');
+                    client.deleteSet('/701504349', 'set', 'basic delete set test');
+                    return;
+                }
+
+                if (testState === 'checking') {
+                    expect(events).to.have.length(3);
+
+                    node = client.getNode('/701504349');
+                    expect(node).not.to.equal(null);
+                    expect(node.getSetNames()).not.to.include('set');
+                    expect(node.getMemberIds('set')).to.empty();
+
+                    node = client.getNode('/323573539');
+                    expect(node).not.to.equal(null);
+                    //FIXME probably this set should be also removed, although it was overwritten
+                    //expect(node.getSetNames()).not.to.include('set');
+                    //expect(node.getMemberIds('set')).to.empty();
+
+                    client.removeUI(testId);
+                    done();
+                }
+            });
+        });
+
     });
+
 
 //TODO how to test as there is no callback
 //no callback start
@@ -1208,46 +1637,6 @@ describe('Browser Client', function () {
     });
 
 
-    it.skip('should add the given node as a new member to the specified set of our node', function () {
-        // addMember
-
-    });
-
-    it.skip('should remove the given member of the specified set of the node', function () {
-        // removeMember
-
-    });
-
-    it.skip('should set the given attribute of the specified member of the set', function () {
-        // setMemberAttribute
-
-    });
-
-    it.skip('should remove the specific attribute of the set member', function () {
-        // delMemberAttribute
-
-    });
-
-    it.skip('should set the given registry key of the set member', function () {
-        // setMemberRegistry
-
-    });
-
-    it.skip('should remove the specified registry key of the set member', function () {
-        // delMemberRegistry
-
-    });
-
-    it.skip('should create an empty set for the node with the given name', function () {
-        // createSet
-
-    });
-
-    it.skip('should remove the given set of the node', function () {
-        // deleteSet
-
-    });
-
     it.skip('should change the ancestor of the given node', function () {
         // setBase
 
@@ -1259,15 +1648,7 @@ describe('Browser Client', function () {
 
     });
 
-    it.skip('should add the constraint under the given name to the node data', function () {
-        // setConstraint
 
-    });
-
-    it.skip('should remove the constraint from the node data', function () {
-        // delConstraint
-
-    });
 //no callback end
 //TODO how to test as there is no callback
 

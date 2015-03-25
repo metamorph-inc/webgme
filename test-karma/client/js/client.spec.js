@@ -571,14 +571,6 @@ describe('Browser Client', function () {
     });
 
     describe('node manipulations', function () {
-        //MGA
-        //startTransaction: startTransaction,
-        //    completeTransaction: completeTransaction,
-        //    createSet: createSet,
-        //    deleteSet: deleteSet,
-        //
-        //    setBase: setBase,
-        //    delBase: delBase,
         var Client,
             gmeConfig,
             client,
@@ -747,6 +739,68 @@ describe('Browser Client', function () {
                     client.removeUI(testId);
                     done();
 
+                }
+            });
+        });
+
+        it('should complete a transaction and commit the changes', function (done) {
+            var testId = 'basicCompleteTransaction';
+            buildUpForTest(testId, {}, function () {
+                client.removeUI(testId);//we do not need a UI and it would just make test code more complex
+                client.completeTransaction('should indicate a commit', function (err) {
+                    expect(err).to.equal(null);
+                    expect(baseCommitHash).not.to.equal(client.getActualCommit());
+                    done();
+                });
+            });
+        });
+
+        it('should start a transaction', function (done) {
+            var testId = 'basicStartTransaction',
+                testState = 'init',
+                node = null;
+            buildUpForTest(testId, {'/1': {children: 0}}, function (events) {
+                if (testState === 'init') {
+                    testState = 'checking';
+
+                    expect(events).to.have.length(2);
+                    expect(events).to.include({eid: '/1', etype: 'load'});
+
+                    node = client.getNode('/1');
+                    expect(node).not.to.equal(null);
+                    expect(node.getAttributeNames()).to.deep.equal(['name']);
+                    expect(node.getAttribute('name')).to.equal('FCO');
+
+                    client.startTransaction('starting a transaction');
+                    client.setAttributes('/1', 'name', 'FCOmodified', 'change without commit');
+                    client.setAttributes('/1', 'newAttribute', 42, 'another change without commit');
+                    client.setRegistry('/1', 'position', {x: 50, y: 50});
+                    client.completeTransaction('now will the events get generated', function (err) {
+                        expect(err).to.equal(null);
+                        client.removeUI(testId);
+                        done();
+                    });
+                }
+
+                if (testState === 'checking') {
+                    testState = null;
+
+                    expect(events).to.have.length(2);
+                    expect(events).to.include({eid: '/1', etype: 'update'});
+
+                    node = client.getNode('/1');
+                    expect(node).not.to.equal(null);
+                    expect(node.getAttributeNames()).to.include('newAttribute');
+                    expect(node.getAttribute('name')).to.equal('FCOmodified');
+                    expect(node.getAttribute('newAttribute')).to.equal(42);
+                    expect(node.getRegistry('position')).to.deep.equal({x: 50, y: 50});
+
+                    return;
+                }
+
+                if (testState === null) {
+                    done(new Error('more than one set of events arrived during or after a transaction!'));
+                    return;
                 }
             });
         });
@@ -1414,6 +1468,7 @@ describe('Browser Client', function () {
                         //this callback is called after we handled the events
                         //TODO should we fix it??? how???
                         client.removeUI(testId);
+                        expect(err).to.equal(null);
                         done();
                     });
                     return;
@@ -1878,37 +1933,104 @@ describe('Browser Client', function () {
             });
         });
 
+        it('should change the ancestor of the given node', function (done) {
+            var testState = 'init',
+                testId = 'basicSetBase',
+                node,
+                newId = null;
+            buildUpForTest(testId, {'': {children: 1}}, function (events) {
+
+                if (testState === 'init') {
+                    testState = 'checking';
+                    expect(events).to.have.length(8);
+                    expect(events).to.include({eid: '', etype: 'load'});
+                    expect(events).to.include({eid: '/1', etype: 'load'});
+                    expect(events).to.include({eid: '/701504349', etype: 'load'});
+
+                    client.startTransaction();
+                    newId = client.createChild({parentId: '', baseId: '/1'}, 'create a node - instance of FCO');
+
+                    expect(newId).not.to.equal(null);
+                    node = client.getNode(newId);
+                    expect(node).not.to.equal(null);
+                    expect(node.getAttribute('name')).to.equal('FCO');
+                    expect(node.getBaseId()).to.equal('/1');
+
+                    client.setBase(newId, '/701504349');
+                    client.completeTransaction('basic set base test', function (err) {
+                        client.removeUI(testId);
+                        expect(err).to.equal(null);
+                        done();
+                    });
+
+                    return;
+                }
+
+                if (testState === 'checking') {
+                    expect(events).to.have.length(9);
+                    expect(events).to.include({eid: newId, etype: 'load'});
+
+                    node = client.getNode(newId);
+                    expect(node).not.to.equal(null);
+                    expect(node.getAttribute('name')).to.equal('node');
+                    expect(node.getBaseId()).to.equal('/701504349');
+                    expect(node.getAttributeNames()).to.include('value');
+
+                    return;
+                }
+            });
+        });
+
+        it('should remove the ancestor of the given node', function (done) {
+            // TODO should we remove this from the 'public' API
+            var testState = 'init',
+                testId = 'basicDelBase',
+                node,
+                newId = null;
+            buildUpForTest(testId, {'': {children: 1}}, function (events) {
+
+                if (testState === 'init') {
+                    testState = 'checking';
+                    expect(events).to.have.length(8);
+                    expect(events).to.include({eid: '', etype: 'load'});
+                    expect(events).to.include({eid: '/1', etype: 'load'});
+
+                    client.startTransaction();
+                    newId = client.createChild({parentId: '', baseId: '/1'}, 'create a node - instance of FCO');
+
+                    expect(newId).not.to.equal(null);
+                    node = client.getNode(newId);
+                    expect(node).not.to.equal(null);
+                    expect(node.getAttribute('name')).to.equal('FCO');
+                    expect(node.getBaseId()).to.equal('/1');
+
+                    client.delBase(newId);
+                    client.completeTransaction('basic del base test', function (err) {
+                        client.removeUI(testId);
+                        expect(err).to.equal(null);
+                        done();
+                    });
+
+                    return;
+                }
+
+                if (testState === 'checking') {
+                    expect(events).to.have.length(9);
+                    expect(events).to.include({eid: newId, etype: 'load'});
+
+                    node = client.getNode(newId);
+                    expect(node).not.to.equal(null);
+                    expect(node.getAttribute('name')).to.equal(undefined);
+                    expect(node.getBaseId()).to.equal(null);
+                    expect(node.getAttributeNames()).to.empty();
+
+                    return;
+                }
+            });
+        });
+
     });
 
-
-//TODO how to test as there is no callback
-//no callback start
-
-    it.skip('should start a transaction', function () {
-        // startTransaction
-
-    });
-
-    it.skip('should complete a transaction and commit the changes', function () {
-        // completeTransaction
-
-    });
-
-
-    it.skip('should change the ancestor of the given node', function () {
-        // setBase
-
-    });
-
-    it.skip('should remove the ancestor of the given node', function () {
-        // delBase
-        // TODO should we remove this from the 'public' API
-
-    });
-
-
-//no callback end
-//TODO how to test as there is no callback
 
     it.skip('should register the User Interface object', function () {
         // addUI

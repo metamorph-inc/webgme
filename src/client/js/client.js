@@ -1790,7 +1790,7 @@ define([
             loading(commitObj.root, callback);
           } else {
             logger.error('Cannot view given ' + hash + ' commit as it\'s root cannot be loaded! [' + JSON.stringify(err) + ']');
-            callback(err);
+            callback(err || new Error('commit object cannot be found!'));
           }
         });
       }

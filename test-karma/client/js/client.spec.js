@@ -30,6 +30,195 @@ describe('Browser Client', function () {
 
     });
 
+    describe('database connection test', function () {
+        var Client,
+            gmeConfig,
+            client;
+
+        before(function (done) {
+            this.timeout(10000);
+            requirejs(['js/client', 'text!gmeConfig.json'], function (Client_, gmeConfigJSON) {
+                Client = Client_;
+                gmeConfig = JSON.parse(gmeConfigJSON);
+                client = new Client(gmeConfig);
+
+                done();
+            });
+        });
+
+        it('should connect to the database', function () {
+
+            client.connectToDatabaseAsync({}, function (err) {
+                expect(err).to.equal(null);
+            });
+        });
+    });
+
+    describe('no database tests', function () {
+        var Client,
+            gmeConfig,
+            client;
+
+        before(function (done) {
+            this.timeout(10000);
+            requirejs(['js/client', 'text!gmeConfig.json'], function (Client_, gmeConfigJSON) {
+                Client = Client_;
+                gmeConfig = JSON.parse(gmeConfigJSON);
+
+                client = new Client(gmeConfig);
+
+                done();
+            });
+        });
+
+        it('should fail to get available project list', function (done) {
+            client.getAvailableProjectsAsync(function (err) {
+                expect(err).not.to.equal(null);
+                expect(err.message).to.contain('no open database');
+
+                done();
+            });
+        });
+
+        it('should fail to get filtered project list', function (done) {
+            client.getViewableProjectsAsync(function (err) {
+                expect(err).not.to.equal(null);
+                expect(err.message).to.contain('no open database');
+
+                done();
+            });
+        });
+
+        it('should fail to get authorization info of a project', function (done) {
+            client.getProjectAuthInfoAsync('any project', function (err) {
+                expect(err).not.to.equal(null);
+                expect(err.message).to.contain('no open database');
+
+                done();
+            });
+        });
+
+        //FIXME - this should also fail
+        it.skip('should fail to full project list', function (done) {
+            client.getFullProjectListAsync(function (err) {
+                expect(err).not.to.equal(null);
+                expect(err.message).to.contain('no open database');
+
+                done();
+            });
+        });
+
+        it('should fail to select project', function (done) {
+            client.selectProjectAsync('any project', function (err) {
+                expect(err).not.to.equal(null);
+                expect(err.message).to.contain('no open database');
+
+                done();
+            });
+        });
+
+        it('should fail to create project', function (done) {
+            client.createProjectAsync('any project', {}, function (err) {
+                expect(err).not.to.equal(null);
+                expect(err.message).to.contain('no open database');
+
+                done();
+            });
+        });
+
+        it('should fail to delete project', function (done) {
+            client.deleteProjectAsync('any project', function (err) {
+                expect(err).not.to.equal(null);
+                expect(err.message).to.contain('no open database');
+
+                done();
+            });
+        });
+
+        //FIXME - harmonize error texts
+        it('should fail to get branch names', function (done) {
+            client.getBranchesAsync(function (err) {
+                expect(err).not.to.equal(null);
+                expect(err.message).to.contain('no opened database');
+
+                done();
+            });
+        });
+
+        it('should fail to select branch', function (done) {
+            client.selectBranchAsync('any branch', function (err) {
+                expect(err).not.to.equal(null);
+                expect(err.message).to.contain('no open database');
+
+                done();
+            });
+        });
+
+        it('should fail to select commit', function (done) {
+            client.selectCommitAsync('any commit', function (err) {
+                expect(err).not.to.equal(null);
+                expect(err.message).to.contain('no open database');
+
+                done();
+            });
+        });
+
+        it('should fail to get commits', function (done) {
+            client.getCommitsAsync('any commit', 'any number', function (err) {
+                expect(err).not.to.equal(null);
+                expect(err.message).to.contain('no open database');
+
+                done();
+            });
+        });
+
+        it('should fail to create branch', function (done) {
+            client.createBranchAsync('any branch', 'any commit', function (err) {
+                expect(err).not.to.equal(null);
+                expect(err.message).to.contain('no open database');
+
+                done();
+            });
+        });
+
+        it('should fail to delete branch', function (done) {
+            client.deleteBranchAsync('any branch', function (err) {
+                expect(err).not.to.equal(null);
+                expect(err.message).to.contain('no open database');
+
+                done();
+            });
+        });
+
+        it('should fail to make a commit', function (done) {
+            client.commitAsync({message: 'any message'}, function (err) {
+                expect(err).not.to.equal(null);
+                expect(err.message).to.contain('no open database');
+
+                done();
+            });
+        });
+
+        //FIXME - there are other Async functions which misses the database check, so they can cause crash in the client
+        // so either we refactor and make the API dynamic, or we add the check to all available functions (which will be a long and boring task)
+        //getExportItemsUrlAsync
+        //getExternalInterpreterConfigUrlAsync
+        //dumpNodeAsync
+        //importNodeAsync
+        //mergeNodeAsync
+        //createProjectFromFileAsync
+        //getDumpURL
+        //getExportLibraryUrlAsync
+        //updateLibraryAsync
+        //addLibraryAsync
+        //getFullProjectsInfoAsync
+        //createGenericBranchAsync
+        //deleteGenericBranchAsync
+        //setProjectInfoAsync
+        //getProjectInfoAsync
+        //getAllInfoTagsAsync
+    });
+
     describe('project and branch operations', function () {
         var Client,
             gmeConfig,
@@ -41,6 +230,7 @@ describe('Browser Client', function () {
             requirejs(['js/client', 'text!gmeConfig.json'], function (Client_, gmeConfigJSON) {
                 Client = Client_;
                 gmeConfig = JSON.parse(gmeConfigJSON);
+                gmeConfig.storage.timeout = 1000;
                 client = new Client(gmeConfig);
 
                 client.connectToDatabaseAsync({}, function (err) {
@@ -51,12 +241,10 @@ describe('Browser Client', function () {
         });
 
         it('should return null as textual id if there is no opened test', function () {
-            // getActiveProjectName
             expect(client.getActiveProjectName()).to.equal(null);
         });
 
         it('should return the valid textual id of the opened test', function (done) {
-            // getActiveProjectName
             client.selectProjectAsync(projectName, function (err) {
                 expect(err).to.equal(null);
 
@@ -66,7 +254,6 @@ describe('Browser Client', function () {
         });
 
         it('should return the list of textual ids of available projects', function (done) {
-            // getAvailableProjectsAsync
             client.getAvailableProjectsAsync(function (err, names) {
                 expect(err).to.equal(null);
 
@@ -77,7 +264,6 @@ describe('Browser Client', function () {
         });
 
         it('should return a filtered list of textual project id, where the user have read access', function (done) {
-            // getViewableProjectsAsync
             client.getViewableProjectsAsync(function (err, names) {
                 expect(err).to.equal(null);
 
@@ -101,7 +287,6 @@ describe('Browser Client', function () {
         });
 
         it('should return the authorization info of a given project', function (done) {
-            // getProjectAuthInfoAsync
             client.getProjectAuthInfoAsync(projectName, function (err, authInfo) {
                 expect(err).to.equal(null);
                 expect(authInfo).to.deep.equal({read: true, write: true, delete: true});
@@ -118,7 +303,6 @@ describe('Browser Client', function () {
         });
 
         it('should return the complete project list, with branches and authorization info', function (done) {
-            //console.log(gmeConfig);
             client.getFullProjectListAsync(function (err, projects) {
                 var key;
                 expect(err).to.equal(null);
@@ -133,7 +317,6 @@ describe('Browser Client', function () {
         });
 
         it('should selects a given project', function (done) {
-            // selectProjectAsync
             client.selectProjectAsync(projectName, function (err) {
                 expect(err).to.equal(null);
                 done();
@@ -141,22 +324,49 @@ describe('Browser Client', function () {
 
         });
 
-        //FIXME - runs into some undefined is not a function error, but no location
-        it.skip('should fail to select an unknown project', function (done) {
+        it('should fail to select an unknown project', function (done) {
             client.selectProjectAsync('unknown_project', function (err) {
-                expect(err).to.contain('no such project');
+                expect(err.message).to.contain('no such project');
                 done();
             });
         });
 
-        //FIXME - mysterious script error (:O)
-        it.skip('should create a project with info data', function (done) {
-            // createProjectAsync
-            var activeProject = client.getActiveProjectName();
-            client.createProjectAsync('createProject', {}, function (err) {
+        it('should delete a project', function (done) {
+            var testProjectName = 'deleteProject';
+            client.deleteProjectAsync(testProjectName, function (err) {
                 expect(err).to.equal(null);
-                expect(client.getActiveProjectName()).to.equal(activeProject);
+                client.getAvailableProjectsAsync(function (err, names) {
+                    expect(err).to.equal(null);
+                    expect(names).not.to.include(testProjectName);
+                    done();
+                });
+            });
+        });
+
+        it('should be able to delete a nonexistent project', function (done) {
+            client.deleteProjectAsync('unknown_project', function (err) {
+                expect(err).to.equal(null);
                 done();
+            });
+        });
+
+        it.skip('should create a project with info data', function (done) {
+            var testProjectName = 'createProject',
+                info = {property: 'value'};
+
+            client.deleteProjectAsync(testProjectName, function (err) {
+                expect(err).to.equal(null);
+
+                client.createProjectAsync(testProjectName, info, function (err) {
+                    expect(err).to.equal(null);
+
+                    client.getAvailableProjectsAsync(function (err, names) {
+                        expect(err).to.equal(null);
+                        expect(names).to.include(testProjectName);
+
+                        done();
+                    });
+                });
             });
         });
 
@@ -167,58 +377,27 @@ describe('Browser Client', function () {
             });
         });
 
-        //FIXME - mysterious script error (:O)
-        it.skip('should delete a project', function (done) {
-            // deleteProjectAsync
-            var delProjectName = 'deleteProject';
-            client.createProjectAsync(delProjectName, {}, function (err) {
-                expect(err).to.equal(null);
-
-                client.selectProjectAsync(delProjectName, function (err) {
-                    expect(err).to.equal(null);
-
-                    client.deleteProjectAsync(delProjectName, function (err) {
-                        expect(err).to.equal(null);
-
-                        client.getAvailableProjectsAsync(function (err, names) {
-                            expect(err).to.equal(null);
-
-                            expect(names).not.to.include(delProjectName);
-
-                            done();
-                        });
-                    });
-                });
-            });
-        });
-
-        it('should be able to delete a nonexistent project', function (done) {
-            client.deleteProjectAsync('unknown_project', function (err) {
-                expect(err).to.equal(null);
-
-                done();
-            });
-        });
-
 
         it('should list the available branches of the opened project', function (done) {
-            // getBranchesAsync
+            var actualBranch,
+                actualCommit;
             client.selectProjectAsync(projectName, function (err) {
                 expect(err).to.equal(null);
+
+                actualBranch = client.getActualBranch();
+                actualCommit = client.getActualCommit();
 
                 client.getBranchesAsync(function (err, branches) {
                     expect(err).to.equal(null);
 
-                    expect(branches).to.have.length(1);
-                    expect(branches[0]).to.have.keys('name', 'commitId', 'sync');
-                    expect(branches[0].name).to.equal('master');
+                    expect(branches).to.have.length.of.at.least(1);
+                    expect(branches).to.include({name: actualBranch, commitId: actualCommit, sync: true});
                     done();
                 });
             });
         });
 
         it('should select the given branch of the opened project', function (done) {
-            // selectBranchAsync
             client.selectProjectAsync(projectName, function (err) {
                 expect(err).to.equal(null);
 
@@ -230,7 +409,6 @@ describe('Browser Client', function () {
         });
 
         it('should select a nonexistent branch of the opened project', function (done) {
-            // selectBranchAsync
             client.selectProjectAsync(projectName, function (err) {
                 expect(err).to.equal(null);
 
@@ -242,8 +420,7 @@ describe('Browser Client', function () {
         });
 
         //FIXME - check if this is the correct behavior
-        it('should return the latest n commits', function (done) {
-            // getCommitsAsync
+        it.skip('should return the latest n commits', function (done) {
             client.selectProjectAsync(projectName, function (err) {
                 expect(err).to.equal(null);
 
@@ -259,7 +436,6 @@ describe('Browser Client', function () {
         });
 
         it('should return the actual commit hash', function (done) {
-            // getActualCommit
             client.selectProjectAsync(projectName, function (err) {
                 expect(err).to.equal(null);
 
@@ -270,7 +446,6 @@ describe('Browser Client', function () {
         });
 
         it('should return the name of the actual branch', function (done) {
-            // getActualBranch
             client.selectProjectAsync(projectName, function (err) {
                 expect(err).to.equal(null);
 
@@ -279,36 +454,114 @@ describe('Browser Client', function () {
             });
         });
 
-        it.skip('should return the current network state', function () {
-            // getActualNetworkStatus
-            // connected or disconnected or ?empty?
-
+        it('should return the current network state', function () {
+            expect(client.getActualNetworkStatus()).to.equal('connected');
         });
 
-        it.skip('should return the current branch state', function () {
-            // getActualBranchStatus
-            // sync or offline or forked
+        it('should return the current branch state', function (done) {
+            client.selectProjectAsync(projectName, function (err) {
+                expect(err).to.equal(null);
+                expect(client.getActualBranchStatus()).to.equal('inSync');
 
+                done();
+            });
         });
 
-        it.skip('should create a new branch from the given commit', function () {
-            // createBranchAsync
+        it('should create a new branch from the given commit', function (done) {
+            var actualBranch,
+                actualCommit,
+                newBranch = 'newBranch';
+            client.selectProjectAsync(projectName, function (err) {
+                expect(err).to.equal(null);
 
+                actualBranch = client.getActualBranch();
+                actualCommit = client.getActualCommit();
+                expect(actualBranch).to.equal('master');
+
+                client.createBranchAsync(newBranch, actualCommit, function (err) {
+                    expect(err).to.equal(null);
+
+                    expect(client.getActualBranch()).to.equal(actualBranch);
+
+                    client.getBranchesAsync(function (err, branches) {
+                        expect(err).to.equal(null);
+
+                        console.log(branches);
+
+                        expect(branches).to.include({name: newBranch, commitId: actualCommit, sync: true});
+
+                        client.deleteBranchAsync(newBranch, function (err) {
+                            expect(err).to.equal(null);
+
+                            done();
+                        });
+                    });
+                });
+            });
         });
 
-        it.skip('should delete the given branch', function () {
-            // deleteBranchAsync
+        it('should delete the given branch', function (done) {
+            var actualBranch,
+                actualCommit,
+                newBranch = 'deleteBranch';
+            client.selectProjectAsync(projectName, function (err) {
+                expect(err).to.equal(null);
 
+                actualBranch = client.getActualBranch();
+                actualCommit = client.getActualCommit();
+                expect(actualBranch).to.equal('master');
+
+                client.createBranchAsync(newBranch, actualCommit, function (err) {
+                    expect(err).to.equal(null);
+
+                    expect(client.getActualBranch()).to.equal(actualBranch);
+
+                    client.getBranchesAsync(function (err, branches) {
+                        expect(err).to.equal(null);
+
+                        expect(branches).to.include({name: newBranch, commitId: actualCommit, sync: true});
+
+                        client.deleteBranchAsync(newBranch, function (err) {
+                            expect(err).to.equal(null);
+                            client.getBranchesAsync(function (err, branches) {
+                                expect(err).to.equal(null);
+
+                                expect(branches).not.to.include({name: newBranch, commitId: actualCommit, sync: true});
+                                done();
+                            });
+                        });
+                    });
+                });
+            });
         });
 
-        it.skip('should create a new -no change- commit with the given message', function () {
-            // commitAsync
+        //FIXME - nondeterministic behaviour
+        it.skip('should fail to remove an unknown branch', function (done) {
+            client.selectProjectAsync(projectName, function (err) {
+                expect(err).to.equal(null);
+                client.deleteBranchAsync('unknown_branch', function (err) {
+                    console.warn(err);
+                    expect(err).not.to.equal(null);
 
+                    done();
+                });
+            });
         });
 
-        it.skip('should connect to the database', function () {
-            // connectToDatabaseAsync
+        it('should create a new -no change- commit with the given message', function (done) {
+            var oldCommit;
+            client.selectProjectAsync(projectName, function (err) {
+                expect(err).to.equal(null);
+                oldCommit = client.getActualCommit();
 
+                client.commitAsync({message: 'just a commit'}, function (err) {
+                    expect(err).to.equal(null);
+
+                    expect(client.getActualCommit()).not.to.equal(oldCommit);
+
+                    done();
+                });
+            });
         });
     });
 

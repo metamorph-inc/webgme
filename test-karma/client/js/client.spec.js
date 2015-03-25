@@ -219,7 +219,7 @@ describe('Browser Client', function () {
         //getAllInfoTagsAsync
     });
 
-    describe('project and branch operations', function () {
+    describe.only('project and branch operations', function () {
         var Client,
             gmeConfig,
             client,
@@ -419,6 +419,31 @@ describe('Browser Client', function () {
             });
         });
 
+        it('should select a given commit', function (done) {
+            client.selectProjectAsync(projectName, function (err) {
+                expect(err).to.equal(null);
+
+                client.selectCommitAsync(client.getActualCommit(), function (err) {
+                    expect(err).to.equal(null);
+
+                    done();
+                });
+            });
+        });
+
+        //FIXME - possible fault that it 'switches branch' before it checks if the commit is known or not
+        it('should fail to select an unknown commit', function (done) {
+            client.selectProjectAsync(projectName, function (err) {
+                expect(err).to.equal(null);
+
+                client.selectCommitAsync('#unknown', function (err) {
+                    expect(err).not.to.equal(null);
+
+                    done();
+                });
+            });
+        });
+        
         //FIXME - check if this is the correct behavior
         it.skip('should return the latest n commits', function (done) {
             client.selectProjectAsync(projectName, function (err) {
@@ -439,9 +464,13 @@ describe('Browser Client', function () {
             client.selectProjectAsync(projectName, function (err) {
                 expect(err).to.equal(null);
 
-                expect(client.getActualCommit()).to.contain('#');
-                expect(client.getActualCommit()).to.have.length(41);
-                done();
+                client.selectBranchAsync('master', function (err) {
+                    expect(err).to.equal(null);
+
+                    expect(client.getActualCommit()).to.contain('#');
+                    expect(client.getActualCommit()).to.have.length(41);
+                    done();
+                });
             });
         });
 
@@ -449,8 +478,12 @@ describe('Browser Client', function () {
             client.selectProjectAsync(projectName, function (err) {
                 expect(err).to.equal(null);
 
-                expect(client.getActualBranch()).to.equal('master');
-                done();
+                client.selectBranchAsync('master',function(err){
+                    expect(err).to.equal(null);
+
+                    expect(client.getActualBranch()).to.equal('master');
+                    done();
+                });
             });
         });
 

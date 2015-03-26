@@ -5,7 +5,7 @@ var GME = GME || {};
 GME.classes = GME.classes || {};
 
 (function(){/** vim: et:ts=4:sw=4:sts=4
- * @license RequireJS 2.1.15 Copyright (c) 2010-2014, The Dojo Foundation All Rights Reserved.
+ * @license RequireJS 2.1.16 Copyright (c) 2010-2015, The Dojo Foundation All Rights Reserved.
  * Available via the MIT or new BSD license.
  * see: http://github.com/jrburke/requirejs for details
  */
@@ -18,7 +18,7 @@ var requirejs, require, define;
 (function (global) {
     var req, s, head, baseElement, dataMain, src,
         interactiveScript, currentlyAddingScript, mainScript, subPath,
-        version = '2.1.15',
+        version = '2.1.16',
         commentRegExp = /(\/\*([\s\S]*?)\*\/|([^:]|^)\/\/(.*)$)/mg,
         cjsRequireRegExp = /[^.]\s*require\s*\(\s*["']([^'"\s]+)["']\s*\)/g,
         jsSuffixRegExp = /\.js$/,
@@ -1129,6 +1129,13 @@ var requirejs, require, define;
 
                         if (this.errback) {
                             on(depMap, 'error', bind(this, this.errback));
+                        } else if (this.events.error) {
+                            // No direct errback on this module, but something
+                            // else is listening for errors, so be sure to
+                            // propagate the error correctly.
+                            on(depMap, 'error', bind(this, function(err) {
+                                this.emit('error', err);
+                            }));
                         }
                     }
 
@@ -2081,7 +2088,7 @@ var requirejs, require, define;
     req(cfg);
 }(this));
 
-define("node_modules/requirejs/require", function(){});
+define("../node_modules/requirejs/require", function(){});
 
 /*
  * Copyright (C) 2012 Vanderbilt University, All rights reserved.
@@ -2089,7 +2096,7 @@ define("node_modules/requirejs/require", function(){});
  * Author: Miklos Maroti
  */
 
-define('util/assert',[],function () {
+define('common/util/assert',[],function () {
 	
 
 	var assert = function (cond, msg) {
@@ -2120,7 +2127,7 @@ define('util/assert',[],function () {
  * -------- EVENT DIASPATCHER -------
  */
 
-define('eventDispatcher',[], function () {
+define('common/EventDispatcher',[], function () {
     var EventDispatcher = function () {
         this._eventList = {};
     };
@@ -2225,7 +2232,7 @@ define('eventDispatcher',[], function () {
  * Author: Tamas Kecskes
  */
 
-define('util/guid',[],function () {
+define('common/util/guid',[],function () {
 	
 
 	var guid = function () {
@@ -2240,11 +2247,11 @@ define('util/guid',[],function () {
 	return guid;
 });
 //SHA1 in Javascript 862 bytes, MIT License, http://antimatter15.com/
-define('util/sha1',[],function() {
+define('common/util/sha1',[],function() {
 return function(l){function p(b,a){return b<<a|b>>>32-a}l+="";for(var n=Math,c=[1518500249,1859775393,2400959708,3395469782,1732584193,4023233417,2562383102,271733878,3285377520,4294967295],s=n.ceil(l.length/4)+2,q=n.ceil(s/16),g=[],a=0,h=[],j,d,e,f,m,i,b,k;a<q;a++){g[a]=[];for(k=0;k<16;k++){function o(b,c){return l.charCodeAt(a*64+k*4+b)<<c}g[a][k]=o(0,24)|o(1,16)|o(2,8)|o(3,0)}}i=l.length*8-8;a=q-1;g[a][14]=i/(c[9]+1);g[a][14]=n.floor(g[a][14]);g[a][15]=i&c[9];for(a=0;a<q;a++){for(b=0;b<16;b++)h[b]=g[a][b];for(b=16;b<80;b++)h[b]=p(h[b-3]^h[b-8]^h[b-14]^h[b-16],1);j=c[4];d=c[5];e=c[6];f=c[7];m=c[8];for(b=0;b<80;b++){var r=n.floor(b/20),t=p(j,5)+(r<1?d&e^~d&f:r==2?d&e^d&f^e&f:d^e^f)+m+c[r]+h[b]&c[9];m=f;f=e;e=p(d,30);d=j;j=t}c[4]+=j;c[5]+=d;c[6]+=e;c[7]+=f;c[8]+=m}i="";for(z=4;z<9;z++)for(a=7;a>=0;a--)i+=((c[z]&c[9])>>>a*4&15).toString(16);return i};
 });
 
-define('util/zssha1',[],function(){
+define('common/util/zssha1',[],function(){
     function SHA1() {
 
         this.pp = function (b, a) {
@@ -2305,7 +2312,7 @@ define('util/zssha1',[],function(){
 });
 
 /* 2012 David Chambers <dc@hashify.me>  */
-define('util/canon',[], function() {
+define('common/util/canon',[], function() {
     var CANON = {},
         keys, map, nativeMap, pad,
         __slice = [].slice,
@@ -2429,7 +2436,7 @@ define('util/canon',[], function() {
  * Created by tkecskes on 1/6/2015.
  */
 /* globals define, WebGMEGlobal, GME */
-define('util/key',[
+define('common/util/key',[
     './sha1',
     './zssha1',
     './assert',
@@ -2469,7 +2476,7 @@ define('util/key',[
  * Author: Miklos Maroti
  */
 
-define('core/future',[], function () {
+define('common/core/future',[], function () {
 	
 
 	var maxDepth = 5;
@@ -3600,7 +3607,7 @@ define('core/future',[], function () {
 	};
 
 	if (typeof define === "function" && define.amd) {
-		define('core/tasync',[], function () {
+		define('common/core/tasync',[], function () {
 			return TASYNC;
 		});
 	} else {
@@ -3614,7 +3621,7 @@ define('core/future',[], function () {
  * Author: Miklos Maroti
  */
 
-define('core/coretree',[ "util/assert", "util/key", "core/future", "core/tasync", 'util/canon' ], function (ASSERT, GENKEY, FUTURE, TASYNC, CANON) {
+define('common/core/coretree',[ "common/util/assert", "common/util/key", "common/core/future", "common/core/tasync", 'common/util/canon' ], function (ASSERT, GENKEY, FUTURE, TASYNC, CANON) {
 	
 
 	var HASH_REGEXP = new RegExp("#[0-9a-f]{40}");
@@ -3654,6 +3661,7 @@ define('core/coretree',[ "util/assert", "util/key", "core/future", "core/tasync"
 
 	return function (storage, options) {
         var gmeConfig = options.globConf;
+		ASSERT(gmeConfig && typeof gmeConfig === "object");
 		var MAX_AGE = 3; // MAGIC NUMBER
 		var MAX_TICKS = 2000; // MAGIC NUMBER
 		var MAX_MUTATE = 30000; // MAGIC NUMBER
@@ -4050,7 +4058,7 @@ define('core/coretree',[ "util/assert", "util/key", "core/future", "core/tasync"
 		};
 
 		var __areEquivalent = function (data1, data2) {
-			return data1 === data2 || (typeof data1 === "string" && data1 === __getChildData(data2, ID_NAME)) || (__isEmptyData(data1) && __isEmptyData(data2));
+            return data1 === data2 || (typeof data1 === "string" && data1 === __getChildData(data2, ID_NAME)) || (__isEmptyData(data1) && __isEmptyData(data2));
 		};
 
 		var mutateCount = 0;
@@ -4096,7 +4104,7 @@ define('core/coretree',[ "util/assert", "util/key", "core/future", "core/tasync"
 			}
 
 			if (node.parent !== null) {
-				ASSERT(__areEquivalent(__getChildData(node.parent.data, node.relid), node.data));
+                ASSERT(__areEquivalent(__getChildData(node.parent.data, node.relid), node.data));
 				node.parent.data[node.relid] = copy;
 			}
 
@@ -4292,13 +4300,15 @@ define('core/coretree',[ "util/assert", "util/key", "core/future", "core/tasync"
 			return typeof node.data === "object" && node.data !== null && typeof node.data[ID_NAME] === "string";
 		};
 
-		var setHashed = function (node, hashed) {
+		var setHashed = function (node, hashed, noMutate) {
 			ASSERT(typeof hashed === "boolean");
 
 			node = normalize(node);
-			if (!mutate(node)) {
-				throw new Error("incorrect node data");
-			}
+            if(!noMutate){
+                if (!mutate(node)) {
+                    throw new Error("incorrect node data");
+                }
+            }
 
 			if (hashed) {
 				node.data[ID_NAME] = "";
@@ -4580,7 +4590,7 @@ define('core/coretree',[ "util/assert", "util/key", "core/future", "core/tasync"
  * Author: Miklos Maroti
  */
 
-define('core/corerel',[ "util/assert", "core/coretree", "core/tasync", "util/canon" ], function (ASSERT, CoreTree, TASYNC, CANON) {
+define('common/core/corerel',[ "common/util/assert", "common/core/coretree", "common/core/tasync", "common/util/canon" ], function (ASSERT, CoreTree, TASYNC, CANON) {
 	
 
 	// ----------------- RELID -----------------
@@ -5417,7 +5427,7 @@ define('core/corerel',[ "util/assert", "core/coretree", "core/tasync", "util/can
  * Author: Tamas Kecskes
  */
 
-define('core/setcore',[ "util/assert"], function (ASSERT) {
+define('common/core/setcore',[ "common/util/assert"], function (ASSERT) {
     
 
     var SETS_ID = '_sets';
@@ -5762,7 +5772,7 @@ define('core/setcore',[ "util/assert"], function (ASSERT) {
  * Author: Tamas Kecskes
  */
 
-define('core/guidcore',[ "util/assert", "util/guid", "core/tasync" ], function (ASSERT, GUID, TASYNC) {
+define('common/core/guidcore',[ "common/util/assert", "common/util/guid", "common/core/tasync" ], function (ASSERT, GUID, TASYNC) {
 	
 
 	var GUID_REGEXP = new RegExp("[a-z0-9]{8}(-[a-z0-9]{4}){3}-[a-z0-9]{12}", 'i');
@@ -5939,7 +5949,7 @@ define('core/guidcore',[ "util/assert", "util/guid", "core/tasync" ], function (
  * Author: Tamas Kecskes
  */
 
-define('core/nullpointercore',[], function () {
+define('common/core/nullpointercore',[], function () {
     
 
     var NULLPTR_NAME = "_null_pointer";
@@ -5995,7 +6005,7 @@ define('core/nullpointercore',[], function () {
  * Author: Miklos Maroti
  */
 
-define('core/coreunwrap',[ "util/assert", "core/tasync" ], function(ASSERT, TASYNC) {
+define('common/core/coreunwrap',[ "common/util/assert", "common/core/tasync" ], function(ASSERT, TASYNC) {
 	
 
 	// ----------------- CoreUnwrap -----------------
@@ -6078,7 +6088,7 @@ define('core/coreunwrap',[ "util/assert", "core/tasync" ], function(ASSERT, TASY
  * Author: Miklos Maroti
  */
 
-define('core/coretype',[ "util/assert", "core/core", "core/tasync" ], function(ASSERT, Core, TASYNC) {
+define('common/core/coretype',[ "common/util/assert", "common/core/core", "common/core/tasync" ], function(ASSERT, Core, TASYNC) {
 	
 
 	// ----------------- CoreType -----------------
@@ -6166,10 +6176,16 @@ define('core/coretype',[ "util/assert", "core/core", "core/tasync" ], function(A
                     }
                     basechild = core.loadChild( base, relid);
                     return TASYNC.call(function(b,c,n,r){
-                        child = c || core.getChild(n,r);
-                        child.base = b;
-                        core.getCoreTree().setHashed(child,true);
-                        return child;
+                        if(c){
+                            child = c;
+                            child.base = b;
+                            return child;
+                        } else {
+                            child = core.getChild(n,r);
+                            core.setHashed(child,true,true);
+                            child.base = b;
+                            return child;
+                        }
                     },basechild,child,node,relid);
                 }
             }
@@ -6867,7 +6883,7 @@ setConstraint(node,constraintObj)
 getConstraintNames(node)
 delConstraint(node,name)
  */
-define('core/constraintcore',[ "util/assert" ], function (ASSERT) {
+define('common/core/constraintcore',[ "common/util/assert" ], function (ASSERT) {
     
     var CONSTRAINTS_RELID = "_constraints";
     var C_DEF_PRIORITY = 1;
@@ -7681,12 +7697,12 @@ define('core/constraintcore',[ "util/assert" ], function (ASSERT) {
   if (typeof module !== 'undefined' && typeof module.exports !== 'undefined')
     module.exports = Environment;
   else if (typeof define === 'function' && define.amd)
-    define('util/jjv',[],function () {return Environment;});
+    define('common/util/jjv',[],function () {return Environment;});
   else
     window.jjv = Environment;
 })();
 
-define('core/metacore',[ "util/assert", "core/core", "core/tasync", "util/jjv", "util/canon" ], function(ASSERT, Core, TASYNC, JsonValidator, CANON) {
+define('common/core/metacore',[ "common/util/assert", "common/core/core", "common/core/tasync", "common/util/jjv", "common/util/canon" ], function(ASSERT, Core, TASYNC, JsonValidator, CANON) {
     
 
     // ----------------- CoreType -----------------
@@ -8172,7 +8188,7 @@ define('core/metacore',[ "util/assert", "core/core", "core/tasync", "util/jjv", 
 /**
  * Created by tkecskes on 12/11/2014.
  */
-define('core/coretreeloader',[ "util/assert", "core/core", "core/tasync" ], function(ASSERT, Core, TASYNC) {
+define('common/core/coretreeloader',[ "common/util/assert", "common/core/core", "common/core/tasync" ], function(ASSERT, Core, TASYNC) {
   
 
   // ----------------- CoreTreeLoader -----------------
@@ -8223,7 +8239,7 @@ define('core/coretreeloader',[ "util/assert", "core/core", "core/tasync" ], func
  *
  * Author: Tamas Kecskes
  */
-define('core/corediff',['util/canon', 'core/tasync', 'util/assert'], function (CANON, TASYNC, ASSERT) {
+define('common/core/corediff',['common/util/canon', 'common/core/tasync', 'common/util/assert'], function (CANON, TASYNC, ASSERT) {
   
 
 
@@ -10336,18 +10352,18 @@ define('core/corediff',['util/canon', 'core/tasync', 'util/assert'], function (C
  * Author: Tamas Kecskes
  */
 
-define('core/core',[
-        "core/corerel",
-        'core/setcore',
-        'core/guidcore',
-        'core/nullpointercore',
-        'core/coreunwrap',
-        'core/coretype',
-        'core/constraintcore',
-        'core/coretree',
-        'core/metacore',
-        'core/coretreeloader',
-        'core/corediff'],
+define('common/core/core',[
+        'common/core/corerel',
+        'common/core/setcore',
+        'common/core/guidcore',
+        'common/core/nullpointercore',
+        'common/core/coreunwrap',
+        'common/core/coretype',
+        'common/core/constraintcore',
+        'common/core/coretree',
+        'common/core/metacore',
+        'common/core/coretreeloader',
+        'common/core/corediff'],
     function (CoreRel, Set, Guid, NullPtr, UnWrap, Type, Constraint, CoreTree, MetaCore, TreeLoader, CoreDiff)
 {
     
@@ -10374,7 +10390,7 @@ define('core/core',[
  * Author: Tamas Kecskes
  */
 
-define('storage/client',[ "util/assert", "util/guid" ], function (ASSERT, GUID) {
+define('common/storage/client',[ "common/util/assert", "common/util/guid" ], function (ASSERT, GUID) {
     
 
     function Database (options) {
@@ -10385,7 +10401,12 @@ define('storage/client',[ "util/assert", "util/guid" ], function (ASSERT, GUID) 
 
         var _hostAddress = null;
         if(options.type === "browser") {
-            _hostAddress = options.host || window.location.protocol + '//' + window.location.host;
+            if (window.__karma__) {
+                // TRICKY: karma uses web sockets too, we need to use the gme server's port
+                _hostAddress = window.location.protocol + '//localhost:' + gmeConfig.server.port;
+            } else {
+                _hostAddress = options.host || window.location.protocol + '//' + window.location.host;
+            }
         } else {
             _hostAddress = options.host + ':' + gmeConfig.server.port;
         }
@@ -11288,7 +11309,7 @@ define('storage/client',[ "util/assert", "util/guid" ], function (ASSERT, GUID) 
  * Author: Tamas Kecskes
  */
 
-define('storage/failsafe',["util/assert", "util/guid"], function (ASSERT, GUID) {
+define('common/storage/failsafe',["common/util/assert", "common/util/guid"], function (ASSERT, GUID) {
   
   var BRANCH_OBJ_ID = '*branch*'; // MAGIC CONSTANT
   var BRANCH_STATES = {  // MAGIC CONSTANT
@@ -11781,7 +11802,7 @@ define('storage/failsafe',["util/assert", "util/guid"], function (ASSERT, GUID) 
  * Author: Miklos Maroti
  */
 
-define('storage/cache',[ "util/assert" ], function (ASSERT) {
+define('common/storage/cache',[ "common/util/assert" ], function (ASSERT) {
 	
 
 	var Lock = function () {
@@ -11858,7 +11879,6 @@ define('storage/cache',[ "util/assert" ], function (ASSERT) {
 			var ID_NAME = project.ID_NAME;
 
 			var refcount = 0;
-			var branches = {};
 			var missing = {};
 			var backup = {};
 			var cache = {};
@@ -12012,66 +12032,10 @@ define('storage/cache',[ "util/assert" ], function (ASSERT) {
 					}
 				}
 
-				for (key in branches) {
-					callbacks = branches[key];
-					while ((cb = callbacks.pop())) {
-						cb(err);
-					}
-				}
-
-				branches = {};
 				missing = {};
 				backup = {};
 				cache = {};
 				cacheSize = 0;
-			}
-
-			function getBranchHash (name, oldhash, callback) {
-				ASSERT(typeof name === "string" && typeof callback === "function");
-				ASSERT(typeof oldhash === "string" || oldhash === null);
-
-				var tag = name + "@" + oldhash;
-				var branch = branches[tag];
-				if (typeof branch === "undefined") {
-					branch = [ callback ];
-					branches[tag] = branch;
-
-					project.getBranchHash(name, oldhash, function (err, newhash, forkedhash) {
-						if (branches[tag] === branch) {
-							var cb;
-							delete branches[tag];
-
-							while ((cb = branch.pop())) {
-								cb(err, newhash, forkedhash);
-							}
-						}
-					});
-				} else {
-					branch.push(callback);
-				}
-			}
-
-			function setBranchHash (name, oldhash, newhash, callback) {
-				ASSERT(typeof name === "string" && typeof oldhash === "string");
-				ASSERT(typeof newhash === "string" && typeof callback === "function");
-
-				project.setBranchHash(name, oldhash, newhash, function (err) {
-					if (!err) {
-						var prefix = name + "@", tag;
-						for (tag in branches) {
-							if (tag.substr(0, prefix.length) === prefix) {
-								var cb, branch = branches[tag];
-								delete branches[tag];
-
-								while ((cb = branch.pop())) {
-									cb(err, newhash, null);
-								}
-							}
-						}
-					}
-
-					callback(err);
-				});
 			}
 
 			function reopenProject (callback) {
@@ -12087,8 +12051,6 @@ define('storage/cache',[ "util/assert" ], function (ASSERT) {
                     cacheProject.loadObject = loadObject;
                     cacheProject.insertObject = insertObject;
                 }
-                cacheProject.getBranchHash = getBranchHash;
-                cacheProject.setBranchHash = setBranchHash;
                 cacheProject.closeProject = closeProject;
 
                 ++refcount;
@@ -12129,7 +12091,7 @@ define('storage/cache',[ "util/assert" ], function (ASSERT) {
  * Author: Tamas Kecskes
  */
 
-define('storage/commit',[ "util/assert", "util/key", "util/canon" ], function (ASSERT, GENKEY, CANON) {
+define('common/storage/commit',[ "common/util/assert", "common/util/key", "common/util/canon" ], function (ASSERT, GENKEY, CANON) {
 	
 	var HASH_REGEXP = new RegExp("^#[0-9a-zA-Z_]*$");
 
@@ -12232,7 +12194,7 @@ define('storage/commit',[ "util/assert", "util/key", "util/canon" ], function (A
  * Author: Tamas Kecskes
  */
 
-define('storage/log',[ "util/assert" ], function (ASSERT) {
+define('common/storage/log',[ "common/util/assert" ], function (ASSERT) {
 	
 
 	function Database (_database, options) {
@@ -12443,7 +12405,7 @@ define('storage/log',[ "util/assert" ], function (ASSERT) {
  * Author: Tamas Kecskes
  */
 
-define('storage/clientstorage',['storage/client', 'storage/failsafe', 'storage/cache', 'storage/commit', 'storage/log'], function (Client,Failsafe,Cache,Commit,Log) {
+define('common/storage/clientstorage',['common/storage/client', 'common/storage/failsafe', 'common/storage/cache', 'common/storage/commit', 'common/storage/log'], function (Client,Failsafe,Cache,Commit,Log) {
     
     function client(options){
         //return  new Log(new Commit(new Cache(new Failsafe(new Client(options),options),options),options),options);
@@ -12468,7 +12430,7 @@ define('storage/clientstorage',['storage/client', 'storage/failsafe', 'storage/c
  * -------- LOGMANAGER -------
  */
 
-define('logManager',[], function () {
+define('common/LogManager',[], function () {
 
 	var logLevels = {
 		"ALL": 5,
@@ -12674,7 +12636,7 @@ define('logManager',[], function () {
 	};
 });
 
-define('util/url',[],function(){
+define('common/util/url',[],function(){
     function decodeUrl(url){
         var start = url.indexOf('%');
         while(start>-1){
@@ -12728,7 +12690,7 @@ define('util/url',[],function(){
  *
  * Author: Tamas Kecskes
  */
-define('coreclient/meta',[], function () {
+define('common/core/users/meta',[], function () {
     
 
     function metaStorage () {
@@ -13513,9 +13475,9 @@ define('coreclient/meta',[], function () {
     return metaStorage;
 });
 
-define('coreclient/tojson',[
-    'coreclient/meta',
-    'util/url'
+define('common/core/users/tojson',[
+    'common/core/users/meta',
+    'common/util/url'
 ],function(
     BaseMeta,
     URL
@@ -13997,10 +13959,10 @@ define('coreclient/tojson',[
     return getJsonNode;
 });
 
-define('coreclient/dump',[
-    'coreclient/meta',
-    'coreclient/tojson',
-    'util/url'
+define('common/core/users/dump',[
+    'common/core/users/meta',
+    'common/core/users/tojson',
+    'common/util/url'
 ],function(
     BaseMeta,
     ToJson,
@@ -14163,10 +14125,10 @@ define('coreclient/dump',[
 });
 
 
-define('coreclient/dumpmore',[
-    'coreclient/meta',
-    'coreclient/tojson',
-    'util/url'
+define('common/core/users/dumpmore',[
+    'common/core/users/meta',
+    'common/core/users/tojson',
+    'common/util/url'
 ],function(
     BaseMeta,
     ToJson,
@@ -14410,8 +14372,8 @@ if it finds the same guid in the same place then it overwrites the node with the
 it not searches for GUID!!! so be careful when to use this method
 */
 
-define('coreclient/import',[
-    'coreclient/meta'
+define('common/core/users/import',[
+    'common/core/users/meta'
 ],function(
     BaseMeta
     ){
@@ -14916,8 +14878,8 @@ define('coreclient/import',[
 // This import will try to import an array of objects as well as a single object.
 // Although this import also asume that there is no loop in the references so it can simply wait for
 
-define('coreclient/copyimport',[
-    'coreclient/meta'
+define('common/core/users/copyimport',[
+    'common/core/users/meta'
 ],function(
     BaseMeta
     ){
@@ -15349,7 +15311,7 @@ define('coreclient/copyimport',[
     }
     return importing;
 });
-define('coreclient/serialization',['util/assert'],function(ASSERT){
+define('common/core/users/serialization',['common/util/assert'],function(ASSERT){
 
     
     var _nodes = {},
@@ -15618,7 +15580,8 @@ define('coreclient/serialization',['util/assert'],function(ASSERT){
             parent:_core.getParent(node) ? _core.getGuid(_core.getParent(node)) : null,
             pointers:getPointersOfNode(node),
             registry:getRegistryOfNode(node),
-            sets:getSetsOfNode(node)
+            sets:getSetsOfNode(node),
+            constraints: getConstraintsOfNode(node)
         };
     }
     function baseGuid(path){
@@ -15736,6 +15699,15 @@ define('coreclient/serialization',['util/assert'],function(ASSERT){
             result = {};
         for(i=0;i<names.length;i++){
             result[names[i]] = _core.getRegistry(node,names[i]);
+        }
+        return result;
+    }
+    function getConstraintsOfNode(node){
+        var names = _core.getOwnConstraintNames(node).sort(),
+            i,
+            result = {};
+        for(i=0;i<names.length;i++){
+            result[names[i]] = _core.getConstraint(node,names[i]);
         }
         return result;
     }
@@ -15993,6 +15965,20 @@ define('coreclient/serialization',['util/assert'],function(ASSERT){
             _core.setAttribute(node,keys[i],jsonNode.attributes[keys[i]]);
         }
     }
+    function updateConstraints(guid){
+        var keys, i,
+            node = _nodes[guid],
+            jsonNode = _import.nodes[guid];
+        keys = _core.getOwnConstraintNames(node);
+        for(i=0;i<keys.length;i++){
+            _core.delConstraint(node,keys[i]);
+        }
+
+        keys = Object.keys(jsonNode.constraints || {});
+        for(i=0;i<keys.length;i++){
+            _core.setConstraint(node,keys[i],jsonNode.constraints[keys[i]]);
+        }
+    }
     //this function does not cover relations - it means only attributes and registry have been updated here
     function updateNode(guid,parent){
         //first we check if the node have to be moved
@@ -16005,6 +15991,7 @@ define('coreclient/serialization',['util/assert'],function(ASSERT){
 
         updateAttributes(guid);
         updateRegistry(guid);
+        updateConstraints(guid);
     }
 
     //this function doesn't not cover relations - so only attributes and registry have been taken care of here
@@ -16012,6 +15999,7 @@ define('coreclient/serialization',['util/assert'],function(ASSERT){
         //at this point we assume that an empty vessel has been already created and part of the _nodes
         updateAttributes(guid);
         updateRegistry(guid);
+        updateConstraints(guid);
     }
 
     function getInheritanceBasedGuidOrder(){
@@ -16183,22 +16171,22 @@ define('coreclient/serialization',['util/assert'],function(ASSERT){
 
 /*globals define, _, requirejs, WebGMEGlobal, GME*/
 
-define('client',[
-    'util/assert',
-    'eventDispatcher',
-    'util/guid',
-    'core/core',
-    'storage/clientstorage',
-    'logManager',
-    'util/url',
-    'coreclient/meta',
-    'coreclient/tojson',
-    'coreclient/dump',
-    'coreclient/dumpmore',
-    'coreclient/import',
-    'coreclient/copyimport',
-    'coreclient/serialization',
-    'core/tasync'
+define('client/js/client',[
+    'common/util/assert',
+    'common/EventDispatcher',
+    'common/util/guid',
+    'common/core/core',
+    'common/storage/clientstorage',
+    'common/LogManager',
+    'common/util/url',
+    'common/core/users/meta',
+    'common/core/users/tojson',
+    'common/core/users/dump',
+    'common/core/users/dumpmore',
+    'common/core/users/import',
+    'common/core/users/copyimport',
+    'common/core/users/serialization',
+    'common/core/tasync'
   ],
   function (
     ASSERT,
@@ -16578,6 +16566,7 @@ define('client',[
 
       //generic project related addOn handling
       function updateRunningAddOns(root) {
+          if(gmeConfig.addOn.enable === true) {
         var neededAddOns = _core.getRegistry(root, "usedAddOns"),
           i,
           runningAddOns = getRunningAddOnNames();
@@ -16594,8 +16583,10 @@ define('client',[
           }
         }
       }
+      }
 
       function stopRunningAddOns() {
+          if(gmeConfig.addOn.enable === true){
         var i,
           keys = Object.keys(_addOns),
           callback = function (err) {
@@ -16606,6 +16597,7 @@ define('client',[
         for (i = 0; i < keys.length; i++) {
           stopAddOn(keys[i], callback);
         }
+      }
       }
 
       function getRunningAddOnNames() {
@@ -19702,6 +19694,7 @@ define('client',[
         setValidationCallback: setValidationCallback,
         getDetailedHistoryAsync: getDetailedHistoryAsync,
         getRunningAddOnNames: getRunningAddOnNames,
+          addOnsAllowed: gmeConfig.addOn.enable === true,
 
         //territory functions for the UI
         addUI: addUI,
@@ -19822,7 +19815,7 @@ define('blob/BlobMetadata',['blob/BlobConfig'], function(BlobConfig){
  * @author lattmann / https://github.com/lattmann
  */
 
-define('blob/Artifact',['blob/BlobMetadata', 'blob/BlobConfig', 'core/tasync'], function (BlobMetadata, BlobConfig, tasync) {
+define('blob/Artifact',['blob/BlobMetadata', 'blob/BlobConfig', 'common/core/tasync'], function (BlobMetadata, BlobConfig, tasync) {
     
     /**
      * Creates a new instance of artifact, i.e. complex object, in memory. This object can be saved in the storage.
@@ -20787,7 +20780,9 @@ function Response(req, options) {
   options = options || {};
   this.req = req;
   this.xhr = this.req.xhr;
-  this.text = this.xhr.responseText;
+  this.text = this.req.method !='HEAD' 
+     ? this.xhr.responseText 
+     : null;
   this.setStatusProperties(this.xhr.status);
   this.header = this.headers = parseHeader(this.xhr.getAllResponseHeaders());
   // getAllResponseHeaders sometimes falsely returns "" for CORS requests, but
@@ -20847,7 +20842,7 @@ Response.prototype.setHeaderProperties = function(header){
 
 Response.prototype.parseBody = function(str){
   var parse = request.parse[this.type];
-  return parse
+  return parse && str && str.length
     ? parse(str)
     : null;
 };
@@ -20943,9 +20938,18 @@ function Request(method, url) {
   this.header = {};
   this._header = {};
   this.on('end', function(){
-    var res = new Response(self);
-    if ('HEAD' == method) res.text = null;
-    self.callback(null, res);
+    var err = null;
+    var res = null;
+
+    try {
+      res = new Response(self); 
+    } catch(e) {
+      err = new Error('Parser is unable to parse the response');
+      err.parse = true;
+      err.original = e;
+    }
+
+    self.callback(err, res);
   });
 }
 
@@ -21035,6 +21039,26 @@ Request.prototype.set = function(field, val){
   }
   this._header[field.toLowerCase()] = val;
   this.header[field] = val;
+  return this;
+};
+
+/**
+ * Remove header `field`.
+ *
+ * Example:
+ *
+ *      req.get('/')
+ *        .unset('User-Agent')
+ *        .end(callback);
+ *
+ * @param {String} field
+ * @return {Request} for chaining
+ * @api public
+ */
+
+Request.prototype.unset = function(field){
+  delete this._header[field.toLowerCase()];
+  delete this.header[field];
   return this;
 };
 
@@ -21272,6 +21296,7 @@ Request.prototype.send = function(data){
 
 Request.prototype.callback = function(err, res){
   var fn = this._callback;
+  this.clearTimeout();
   if (2 == fn.length) return fn(err, res);
   if (err) return this.emit('error', err);
   fn(res);
@@ -21762,6 +21787,9 @@ define('blob/BlobClient',['./Artifact', 'blob/BlobMetadata', 'superagent'], func
 
             var buffers = new BuffersWritable();
             buffers.on('finish', function () {
+                if (req.req.res.statusCode > 399) {
+                    return callback(req.req.res.statusCode);
+                }
                 callback(null, Buffer.concat(buffers.buffers));
             });
             buffers.on('error', function (err) {
@@ -21867,6 +21895,7 @@ define('blob/BlobClient',['./Artifact', 'blob/BlobMetadata', 'superagent'], func
 
     return BlobClient;
 });
+
 /*globals define, WebGMEGlobal, require*/
 /**
  * @author lattmann / https://github.com/lattmann
@@ -22892,7 +22921,7 @@ define('plugin/PluginContext',[], function () {
 define('plugin/PluginManagerBase',[
         './PluginBase',
         './PluginContext',
-        'logManager'],
+        'common/LogManager'],
     function (PluginBase, PluginContext, LogManager) {
 
         var PluginManagerBase = function (storage, Core, plugins, gmeConfig) {
@@ -23177,7 +23206,7 @@ define('js/Dialogs/PluginConfig/PluginConfigDialog',[], function () {
 
 /*globals define, _, requirejs, WebGMEGlobal*/
 
-define('js/Utils/InterpreterManager',['core/core',
+define('js/Utils/InterpreterManager',['common/core/core',
         'plugin/PluginManagerBase',
         'plugin/PluginResult',
         'blob/BlobClient',
@@ -23232,15 +23261,16 @@ define('js/Utils/InterpreterManager',['core/core',
                     self.gmeConfig);
                 pluginManager.initialize(null, function (pluginConfigs, configSaveCallback) {
                     //#1: display config to user
-                    var hackedConfig = {
+                    var noServerExecution = self.gmeConfig.plugin.allowServerExecution === false,
+                        hackedConfig = {
                         'Global Options': [
                             {
                                 "name": "runOnServer",
                                 "displayName": "Execute on Server",
-                                "description": '',
+                                "description": noServerExecution ? 'Server side execution is disabled.' : '',
                                 "value": false, // this is the 'default config'
                                 "valueType": "boolean",
-                                "readOnly": false
+                                "readOnly": noServerExecution
                             }
                         ]
                     };
@@ -23364,12 +23394,12 @@ define('js/Utils/InterpreterManager',['core/core',
 
 define('webgme.classes',
     [
-        'client',
+        'client/js/client',
         'blob/BlobClient',
         'executor/ExecutorClient',
         'js/Utils/InterpreterManager',
-        'core/core',
-        'storage/clientstorage'
+        'common/core/core',
+        'common/storage/clientstorage'
     ], function (Client, BlobClient, ExecutorClient, InterpreterManager, Core, Storage) {
 
         

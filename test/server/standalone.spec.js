@@ -10,7 +10,7 @@ describe('standalone server', function () {
     'use strict';
 
     var WebGME = testFixture.WebGME,
-        requirejs = require('requirejs'),
+        logger = testFixture.logger,
 
         should = testFixture.should,
         superagent = testFixture.superagent,
@@ -125,7 +125,7 @@ describe('standalone server', function () {
             {code: 200, url: '/plugin/PluginResult.js'},
             {code: 200, url: '/common/storage/cache.js'},
             {code: 200, url: '/common/storage/client.js'},
-            {code: 200, url: '/middleware/blob/BlobClient.js'}
+            {code: 200, url: '/common/blob/BlobClient.js'}
         ]
     }, {
         type: 'https',
@@ -150,12 +150,8 @@ describe('standalone server', function () {
         it('returns ' + requestTest.code + ' for ' + url + redirectText, function (done) {
             // TODO: add POST/DELETE etc support
             agent.get(server.getUrl() + url).end(function (err, res) {
-                if (err) {
-                    done(err);
-                    return;
-                }
 
-                should.equal(res.status, requestTest.code);
+                should.equal(res.status, requestTest.code, err);
 
                 if (requestTest.redirectUrl) {
                     // redirected
@@ -164,7 +160,7 @@ describe('standalone server', function () {
                         should.equal(res.headers.location, requestTest.redirectUrl);
                     }
                     should.not.equal(res.headers.location, url);
-                    console.log(res.headers.location, url, requestTest.redirectUrl);
+                    logger.debug(res.headers.location, url, requestTest.redirectUrl);
                     should.equal(res.redirects.length, 1);
                 } else {
                     // was not redirected
@@ -188,7 +184,7 @@ describe('standalone server', function () {
 
         describe(scenario.type + ' server ' + (scenario.authentication ? 'with' : 'without') + ' auth', function () {
             var nodeTLSRejectUnauthorized = process.env.NODE_TLS_REJECT_UNAUTHORIZED,
-                gmeauth,
+                gmeauth = require('../../src/server/middleware/auth/gmeauth'),
                 db;
 
             before(function (done) {
@@ -205,6 +201,7 @@ describe('standalone server', function () {
                 gmeConfig.authentication.guestAccount = 'guestUserName';
                 gmeConfig.server.https.enable = scenario.type === 'https';
 
+                // https://github.com/visionmedia/superagent/issues/205
                 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
                 dbConn = Q.ninvoke(mongodb.MongoClient, 'connect', gmeConfig.mongo.uri, gmeConfig.mongo.options)
@@ -241,11 +238,7 @@ describe('standalone server', function () {
                     });
 
                 gmeauthDeferred = Q.defer();
-                requirejs(['server/auth/gmeauth'], function (gmeauth) {
-                    gmeauthDeferred.resolve(gmeauth(null /* session */, gmeConfig));
-                }, function (err) {
-                    gmeauthDeferred.reject(err);
-                });
+                gmeauthDeferred.resolve(gmeauth(null /* session */, gmeConfig));
 
                 userReady = gmeauthDeferred.promise.then(function (gmeauth_) {
                     gmeauth = gmeauth_;
@@ -288,15 +281,9 @@ describe('standalone server', function () {
                         done(err);
                         return;
                     }
-                    gmeauth.unload(function (err) {
-                        if (err) {
-                            done(err);
-                            return;
-                        }
-                        server.stop(function () {
-                            //console.log('done');
-                            done();
-                        });
+                    server.stop(function () {
+                        logger.debug('server stopped');
+                        done();
                     });
                 });
             });
@@ -333,11 +320,7 @@ describe('standalone server', function () {
 
         it('should return 404 /decorators/DefaultDecorator/DefaultDecorator.js', function (done) {
             agent.get(serverBaseUrl + '/decorators/DefaultDecorator/DefaultDecorator.js').end(function (err, res) {
-                if (err) {
-                    done(err);
-                    return;
-                }
-                should.equal(res.status, 404);
+                should.equal(res.status, 404, err);
                 done();
             });
         });
@@ -347,9 +330,7 @@ describe('standalone server', function () {
 
         var db,
             collection,
-            gmeauth,
-            sockets = [],
-            socketId,
+            gmeauth = require('../../src/server/middleware/auth/gmeauth'),
             gmeConfig = testFixture.getGmeConfig(),
             logIn = function (callback) {
                 agent.post(serverBaseUrl + '/login?redirect=%2F')
@@ -388,8 +369,6 @@ describe('standalone server', function () {
                         socket.on('connect', function () {
                             defer.resolve(socket);
                         });
-
-                        sockets.push(socket);
 
                         return defer.promise;
                     });
@@ -445,11 +424,7 @@ describe('standalone server', function () {
                 });
 
             gmeauthDeferred = Q.defer();
-            requirejs(['server/auth/gmeauth'], function (gmeauth) {
-                gmeauthDeferred.resolve(gmeauth(null /* session */, gmeConfig));
-            }, function (err) {
-                gmeauthDeferred.reject(err);
-            });
+            gmeauthDeferred.resolve(gmeauth(null /* session */, gmeConfig));
 
             userReady = gmeauthDeferred.promise.then(function (gmeauth_) {
                 gmeauth = gmeauth_;
@@ -467,6 +442,12 @@ describe('standalone server', function () {
                         write: false,
                         delete: false
                     });
+                //}).then(function () {
+                //    return gmeauth.addUser(gmeConfig.authentication.guestAccount,
+                //        gmeConfig.authentication.guestAccount +'@example.com',
+                //        'plaintext',
+                //        true,
+                //        {overwrite: true});
                 });
             });
 
@@ -484,25 +465,9 @@ describe('standalone server', function () {
                     done(err);
                     return;
                 }
-                gmeauth.unload(function (err) {
-                    if (err) {
-                        done(err);
-                        return;
-                    }
 
-                    // destroy all socket io connections
-                    // this will ensures that the server stops as soon as possible and the test will not timeout.
-                    for (socketId in sockets) {
-                        //console.log('socket', socketId, 'destroyed');
-                        if (sockets.hasOwnProperty(socketId)) {
-                            sockets[socketId].destroy();
-                        }
-                    }
-
-                    server.stop(function () {
-                        //console.log('done');
-                        done();
-                    });
+                server.stop(function () {
+                    done();
                 });
             });
         });
@@ -517,7 +482,7 @@ describe('standalone server', function () {
                     done(err);
                     return;
                 }
-                //console.log(res);
+                logger.debug(res);
                 should.equal(res.status, 200);
                 done();
             });
@@ -609,5 +574,23 @@ describe('standalone server', function () {
                 }).nodeify(done);
         });
 
+
+        it('should return a readable error', function (done) {
+            var projectName = 'DoesntExist';
+            openSocketIo()
+                .then(function (socket) {
+                    return Q.ninvoke(socket, 'emit', 'openProject', projectName)
+                        .then(function () {
+                            return Q.ninvoke(socket, 'emit', 'findHash', projectName, 'asdf');
+                        })
+                        .finally(function () {
+                            socket.disconnect();
+                        });
+                })
+                .nodeify(function (err) {
+                    should.equal(typeof err, 'string');
+                    done();
+                });
+        });
     });
 });

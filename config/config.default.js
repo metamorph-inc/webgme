@@ -27,6 +27,10 @@ var path = require('path'),
 
         client: {
             appDir: path.join(__dirname, '../src/client'),
+            log: {
+                level: 'debug' // To see log messages in the browser inspector set:
+                               // localStorage.debug = '*' (or 'gme*', 'gme:core*')
+            },
             // Used in client/WebGME.js to load initial project.
             defaultProject: {
                 name: null,
@@ -41,12 +45,8 @@ var path = require('path'),
             enable: false,
             nonce: null,
             outputDir: './',
-            workerRefreshInterval: 5000
-        },
-
-        log: {
-            level: 1, // 5 = ALL, 4 = DEBUG, 3 = INFO, 2 = WARNING, 1 = ERROR, 0 = OFF
-            file: 'server.log'
+            workerRefreshInterval: 5000,
+            labelJobs: './labelJobs.json'
         },
 
         mongo: {
@@ -81,6 +81,37 @@ var path = require('path'),
             maxWorkers: 10,
             sessionCookieId: 'webgmeSid',
             sessionCookieSecret: 'meWebGMEez',
+            log: {
+                transports: [{
+                    transportType: 'Console',
+                    //patterns: ['gme:server:*', '-gme:server:worker*'], // ['gme:server:worker:*'], ['gme:server:*', '-gme:server:worker*']
+                    options: {
+                        level: 'info',
+                        colorize: true,
+                        timestamp: true,
+                        prettyPrint: true,
+                        handleExceptions: true, // ignored by default when you create the logger, see the logger.create function
+                        depth: 2
+                    }
+                }, {
+                    transportType: 'File',
+                    options: {
+                        name: 'info-file',
+                        filename: './server.log',
+                        level: 'info',
+                        json: false
+                    }
+                }, {
+                    transportType: 'File',
+                    options: {
+                        name: 'error-file',
+                        filename: './server-error.log',
+                        level: 'error',
+                        handleExceptions: true, // ignored by default when you create the logger, see the logger.create function
+                        json: false
+                    }
+                }]
+            },
             https: {
                 enable: false,
                 certificateFile: path.join(__dirname, '../certificates/sample-cert.pem'),

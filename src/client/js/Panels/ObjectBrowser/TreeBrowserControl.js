@@ -4,20 +4,20 @@
  * @author rkereskenyi / https://github.com/rkereskenyi
  */
 
-define(['common/LogManager',
+define(['js/logger',
         'js/Utils/GMEConcepts',
         'js/NodePropertyNames',
         'js/Utils/ExportManager',
         'js/Utils/ImportManager',
         'js/Constants',
         'js/RegistryKeys',
-        'css!./styles/TreeBrowserControl.css'], function (logManager,
-                                                                       GMEConcepts,
-                                                                       nodePropertyNames,
-                                                                       ExportManager,
-                                                                       ImportManager,
-                                                                       CONSTANTS,
-                                                                       REGISTRY_KEYS) {
+        'css!./styles/TreeBrowserControl.css'], function (Logger,
+                                                           GMEConcepts,
+                                                           nodePropertyNames,
+                                                           ExportManager,
+                                                           ImportManager,
+                                                           CONSTANTS,
+                                                           REGISTRY_KEYS) {
 
     "use strict";
 
@@ -28,7 +28,6 @@ define(['common/LogManager',
         GME_CONNECTION_CLASS = "gme-connection",
         GME_ROOT_ICON = "gme-root",
         GME_ASPECT_ICON = "gme-aspect",
-        projectRootID = CONSTANTS.PROJECT_ROOT_ID,
         DEFAULT_VISUALIZER = 'ModelEditor',
         CROSSCUT_VISUALIZER = 'Crosscut',
         SET_VISUALIZER = 'SetEditor';
@@ -47,44 +46,54 @@ define(['common/LogManager',
             getNodeClass;
 
         //get logger instance for this component
-        logger = logManager.create("TreeBrowserControl");
+        logger = Logger.create('gme:Panels:ObjectBrowser:TreeBrowserControl', WebGMEGlobal.gmeConfig.client.log);
         this._logger = logger;
 
         this._client = client;
 
         initialize = function () {
-            var rootNode = client.getNode(projectRootID); //TODO make this loaded from constants
-
+            var rootNode = client.getNode(CONSTANTS.PROJECT_ROOT_ID); //TODO make this loaded from constants
+            logger.debug('entered initialize');
             if (rootNode) {
                 var loadingRootTreeNode;
-
+                logger.debug('rootNode avaliable now');
                 selfId = client.addUI(self, function (events) {
+                    logger.debug('loaded territory from rootNode at initialize');
                     self._eventCallback(events);
                 });
 
                 //add "root" with its children to territory
                 //create a new loading node for it in the tree
-                loadingRootTreeNode = treeBrowser.createNode(null, {   "id": projectRootID,
+                loadingRootTreeNode = treeBrowser.createNode(null, {   "id": CONSTANTS.PROJECT_ROOT_ID,
                     "name": "Initializing tree...",
                     "hasChildren" : false,
                     "class" :  NODE_PROGRESS_CLASS });
 
                 //store the node's info in the local hashmap
-                nodes[projectRootID] = {   "treeNode": loadingRootTreeNode,
+                nodes[CONSTANTS.PROJECT_ROOT_ID] = {   "treeNode": loadingRootTreeNode,
                     "children" : [],
                     "state" : stateLoading };
 
                 //add the root to the query
-                selfPatterns ={};
-                selfPatterns[projectRootID] = { "children": 2}; //TODO make this loaded from constants
+                selfPatterns = {};
+                selfPatterns[CONSTANTS.PROJECT_ROOT_ID] = { "children": 2};
                 client.updateTerritory(selfId, selfPatterns);
 
                 // expand root
                 // FIXME: how to detect, when the root is loaded for the first time
                 setTimeout(function () {
+                    var settings = {};
+                    logger.debug('expanding root-tree');
                     loadingRootTreeNode.expand(true);
+                    if (WebGMEGlobal.State.getActiveObject()) {
+                        // no selection needed
+                    } else {
+                        settings[CONSTANTS.STATE_ACTIVE_OBJECT] = CONSTANTS.PROJECT_ROOT_ID;
+                        WebGMEGlobal.State.set(settings);
+                    }
                 }, 100);
             } else {
+                logger.debug('rootNode not avaliable at initialize');
                 setTimeout(initialize, 500);
             }
         };
@@ -93,7 +102,7 @@ define(['common/LogManager',
             var objID = nodeObj.getId(),
                 c = GME_ATOM_CLASS; //by default everyone is represented with the atom class
 
-            if (objID === projectRootID) {
+            if (objID === CONSTANTS.PROJECT_ROOT_ID) {
                 //if root object
                 c = GME_ROOT_ICON;
             } else if (GMEConcepts.getCrosscuts(objID).length > 0) {
@@ -230,7 +239,7 @@ define(['common/LogManager',
             //temporary fix to not allow deleting ROOT AND FCO
             while (i--) {
                 if (!GMEConcepts.canDeleteNode(selectedIds[i])) {
-                    logger.warning('Can not delete item with ID: ' + selectedIds[i] + '. Possibly it is the ROOT or FCO');
+                    logger.warn('Can not delete item with ID: ' + selectedIds[i] + '. Possibly it is the ROOT or FCO');
                     selectedIds.splice(i, 1);
                 }
             }
@@ -529,7 +538,7 @@ define(['common/LogManager',
                             nodes[objectId].state = stateLoaded;
 
                             //if there is no more children of the current node, remove it from the territory
-                            if ((updatedObject.getChildrenIds()).length === 0 && objectId !== projectRootID) {
+                            if ((updatedObject.getChildrenIds()).length === 0 && objectId !== CONSTANTS.PROJECT_ROOT_ID) {
                                 removeFromTerritory.push({ "nodeid" : objectId });
                                 delete selfPatterns[objectId];
                             }
@@ -576,7 +585,7 @@ define(['common/LogManager',
             //forget the old territory
             client.removeUI(selfId);
 
-            treeBrowser.deleteNode(nodes[projectRootID].treeNode);
+            treeBrowser.deleteNode(nodes[CONSTANTS.PROJECT_ROOT_ID].treeNode);
 
             selfPatterns = {};
             nodes = {};
@@ -647,7 +656,7 @@ define(['common/LogManager',
             params[childId]['registry'][REGISTRY_KEYS.POSITION] = {x: 100, y: 100};
             client.createChildren(params);
         } else {
-            logger.warning("Can not create child instance of '" + childId + "', in parent object: '" + nodeId + "'");
+            logger.warn("Can not create child instance of '" + childId + "', in parent object: '" + nodeId + "'");
         }
     };
 

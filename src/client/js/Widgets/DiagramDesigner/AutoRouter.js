@@ -1,11 +1,11 @@
-/*globals define*/
+/*globals define, WebGMEGlobal*/
 /*
  * Copyright (C) 2013 Vanderbilt University, All rights reserved.
  *
  * @author brollb / https:// github/brollb
  */
 
-define(['common/LogManager',
+define(['js/logger',
            'common/util/assert',
            './AutoRouter.Constants',
            './AutoRouter.Utils',
@@ -15,7 +15,7 @@ define(['common/LogManager',
            './AutoRouter.Box',
            './AutoRouter.Port',
            './AutoRouter.Path'],
-       function (logManager, 
+       function (Logger,
                  assert, 
                  CONSTANTS, 
                  Utils, 
@@ -28,7 +28,7 @@ define(['common/LogManager',
 
     'use strict'; 
 
-    var _logger = logManager.create('AutoRouter');
+    var _logger = Logger.create('gme:Widgets:DiagramDesigner:AutoRouter', WebGMEGlobal.gmeConfig.client.log);
 
     var AutoRouter = function() {
        this.paths = {};
@@ -465,17 +465,11 @@ define(['common/LogManager',
         assert(this.paths[pathId] !== undefined, 
                'AutoRouter:getPath requested path does not match any current paths');
         var path = this.paths[pathId],
-            points = path.getPointList(),
-            i = -1,
-            res = [],
-            pt;
+            points = path.getPointList();
 
-        while(++i < points.length) {
-            pt = [points[i].x, points[i].y];
-            res.push(pt);
-        }
-
-        return res;
+        return points.map(function(point) {
+            return [point.x, point.y];
+        });
     };
 
     AutoRouter.prototype.setBoxRect = function(boxObject, size) {
@@ -612,8 +606,7 @@ define(['common/LogManager',
 
     AutoRouter.prototype.setPathCustomPoints = function(args) { // args.points = [ [x, y], [x2, y2], ... ]
         var path = this.paths[args.path],
-            points = [],
-            i = 0;
+            points;
         if(path === undefined) {
             throw 'AutoRouter: Need to have an AutoRouterPath type to set custom path points';
         }
@@ -625,13 +618,11 @@ define(['common/LogManager',
         }
 
         // Convert args.points to array of [ArPoint] 's
-        while (i < args.points.length) {
-            points.push(new ArPoint(args.points[i][0], args.points[i][1]));
-            ++i;
-        }
+        points = args.points.map(function(point) {
+            return new ArPoint(point[0], point[1]);
+        });
 
         path.setCustomPathPoints(points);
-
     };
 
     /**

@@ -57,11 +57,12 @@ define(['common/util/assert', 'common/core/core'], function (ASSERT, Core) {
             }
             if (parameters.projectName) {
                 storage.getProjectNames(function (err, projectNames) {
-                    var projectExists = projectNames.indexOf(parameters.projectName) > -1;
+                    var projectExists;
                     if (err) {
                         closeOnError(err);
                         return;
                     }
+                    projectExists = projectNames.indexOf(parameters.projectName) > -1;
                     if (!projectExists && !parameters.createProject && !parameters.overwriteProject) {
                         closeOnError('"' + parameters.projectName + '" does not exists among: ' +
                         projectNames.toString() + '. Set flag "createProject" to create a new project.');
@@ -299,12 +300,15 @@ define(['common/util/assert', 'common/core/core'], function (ASSERT, Core) {
         result.rootNode = result.core.createNode();
 
         result.core.persist(result.rootNode, function (err) {
+            var newRootHash;
             if (err) {
                 callback(err);
                 return;
             }
 
-            result.project.makeCommit([], result.core.getHash(result.rootNode), 'create empty project', function (err, commitHash) {
+            newRootHash = result.core.getHash(result.rootNode);
+
+            result.project.makeCommit([], newRootHash, 'create empty project', function (err, commitHash) {
                 if (err) {
                     callback(err);
                     return;

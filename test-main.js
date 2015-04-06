@@ -36,8 +36,8 @@ require.config({
 
 
         // MAGIC ... from src/client/js/main.js
-        'executor': './src/middleware/executor',
-        'blob': './src/middleware/blob',
+        'executor': './src/common/executor',
+        'blob': './src/common/blob',
         'common': './src/common',
         //'core': './src/common/core',
         //'storage': './src/common/storage',
@@ -48,8 +48,9 @@ require.config({
         //'logManager': './src/common/LogManager',
         //'coreclient': './src/common/core/users',
 
-        'superagent': './src/client/lib/superagent/superagent',
-        'jszip': './src/client/lib/jszip/jszip'
+        'superagent': './src/client/lib/superagent/superagent-1.1.0',
+        'jszip': './src/client/lib/jszip/jszip',
+        'debug': './src/client/lib/debug/debug'
 
         // external libraries used by plugins
         //'ejs': './support/ejs/ejs.min',

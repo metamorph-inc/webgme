@@ -10607,6 +10607,12 @@ define('common/storage/client',[ "common/util/assert", "common/util/guid" ], fun
                         delete callbacks[guid];
                         callback(err);
                     }
+
+                    // FIXME: how to disconnect properly ???
+                    //if (socketConnected && Object.keys(references).length === 0) {
+                    //    socketConnected = false;
+                    //    socket.disconnect();
+                    //}
                 });
             } else {
                 callback(new Error(ERROR_DISCONNECTED));
@@ -11828,6 +11834,8 @@ define('common/storage/cache',[ "common/util/assert" ], function (ASSERT) {
 
 	var Database = function (database, options) {
         var gmeConfig = options.globConf;
+        var logger = options.log.fork('cache');
+        logger.debug('Initializing');
 		ASSERT(typeof database === "object" && typeof gmeConfig === "object");
 
 		var projects = {};
@@ -11835,6 +11843,8 @@ define('common/storage/cache',[ "common/util/assert" ], function (ASSERT) {
 
 		function openProject (name, callback) {
 			ASSERT(typeof name === "string" && typeof callback === "function");
+
+            logger.debug('openProject', {metadata: {name: name}});
 
 			dlock.lock(function () {
 				if (typeof projects[name] !== "undefined") {
@@ -11856,7 +11866,9 @@ define('common/storage/cache',[ "common/util/assert" ], function (ASSERT) {
 		}
 
 		function closeDatabase (callback) {
-			dlock.lock(function () {
+            logger.debug('closeDatabase');
+
+            dlock.lock(function () {
 				var n;
 				for (n in projects) {
 					projects[n].abortProject();
@@ -11868,7 +11880,9 @@ define('common/storage/cache',[ "common/util/assert" ], function (ASSERT) {
 		}
 
 		function deleteProject (name, callback) {
-			if (typeof projects[name] !== "undefined") {
+            logger.debug('deleteProject', {metadata: {name: name}});
+
+            if (typeof projects[name] !== "undefined") {
 				projects[name].deleteProject();
 			}
 
@@ -11884,7 +11898,10 @@ define('common/storage/cache',[ "common/util/assert" ], function (ASSERT) {
 			var cache = {};
 			var cacheSize = 0;
 
-			function tryFreeze(o) {
+            var wrapLogger = logger.fork('wrapProject:' + name);
+            wrapLogger.debug('Initializing');
+
+            function tryFreeze(o) {
 				try{
 					Object.freeze(o);
 				}
@@ -11916,6 +11933,7 @@ define('common/storage/cache',[ "common/util/assert" ], function (ASSERT) {
 
 			function cacheInsert (key, obj) {
 				ASSERT(typeof cache[key] === "undefined" && obj[ID_NAME] === key);
+                wrapLogger.debug('cacheInsert', {metadata: key});
 
 				deepFreeze(obj);
 				cache[key] = obj;
@@ -11930,6 +11948,7 @@ define('common/storage/cache',[ "common/util/assert" ], function (ASSERT) {
 			function loadObject (key, callback) {
 				ASSERT(typeof key === "string" && typeof callback === "function");
 				ASSERT(project !== null);
+                wrapLogger.debug('loadObject', {metadata: key});
 
 				var obj = cache[key];
 				if (typeof obj === "undefined") {
@@ -11971,6 +11990,7 @@ define('common/storage/cache',[ "common/util/assert" ], function (ASSERT) {
 
 			function insertObject (obj, callback) {
 				ASSERT(typeof obj === "object" && obj !== null && typeof callback === "function");
+                wrapLogger.debug('insertObject');
 
 				var key = obj[ID_NAME];
 				ASSERT(typeof key === "string");
@@ -12002,7 +12022,9 @@ define('common/storage/cache',[ "common/util/assert" ], function (ASSERT) {
 			}
 
 			function abortProject (callback) {
-				if (project !== null) {
+                wrapLogger.debug('abortProject');
+
+                if (project !== null) {
 					var p = project;
 					project = null;
 					delete projects[name];
@@ -12014,18 +12036,26 @@ define('common/storage/cache',[ "common/util/assert" ], function (ASSERT) {
 			}
 
 			function closeProject (callback) {
-				ASSERT(refcount >= 1);
+                wrapLogger.debug('closeProject', {metadata: {refcount: refcount}});
 
-				if (--refcount === 0) {
-					abortProject(callback);
-				} else if (typeof callback === "function") {
-					callback(null);
-				}
+                if (refcount >= 1) {
+                    if (--refcount === 0) {
+                        abortProject(callback);
+                    } else if (typeof callback === "function") {
+                        callback(null);
+                    }
+                } else {
+                    wrapLogger.warn('closeProject was called more times than open project');
+                    // nothing to close
+                    callback(null);
+                }
 			}
 
 			function deleteProject () {
 				var key, callbacks, cb, err = new Error("cache closed");
-				for (key in missing) {
+                wrapLogger.debug('deleteProject');
+
+                for (key in missing) {
 					callbacks = missing[key];
 					while ((cb = callbacks.pop())) {
 						cb(err);
@@ -12040,6 +12070,7 @@ define('common/storage/cache',[ "common/util/assert" ], function (ASSERT) {
 
 			function reopenProject (callback) {
 				ASSERT(project !== null && refcount >= 0 && typeof callback === "function");
+                wrapLogger.debug('reopenProject');
 
                 var cacheProject = {};
                 for (var key in project) {
@@ -12064,6 +12095,7 @@ define('common/storage/cache',[ "common/util/assert" ], function (ASSERT) {
 			};
 		}
 
+        logger.debug('Ready');
 		return {
 			openDatabase: database.openDatabase,
 			closeDatabase: closeDatabase,
@@ -12096,14 +12128,19 @@ define('common/storage/commit',[ "common/util/assert", "common/util/key", "commo
 	var HASH_REGEXP = new RegExp("^#[0-9a-zA-Z_]*$");
 
 	function Database (_database,_options) {
-        var gmeConfig = _options.globConf;
+        var gmeConfig = _options.globConf,
+            logger = _options.log.fork('commit');
+        logger.debug('Initializing');
 		ASSERT(typeof _database === "object");
 		ASSERT(typeof _options === "object");
 		ASSERT(typeof gmeConfig.storage.keyType === "string");
 
 		function openProject (projectName, callback) {
 
-			var _project = null;
+			var _project = null,
+                projectLogger = logger.fork('project:' + projectName);
+            projectLogger.debug('Initializing');
+
 			_database.openProject(projectName, function (err, proj) {
 				if (!err && proj) {
 					_project = proj;
@@ -12131,6 +12168,7 @@ define('common/storage/commit',[ "common/util/assert", "common/util/key", "commo
 			});
 
 			function makeCommit (parents, roothash, msg, callback) {
+                projectLogger.debug('makeCommit', {metadata: arguments});
 				ASSERT(HASH_REGEXP.test(roothash));
 				ASSERT(typeof callback === 'function');
 
@@ -12161,13 +12199,19 @@ define('common/storage/commit',[ "common/util/assert", "common/util/key", "commo
 			}
 
             function setUser (userId){
+                projectLogger.debug('setUser', {metadata: arguments});
+
                 if(typeof userId === 'string'){
                     _options.user = userId;
                 };
             }
-		}
 
-		return {
+            projectLogger.debug('Ready');
+        }
+
+        logger.debug('Ready');
+
+        return {
 			openDatabase: _database.openDatabase,
 			closeDatabase: _database.closeDatabase,
 			fsyncDatabase: _database.fsyncDatabase,
@@ -17320,43 +17364,63 @@ define('client/js/client',[
           }
         }
       }
-
+      
       function networkWatcher() {
         _networkStatus = "";
-        var running = true;
         //FIXME: Are these gme options or not??
-        var autoReconnect = _configuration.autoreconnect;
-        var reConnDelay = _configuration.reconndelay;
-        var reConnAmount = _configuration.reconnamount;
-        var reconnecting = function () {
-          var counter = 0;
-          var timerId = setInterval(function () {
-            if (counter < reConnAmount && _networkStatus === _self.networkStates.DISCONNECTED && running) {
-              _database.openDatabase(function (err) {
-              });
-              counter++;
-            } else {
-              clearInterval(timerId);
-            }
-          }, reConnDelay);
-        };
-        var dbStatusUpdated = function (err, newstatus) {
-          if (running) {
-            if (!err && newstatus && _networkStatus !== newstatus) {
-              _networkStatus = newstatus;
-              if (_networkStatus === _self.networkStates.DISCONNECTED && autoReconnect) {
-                reconnecting();
+
+        var frequency = 10,
+            running = true,
+            stop = function () {
+              running = false;
+            },
+            checking = false,
+            reconneting = function(finished){
+              var connecting = false,
+                  counter = 0,
+                  frequency = _configuration.reconndelay || 10,
+                  timerId = setInterval(function(){
+                    if(!connecting){
+                      _database.openDatabase(function(err){
+                        connecting = false;
+                        if(!err){
+                         //we are back!
+                          clearInterval(timerId);
+                          return finished(null);
+                        }
+                        if(++counter === _configuration.reconnamount){
+                          //we failed, stop trying
+                          clearInterval(timerId);
+                          return finished(err);
+                        }
+                      });
+                    }
+                  },frequency);
+            },
+            checkId = setInterval(function(){
+              if(!checking){
+                checking = true;
+                _database.getDatabaseStatus(_networkStatus,function(err,newStatus){
+                  if(running){
+                    _networkStatus = newStatus;
+                    if (_networkStatus === _self.networkStates.DISCONNECTED && _configuration.autoreconnect) {
+                      reconnecting(function(err){
+                        checking = false;
+                        if(err){
+                          logger.error('permanent network failure:',err);
+                          clearInterval(checkId);
+                        }
+                      });
+                    } else {
+                      checking = false;
+                    }
+                    _self.dispatchEvent(_self.events.NETWORKSTATUS_CHANGED, _networkStatus);
+                  } else {
+                    clearInterval(checkId);
+                  }
+                });
               }
-              _self.dispatchEvent(_self.events.NETWORKSTATUS_CHANGED, _networkStatus);
-            }
-            return _database.getDatabaseStatus(_networkStatus, dbStatusUpdated);
-          }
-          return;
-        };
-        var stop = function () {
-          running = false;
-        }
-        _database.getDatabaseStatus('', dbStatusUpdated);
+            },frequency);
 
         return {
           stop: stop
@@ -19625,6 +19689,27 @@ define('client/js/client',[
         });
       }
 
+      function getSeedInfoAsync(callback) {
+        _database.simpleRequest({command: 'getSeedInfo'}, function (err, id) {
+          if (err) {
+            return callback(err);
+          }
+
+          _database.simpleResult(id, callback);
+        });
+      }
+
+      function seedProjectAsync(parameters, callback) {
+        parameters.command = 'seedProject';
+        _database.simpleRequest(parameters, function (err, id) {
+          if (err) {
+            return callback(err);
+          }
+
+          _database.simpleResult(id, callback);
+        });
+      }
+
         //TODO these functions or some successors will be needed when the UI will handle merge tasks!!!
       //TODO probably it would be a good idea to put this functionality to server
       //function getBaseOfCommits(one,other,callback){
@@ -20104,6 +20189,10 @@ define('client/js/client',[
         //undo - redo
         undo: _redoer.undo,
         redo: _redoer.redo,
+
+        //clone services
+        getSeedInfoAsync: getSeedInfoAsync,
+        seedProjectAsync: seedProjectAsync
 
         //merge
         //getBaseOfCommits: getBaseOfCommits,
@@ -22071,7 +22160,12 @@ define('blob/BlobClient',['blob/Artifact', 'blob/BlobMetadata', 'superagent'], f
                     var response = req.xhr.response; // response is an arraybuffer
                     if (contentType === 'application/json') {
                         var utf8ArrayToString = function (uintArray) {
-                            return decodeURIComponent(escape(String.fromCharCode.apply(null, uintArray)));
+                            var inputString = '',
+                                i;
+                            for (i = 0; i < uintArray.byteLength; i++) {
+                                inputString += String.fromCharCode(uintArray[i]);
+                            }
+                            return decodeURIComponent(escape(inputString));
                         };
                         response = JSON.parse(utf8ArrayToString(new Uint8Array(response)));
                     }

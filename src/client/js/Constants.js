@@ -4,9 +4,9 @@
  * STRING CONSTANT DEFINITIONS USED IN CLIENT JAVASCRIPT (INHERITS ALL THE CONSTANST FROM COMMON/CONSTANST.JS)
  */
 
-define(['underscore', '/common/Constants.js'], function (underscore, COMMON_CONSTANTS) {
+define(['underscore', 'common/Constants'], function (underscore, COMMON_CONSTANTS) {
 
-    "use strict";
+    'use strict';
 
     //define client-only string constants
     var clientContants = {};
@@ -69,6 +69,7 @@ define(['underscore', '/common/Constants.js'], function (underscore, COMMON_CONS
         STATE_ACTIVE_COMMIT: 'activeCommit',
         STATE_ACTIVE_BRANCH_NAME: 'activeBranchName',
         STATE_ACTIVE_CROSSCUT: 'activeCrosscut',
+        STATE_IS_INIT_PHASE: 'isInitPhase',
 
         /* ASPECTs */
         ASPECT_ALL: 'All',

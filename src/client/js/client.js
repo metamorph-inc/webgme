@@ -771,43 +771,63 @@ define([
           }
         }
       }
-
+      
       function networkWatcher() {
         _networkStatus = "";
-        var running = true;
         //FIXME: Are these gme options or not??
-        var autoReconnect = _configuration.autoreconnect;
-        var reConnDelay = _configuration.reconndelay;
-        var reConnAmount = _configuration.reconnamount;
-        var reconnecting = function () {
-          var counter = 0;
-          var timerId = setInterval(function () {
-            if (counter < reConnAmount && _networkStatus === _self.networkStates.DISCONNECTED && running) {
-              _database.openDatabase(function (err) {
-              });
-              counter++;
-            } else {
-              clearInterval(timerId);
-            }
-          }, reConnDelay);
-        };
-        var dbStatusUpdated = function (err, newstatus) {
-          if (running) {
-            if (!err && newstatus && _networkStatus !== newstatus) {
-              _networkStatus = newstatus;
-              if (_networkStatus === _self.networkStates.DISCONNECTED && autoReconnect) {
-                reconnecting();
+
+        var frequency = 10,
+            running = true,
+            stop = function () {
+              running = false;
+            },
+            checking = false,
+            reconneting = function(finished){
+              var connecting = false,
+                  counter = 0,
+                  frequency = _configuration.reconndelay || 10,
+                  timerId = setInterval(function(){
+                    if(!connecting){
+                      _database.openDatabase(function(err){
+                        connecting = false;
+                        if(!err){
+                         //we are back!
+                          clearInterval(timerId);
+                          return finished(null);
+                        }
+                        if(++counter === _configuration.reconnamount){
+                          //we failed, stop trying
+                          clearInterval(timerId);
+                          return finished(err);
+                        }
+                      });
+                    }
+                  },frequency);
+            },
+            checkId = setInterval(function(){
+              if(!checking){
+                checking = true;
+                _database.getDatabaseStatus(_networkStatus,function(err,newStatus){
+                  if(running){
+                    _networkStatus = newStatus;
+                    if (_networkStatus === _self.networkStates.DISCONNECTED && _configuration.autoreconnect) {
+                      reconnecting(function(err){
+                        checking = false;
+                        if(err){
+                          logger.error('permanent network failure:',err);
+                          clearInterval(checkId);
+                        }
+                      });
+                    } else {
+                      checking = false;
+                    }
+                    _self.dispatchEvent(_self.events.NETWORKSTATUS_CHANGED, _networkStatus);
+                  } else {
+                    clearInterval(checkId);
+                  }
+                });
               }
-              _self.dispatchEvent(_self.events.NETWORKSTATUS_CHANGED, _networkStatus);
-            }
-            return _database.getDatabaseStatus(_networkStatus, dbStatusUpdated);
-          }
-          return;
-        };
-        var stop = function () {
-          running = false;
-        }
-        _database.getDatabaseStatus('', dbStatusUpdated);
+            },frequency);
 
         return {
           stop: stop
@@ -3076,6 +3096,27 @@ define([
         });
       }
 
+      function getSeedInfoAsync(callback) {
+        _database.simpleRequest({command: 'getSeedInfo'}, function (err, id) {
+          if (err) {
+            return callback(err);
+          }
+
+          _database.simpleResult(id, callback);
+        });
+      }
+
+      function seedProjectAsync(parameters, callback) {
+        parameters.command = 'seedProject';
+        _database.simpleRequest(parameters, function (err, id) {
+          if (err) {
+            return callback(err);
+          }
+
+          _database.simpleResult(id, callback);
+        });
+      }
+
         //TODO these functions or some successors will be needed when the UI will handle merge tasks!!!
       //TODO probably it would be a good idea to put this functionality to server
       //function getBaseOfCommits(one,other,callback){
@@ -3555,6 +3596,10 @@ define([
         //undo - redo
         undo: _redoer.undo,
         redo: _redoer.redo,
+
+        //clone services
+        getSeedInfoAsync: getSeedInfoAsync,
+        seedProjectAsync: seedProjectAsync
 
         //merge
         //getBaseOfCommits: getBaseOfCommits,

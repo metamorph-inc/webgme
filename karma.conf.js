@@ -18,7 +18,8 @@ webgme.addToRequireJsPaths(gmeConfig);
     var server = webgme.standaloneServer(gmeConfig),
         importProject = function (projectName, filePath) {
             importCli.import(
-                gmeConfig.mongo.uri,
+                webgme.serverUserStorage,
+                gmeConfig,
                 projectName,
                 JSON.parse(testFixture.fs.readFileSync(filePath, 'utf8')),
                 'master',
@@ -79,6 +80,8 @@ module.exports = function (config) {
         files: [
             {pattern: 'src/**/*.js', included: false},
             {pattern: 'test-karma/**/*.spec.js', included: false},
+            {pattern: 'test-karma/**/*.inc.js', included: false}, //test include scripts
+            {pattern: 'test-karma/**/*.json', included: false}, //test assets
             'test-main.js'
         ],
 
@@ -99,7 +102,7 @@ module.exports = function (config) {
         // test results reporter to use
         // possible values: 'dots', 'progress'
         // available reporters: https://npmjs.org/browse/keyword/karma-reporter
-        reporters: ['mocha', 'coverage'],
+        reporters: ['dots', 'coverage'],
 
 
         // web server port

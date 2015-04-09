@@ -19,6 +19,23 @@ var path = require('path'),
             salts: 10
         },
 
+        bin: {
+            log: {
+                transports: [{
+                    transportType: 'Console',
+                    //patterns: ['gme:server:*', '-gme:server:worker*'], // ['gme:server:worker:*'], ['gme:server:*', '-gme:server:worker*']
+                    options: {
+                        level: 'info',
+                        colorize: true,
+                        timestamp: true,
+                        prettyPrint: true,
+                        handleExceptions: true, // ignored by default when you create the logger, see the logger.create function
+                        depth: 2
+                    }
+                }]
+            }
+        },
+
         blob: {
             type: 'FS', //'FS', 'S3'
             fsDir: './blob-local-storage',
@@ -31,6 +48,12 @@ var path = require('path'),
                 level: 'debug' // To see log messages in the browser inspector set:
                                // localStorage.debug = '*' (or 'gme*', 'gme:core*')
             },
+            usedDecorators: ['ModelDecorator',
+                             'CircleDecorator',
+                             'MetaDecorator',
+                             'SVGDecorator',
+                             'UMLStateMachineDecorator',
+                             'DefaultDecorator'],
             // Used in client/WebGME.js to load initial project.
             defaultProject: {
                 name: null,
@@ -76,12 +99,19 @@ var path = require('path'),
             components: {}
         },
 
+        seedProjects: {
+            enable: true,
+            defaultProject: 'EmptyProject',
+            basePaths: [path.join(__dirname, '../seeds')]
+        },
+
         server: {
             port: 8888,
             maxWorkers: 10,
             sessionCookieId: 'webgmeSid',
             sessionCookieSecret: 'meWebGMEez',
             log: {
+                //patterns: ['gme:server:*', '-gme:server:standalone*'],
                 transports: [{
                     transportType: 'Console',
                     //patterns: ['gme:server:*', '-gme:server:worker*'], // ['gme:server:worker:*'], ['gme:server:*', '-gme:server:worker*']
@@ -120,7 +150,7 @@ var path = require('path'),
         },
 
         socketIO: {
-            reconnect: false,
+            reconnection: false,
             'connect timeout': 10,
             'reconnection delay': 1,
             'force new connection': true,

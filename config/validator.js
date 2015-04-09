@@ -87,6 +87,11 @@ function validateConfig (configOrFileName) {
     assertString('config.authentication.logOutUrl', config.authentication.logOutUrl);
     assertNumber('config.authentication.salts', config.authentication.salts);
 
+    // bin scripts
+    expectedKeys.push('bin');
+    assertObject('config.bin', config.bin);
+    assertObject('config.bin.log', config.bin.log);
+
     // blob
     expectedKeys.push('blob');
     assertObject('config.blob', config.blob);
@@ -139,6 +144,12 @@ function validateConfig (configOrFileName) {
     assertObject('config.rest', config.rest);
     assertBoolean('config.rest.secure', config.rest.secure);
     assertObject('config.rest.components', config.rest.components);
+
+    //seedProjects
+    expectedKeys.push('seedProjects');
+    assertBoolean('config.seedProjects.enable', config.seedProjects.enable);
+    assertString('config.seedProjects.defaultProject', config.seedProjects.defaultProject);
+    assertArray('config.seedProjects.basePaths', config.seedProjects.basePaths);
 
     // server configuration
     expectedKeys.push('server');

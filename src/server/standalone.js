@@ -12,6 +12,7 @@
 var Path = require('path'),
     FS = require('fs'),
     OS = require('os'),
+    Q = require('q'),
     Express = require('express'),
     session = require('express-session'),
     compression = require('compression'),
@@ -29,17 +30,19 @@ var Path = require('path'),
     ASSERT = requireJS('common/util/assert'),
     GUID = requireJS('common/util/guid'),
     CANON = requireJS('common/util/cJson'),
-    BlobMetadata = requireJS('blob/BlobMetadata'),
 
-    BlobFSBackend = require('./middleware/blob/BlobFSBackend'),
-    BlobS3Backend = require('./middleware/blob/BlobS3Backend'),
+    // Middleware
     BlobServer = require('./middleware/blob/BlobServer'),
-    REST = require('./middleware/rest/rest'),
+    ExecutorServer = require('./middleware/executor/ExecutorServer'),
+    RestServer = require('./middleware/rest/RestServer'),
+
     Storage = require('./storage/serverstorage'),
     getClientConfig = require('../../config/getclientconfig'),
     GMEAUTH = require('./middleware/auth/gmeauth'),
     SSTORE = require('./middleware/auth/sessionstore'),
     Logger = require('./logger'),
+
+    ServerWorkerManager = require('./worker/serverworkermanager'),
 
     servers = [],
 
@@ -141,6 +144,9 @@ function StandAloneServer(gmeConfig) {
 
     //public functions
     function start(callback) {
+        var serverDeferred = Q.defer(),
+            storageDeferred = Q.defer();
+
         if (typeof callback !== 'function') {
             callback = function () {
             };
@@ -158,18 +164,31 @@ function StandAloneServer(gmeConfig) {
             __httpServer = Https.createServer({
                 key: __secureSiteInfo.key,
                 cert: __secureSiteInfo.certificate
-            }, __app).listen(gmeConfig.server.port, callback);
+            }, __app).listen(gmeConfig.server.port, function (err) {
+                if (err) {
+                    serverDeferred.reject(err);
+                } else {
+                    serverDeferred.resolve();
+                }
+            });
         } else {
-            __httpServer = Http.createServer(__app).listen(gmeConfig.server.port, callback);
+            __httpServer = Http.createServer(__app).listen(gmeConfig.server.port, function (err) {
+                if (err) {
+                    serverDeferred.reject(err);
+                } else {
+                    serverDeferred.resolve();
+                }
+            });
         }
 
         __httpServer.on('connection', function (socket) {
             var socketId = socket.remoteAddress + ':' + socket.remotePort;
 
             sockets[socketId] = socket;
+            logger.debug('socket connected (added to list) ' + socketId);
 
             socket.on('close', function () {
-                logger.debug('remove socket from list ' + socketId);
+                logger.debug('socket closed (removed from list) ' + socketId);
                 delete sockets[socketId];
             });
         });
@@ -177,7 +196,7 @@ function StandAloneServer(gmeConfig) {
         //creating the proper storage for the standalone server
         __storageOptions = {
             combined: __httpServer,
-            logger: Logger.create('gme:server:standalone:socket.io', gmeConfig.server.log)
+            logger: logger.fork('socket-io')
         };
         if (true === gmeConfig.authentication.enable) {
             __storageOptions.sessioncheck = __sessionStore.check;
@@ -186,19 +205,29 @@ function StandAloneServer(gmeConfig) {
             __storageOptions.getAuthorizationInfo = __gmeAuth.getProjectAuthorizationBySession;
         }
 
-        __storageOptions.log = Logger.create('gme:server:standalone:storage', gmeConfig.server.log);
+        __storageOptions.log = logger.fork('storage');
         __storageOptions.getToken = __gmeAuth.getToken;
 
         __storageOptions.sessionToUser = __sessionStore.getSessionUser;
 
+        __storageOptions.workerManager = __workerManager;
+
         __storageOptions.globConf = gmeConfig;
         __storage = Storage(__storageOptions); // FIXME: why do not we use the 'new' keyword here?
         //end of storage creation
-        __storage.open();
+        __storage.open(function (err) {
+            if (err) {
+                storageDeferred.reject(err);
+            } else {
+                storageDeferred.resolve();
+            }
+        });
 
-        self.isRunning = true;
-
-
+        Q.all([serverDeferred.promise, storageDeferred.promise])
+            .nodeify(function (err) {
+                self.isRunning = true;
+                callback(err);
+            });
     }
 
     function stop(callback) {
@@ -215,22 +244,29 @@ function StandAloneServer(gmeConfig) {
         try {
             // close storage first
             // FIXME: is this call synchronous?
-            __storage.close();
 
-            // request server close - do not accept any new connections.
-            // first we have to request the close then we can destroy the sockets.
-            __httpServer.close(function (err) {
-                logger.info('http server closed');
-                callback(err);
-            });
+            __storage.close(function (err1) {
+                var numDestroyedSockets = 0;
+                //kill all remaining workers
+                __workerManager.stop();
+                // request server close - do not accept any new connections.
+                // first we have to request the close then we can destroy the sockets.
+                __httpServer.close(function (err2) {
+                    logger.info('http server closed');
+                    callback(err1 || err2 || null);
+                });
 
-            // destroy all open sockets i.e. keep-alive and socket-io connections, etc.
-            for (key in sockets) {
-                if (sockets.hasOwnProperty(key)) {
-                    sockets[key].destroy();
-                    logger.info('destroyed open socket ' + key);
+                // destroy all open sockets i.e. keep-alive and socket-io connections, etc.
+                for (key in sockets) {
+                    if (sockets.hasOwnProperty(key)) {
+                        sockets[key].destroy();
+                        logger.debug('destroyed open socket ' + key);
+                        numDestroyedSockets += 1;
+                    }
                 }
-            }
+
+                logger.debug('destroyed # of sockets: ' + numDestroyedSockets);
+            });
         } catch (e) {
             //ignore errors
             callback(e);
@@ -303,25 +339,6 @@ function StandAloneServer(gmeConfig) {
             return next();
         }
     }
-
-    function checkREST(req, res, next) {
-        var baseUrl = gmeConfig.server.https.enable === true ? 'https://' : 'http://' + req.headers.host + '/rest';
-        if (__REST === null) {
-            var restAuthorization;
-            if (gmeConfig.authentication.enable === true) {
-                restAuthorization = __gmeAuth.tokenAuthorization;
-            }
-            __REST = new REST({
-                globConf: gmeConfig,
-                baseUrl: baseUrl,
-                authorization: restAuthorization
-            });
-        } else {
-            __REST.setBaseUrl(baseUrl);
-        }
-        return next();
-    }
-
 
     function ensureAuthenticated(req, res, next) {
         if (true === gmeConfig.authentication.enable) {
@@ -482,10 +499,10 @@ function StandAloneServer(gmeConfig) {
         __secureSiteInfo = {},
         __app = null,
         __sessionStore,
+        __workerManager,
         __users = {},
         __googleAuthenticationSet = false,
         __googleStrategy = PassGoogle.Strategy,
-        __REST = null,
         __canCheckToken = true,
         __httpServer = null,
         __logoutUrl = gmeConfig.authentication.logOutUrl || '/',
@@ -493,10 +510,11 @@ function StandAloneServer(gmeConfig) {
         __clientBaseDir = Path.resolve(gmeConfig.client.appDir),
         __requestCounter = 0,
         __reportedRequestCounter = 0,
-        __requestCheckInterval = 2500;
+        __requestCheckInterval = 2500,
+        middlewareOpts;
 
     //creating the logger
-    logger = Logger.create('gme:server:standalone', gmeConfig.server.log);
+    logger = mainLogger.fork('server:standalone');
     self.logger = logger;
 
     logger.debug("starting standalone server initialization");
@@ -508,6 +526,12 @@ function StandAloneServer(gmeConfig) {
 
     logger.debug("initializing session storage");
     __sessionStore = new SSTORE();
+
+    logger.debug('initializing server worker manager');
+    __workerManager = new ServerWorkerManager({
+        sessionToUser: __sessionStore.getSessionUser,
+        globConf: gmeConfig
+    });
 
     logger.debug("initializing authentication modules");
     //TODO: do we need to create this even though authentication is disabled?
@@ -528,6 +552,14 @@ function StandAloneServer(gmeConfig) {
     logger.debug("initializing static server");
     __app = Express();
 
+    middlewareOpts = {  //TODO: Pass this to every middleware They must not modify the options!
+        gmeConfig: gmeConfig,
+        logger: logger,
+        ensureAuthenticated: ensureAuthenticated,
+        gmeAuth: __gmeAuth,
+        workerManager: __workerManager
+    };
+
     //__app.configure(function () {
     //counting of requests works only in debug mode
     if (gmeConfig.debug === true) {
@@ -546,13 +578,13 @@ function StandAloneServer(gmeConfig) {
         var infoguid = GUID(),
             infotxt = "request[" + infoguid + "]:" + req.headers.host + " - " + req.protocol.toUpperCase() + "(" + req.httpVersion + ") - " + req.method.toUpperCase() + " - " + req.originalUrl + " - " + req.ip + " - " + req.headers['user-agent'],
             infoshort = "incoming[" + infoguid + "]: " + req.originalUrl;
-        logger.debug(infoshort);
+        //logger.debug(infoshort); // FIXME: not useful at all use `DEBUG=express* npm start` instead
         var end = res.end;
         res.end = function (chunk, encoding) {
             res.end = end;
             res.end(chunk, encoding);
             infotxt += " -> " + res.statusCode;
-            logger.debug(infotxt);
+            //logger.debug(infotxt); // FIXME: not useful at all use `DEBUG=express* npm start` instead
         };
         next();
     });
@@ -576,16 +608,12 @@ function StandAloneServer(gmeConfig) {
     __app.use(Passport.session());
 
     if (gmeConfig.executor.enable) {
-        var executorRest = require('./middleware/executor/Executor');
-        __app.use('/rest/executor', executorRest(gmeConfig));
-        logger.debug('Executor listening at rest/executor');
+        ExecutorServer.createExpressExecutor(__app, '/rest/executor', middlewareOpts);
     } else {
-        logger.debug('Executor not enabled. Add "enableExecutor: true" to config.js for activation.');
+        logger.debug('Executor not enabled. Add "executor.enable: true" to configuration to activate.');
     }
 
     setupExternalRestModules();
-
-    //});
 
     logger.debug("creating login routing rules for the static server");
     __app.get('/', ensureAuthenticated, function (req, res) {
@@ -637,7 +665,7 @@ function StandAloneServer(gmeConfig) {
     });
 
     //TODO: only node_worker/index.html and common/util/common are using this
-    logger.debug("creating decorator specific routing rules");
+    //logger.debug("creating decorator specific routing rules");
     __app.get('/bin/getconfig.js', ensureAuthenticated, function (req, res) {
         res.status(200);
         res.setHeader('Content-type', 'application/javascript');
@@ -659,6 +687,7 @@ function StandAloneServer(gmeConfig) {
                 resolvedPath = Path.resolve(gmeConfig.visualization.decoratorPaths[index]);
                 resolvedPath = Path.join(resolvedPath, req.url.substring('/decorators/'.length));
                 res.sendFile(resolvedPath, function (err) {
+                    logger.debug('sending decorator', resolvedPath);
                     if (err && err.code !== 'ECONNRESET') {
                         tryNext(index + 1);
                     }
@@ -735,20 +764,7 @@ function StandAloneServer(gmeConfig) {
     });
 
 
-    logger.debug("creating blob related rules");
-
-    var blobBackend;
-
-    if (gmeConfig.blob.type === 'FS') {
-        blobBackend = new BlobFSBackend(gmeConfig);
-    } else if (gmeConfig.blob.type === 'S3') {
-        //var blobBackend = new BlobS3Backend(gmeConfig);
-        throw new Error('S3 blob not fully supported');
-    } else {
-        throw new Error('Only FS and S3 blobs valid blob types.');
-    }
-
-    BlobServer.createExpressBlob(__app, blobBackend, ensureAuthenticated, logger);
+    BlobServer.createExpressBlob(__app, '/rest/blob', middlewareOpts);
 
     //client contents - js/html/css
     //stuff that considered not protected
@@ -803,41 +819,8 @@ function StandAloneServer(gmeConfig) {
     });
 
     //TODO: needs to refactor for the /rest/... format
-    logger.debug("creating REST related routing rules");
-    __app.get('/rest/:command', ensureAuthenticated, checkREST, function (req, res) {
-        __REST.initialize(function (err) {
-            if (err) {
-                res.sendStatus(500);
-            } else {
-                __REST.doRESTCommand(__REST.request.GET, req.params.command, req.headers.webGMEToken, req.query, function (httpStatus, object) {
-
-                    res.header("Access-Control-Allow-Origin", "*");
-                    res.header("Access-Control-Allow-Headers", "X-Requested-With");
-                    if (req.params.command === __REST.command.etf) {
-                        if (httpStatus === 200) {
-                            var filename = 'exportedNode.json';
-                            if (req.query.output) {
-                                filename = req.query.output;
-                            }
-                            if (filename.indexOf('.') === -1) {
-                                filename += '.json';
-                            }
-                            res.header("Content-Type", "application/json");
-                            res.header("Content-Disposition", "attachment;filename=\"" + filename + "\"");
-                            res.status(httpStatus);
-                            res.end(/*CANON*/JSON.stringify(object, null, 2));
-                        } else {
-                            logger.warn(httpStatus, JSON.stringify(object, null, 2));
-                            res.status(httpStatus).send(object);
-                        }
-                    } else {
-                        res.status(httpStatus).json(object || null);
-                    }
-                });
-            }
-        });
-    });
-
+    logger.debug('creating REST related routing rules');
+    RestServer.createExpressRest(__app, '/rest', middlewareOpts);
 
     logger.debug("creating server-worker related routing rules");
     __app.get('/worker/simpleResult/*', function (req, res) {

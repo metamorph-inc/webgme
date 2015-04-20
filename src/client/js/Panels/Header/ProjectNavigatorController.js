@@ -56,9 +56,11 @@ define([
     };
 
     ProjectNavigatorController.prototype.update = function () {
-        if (!this.$scope.$$phase) {
-            this.$scope.$apply();
-        }
+        this.logger.debug('update');
+        // force ui update
+        this.$timeout(function () {
+            
+        });
     };
 
     ProjectNavigatorController.prototype.initialize = function () {
@@ -291,10 +293,10 @@ define([
 
             for (projectId in projectList) {
                 if (projectList.hasOwnProperty(projectId)) {
-                    self.addProject(projectId, projectList[projectId].rights);
+                    self.addProject(projectId, projectList[projectId].rights, true);
                     for (branchId in projectList[projectId].branches) {
                         if (projectList[projectId].branches.hasOwnProperty(branchId)) {
-                            self.addBranch(projectId, branchId, projectList[projectId].branches[branchId]);
+                            self.addBranch(projectId, branchId, projectList[projectId].branches[branchId], true);
                         }
                     }
                 }
@@ -303,11 +305,13 @@ define([
             if (self.requestedSelection) {
                 self.selectBranch(self.requestedSelection);
                 self.requestedSelection = null;
+            } else {
+                self.update();
             }
         });
     };
 
-    ProjectNavigatorController.prototype.addProject = function (projectId, rights) {
+    ProjectNavigatorController.prototype.addProject = function (projectId, rights, noUpdate) {
         var self = this,
             i,
             showHistory,
@@ -447,8 +451,10 @@ define([
                     id: 'branches',
                     label: 'Recent branches',
                     totalItems: 20,
-                    items: []
-//                    showAllItems: showAllBranches
+                    items: [],
+                    showAllItems: function () {
+                        showHistory({projectId: projectId});
+                    }
                 }
             ]
         };
@@ -468,10 +474,14 @@ define([
             }
         }
 
-        self.update();
+        if (noUpdate === true) {
+
+        } else {
+            self.update();
+        }
     };
 
-    ProjectNavigatorController.prototype.addBranch = function (projectId, branchId, branchInfo) {
+    ProjectNavigatorController.prototype.addBranch = function (projectId, branchId, branchInfo, noUpdate) {
         var self = this,
             i,
             selectBranch,
@@ -484,6 +494,11 @@ define([
             undoLastCommitItem,
             redoLastUndoItem,
             mergeBranchItem;
+
+        if (self.projects.hasOwnProperty(projectId) === false) {
+            self.logger.warn('project is not in the list yet: ', projectId);
+            return;
+        }
 
         if (self.projects[projectId].disabled) {
             // do not show any branches if the project is disabled
@@ -732,7 +747,11 @@ define([
             }
         }
 
-        self.update();
+        if (noUpdate === true) {
+
+        } else {
+            self.update();
+        }
     };
 
     ProjectNavigatorController.prototype.removeProject = function (projectId, callback) {
@@ -917,11 +936,19 @@ define([
     };
 
     ProjectNavigatorController.prototype.updateBranch = function (projectId, branchId, branchInfo) {
-        this.projects[projectId].branches[branchId].properties = {
-            hashTag: branchInfo || '#1234567890',
-            lastCommiter: 'petike',
-            lastCommitTime: new Date()
-        };
+        if (this.projects.hasOwnProperty(projectId) &&
+            this.projects[projectId].branches.hasOwnProperty(branchId)) {
+
+            this.projects[projectId].branches[branchId].properties = {
+                hashTag: branchInfo || '#1234567890',
+                lastCommiter: 'petike',
+                lastCommitTime: new Date()
+            };
+
+            this.update();
+        } else {
+            this.logger.warn('project or branch is not in the list yet: ', projectId, branchId, branchInfo);
+        }
     };
 
     ProjectNavigatorController.prototype.mergeBranch = function (projectId, whatBranchId, whereBranchId) {

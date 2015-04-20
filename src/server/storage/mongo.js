@@ -12,66 +12,86 @@
 var MONGODB = require('mongodb'),
 
     ASSERT = requireJS('common/util/assert'),
-    CANON = requireJS('common/util/canon');
+    CANON = requireJS('common/util/canon'),
+    REGEXP = requireJS('common/regexp');
 
-
-var PROJECT_REGEXP = new RegExp("^[0-9a-zA-Z_]*$");
-var HASH_REGEXP = new RegExp("^#[0-9a-zA-Z_]*$");
-var BRANCH_REGEXP = new RegExp("^\\*[0-9a-zA-Z_]*$");
-
-var STATUS_CLOSED = "mongodb closed";
-var STATUS_UNREACHABLE = "mongodb unreachable";
-var STATUS_CONNECTED = "connected";
+var STATUS_CLOSED = 'mongodb closed';
+var STATUS_UNREACHABLE = 'mongodb unreachable';
+var STATUS_CONNECTED = 'connected';
 
 var PROJECT_INFO_ID = '*info*';
-var ID_NAME = "_id";
+var ID_NAME = '_id';
 
 function Database(options) {
-    ASSERT(typeof options === "object");
-    var gmeConfig = options.globConf;
-    var mongo = null;
+    ASSERT(typeof options === 'object');
+    ASSERT(typeof options.logger === 'object');
+    var mongo = null,
+        gmeConfig = options.globConf,
+        logger = options.logger.fork('mongo');
 
     function openDatabase(callback) {
-        //ASSERT(mongo === null && typeof callback === "function");
+        ASSERT(typeof callback === 'function');
 
-        MONGODB.MongoClient.connect(gmeConfig.mongo.uri, gmeConfig.mongo.options, function (err, db) {
-            if (!err && db) {
-                mongo = db;
-                callback(null);
-            } else {
-                mongo = null;
-                callback(err);
-            }
-        });
+        if (mongo === null) {
+            logger.debug('connecting to mongo');
+            // connect to mongo
+            MONGODB.MongoClient.connect(gmeConfig.mongo.uri, gmeConfig.mongo.options, function (err, db) {
+                if (!err && db) {
+                    mongo = db;
+                    callback(null);
+                } else {
+                    mongo = null;
+                    callback(err);
+                }
+            });
+        } else {
+            logger.debug('reusing mongo connection');
+            // we are already connected
+            callback(null);
+        }
     }
 
     function closeDatabase(callback) {
+        logger.debug('closeDatabase');
         if (mongo !== null) {
+            logger.debug('closing mongo calling fsyncDatabase');
             fsyncDatabase(function () {
+                logger.debug('closing mongo calling close');
                 mongo.close(function () {
                     mongo = null;
-                    if (typeof callback === "function") {
+                    logger.debug('closed');
+                    if (typeof callback === 'function') {
                         callback(null);
                     }
                 });
             });
-        } else if (typeof callback === "function") {
+        } else if (typeof callback === 'function') {
             callback(null);
         }
     }
 
     function fsyncDatabase(callback) {
-        ASSERT(typeof callback === "function");
+        ASSERT(typeof callback === 'function');
+
+        logger.debug('fsyncDatabase');
 
         var error = null;
         var synced = 0;
 
-        function fsyncConnection(conn) {
+        function fsyncConnection(conn, i) {
+            logger.debug('fsyncConnection ' + conn.id);
+
             mongo.command({getLastError: 1, fsync: true}, {connection: conn},
-                function (err, result) {
+                function (err /*, result*/) {
                     //TODO we ignore the result right now
                     error = error || err;
+                    logger.debug('fsyncConnection done for ' + i);
+
                     if (++synced === conns.length) {
+                        logger.debug('fsyncConnection done');
+                        if (error) {
+                            logger.error(error);
+                        }
                         callback(error);
                     }
                 });
@@ -79,17 +99,18 @@ function Database(options) {
 
         var conns = mongo.serverConfig.allRawConnections();
         if (conns instanceof Array && conns.length >= 1) {
+            logger.debug('fsyncConnection for connections: ' + conns.length);
             for (var i = 0; i < conns.length; ++i) {
-                fsyncConnection(conns[i]);
+                fsyncConnection(conns[i], i);
             }
         } else {
-            callback("not connected");
+            callback('not connected');
         }
     }
 
     function getDatabaseStatus(oldstatus, callback) {
-        ASSERT(oldstatus === null || typeof oldstatus === "string");
-        ASSERT(typeof callback === "function");
+        ASSERT(oldstatus === null || typeof oldstatus === 'string');
+        ASSERT(typeof callback === 'function');
 
         if (mongo === null) {
             reportStatus(oldstatus, STATUS_CLOSED, callback);
@@ -116,7 +137,7 @@ function Database(options) {
     }
 
     function getProjectNames(callback) {
-        ASSERT(typeof callback === "function");
+        ASSERT(typeof callback === 'function');
 
         mongo.collectionNames(function (err, collections) {
             if (err) {
@@ -124,7 +145,10 @@ function Database(options) {
             } else {
                 var names = [];
                 for (var i = 0; i < collections.length; i++) {
-                    var p = collections[i].name.indexOf(".");
+                    if (!REGEXP.PROJECT.test(collections[i].name)) {
+                        continue;
+                    }
+                    var p = collections[i].name.indexOf('.');
                     var n = collections[i].name.substring(p + 1);
                     if (n.indexOf('system') === -1 && n.indexOf('.') === -1 && n.indexOf('_') !== 0) {
                         names.push(n);
@@ -136,17 +160,20 @@ function Database(options) {
     }
 
     function deleteProject(name, callback) {
-        ASSERT(typeof name === "string" && PROJECT_REGEXP.test(name));
-        ASSERT(typeof callback === "function");
+        ASSERT(typeof name === 'string' && REGEXP.PROJECT.test(name));
+        ASSERT(typeof callback === 'function');
 
         mongo.dropCollection(name, function (err) {
+            if (err) {
+                logger.debug('Error in dropCollection (not handled)', err);
+            }
             callback(null);
         });
     }
 
     function openProject(name, callback) {
-        ASSERT(mongo !== null && typeof callback === "function");
-        ASSERT(typeof name === "string" && PROJECT_REGEXP.test(name));
+        ASSERT(mongo !== null && typeof callback === 'function');
+        ASSERT(typeof name === 'string' && REGEXP.PROJECT.test(name));
 
         var collection = null;
 
@@ -177,13 +204,13 @@ function Database(options) {
 
         function closeProject(callback) {
             collection = null;
-            if (typeof callback === "function") {
+            if (typeof callback === 'function') {
                 callback(null);
             }
         }
 
         function loadObject(hash, callback) {
-            ASSERT(typeof hash === "string" && HASH_REGEXP.test(hash));
+            ASSERT(typeof hash === 'string' && REGEXP.HASH.test(hash));
 
             collection.findOne({
                 _id: hash
@@ -191,8 +218,8 @@ function Database(options) {
         }
 
         function insertObject(object, callback) {
-            ASSERT(object !== null && typeof object === "object");
-            ASSERT(typeof object._id === "string" && HASH_REGEXP.test(object._id));
+            ASSERT(object !== null && typeof object === 'object');
+            ASSERT(typeof object._id === 'string' && REGEXP.HASH.test(object._id));
 
             collection.insert(object, function (err) {
                 // manually check duplicate keys
@@ -230,14 +257,14 @@ function Database(options) {
         }
 
         function findHash(beginning, callback) {
-            ASSERT(typeof beginning === "string" && typeof callback === "function");
+            ASSERT(typeof beginning === 'string' && typeof callback === 'function');
 
-            if (!HASH_REGEXP.test(beginning)) {
-                callback("hash " + beginning + " not valid");
+            if (!REGEXP.HASH.test(beginning)) {
+                callback('hash ' + beginning + ' not valid');
             } else {
                 collection.find({
                     _id: {
-                        $regex: "^" + beginning
+                        $regex: '^' + beginning
                     }
                 }, {
                     limit: 2
@@ -245,9 +272,9 @@ function Database(options) {
                     if (err) {
                         callback(err);
                     } else if (docs.length === 0) {
-                        callback("hash " + beginning + " not found");
+                        callback('hash ' + beginning + ' not found');
                     } else if (docs.length !== 1) {
-                        callback("hash " + beginning + " not unique");
+                        callback('hash ' + beginning + ' not unique');
                     } else {
                         callback(null, docs[0]._id);
                     }
@@ -256,23 +283,23 @@ function Database(options) {
         }
 
         function dumpObjects(callback) {
-            ASSERT(typeof callback === "function");
+            ASSERT(typeof callback === 'function');
 
             collection.find().each(function (err, item) {
                 if (err || item === null) {
                     callback(err);
                 } else {
-                    console.log(item);
+                    logger.debug(item);
                 }
             });
         }
 
         function getBranchNames(callback) {
-            ASSERT(typeof callback === "function");
+            ASSERT(typeof callback === 'function');
 
             collection.find({
                 _id: {
-                    $regex: BRANCH_REGEXP.source
+                    $regex: REGEXP.RAW_BRANCH.source
                 }
             }).toArray(function (err, docs) {
                 if (err) {
@@ -289,9 +316,9 @@ function Database(options) {
 
         function getBranchHash(branch, oldhash, callback) {
             branch = '*' + branch;
-            ASSERT(typeof branch === "string" && BRANCH_REGEXP.test(branch));
-            ASSERT(oldhash === null || (typeof oldhash === "string" && (oldhash === "" || HASH_REGEXP.test(oldhash))));
-            ASSERT(typeof callback === "function");
+            ASSERT(typeof branch === 'string' && REGEXP.RAW_BRANCH.test(branch));
+            ASSERT(oldhash === null || (typeof oldhash === 'string' && (oldhash === '' || REGEXP.HASH.test(oldhash))));
+            ASSERT(typeof callback === 'function');
 
             collection.findOne({
                 _id: branch
@@ -299,7 +326,7 @@ function Database(options) {
                 if (err) {
                     callback(err);
                 } else {
-                    var newhash = (obj && obj.hash) || "";
+                    var newhash = (obj && obj.hash) || '';
                     if (oldhash === null || oldhash !== newhash) {
                         callback(null, newhash, null);
                     } else {
@@ -310,33 +337,32 @@ function Database(options) {
         }
 
         function setBranchHash(branch, oldhash, newhash, callback) {
-            var _branch = branch;
             branch = '*' + branch;
-            ASSERT(typeof branch === "string" && BRANCH_REGEXP.test(branch));
-            ASSERT(typeof oldhash === "string" && (oldhash === "" || HASH_REGEXP.test(oldhash)));
-            ASSERT(typeof newhash === "string" && (newhash === "" || HASH_REGEXP.test(newhash)));
-            ASSERT(typeof callback === "function");
+            ASSERT(typeof branch === 'string' && REGEXP.RAW_BRANCH.test(branch));
+            ASSERT(typeof oldhash === 'string' && (oldhash === '' || REGEXP.HASH.test(oldhash)));
+            ASSERT(typeof newhash === 'string' && (newhash === '' || REGEXP.HASH.test(newhash)));
+            ASSERT(typeof callback === 'function');
 
             if (oldhash === newhash) {
                 collection.findOne({
                     _id: branch
                 }, function (err, obj) {
-                    if (!err && oldhash !== ((obj && obj.hash) || "")) {
-                        err = "branch hash mismatch";
+                    if (!err && oldhash !== ((obj && obj.hash) || '')) {
+                        err = 'branch hash mismatch';
                     }
                     callback(err);
                 });
-            } else if (newhash === "") {
+            } else if (newhash === '') {
                 collection.remove({
                     _id: branch,
                     hash: oldhash
                 }, function (err, num) {
                     if (!err && num !== 1) {
-                        err = "branch hash mismatch";
+                        err = 'branch hash mismatch';
                     }
                     callback(err);
                 });
-            } else if (oldhash === "") {
+            } else if (oldhash === '') {
                 collection.insert({
                     _id: branch,
                     hash: newhash
@@ -354,7 +380,7 @@ function Database(options) {
                 }, function (err, num) {
 
                     if (!err && num !== 1) {
-                        err = "branch hash mismatch";
+                        err = 'branch hash mismatch';
                     }
                     callback(err);
                 });

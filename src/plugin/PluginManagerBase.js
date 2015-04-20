@@ -19,10 +19,9 @@ define(['./PluginBase',
     function (PluginBase, PluginContext) {
 'use strict';
 
-        var PluginManagerBase = function (storage, Core, Logger, plugins, gmeConfig) {
+        var PluginManagerBase = function (storage, Core, logger, plugins, gmeConfig) {
             this.gmeConfig = gmeConfig; // global configuration of webgme
-            this.LoggerClass = Logger;
-            this.logger = Logger.createWithGmeConfig('gme:plugin:PluginManagerBase', gmeConfig);
+            this.logger = logger.fork('PluginManager');
             this._Core = Core;       // webgme core class is used to operate on objects
             this._storage = storage; // webgme storage
             this._plugins = plugins; // key value pair of pluginName: pluginType - plugins are already loaded/downloaded
@@ -146,7 +145,10 @@ define(['./PluginBase',
 
             pluginContext.project = this._storage;
             pluginContext.projectName = managerConfiguration.project;
-            pluginContext.core = new self._Core(pluginContext.project, {globConf: self.gmeConfig});
+            pluginContext.core = new self._Core(pluginContext.project, {
+                globConf: self.gmeConfig,
+                logger: self.logger.fork('core') //TODO: This logger should probably fork from the plugin logger
+            });
             pluginContext.commitHash = managerConfiguration.commit;
             pluginContext.activeNode = null;    // active object
             pluginContext.activeSelection = []; // selected objects
@@ -237,13 +239,15 @@ define(['./PluginBase',
             // TODO: check if name is a string
             // TODO: check if managerConfiguration is an instance of PluginManagerConfiguration
             // TODO: check if callback is a function
-            var self = this;
+            var self = this,
+                mainCallbackCalls = 0,
+                multiCallbackHandled = false;
 
             var PluginClass = this.getPluginByName(name);
 
             var plugin = new PluginClass();
 
-            var pluginLogger = this.LoggerClass.createWithGmeConfig('gme:plugin:' + name, this.gmeConfig);
+            var pluginLogger = this.logger.fork('gme:plugin:' + name, true);
 
             plugin.initialize(pluginLogger, managerConfiguration.blobClient, self.gmeConfig);
 
@@ -268,14 +272,31 @@ define(['./PluginBase',
                 var startTime = (new Date()).toISOString();
 
                 plugin.main(function (err, result) {
+                    var stackTrace;
+                    mainCallbackCalls += 1;
                     // set common information (meta info) about the plugin and measured execution times
                     result.setFinishTime((new Date()).toISOString());
                     result.setStartTime(startTime);
 
                     result.setPluginName(plugin.getName());
-                    result.setError(err);
 
-                    callback(err, result);
+                    if (mainCallbackCalls > 1) {
+                        stackTrace = new Error().stack;
+                        self.logger.error('The main callback is being called more than once!', {metadata: stackTrace});
+                        result.setError('The main callback is being called more than once!');
+                        if (multiCallbackHandled === true) {
+                            plugin.createMessage(null, stackTrace);
+                            return;
+                        }
+                        multiCallbackHandled = true;
+                        result.setSuccess(false);
+                        plugin.createMessage(null, 'The main callback is being called more than once.');
+                        plugin.createMessage(null, stackTrace);
+                        callback('The main callback is being called more than once!', result);
+                    } else {
+                        result.setError(err);
+                        callback(err, result);
+                    }
                 });
 
             });

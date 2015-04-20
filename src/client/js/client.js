@@ -1,4 +1,4 @@
-/*globals define, _, requirejs, WebGMEGlobal, GME*/
+/*globals define, _, requirejs, GME*/
 
 define([
     'common/util/assert',
@@ -15,7 +15,8 @@ define([
     'common/core/users/import',
     'common/core/users/copyimport',
     'common/core/users/serialization',
-    'common/core/tasync'
+    'common/core/tasync',
+    'superagent'
   ],
   function (
     ASSERT,
@@ -32,7 +33,8 @@ define([
     MergeImport,
     Import,
     Serialization,
-    TASYNC) {
+    TASYNC,
+    superagent) {
 
     "use strict";
 
@@ -46,10 +48,10 @@ define([
     }
 
 
-    function getNewCore(project, gmeConfig) {
+    function getNewCore(project, gmeConfig, logger) {
       //return new NullPointerCore(new DescriptorCore(new SetCore(new GuidCore(new Core(project)))));
         // FIXME: why usertype is nodejs when it is running from the browser?
-      var options = {usertype: 'nodejs', globConf: gmeConfig};
+      var options = {usertype: 'nodejs', globConf: gmeConfig, logger: logger.fork('core')};
       return Core(project, options);
     }
 
@@ -170,28 +172,34 @@ define([
         _redoer = null,
         _selfCommits = {},
         _configuration = {},
+        req,
         AllPlugins, AllDecorators;
 
-
-        //FIXME remove TESTING and leave only require here
-      if(typeof TESTING === 'undefined') {
-          if (window) {
-              _configuration.host = window.location.protocol + '//' + window.location.host;
-          } else {
-              _configuration.host = '';
-          }
-        require([_configuration.host + '/listAllDecorators', _configuration.host + '/listAllPlugins'], function (d, p) {
-          AllDecorators = WebGMEGlobal.allDecorators;
-          AllPlugins = WebGMEGlobal.allPlugins;
-        });
-      } else {
-        _configuration.host = ' ';
-        console.warn('TESTING is defined - we are not getting plugins and decorators.');
-      }
-
-
-
-
+        if (window) {
+            _configuration.host = window.location.protocol + '//' + window.location.host;
+        } else {
+            //TODO: Is this ever applicable?
+            _configuration.host = '';
+        }
+        // FIXME: These are asynchronous
+        superagent.get('/listAllPlugins')
+          .end(function (err, res) {
+             if (res.status !== 200) {
+               logger.error('/listAllPlugins failed', err);
+             } else {
+               AllPlugins = res.body.allPlugins;
+               logger.debug('/listAllPlugins', AllPlugins);
+             }
+          });
+        superagent.get('/listAllDecorators')
+          .end(function (err, res) {
+            if (res.status !== 200) {
+              logger.error('/listAllDecorators failed', err);
+            } else {
+               AllDecorators = res.body.allDecorators;
+               logger.debug('/listAllDecorators', AllDecorators);
+            }
+          });
         //TODO remove it
       //function print_nodes(pretext) {
       //  if (pretext) {
@@ -260,7 +268,7 @@ define([
 
         //FIXME remove TESTING
       function newDatabase() {
-        var storageOptions ={log: Logger.create('gme:client:storage', gmeConfig.client.log), host: _configuration.host},
+        var storageOptions ={logger: Logger.create('gme:client:storage', gmeConfig.client.log), host: _configuration.host},
             protocolStr;
         if(typeof TESTING !== 'undefined'){
           protocolStr = gmeConfig.server.https.enable ? 'https' : 'http';
@@ -552,9 +560,10 @@ define([
         refreshToken();
 
         //TODO check if this is okay to set it here
-        if(typeof WebGMEGlobal !== 'undefined') {
-           WebGMEGlobal.getToken = getToken;
-        }
+        //ANS: It is not and now it is removed - p
+        //if(typeof WebGMEGlobal !== 'undefined') {
+        //   WebGMEGlobal.getToken = getToken;
+        //}
         return {
           getToken: getToken
         };
@@ -632,6 +641,7 @@ define([
                     canRedo = true;
                   }
                 }
+
                 _self.dispatchEvent(_self.events.UNDO_AVAILABLE, canUndo);
                 _self.dispatchEvent(_self.events.REDO_AVAILABLE, canRedo);
 
@@ -771,7 +781,7 @@ define([
           }
         }
       }
-      
+
       function networkWatcher() {
         _networkStatus = "";
         //FIXME: Are these gme options or not??
@@ -782,52 +792,57 @@ define([
               running = false;
             },
             checking = false,
-            reconneting = function(finished){
+            reconnecting = function (finished) {
               var connecting = false,
                   counter = 0,
                   frequency = _configuration.reconndelay || 10,
-                  timerId = setInterval(function(){
-                    if(!connecting){
-                      _database.openDatabase(function(err){
+                  timerId = setInterval(function () {
+                    if (!connecting) {
+                      connecting = true;
+                      _database.openDatabase(function (err) {
                         connecting = false;
-                        if(!err){
-                         //we are back!
+                        if (!err) {
+                          //we are back!
                           clearInterval(timerId);
                           return finished(null);
                         }
-                        if(++counter === _configuration.reconnamount){
+                        if (++counter === _configuration.reconnamount) {
                           //we failed, stop trying
                           clearInterval(timerId);
                           return finished(err);
                         }
                       });
                     }
-                  },frequency);
+                  }, frequency);
             },
-            checkId = setInterval(function(){
-              if(!checking){
+            checkId = setInterval(function () {
+              if (!checking) {
                 checking = true;
-                _database.getDatabaseStatus(_networkStatus,function(err,newStatus){
-                  if(running){
-                    _networkStatus = newStatus;
-                    if (_networkStatus === _self.networkStates.DISCONNECTED && _configuration.autoreconnect) {
-                      reconnecting(function(err){
+                _database.getDatabaseStatus(_networkStatus, function (err, newStatus) {
+                  if (running) {
+                    if (_networkStatus !== newStatus) {
+                      _networkStatus = newStatus;
+                      _self.dispatchEvent(_self.events.NETWORKSTATUS_CHANGED, _networkStatus);
+                      if (_networkStatus === _self.networkStates.DISCONNECTED && _configuration.autoreconnect) {
+                        reconnecting(function (err) {
+                          checking = false;
+                          if (err) {
+                            logger.error('permanent network failure:', err);
+                            clearInterval(checkId);
+                          }
+                        });
+                      } else {
                         checking = false;
-                        if(err){
-                          logger.error('permanent network failure:',err);
-                          clearInterval(checkId);
-                        }
-                      });
+                      }
                     } else {
                       checking = false;
                     }
-                    _self.dispatchEvent(_self.events.NETWORKSTATUS_CHANGED, _networkStatus);
                   } else {
                     clearInterval(checkId);
                   }
                 });
               }
-            },frequency);
+            }, frequency);
 
         return {
           stop: stop
@@ -990,7 +1005,7 @@ define([
                   _inTransaction = false;
                   _nodes = {};
                   _metaNodes = {};
-                  _core = getNewCore(_project, gmeConfig);
+                  _core = getNewCore(_project, gmeConfig, logger.fork('project' + name));
                   META.initialize(_core, _metaNodes, saveRoot);
                   if (_commitCache) {
                     _commitCache.clearCache();
@@ -1110,7 +1125,7 @@ define([
       }
 
       function createEmptyProject(project, callback) {
-        var core = getNewCore(project, gmeConfig),
+        var core = getNewCore(project, gmeConfig, logger.fork('createEmptyProject')),
           root = core.createNode(),
           rootHash = '',
           commitHash = '';
@@ -3023,6 +3038,10 @@ define([
       }
 
       function getAvailableInterpreterNames() {
+          if (!AllPlugins) {
+              logger.error('AllPlugins were never uploaded!');
+              return [];
+          }
         var names = [];
         var valids = _nodes[ROOT_PATH] ? _core.getRegistry(_nodes[ROOT_PATH].node, 'validPlugins') || "" : "";
         valids = valids.split(" ");
@@ -3039,6 +3058,10 @@ define([
       }
 
       function getAvailableDecoratorNames() {
+          if (!AllDecorators) {
+              logger.error('AllDecorators were never uploaded!');
+              return [];
+          }
         return AllDecorators;
       }
 

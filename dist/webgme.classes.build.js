@@ -4,6 +4,9 @@ var GME = GME || {};
 // property to access GME class definitions
 GME.classes = GME.classes || {};
 
+// property to access build in dependencies
+GME.utils = GME.utils || {};
+
 (function(){/** vim: et:ts=4:sw=4:sts=4
  * @license RequireJS 2.1.16 Copyright (c) 2010-2015, The Dojo Foundation All Rights Reserved.
  * Available via the MIT or new BSD license.
@@ -3660,8 +3663,13 @@ define('common/core/coretree',[ "common/util/assert", "common/util/key", "common
 	var rootCounter = 0;
 
 	return function (storage, options) {
+        ASSERT(typeof options === 'object');
+        ASSERT(typeof options.globConf === 'object');
+        ASSERT(typeof options.logger !== 'undefined');
+
         var gmeConfig = options.globConf;
-		ASSERT(gmeConfig && typeof gmeConfig === "object");
+        var logger = options.logger.fork('coretree');
+
 		var MAX_AGE = 3; // MAGIC NUMBER
 		var MAX_TICKS = 2000; // MAGIC NUMBER
 		var MAX_MUTATE = 30000; // MAGIC NUMBER
@@ -4621,8 +4629,15 @@ define('common/core/corerel',[ "common/util/assert", "common/core/coretree", "co
 
 	// ----------------- Core -----------------
 
-	function CoreRel(coretree) {
-		ASSERT(typeof coretree == "object");
+	function CoreRel(coretree, options) {
+        ASSERT(typeof options === 'object');
+        ASSERT(typeof options.globConf === 'object');
+        ASSERT(typeof options.logger !== 'undefined');
+        ASSERT(typeof coretree === 'object');
+
+        var logger = options.logger.fork('corerel');
+
+        logger.debug('initialized');
 
 		function isValidNode(node) {
 			try {
@@ -5433,8 +5448,12 @@ define('common/core/setcore',[ "common/util/assert"], function (ASSERT) {
     var SETS_ID = '_sets';
     var REL_ID = 'member';
 
-    function SetCore(innerCore){
+    function SetCore(innerCore, options){
+        ASSERT(typeof options === 'object');
+        ASSERT(typeof options.globConf === 'object');
+        ASSERT(typeof options.logger !== 'undefined');
 
+        var logger = options.logger.fork('setcore');
         //help functions
         var setModified = function(node){
             innerCore.setRegistry(node,'_sets_',(innerCore.getRegistry(node,'_sets_') || 0)+1);
@@ -5528,7 +5547,7 @@ define('common/core/setcore',[ "common/util/assert"], function (ASSERT) {
         for(var i in innerCore){
             setcore[i] = innerCore[i];
         }
-
+        logger.debug('initialized');
         //adding new functions
         setcore.getSetNumbers = function(node){
             return this.getSetNames(node).length;
@@ -5766,89 +5785,120 @@ define('common/core/setcore',[ "common/util/assert"], function (ASSERT) {
 
 
 
-/*
- * Copyright (C) 2013 Vanderbilt University, All rights reserved.
- *
- * Author: Tamas Kecskes
+/*globals define*/
+/*jshint node:true, browser: true*/
+/**
+ * @author pmeijer / https://github.com/pmeijer
  */
 
-define('common/core/guidcore',[ "common/util/assert", "common/util/guid", "common/core/tasync" ], function (ASSERT, GUID, TASYNC) {
-	
+define('common/regexp',[], function () {
+    
+    var HASH = new RegExp('^#[0-9a-zA-Z_]*$'),
+        BRANCH = new RegExp('^[0-9a-zA-Z_]*$'),
+        RAW_BRANCH = new RegExp('^\\*[0-9a-zA-Z_]*$'),// This is how it's stored in mongodb, i.e. with a prefixed *.
+        PROJECT = new RegExp('^(?!system\\.)(?!_)[0-9a-zA-Z_]*$'), // project name may not start with system. or _
 
-	var GUID_REGEXP = new RegExp("[a-z0-9]{8}(-[a-z0-9]{4}){3}-[a-z0-9]{12}", 'i');
-    var OWN_GUID = "_relguid";
+        GUID = new RegExp('[a-z0-9]{8}(-[a-z0-9]{4}){3}-[a-z0-9]{12}', 'i');
 
-	function guidCore (_innerCore) {
+    return {
+        HASH: HASH,
+        BRANCH: BRANCH,
+        RAW_BRANCH: RAW_BRANCH,
+        PROJECT: PROJECT,
+        GUID: GUID
+    };
+});
 
-		//helper functions
-		function toInternalGuid (myGuid) {
-			return myGuid.replace(/-/g, "");
-		}
+/*globals define*/
 
-		function toExternalGuid (myGuid) {
-			var out = myGuid.substr(0, 8) + '-' + myGuid.substr(8, 4) + '-' + myGuid.substr(12, 4) + '-' + myGuid.substr(16, 4) + '-' + myGuid.substr(20);
-			return out;
-		}
+/**
+ * @author kecso / https://github.com/kecso
+ */
 
-		function guidToArray (guid) {
-            if(guid === null || guid === undefined){
-                return [0,0,0,0,0,0,0,0];
+define('common/core/guidcore',['common/util/assert',
+    'common/util/guid',
+    'common/core/tasync',
+    'common/regexp'], function (ASSERT, GUID, TASYNC, REGEXP) {
+
+    
+
+    var OWN_GUID = '_relguid';
+
+    function guidCore(_innerCore, options) {
+        ASSERT(typeof options === 'object');
+        ASSERT(typeof options.globConf === 'object');
+        ASSERT(typeof options.logger !== 'undefined');
+        var logger = options.logger.fork('guidCore');
+        //helper functions
+        function toInternalGuid(myGuid) {
+            return myGuid.replace(/-/g, '');
+        }
+
+        function toExternalGuid(myGuid) {
+            var out = myGuid.substr(0, 8) + '-' + myGuid.substr(8, 4) + '-' +
+                myGuid.substr(12, 4) + '-' + myGuid.substr(16, 4) + '-' + myGuid.substr(20);
+            return out;
+        }
+
+        function guidToArray(guid) {
+            if (guid === null || guid === undefined) {
+                return [0, 0, 0, 0, 0, 0, 0, 0];
             }
-			var array = [];
-			for ( var i = 0; i < guid.length / 4; i++) {
-				array.push(parseInt(guid.substr(4 * i, 4), 16));
-			}
-			return array;
-		}
+            var array = [];
+            for (var i = 0; i < guid.length / 4; i++) {
+                array.push(parseInt(guid.substr(4 * i, 4), 16));
+            }
+            return array;
+        }
 
-        function getRelidGuid(node){
+        function getRelidGuid(node) {
             //TODO we always should know what structure we should expect as a relid, now we think it is a number so it can be converted to 0xsomething
             var relid = _core.getRelid(node);
             relid = Number(relid);
-            if (relid ==="NaN"){
-                return null
+            if (relid === 'NaN') {
+                return null;
             }
-            if (relid < 0){
-                relid = relid *(-1);
+            if (relid < 0) {
+                relid = relid * (-1);
             }
 
             relid = relid.toString(16);
 
             //now we should fill up with 0's in the beggining
-            while(relid.length<32){
-                relid=relid+"0"; //TODO we pad to the end so the final result will be more visible during debug
+            while (relid.length < 32) {
+                relid = relid + '0'; //TODO we pad to the end so the final result will be more visible during debug
             }
-            return relid
+            return relid;
         }
 
-		function xorGuids (a, b) {
-			var arrayA = guidToArray(a);
-			var arrayB = guidToArray(b);
+        function xorGuids(a, b) {
+            var arrayA = guidToArray(a);
+            var arrayB = guidToArray(b);
 
-			ASSERT(arrayA.length === arrayB.length);
+            ASSERT(arrayA.length === arrayB.length);
 
-			var arrayOut = [];
-			for ( var i = 0; i < arrayA.length; i++) {
-				arrayOut.push(arrayA[i] ^ arrayB[i]);
-			}
-			for (i = 0; i < arrayOut.length; i++) {
-				arrayOut[i] = Number(arrayOut[i]).toString(16);
-				var difi = 4 - arrayOut[i].length;
-				while (difi > 0) {
-					arrayOut[i] = '0' + arrayOut[i];
-					difi--;
-				}
-			}
-			return arrayOut.join("");
-		}
+            var arrayOut = [];
+            for (var i = 0; i < arrayA.length; i++) {
+                arrayOut.push(arrayA[i] ^ arrayB[i]);
+            }
+            for (i = 0; i < arrayOut.length; i++) {
+                arrayOut[i] = Number(arrayOut[i]).toString(16);
+                var difi = 4 - arrayOut[i].length;
+                while (difi > 0) {
+                    arrayOut[i] = '0' + arrayOut[i];
+                    difi--;
+                }
+            }
+            return arrayOut.join('');
+        }
 
-		var _core = {};
-		for ( var i in _innerCore) {
-			_core[i] = _innerCore[i];
-		}
-
-		//new functions
-        _core.getMiddleGuid = function(node){
+        var _core = {};
+        for (var i in _innerCore) {
+            _core[i] = _innerCore[i];
+        }
+        logger.debug('initialized');
+        //new functions
+        _core.getMiddleGuid = function (node) {
             var outGuid = _core.getAttribute(node, OWN_GUID);
             var tempnode = _core.getParent(node);
             while (tempnode) {
@@ -5858,89 +5908,91 @@ define('common/core/guidcore',[ "common/util/assert", "common/util/guid", "commo
             return outGuid;
         };
 
-		_core.getGuid = function (node) {
+        _core.getGuid = function (node) {
             var middle = _core.getMiddleGuid(node),
                 relid = getRelidGuid(node),
-                guid = xorGuids(middle,relid);
+                guid = xorGuids(middle, relid);
             return toExternalGuid(guid);
-		};
+        };
 
-        _core.setGuid = function(node,guid){
-            ASSERT(GUID_REGEXP.test(guid));
+        _core.setGuid = function (node, guid) {
+            ASSERT(REGEXP.GUID.test(guid));
             var children = _core.loadChildren(node);
-            return TASYNC.call(function(nodeArray){
+            return TASYNC.call(function (nodeArray) {
                 var newGuid = toInternalGuid(guid);
                 //first setting the node's OWN_GUID
-                var oldOwn = _core.getAttribute(node,OWN_GUID);
+                var oldOwn = _core.getAttribute(node, OWN_GUID);
                 var parent = _core.getParent(node);
                 if (parent) {
-                    _core.setAttribute(node, OWN_GUID, xorGuids(newGuid,xorGuids(_core.getMiddleGuid(parent),getRelidGuid(node))));
+                    _core.setAttribute(node, OWN_GUID,
+                        xorGuids(newGuid, xorGuids(_core.getMiddleGuid(parent), getRelidGuid(node))));
                 } else {
-                    _core.setAttribute(node, OWN_GUID, xorGuids(newGuid,getRelidGuid(node)));
+                    _core.setAttribute(node, OWN_GUID, xorGuids(newGuid, getRelidGuid(node)));
                 }
-                var newOwn = _core.getAttribute(node,OWN_GUID);
+                var newOwn = _core.getAttribute(node, OWN_GUID);
                 //now modify its children's
-                for ( var i = 0; i < nodeArray.length; i++) {
-                    var oldGuid = _core.getAttribute(nodeArray[i],OWN_GUID);
-                    _core.setAttribute(nodeArray[i], OWN_GUID, xorGuids(oldGuid,xorGuids(oldOwn,newOwn)));
+                for (var i = 0; i < nodeArray.length; i++) {
+                    var oldGuid = _core.getAttribute(nodeArray[i], OWN_GUID);
+                    _core.setAttribute(nodeArray[i], OWN_GUID, xorGuids(oldGuid, xorGuids(oldOwn, newOwn)));
                 }
-
 
                 return;
-            },children);
+            }, children);
         };
 
-		//modified functions
-		_core.createNode = function (parameters) {
-			parameters = parameters || {};
-			var guid = parameters.guid || GUID(),
-				parent = parameters.parent;
+        //modified functions
+        _core.createNode = function (parameters) {
+            parameters = parameters || {};
+            var guid = parameters.guid || GUID(),
+                parent = parameters.parent;
 
-			ASSERT(GUID_REGEXP.test(guid));
+            ASSERT(REGEXP.GUID.test(guid));
 
-			var node = _innerCore.createNode(parameters);
-			guid = toInternalGuid(guid);
+            var node = _innerCore.createNode(parameters);
+            guid = toInternalGuid(guid);
 
-			var relguid = "";
-			if (parent) {
-				relguid = xorGuids(toInternalGuid(_core.getMiddleGuid(_core.getParent(node))),xorGuids(guid,getRelidGuid(node)));
-			} else {
-				relguid = xorGuids(guid,getRelidGuid(node));
-			}
-			_innerCore.setAttribute(node, OWN_GUID, relguid);
+            var relguid = '';
+            if (parent) {
+                relguid = xorGuids(toInternalGuid(_core.getMiddleGuid(_core.getParent(node))),
+                    xorGuids(guid, getRelidGuid(node)));
+            } else {
+                relguid = xorGuids(guid, getRelidGuid(node));
+            }
+            _innerCore.setAttribute(node, OWN_GUID, relguid);
 
-			return node;
-		};
+            return node;
+        };
 
-        _core.moveNode = function(node,parent){
+        _core.moveNode = function (node, parent) {
             var oldGuid = toInternalGuid(_core.getGuid(node)),
-                newNode = _innerCore.moveNode(node,parent);
+                newNode = _innerCore.moveNode(node, parent);
 
-            _core.setAttribute(newNode,OWN_GUID,xorGuids(_core.getMiddleGuid(parent),xorGuids(oldGuid,getRelidGuid(newNode))));
+            _core.setAttribute(newNode, OWN_GUID, xorGuids(_core.getMiddleGuid(parent),
+                xorGuids(oldGuid, getRelidGuid(newNode))));
 
             return newNode;
         };
 
-        _core.copyNode = function(node,parent){
-            var newNode = _innerCore.copyNode(node,parent);
-            _core.setAttribute(newNode,OWN_GUID,toInternalGuid(GUID()));
+        _core.copyNode = function (node, parent) {
+            var newNode = _innerCore.copyNode(node, parent);
+            _core.setAttribute(newNode, OWN_GUID, toInternalGuid(GUID()));
             return newNode;
         };
 
-        _core.copyNodes = function(nodes,parent){
-            var copiedNodes = _innerCore.copyNodes(nodes,parent),
+        _core.copyNodes = function (nodes, parent) {
+            var copiedNodes = _innerCore.copyNodes(nodes, parent),
                 i;
-            for(i=0;i<copiedNodes.length;i++){
-                _core.setAttribute(copiedNodes[i],OWN_GUID,toInternalGuid(GUID()));
+            for (i = 0; i < copiedNodes.length; i++) {
+                _core.setAttribute(copiedNodes[i], OWN_GUID, toInternalGuid(GUID()));
             }
 
             return copiedNodes;
         };
 
-		return _core;
-	}
+        return _core;
+    }
 
-	return guidCore;
+    return guidCore;
 });
 
 /*
@@ -5949,19 +6001,23 @@ define('common/core/guidcore',[ "common/util/assert", "common/util/guid", "commo
  * Author: Tamas Kecskes
  */
 
-define('common/core/nullpointercore',[], function () {
+define('common/core/nullpointercore',['common/util/assert'], function (ASSERT) {
     
 
     var NULLPTR_NAME = "_null_pointer";
     var NULLPTR_RELID = "_nullptr";
 
 
-    function nullPointerCore (_innerCore) {
-        var _core = {};
+    function nullPointerCore (_innerCore, options) {
+        ASSERT(typeof options === 'object');
+        ASSERT(typeof options.globConf === 'object');
+        ASSERT(typeof options.logger !== 'undefined');
+        var _core = {},
+            logger = options.logger.fork('nullpointercore');
         for(var i in _innerCore){
             _core[i] = _innerCore[i];
         }
-
+        logger.debug('initialized');
         
         //extra functions
         _core.setPointer = function(node,name, target){
@@ -6010,8 +6066,11 @@ define('common/core/coreunwrap',[ "common/util/assert", "common/core/tasync" ], 
 
 	// ----------------- CoreUnwrap -----------------
 
-	var CoreUnwrap = function(oldcore) {
-
+	var CoreUnwrap = function(oldcore, options) {
+        ASSERT(typeof options === 'object');
+        ASSERT(typeof options.globConf === 'object');
+        ASSERT(typeof options.logger !== 'undefined');
+        var logger = options.logger.fork('coreunwrap');
 		function checkNode(node) {
 			if (node === null || oldcore.isValidNode(node)) {
 				return node;
@@ -6038,7 +6097,7 @@ define('common/core/coreunwrap',[ "common/util/assert", "common/core/tasync" ], 
 		for ( var key in oldcore) {
 			core[key] = oldcore[key];
 		}
-
+        logger.debug('initialized');
 		core.loadRoot = TASYNC.unwrap(oldcore.loadRoot);
 		core.persist = TASYNC.unwrap(oldcore.persist);
 
@@ -6097,13 +6156,17 @@ define('common/core/coretype',[ "common/util/assert", "common/core/core", "commo
     var OVERLAYS = "ovr";
     var COLLSUFFIX = "-inv";
 
-    var CoreType = function(oldcore) {
+    var CoreType = function(oldcore, options) {
 		// copy all operations
-		var core = {};
+        ASSERT(typeof options === 'object');
+        ASSERT(typeof options.globConf === 'object');
+        ASSERT(typeof options.logger !== 'undefined');
+		var core = {},
+            logger = options.logger.fork('coretype');
 		for ( var key in oldcore) {
 			core[key] = oldcore[key];
 		}
-
+        logger.debug('initialized');
 		// ----- validity
 
 		function __test(text, cond) {
@@ -6887,12 +6950,16 @@ define('common/core/constraintcore',[ "common/util/assert" ], function (ASSERT) 
     
     var CONSTRAINTS_RELID = "_constraints";
     var C_DEF_PRIORITY = 1;
-    function constraintCore (_innerCore) {
-        var _core = {};
+    function constraintCore (_innerCore, options) {
+        ASSERT(typeof options === 'object');
+        ASSERT(typeof options.globConf === 'object');
+        ASSERT(typeof options.logger !== 'undefined');
+        var _core = {},
+            logger = options.logger.fork('constraintcore');
         for(var i in _innerCore){
             _core[i] = _innerCore[i];
         }
-
+        logger.debug('initialized');
         var createNewConstraintRelId = function(constraintsNode){
             var max = Math.pow(2, 31);
             var existingRelIds = _innerCore.getChildrenRelids(constraintsNode);
@@ -7707,13 +7774,17 @@ define('common/core/metacore',[ "common/util/assert", "common/core/core", "commo
 
     // ----------------- CoreType -----------------
 
-    var MetaCore = function(oldcore) {
+    var MetaCore = function(oldcore, options) {
+        ASSERT(typeof options === 'object');
+        ASSERT(typeof options.globConf === 'object');
+        ASSERT(typeof options.logger !== 'undefined');
         // copy all operations
-        var core = {};
+        var core = {},
+            logger = options.logger.fork('metacore');
         for ( var key in oldcore) {
             core[key] = oldcore[key];
         }
-
+        logger.debug('initialized');
         var sameNode = function(nodeA,nodeB){
             if(core.getPath(nodeA) === core.getPath(nodeB)){
                 return true;
@@ -8193,13 +8264,17 @@ define('common/core/coretreeloader',[ "common/util/assert", "common/core/core", 
 
   // ----------------- CoreTreeLoader -----------------
 
-  var MetaCore = function (innerCore) {
+  var MetaCore = function (innerCore, options) {
+      ASSERT(typeof options === 'object');
+      ASSERT(typeof options.globConf === 'object');
+      ASSERT(typeof options.logger !== 'undefined');
     var core = {},
-      key;
+      key,
+        logger = options.logger.fork('coretreeloader');
     for ( key in innerCore) {
       core[key] = innerCore[key];
     }
-
+      logger.debug('initialized');
     //adding load functions
     core.loadSubTree = function(root){
       var loadSubTrees = function(nodes){
@@ -8243,8 +8318,12 @@ define('common/core/corediff',['common/util/canon', 'common/core/tasync', 'commo
   
 
 
-  function diffCore(_innerCore) {
+  function diffCore(_innerCore, options) {
+    ASSERT(typeof options === 'object');
+    ASSERT(typeof options.globConf === 'object');
+    ASSERT(typeof options.logger !== 'undefined');
     var _core = {},
+      logger = options.logger.fork('corediff'),
       _yetToCompute = {},
       _DIFF = {},
       _needChecking = true,
@@ -8267,6 +8346,7 @@ define('common/core/corediff',['common/util/canon', 'common/core/tasync', 'commo
       _concat_moves,
       _resolve_moves;
 
+    logger.debug('initialized');
     for (var i in _innerCore) {
       _core[i] = _innerCore[i];
     }
@@ -10346,7 +10426,10 @@ define('common/core/corediff',['common/util/canon', 'common/core/tasync', 'commo
   return diffCore;
 });
 
-/*
+/*globals define*/
+/*jshint node: true, browser: true*/
+
+/**
  * Copyright (C) 2012 Vanderbilt University, All rights reserved.
  *
  * Author: Tamas Kecskes
@@ -10364,24 +10447,34 @@ define('common/core/core',[
         'common/core/metacore',
         'common/core/coretreeloader',
         'common/core/corediff'],
-    function (CoreRel, Set, Guid, NullPtr, UnWrap, Type, Constraint, CoreTree, MetaCore, TreeLoader, CoreDiff)
-{
+    function (CoreRel, Set, Guid, NullPtr, UnWrap, Type, Constraint, CoreTree, MetaCore, TreeLoader, CoreDiff) {
     
 
-    function core(storage,options){
-        options = options || {};
-        options.usertype = options.usertype || 'nodejs'; // FIXME: why this is nodejs???
-
-        var coreCon = new TreeLoader(new CoreDiff(new MetaCore(new Constraint(new Guid(new Set(new NullPtr(new Type(new NullPtr(new CoreRel(new CoreTree(storage, options)))))))))));
-
-        if(options.usertype === 'tasync'){
-            return coreCon;
-        } else {
-            return new UnWrap(coreCon);
+    function Core(storage, options) {
+        var core,
+            coreLayers = [];
+        coreLayers.push(CoreRel);
+        coreLayers.push(NullPtr);
+        coreLayers.push(Type);
+        coreLayers.push(NullPtr);
+        coreLayers.push(Set);
+        coreLayers.push(Guid);
+        coreLayers.push(Constraint);
+        coreLayers.push(MetaCore);
+        coreLayers.push(CoreDiff);
+        coreLayers.push(TreeLoader);
+        if (options.usertype !== 'tasync') {
+            coreLayers.push(UnWrap);
         }
+
+        core = coreLayers.reduce(function (inner, Class) {
+            return new Class(inner, options);
+        }, new CoreTree(storage, options));
+
+        return core;
     }
 
-    return core;
+    return Core;
 });
 
 /*
@@ -10394,8 +10487,11 @@ define('common/storage/client',[ "common/util/assert", "common/util/guid" ], fun
     
 
     function Database (options) {
-        var gmeConfig = options.globConf;
-        ASSERT(typeof options === "object");
+        ASSERT(typeof options === 'object');
+        ASSERT(typeof options.logger !== 'undefined');
+        ASSERT(typeof options.globConf === 'object');
+        var gmeConfig = options.globConf,
+            logger = options.logger.fork('client');
 
         options.type = options.type || "browser";
 
@@ -11326,8 +11422,12 @@ define('common/storage/failsafe',["common/util/assert", "common/util/guid"], fun
   };
 
   function Database(_database, options) {
-    ASSERT(typeof options === "object" && typeof _database === "object");
-    var gmeConfig = options.globConf;
+    ASSERT(typeof _database === 'object');
+    ASSERT(typeof options === 'object');
+    ASSERT(typeof options.logger !== 'undefined');
+    ASSERT(typeof options.globConf === 'object');
+    var gmeConfig = options.globConf,
+        logger = options.logger.fork('failsafe');
 
     var exceptionErrors = [],
         fsId = "FS", // MAGIC CONSTANT
@@ -11833,8 +11933,11 @@ define('common/storage/cache',[ "common/util/assert" ], function (ASSERT) {
 	};
 
 	var Database = function (database, options) {
-        var gmeConfig = options.globConf;
-        var logger = options.log.fork('cache');
+        ASSERT(typeof options === 'object');
+        ASSERT(typeof options.logger !== 'undefined');
+        ASSERT(typeof options.globConf === 'object');
+        var gmeConfig = options.globConf,
+            logger = options.logger.fork('cache');
         logger.debug('Initializing');
 		ASSERT(typeof database === "object" && typeof gmeConfig === "object");
 
@@ -12117,93 +12220,97 @@ define('common/storage/cache',[ "common/util/assert" ], function (ASSERT) {
 	return Database;
 });
 
-/*
- * Copyright (C) 2012-2013 Vanderbilt University, All rights reserved.
- *
- * Author: Tamas Kecskes
+/*globals define*/
+
+/**
+ * @author kecso / https://github.com/kecso
  */
 
-define('common/storage/commit',[ "common/util/assert", "common/util/key", "common/util/canon" ], function (ASSERT, GENKEY, CANON) {
-	
-	var HASH_REGEXP = new RegExp("^#[0-9a-zA-Z_]*$");
+define('common/storage/commit',['common/util/assert',
+    'common/util/key',
+    'common/regexp'], function (ASSERT, GENKEY, REGEXP) {
+    
 
-	function Database (_database,_options) {
+    function Database(_database, _options) {
+        ASSERT(typeof _database === 'object');
+        ASSERT(typeof _options === 'object');
+        ASSERT(typeof _options.globConf === 'object');
+        ASSERT(typeof _options.logger !== 'undefined');
+
         var gmeConfig = _options.globConf,
-            logger = _options.log.fork('commit');
+            logger = _options.logger.fork('commit');
+
         logger.debug('Initializing');
-		ASSERT(typeof _database === "object");
-		ASSERT(typeof _options === "object");
-		ASSERT(typeof gmeConfig.storage.keyType === "string");
 
-		function openProject (projectName, callback) {
+        function openProject(projectName, callback) {
 
-			var _project = null,
+            var _project = null,
                 projectLogger = logger.fork('project:' + projectName);
             projectLogger.debug('Initializing');
 
-			_database.openProject(projectName, function (err, proj) {
-				if (!err && proj) {
-					_project = proj;
-					callback(null, {
-						fsyncDatabase: _project.fsyncDatabase,
-						closeProject: _project.closeProject,
-						loadObject: _project.loadObject,
-						insertObject: _project.insertObject,
-						getInfo: _project.getInfo,
-						setInfo: _project.setInfo,
-						findHash: _project.findHash,
-						dumpObjects: _project.dumpObjects,
-						getBranchNames: _project.getBranchNames,
-						getBranchHash: _project.getBranchHash,
-						setBranchHash: _project.setBranchHash,
-						getCommits: _project.getCommits,
-            getCommonAncestorCommit: _project.getCommonAncestorCommit,
-						makeCommit: makeCommit,
+            _database.openProject(projectName, function (err, proj) {
+                if (!err && proj) {
+                    _project = proj;
+                    callback(null, {
+                        fsyncDatabase: _project.fsyncDatabase,
+                        closeProject: _project.closeProject,
+                        loadObject: _project.loadObject,
+                        insertObject: _project.insertObject,
+                        getInfo: _project.getInfo,
+                        setInfo: _project.setInfo,
+                        findHash: _project.findHash,
+                        dumpObjects: _project.dumpObjects,
+                        getBranchNames: _project.getBranchNames,
+                        getBranchHash: _project.getBranchHash,
+                        setBranchHash: _project.setBranchHash,
+                        getCommits: _project.getCommits,
+                        getCommonAncestorCommit: _project.getCommonAncestorCommit,
+                        makeCommit: makeCommit,
                         setUser: setUser,
-						ID_NAME: _project.ID_NAME
-					});
-				} else {
-					callback(err, proj);
-				}
-			});
+                        ID_NAME: _project.ID_NAME
+                    });
+                } else {
+                    callback(err, proj);
+                }
+            });
 
-			function makeCommit (parents, roothash, msg, callback) {
+            function makeCommit(parents, roothash, msg, callback) {
                 projectLogger.debug('makeCommit', {metadata: arguments});
-				ASSERT(HASH_REGEXP.test(roothash));
-				ASSERT(typeof callback === 'function');
+                ASSERT(REGEXP.HASH.test(roothash));
+                ASSERT(typeof callback === 'function');
 
-				parents = parents || [];
-				msg = msg || "n/a";
+                parents = parents || [];
+                msg = msg || 'n/a';
 
-				var commitObj = {
-					root: roothash,
-					parents: parents,
-					updater: [ _options.user ],
-					time: (new Date()).getTime(),
-					message: msg,
-					type: "commit"
-				};
+                var commitObj = {
+                    root: roothash,
+                    parents: parents,
+                    updater: [_options.user],
+                    time: (new Date()).getTime(),
+                    message: msg,
+                    type: 'commit'
+                };
 
-				var id = '#' + GENKEY(commitObj, gmeConfig);
-				commitObj[_project.ID_NAME] = id;
+                var id = '#' + GENKEY(commitObj, gmeConfig);
+                commitObj[_project.ID_NAME] = id;
 
-				_project.insertObject(commitObj, function (err) {
-					if (err) {
-						callback(err);
-					} else {
-						callback(null, id);
-					}
-				});
+                _project.insertObject(commitObj, function (err) {
+                    if (err) {
+                        callback(err);
+                    } else {
+                        callback(null, id);
+                    }
+                });
 
-				return id;
-			}
+                return id;
+            }
 
-            function setUser (userId){
+            function setUser(userId) {
                 projectLogger.debug('setUser', {metadata: arguments});
 
-                if(typeof userId === 'string'){
+                if (typeof userId === 'string') {
                     _options.user = userId;
-                };
+                }
             }
 
             projectLogger.debug('Ready');
@@ -12212,24 +12319,24 @@ define('common/storage/commit',[ "common/util/assert", "common/util/key", "commo
         logger.debug('Ready');
 
         return {
-			openDatabase: _database.openDatabase,
-			closeDatabase: _database.closeDatabase,
-			fsyncDatabase: _database.fsyncDatabase,
-			getProjectNames: _database.getProjectNames,
+            openDatabase: _database.openDatabase,
+            closeDatabase: _database.closeDatabase,
+            fsyncDatabase: _database.fsyncDatabase,
+            getProjectNames: _database.getProjectNames,
             getAllowedProjectNames: _database.getAllowedProjectNames,
             getAuthorizationInfo: _database.getAuthorizationInfo,
-			getDatabaseStatus: _database.getDatabaseStatus,
-			openProject: openProject,
-			deleteProject: _database.deleteProject,
+            getDatabaseStatus: _database.getDatabaseStatus,
+            openProject: openProject,
+            deleteProject: _database.deleteProject,
             simpleRequest: _database.simpleRequest,
             simpleResult: _database.simpleResult,
             simpleQuery: _database.simpleQuery,
             getNextServerEvent: _database.getNextServerEvent,
             getToken: _database.getToken
-		};
-	}
+        };
+    }
 
-	return Database;
+    return Database;
 });
 
 /*
@@ -12243,15 +12350,8 @@ define('common/storage/log',[ "common/util/assert" ], function (ASSERT) {
 
 	function Database (_database, options) {
 		ASSERT(typeof options === "object" && typeof _database === "object");
-		options.log = options.log || {
-			debug: function (msg) {
-				console.log("DEBUG - " + msg);
-			},
-			error: function (msg) {
-				console.log("ERROR - " + msg);
-			}
-		};
-		var logger = options.log;
+        ASSERT(typeof options.logger !== 'undefined');
+		var logger = options.logger.fork('log');
 
 		function openDatabase (callback) {
 			logger.debug('openDatabase()');
@@ -16591,7 +16691,1313 @@ define('common/core/users/serialization',['common/util/assert'],function(ASSERT)
     };
 });
 
-/*globals define, _, requirejs, WebGMEGlobal, GME*/
+!function(e){if("object"==typeof exports&&"undefined"!=typeof module)module.exports=e();else if("function"==typeof define&&define.amd)define('superagent',[],e);else{var f;"undefined"!=typeof window?f=window:"undefined"!=typeof global?f=global:"undefined"!=typeof self&&(f=self),f.superagent=e()}}(function(){var define,module,exports;return (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
+/**
+ * Module dependencies.
+ */
+
+var Emitter = require('emitter');
+var reduce = require('reduce');
+
+/**
+ * Root reference for iframes.
+ */
+
+var root = 'undefined' == typeof window
+  ? this
+  : window;
+
+/**
+ * Noop.
+ */
+
+function noop(){};
+
+/**
+ * Check if `obj` is a host object,
+ * we don't want to serialize these :)
+ *
+ * TODO: future proof, move to compoent land
+ *
+ * @param {Object} obj
+ * @return {Boolean}
+ * @api private
+ */
+
+function isHost(obj) {
+  var str = {}.toString.call(obj);
+
+  switch (str) {
+    case '[object File]':
+    case '[object Blob]':
+    case '[object FormData]':
+      return true;
+    default:
+      return false;
+  }
+}
+
+/**
+ * Determine XHR.
+ */
+
+request.getXHR = function () {
+  if (root.XMLHttpRequest
+    && ('file:' != root.location.protocol || !root.ActiveXObject)) {
+    return new XMLHttpRequest;
+  } else {
+    try { return new ActiveXObject('Microsoft.XMLHTTP'); } catch(e) {}
+    try { return new ActiveXObject('Msxml2.XMLHTTP.6.0'); } catch(e) {}
+    try { return new ActiveXObject('Msxml2.XMLHTTP.3.0'); } catch(e) {}
+    try { return new ActiveXObject('Msxml2.XMLHTTP'); } catch(e) {}
+  }
+  return false;
+};
+
+/**
+ * Removes leading and trailing whitespace, added to support IE.
+ *
+ * @param {String} s
+ * @return {String}
+ * @api private
+ */
+
+var trim = ''.trim
+  ? function(s) { return s.trim(); }
+  : function(s) { return s.replace(/(^\s*|\s*$)/g, ''); };
+
+/**
+ * Check if `obj` is an object.
+ *
+ * @param {Object} obj
+ * @return {Boolean}
+ * @api private
+ */
+
+function isObject(obj) {
+  return obj === Object(obj);
+}
+
+/**
+ * Serialize the given `obj`.
+ *
+ * @param {Object} obj
+ * @return {String}
+ * @api private
+ */
+
+function serialize(obj) {
+  if (!isObject(obj)) return obj;
+  var pairs = [];
+  for (var key in obj) {
+    if (null != obj[key]) {
+      pairs.push(encodeURIComponent(key)
+        + '=' + encodeURIComponent(obj[key]));
+    }
+  }
+  return pairs.join('&');
+}
+
+/**
+ * Expose serialization method.
+ */
+
+ request.serializeObject = serialize;
+
+ /**
+  * Parse the given x-www-form-urlencoded `str`.
+  *
+  * @param {String} str
+  * @return {Object}
+  * @api private
+  */
+
+function parseString(str) {
+  var obj = {};
+  var pairs = str.split('&');
+  var parts;
+  var pair;
+
+  for (var i = 0, len = pairs.length; i < len; ++i) {
+    pair = pairs[i];
+    parts = pair.split('=');
+    obj[decodeURIComponent(parts[0])] = decodeURIComponent(parts[1]);
+  }
+
+  return obj;
+}
+
+/**
+ * Expose parser.
+ */
+
+request.parseString = parseString;
+
+/**
+ * Default MIME type map.
+ *
+ *     superagent.types.xml = 'application/xml';
+ *
+ */
+
+request.types = {
+  html: 'text/html',
+  json: 'application/json',
+  xml: 'application/xml',
+  urlencoded: 'application/x-www-form-urlencoded',
+  'form': 'application/x-www-form-urlencoded',
+  'form-data': 'application/x-www-form-urlencoded'
+};
+
+/**
+ * Default serialization map.
+ *
+ *     superagent.serialize['application/xml'] = function(obj){
+ *       return 'generated xml here';
+ *     };
+ *
+ */
+
+ request.serialize = {
+   'application/x-www-form-urlencoded': serialize,
+   'application/json': JSON.stringify
+ };
+
+ /**
+  * Default parsers.
+  *
+  *     superagent.parse['application/xml'] = function(str){
+  *       return { object parsed from str };
+  *     };
+  *
+  */
+
+request.parse = {
+  'application/x-www-form-urlencoded': parseString,
+  'application/json': JSON.parse
+};
+
+/**
+ * Parse the given header `str` into
+ * an object containing the mapped fields.
+ *
+ * @param {String} str
+ * @return {Object}
+ * @api private
+ */
+
+function parseHeader(str) {
+  var lines = str.split(/\r?\n/);
+  var fields = {};
+  var index;
+  var line;
+  var field;
+  var val;
+
+  lines.pop(); // trailing CRLF
+
+  for (var i = 0, len = lines.length; i < len; ++i) {
+    line = lines[i];
+    index = line.indexOf(':');
+    field = line.slice(0, index).toLowerCase();
+    val = trim(line.slice(index + 1));
+    fields[field] = val;
+  }
+
+  return fields;
+}
+
+/**
+ * Return the mime type for the given `str`.
+ *
+ * @param {String} str
+ * @return {String}
+ * @api private
+ */
+
+function type(str){
+  return str.split(/ *; */).shift();
+};
+
+/**
+ * Return header field parameters.
+ *
+ * @param {String} str
+ * @return {Object}
+ * @api private
+ */
+
+function params(str){
+  return reduce(str.split(/ *; */), function(obj, str){
+    var parts = str.split(/ *= */)
+      , key = parts.shift()
+      , val = parts.shift();
+
+    if (key && val) obj[key] = val;
+    return obj;
+  }, {});
+};
+
+/**
+ * Initialize a new `Response` with the given `xhr`.
+ *
+ *  - set flags (.ok, .error, etc)
+ *  - parse header
+ *
+ * Examples:
+ *
+ *  Aliasing `superagent` as `request` is nice:
+ *
+ *      request = superagent;
+ *
+ *  We can use the promise-like API, or pass callbacks:
+ *
+ *      request.get('/').end(function(res){});
+ *      request.get('/', function(res){});
+ *
+ *  Sending data can be chained:
+ *
+ *      request
+ *        .post('/user')
+ *        .send({ name: 'tj' })
+ *        .end(function(res){});
+ *
+ *  Or passed to `.send()`:
+ *
+ *      request
+ *        .post('/user')
+ *        .send({ name: 'tj' }, function(res){});
+ *
+ *  Or passed to `.post()`:
+ *
+ *      request
+ *        .post('/user', { name: 'tj' })
+ *        .end(function(res){});
+ *
+ * Or further reduced to a single call for simple cases:
+ *
+ *      request
+ *        .post('/user', { name: 'tj' }, function(res){});
+ *
+ * @param {XMLHTTPRequest} xhr
+ * @param {Object} options
+ * @api private
+ */
+
+function Response(req, options) {
+  options = options || {};
+  this.req = req;
+  this.xhr = this.req.xhr;
+  // responseText is accessible only if responseType is '' or 'text' and on older browsers
+  this.text = ((this.req.method !='HEAD' && (this.xhr.responseType === '' || this.xhr.responseType === 'text')) || typeof this.xhr.responseType === 'undefined')
+     ? this.xhr.responseText
+     : null;
+  this.statusText = this.req.xhr.statusText;
+  this.setStatusProperties(this.xhr.status);
+  this.header = this.headers = parseHeader(this.xhr.getAllResponseHeaders());
+  // getAllResponseHeaders sometimes falsely returns "" for CORS requests, but
+  // getResponseHeader still works. so we get content-type even if getting
+  // other headers fails.
+  this.header['content-type'] = this.xhr.getResponseHeader('content-type');
+  this.setHeaderProperties(this.header);
+  this.body = this.req.method != 'HEAD'
+    ? this.parseBody(this.text ? this.text : this.xhr.response)
+    : null;
+}
+
+/**
+ * Get case-insensitive `field` value.
+ *
+ * @param {String} field
+ * @return {String}
+ * @api public
+ */
+
+Response.prototype.get = function(field){
+  return this.header[field.toLowerCase()];
+};
+
+/**
+ * Set header related properties:
+ *
+ *   - `.type` the content type without params
+ *
+ * A response of "Content-Type: text/plain; charset=utf-8"
+ * will provide you with a `.type` of "text/plain".
+ *
+ * @param {Object} header
+ * @api private
+ */
+
+Response.prototype.setHeaderProperties = function(header){
+  // content-type
+  var ct = this.header['content-type'] || '';
+  this.type = type(ct);
+
+  // params
+  var obj = params(ct);
+  for (var key in obj) this[key] = obj[key];
+};
+
+/**
+ * Parse the given body `str`.
+ *
+ * Used for auto-parsing of bodies. Parsers
+ * are defined on the `superagent.parse` object.
+ *
+ * @param {String} str
+ * @return {Mixed}
+ * @api private
+ */
+
+Response.prototype.parseBody = function(str){
+  var parse = request.parse[this.type];
+  return parse && str && (str.length || str instanceof Object)
+    ? parse(str)
+    : null;
+};
+
+/**
+ * Set flags such as `.ok` based on `status`.
+ *
+ * For example a 2xx response will give you a `.ok` of __true__
+ * whereas 5xx will be __false__ and `.error` will be __true__. The
+ * `.clientError` and `.serverError` are also available to be more
+ * specific, and `.statusType` is the class of error ranging from 1..5
+ * sometimes useful for mapping respond colors etc.
+ *
+ * "sugar" properties are also defined for common cases. Currently providing:
+ *
+ *   - .noContent
+ *   - .badRequest
+ *   - .unauthorized
+ *   - .notAcceptable
+ *   - .notFound
+ *
+ * @param {Number} status
+ * @api private
+ */
+
+Response.prototype.setStatusProperties = function(status){
+  var type = status / 100 | 0;
+
+  // status / class
+  this.status = status;
+  this.statusType = type;
+
+  // basics
+  this.info = 1 == type;
+  this.ok = 2 == type;
+  this.clientError = 4 == type;
+  this.serverError = 5 == type;
+  this.error = (4 == type || 5 == type)
+    ? this.toError()
+    : false;
+
+  // sugar
+  this.accepted = 202 == status;
+  this.noContent = 204 == status || 1223 == status;
+  this.badRequest = 400 == status;
+  this.unauthorized = 401 == status;
+  this.notAcceptable = 406 == status;
+  this.notFound = 404 == status;
+  this.forbidden = 403 == status;
+};
+
+/**
+ * Return an `Error` representative of this response.
+ *
+ * @return {Error}
+ * @api public
+ */
+
+Response.prototype.toError = function(){
+  var req = this.req;
+  var method = req.method;
+  var url = req.url;
+
+  var msg = 'cannot ' + method + ' ' + url + ' (' + this.status + ')';
+  var err = new Error(msg);
+  err.status = this.status;
+  err.method = method;
+  err.url = url;
+
+  return err;
+};
+
+/**
+ * Expose `Response`.
+ */
+
+request.Response = Response;
+
+/**
+ * Initialize a new `Request` with the given `method` and `url`.
+ *
+ * @param {String} method
+ * @param {String} url
+ * @api public
+ */
+
+function Request(method, url) {
+  var self = this;
+  Emitter.call(this);
+  this._query = this._query || [];
+  this.method = method;
+  this.url = url;
+  this.header = {};
+  this._header = {};
+  this.on('end', function(){
+    var err = null;
+    var res = null;
+
+    try {
+      res = new Response(self);
+    } catch(e) {
+      err = new Error('Parser is unable to parse the response');
+      err.parse = true;
+      err.original = e;
+      return self.callback(err);
+    }
+
+    self.emit('response', res);
+
+    if (err) {
+      return self.callback(err, res);
+    }
+
+    if (res.status >= 200 && res.status < 300) {
+      return self.callback(err, res);
+    }
+
+    var new_err = new Error(res.statusText || 'Unsuccessful HTTP response');
+    new_err.original = err;
+    new_err.response = res;
+    new_err.status = res.status;
+
+    self.callback(err || new_err, res);
+  });
+}
+
+/**
+ * Mixin `Emitter`.
+ */
+
+Emitter(Request.prototype);
+
+/**
+ * Allow for extension
+ */
+
+Request.prototype.use = function(fn) {
+  fn(this);
+  return this;
+}
+
+/**
+ * Set timeout to `ms`.
+ *
+ * @param {Number} ms
+ * @return {Request} for chaining
+ * @api public
+ */
+
+Request.prototype.timeout = function(ms){
+  this._timeout = ms;
+  return this;
+};
+
+/**
+ * Clear previous timeout.
+ *
+ * @return {Request} for chaining
+ * @api public
+ */
+
+Request.prototype.clearTimeout = function(){
+  this._timeout = 0;
+  clearTimeout(this._timer);
+  return this;
+};
+
+/**
+ * Abort the request, and clear potential timeout.
+ *
+ * @return {Request}
+ * @api public
+ */
+
+Request.prototype.abort = function(){
+  if (this.aborted) return;
+  this.aborted = true;
+  this.xhr.abort();
+  this.clearTimeout();
+  this.emit('abort');
+  return this;
+};
+
+/**
+ * Set header `field` to `val`, or multiple fields with one object.
+ *
+ * Examples:
+ *
+ *      req.get('/')
+ *        .set('Accept', 'application/json')
+ *        .set('X-API-Key', 'foobar')
+ *        .end(callback);
+ *
+ *      req.get('/')
+ *        .set({ Accept: 'application/json', 'X-API-Key': 'foobar' })
+ *        .end(callback);
+ *
+ * @param {String|Object} field
+ * @param {String} val
+ * @return {Request} for chaining
+ * @api public
+ */
+
+Request.prototype.set = function(field, val){
+  if (isObject(field)) {
+    for (var key in field) {
+      this.set(key, field[key]);
+    }
+    return this;
+  }
+  this._header[field.toLowerCase()] = val;
+  this.header[field] = val;
+  return this;
+};
+
+/**
+ * Remove header `field`.
+ *
+ * Example:
+ *
+ *      req.get('/')
+ *        .unset('User-Agent')
+ *        .end(callback);
+ *
+ * @param {String} field
+ * @return {Request} for chaining
+ * @api public
+ */
+
+Request.prototype.unset = function(field){
+  delete this._header[field.toLowerCase()];
+  delete this.header[field];
+  return this;
+};
+
+/**
+ * Get case-insensitive header `field` value.
+ *
+ * @param {String} field
+ * @return {String}
+ * @api private
+ */
+
+Request.prototype.getHeader = function(field){
+  return this._header[field.toLowerCase()];
+};
+
+/**
+ * Set Content-Type to `type`, mapping values from `request.types`.
+ *
+ * Examples:
+ *
+ *      superagent.types.xml = 'application/xml';
+ *
+ *      request.post('/')
+ *        .type('xml')
+ *        .send(xmlstring)
+ *        .end(callback);
+ *
+ *      request.post('/')
+ *        .type('application/xml')
+ *        .send(xmlstring)
+ *        .end(callback);
+ *
+ * @param {String} type
+ * @return {Request} for chaining
+ * @api public
+ */
+
+Request.prototype.type = function(type){
+  this.set('Content-Type', request.types[type] || type);
+  return this;
+};
+
+/**
+ * Set Accept to `type`, mapping values from `request.types`.
+ *
+ * Examples:
+ *
+ *      superagent.types.json = 'application/json';
+ *
+ *      request.get('/agent')
+ *        .accept('json')
+ *        .end(callback);
+ *
+ *      request.get('/agent')
+ *        .accept('application/json')
+ *        .end(callback);
+ *
+ * @param {String} accept
+ * @return {Request} for chaining
+ * @api public
+ */
+
+Request.prototype.accept = function(type){
+  this.set('Accept', request.types[type] || type);
+  return this;
+};
+
+/**
+ * Set Authorization field value with `user` and `pass`.
+ *
+ * @param {String} user
+ * @param {String} pass
+ * @return {Request} for chaining
+ * @api public
+ */
+
+Request.prototype.auth = function(user, pass){
+  var str = btoa(user + ':' + pass);
+  this.set('Authorization', 'Basic ' + str);
+  return this;
+};
+
+/**
+* Add query-string `val`.
+*
+* Examples:
+*
+*   request.get('/shoes')
+*     .query('size=10')
+*     .query({ color: 'blue' })
+*
+* @param {Object|String} val
+* @return {Request} for chaining
+* @api public
+*/
+
+Request.prototype.query = function(val){
+  if ('string' != typeof val) val = serialize(val);
+  if (val) this._query.push(val);
+  return this;
+};
+
+/**
+ * Write the field `name` and `val` for "multipart/form-data"
+ * request bodies.
+ *
+ * ``` js
+ * request.post('/upload')
+ *   .field('foo', 'bar')
+ *   .end(callback);
+ * ```
+ *
+ * @param {String} name
+ * @param {String|Blob|File} val
+ * @return {Request} for chaining
+ * @api public
+ */
+
+Request.prototype.field = function(name, val){
+  if (!this._formData) this._formData = new root.FormData();
+  this._formData.append(name, val);
+  return this;
+};
+
+/**
+ * Queue the given `file` as an attachment to the specified `field`,
+ * with optional `filename`.
+ *
+ * ``` js
+ * request.post('/upload')
+ *   .attach(new Blob(['<a id="a"><b id="b">hey!</b></a>'], { type: "text/html"}))
+ *   .end(callback);
+ * ```
+ *
+ * @param {String} field
+ * @param {Blob|File} file
+ * @param {String} filename
+ * @return {Request} for chaining
+ * @api public
+ */
+
+Request.prototype.attach = function(field, file, filename){
+  if (!this._formData) this._formData = new root.FormData();
+  this._formData.append(field, file, filename);
+  return this;
+};
+
+/**
+ * Send `data`, defaulting the `.type()` to "json" when
+ * an object is given.
+ *
+ * Examples:
+ *
+ *       // querystring
+ *       request.get('/search')
+ *         .end(callback)
+ *
+ *       // multiple data "writes"
+ *       request.get('/search')
+ *         .send({ search: 'query' })
+ *         .send({ range: '1..5' })
+ *         .send({ order: 'desc' })
+ *         .end(callback)
+ *
+ *       // manual json
+ *       request.post('/user')
+ *         .type('json')
+ *         .send('{"name":"tj"})
+ *         .end(callback)
+ *
+ *       // auto json
+ *       request.post('/user')
+ *         .send({ name: 'tj' })
+ *         .end(callback)
+ *
+ *       // manual x-www-form-urlencoded
+ *       request.post('/user')
+ *         .type('form')
+ *         .send('name=tj')
+ *         .end(callback)
+ *
+ *       // auto x-www-form-urlencoded
+ *       request.post('/user')
+ *         .type('form')
+ *         .send({ name: 'tj' })
+ *         .end(callback)
+ *
+ *       // defaults to x-www-form-urlencoded
+  *      request.post('/user')
+  *        .send('name=tobi')
+  *        .send('species=ferret')
+  *        .end(callback)
+ *
+ * @param {String|Object} data
+ * @return {Request} for chaining
+ * @api public
+ */
+
+Request.prototype.send = function(data){
+  var obj = isObject(data);
+  var type = this.getHeader('Content-Type');
+
+  // merge
+  if (obj && isObject(this._data)) {
+    for (var key in data) {
+      this._data[key] = data[key];
+    }
+  } else if ('string' == typeof data) {
+    if (!type) this.type('form');
+    type = this.getHeader('Content-Type');
+    if ('application/x-www-form-urlencoded' == type) {
+      this._data = this._data
+        ? this._data + '&' + data
+        : data;
+    } else {
+      this._data = (this._data || '') + data;
+    }
+  } else {
+    this._data = data;
+  }
+
+  if (!obj || isHost(data)) return this;
+  if (!type) this.type('json');
+  return this;
+};
+
+/**
+ * Invoke the callback with `err` and `res`
+ * and handle arity check.
+ *
+ * @param {Error} err
+ * @param {Response} res
+ * @api private
+ */
+
+Request.prototype.callback = function(err, res){
+  var fn = this._callback;
+  this.clearTimeout();
+  fn(err, res);
+};
+
+/**
+ * Invoke callback with x-domain error.
+ *
+ * @api private
+ */
+
+Request.prototype.crossDomainError = function(){
+  var err = new Error('Origin is not allowed by Access-Control-Allow-Origin');
+  err.crossDomain = true;
+  this.callback(err);
+};
+
+/**
+ * Invoke callback with timeout error.
+ *
+ * @api private
+ */
+
+Request.prototype.timeoutError = function(){
+  var timeout = this._timeout;
+  var err = new Error('timeout of ' + timeout + 'ms exceeded');
+  err.timeout = timeout;
+  this.callback(err);
+};
+
+/**
+ * Enable transmission of cookies with x-domain requests.
+ *
+ * Note that for this to work the origin must not be
+ * using "Access-Control-Allow-Origin" with a wildcard,
+ * and also must set "Access-Control-Allow-Credentials"
+ * to "true".
+ *
+ * @api public
+ */
+
+Request.prototype.withCredentials = function(){
+  this._withCredentials = true;
+  return this;
+};
+
+/**
+ * Initiate request, invoking callback `fn(res)`
+ * with an instanceof `Response`.
+ *
+ * @param {Function} fn
+ * @return {Request} for chaining
+ * @api public
+ */
+
+Request.prototype.end = function(fn){
+  var self = this;
+  var xhr = this.xhr = request.getXHR();
+  var query = this._query.join('&');
+  var timeout = this._timeout;
+  var data = this._formData || this._data;
+
+  // store callback
+  this._callback = fn || noop;
+
+  // state change
+  xhr.onreadystatechange = function(){
+    if (4 != xhr.readyState) return;
+
+    // In IE9, reads to any property (e.g. status) off of an aborted XHR will
+    // result in the error "Could not complete the operation due to error c00c023f"
+    var status;
+    try { status = xhr.status } catch(e) { status = 0; }
+
+    if (0 == status) {
+      if (self.timedout) return self.timeoutError();
+      if (self.aborted) return;
+      return self.crossDomainError();
+    }
+    self.emit('end');
+  };
+
+  // progress
+  try {
+    if (xhr.upload && this.hasListeners('progress')) {
+      xhr.upload.onprogress = function(e){
+        e.percent = e.loaded / e.total * 100;
+        self.emit('progress', e);
+      };
+    }
+  } catch(e) {
+    // Accessing xhr.upload fails in IE from a web worker, so just pretend it doesn't exist.
+    // Reported here:
+    // https://connect.microsoft.com/IE/feedback/details/837245/xmlhttprequest-upload-throws-invalid-argument-when-used-from-web-worker-context
+  }
+
+  // timeout
+  if (timeout && !this._timer) {
+    this._timer = setTimeout(function(){
+      self.timedout = true;
+      self.abort();
+    }, timeout);
+  }
+
+  // querystring
+  if (query) {
+    query = request.serializeObject(query);
+    this.url += ~this.url.indexOf('?')
+      ? '&' + query
+      : '?' + query;
+  }
+
+  // initiate request
+  xhr.open(this.method, this.url, true);
+
+  // CORS
+  if (this._withCredentials) xhr.withCredentials = true;
+
+  // body
+  if ('GET' != this.method && 'HEAD' != this.method && 'string' != typeof data && !isHost(data)) {
+    // serialize stuff
+    var serialize = request.serialize[this.getHeader('Content-Type')];
+    if (serialize) data = serialize(data);
+  }
+
+  // set header fields
+  for (var field in this.header) {
+    if (null == this.header[field]) continue;
+    xhr.setRequestHeader(field, this.header[field]);
+  }
+
+  // send stuff
+  this.emit('request', this);
+  xhr.send(data);
+  return this;
+};
+
+/**
+ * Expose `Request`.
+ */
+
+request.Request = Request;
+
+/**
+ * Issue a request:
+ *
+ * Examples:
+ *
+ *    request('GET', '/users').end(callback)
+ *    request('/users').end(callback)
+ *    request('/users', callback)
+ *
+ * @param {String} method
+ * @param {String|Function} url or callback
+ * @return {Request}
+ * @api public
+ */
+
+function request(method, url) {
+  // callback
+  if ('function' == typeof url) {
+    return new Request('GET', method).end(url);
+  }
+
+  // url first
+  if (1 == arguments.length) {
+    return new Request('GET', method);
+  }
+
+  return new Request(method, url);
+}
+
+/**
+ * GET `url` with optional callback `fn(res)`.
+ *
+ * @param {String} url
+ * @param {Mixed|Function} data or fn
+ * @param {Function} fn
+ * @return {Request}
+ * @api public
+ */
+
+request.get = function(url, data, fn){
+  var req = request('GET', url);
+  if ('function' == typeof data) fn = data, data = null;
+  if (data) req.query(data);
+  if (fn) req.end(fn);
+  return req;
+};
+
+/**
+ * HEAD `url` with optional callback `fn(res)`.
+ *
+ * @param {String} url
+ * @param {Mixed|Function} data or fn
+ * @param {Function} fn
+ * @return {Request}
+ * @api public
+ */
+
+request.head = function(url, data, fn){
+  var req = request('HEAD', url);
+  if ('function' == typeof data) fn = data, data = null;
+  if (data) req.send(data);
+  if (fn) req.end(fn);
+  return req;
+};
+
+/**
+ * DELETE `url` with optional callback `fn(res)`.
+ *
+ * @param {String} url
+ * @param {Function} fn
+ * @return {Request}
+ * @api public
+ */
+
+request.del = function(url, fn){
+  var req = request('DELETE', url);
+  if (fn) req.end(fn);
+  return req;
+};
+
+/**
+ * PATCH `url` with optional `data` and callback `fn(res)`.
+ *
+ * @param {String} url
+ * @param {Mixed} data
+ * @param {Function} fn
+ * @return {Request}
+ * @api public
+ */
+
+request.patch = function(url, data, fn){
+  var req = request('PATCH', url);
+  if ('function' == typeof data) fn = data, data = null;
+  if (data) req.send(data);
+  if (fn) req.end(fn);
+  return req;
+};
+
+/**
+ * POST `url` with optional `data` and callback `fn(res)`.
+ *
+ * @param {String} url
+ * @param {Mixed} data
+ * @param {Function} fn
+ * @return {Request}
+ * @api public
+ */
+
+request.post = function(url, data, fn){
+  var req = request('POST', url);
+  if ('function' == typeof data) fn = data, data = null;
+  if (data) req.send(data);
+  if (fn) req.end(fn);
+  return req;
+};
+
+/**
+ * PUT `url` with optional `data` and callback `fn(res)`.
+ *
+ * @param {String} url
+ * @param {Mixed|Function} data or fn
+ * @param {Function} fn
+ * @return {Request}
+ * @api public
+ */
+
+request.put = function(url, data, fn){
+  var req = request('PUT', url);
+  if ('function' == typeof data) fn = data, data = null;
+  if (data) req.send(data);
+  if (fn) req.end(fn);
+  return req;
+};
+
+/**
+ * Expose `request`.
+ */
+
+module.exports = request;
+
+},{"emitter":2,"reduce":3}],2:[function(require,module,exports){
+
+/**
+ * Expose `Emitter`.
+ */
+
+module.exports = Emitter;
+
+/**
+ * Initialize a new `Emitter`.
+ *
+ * @api public
+ */
+
+function Emitter(obj) {
+  if (obj) return mixin(obj);
+};
+
+/**
+ * Mixin the emitter properties.
+ *
+ * @param {Object} obj
+ * @return {Object}
+ * @api private
+ */
+
+function mixin(obj) {
+  for (var key in Emitter.prototype) {
+    obj[key] = Emitter.prototype[key];
+  }
+  return obj;
+}
+
+/**
+ * Listen on the given `event` with `fn`.
+ *
+ * @param {String} event
+ * @param {Function} fn
+ * @return {Emitter}
+ * @api public
+ */
+
+Emitter.prototype.on =
+Emitter.prototype.addEventListener = function(event, fn){
+  this._callbacks = this._callbacks || {};
+  (this._callbacks[event] = this._callbacks[event] || [])
+    .push(fn);
+  return this;
+};
+
+/**
+ * Adds an `event` listener that will be invoked a single
+ * time then automatically removed.
+ *
+ * @param {String} event
+ * @param {Function} fn
+ * @return {Emitter}
+ * @api public
+ */
+
+Emitter.prototype.once = function(event, fn){
+  var self = this;
+  this._callbacks = this._callbacks || {};
+
+  function on() {
+    self.off(event, on);
+    fn.apply(this, arguments);
+  }
+
+  on.fn = fn;
+  this.on(event, on);
+  return this;
+};
+
+/**
+ * Remove the given callback for `event` or all
+ * registered callbacks.
+ *
+ * @param {String} event
+ * @param {Function} fn
+ * @return {Emitter}
+ * @api public
+ */
+
+Emitter.prototype.off =
+Emitter.prototype.removeListener =
+Emitter.prototype.removeAllListeners =
+Emitter.prototype.removeEventListener = function(event, fn){
+  this._callbacks = this._callbacks || {};
+
+  // all
+  if (0 == arguments.length) {
+    this._callbacks = {};
+    return this;
+  }
+
+  // specific event
+  var callbacks = this._callbacks[event];
+  if (!callbacks) return this;
+
+  // remove all handlers
+  if (1 == arguments.length) {
+    delete this._callbacks[event];
+    return this;
+  }
+
+  // remove specific handler
+  var cb;
+  for (var i = 0; i < callbacks.length; i++) {
+    cb = callbacks[i];
+    if (cb === fn || cb.fn === fn) {
+      callbacks.splice(i, 1);
+      break;
+    }
+  }
+  return this;
+};
+
+/**
+ * Emit `event` with the given args.
+ *
+ * @param {String} event
+ * @param {Mixed} ...
+ * @return {Emitter}
+ */
+
+Emitter.prototype.emit = function(event){
+  this._callbacks = this._callbacks || {};
+  var args = [].slice.call(arguments, 1)
+    , callbacks = this._callbacks[event];
+
+  if (callbacks) {
+    callbacks = callbacks.slice(0);
+    for (var i = 0, len = callbacks.length; i < len; ++i) {
+      callbacks[i].apply(this, args);
+    }
+  }
+
+  return this;
+};
+
+/**
+ * Return array of callbacks for `event`.
+ *
+ * @param {String} event
+ * @return {Array}
+ * @api public
+ */
+
+Emitter.prototype.listeners = function(event){
+  this._callbacks = this._callbacks || {};
+  return this._callbacks[event] || [];
+};
+
+/**
+ * Check if this emitter has `event` handlers.
+ *
+ * @param {String} event
+ * @return {Boolean}
+ * @api public
+ */
+
+Emitter.prototype.hasListeners = function(event){
+  return !! this.listeners(event).length;
+};
+
+},{}],3:[function(require,module,exports){
+
+/**
+ * Reduce `arr` with `fn`.
+ *
+ * @param {Array} arr
+ * @param {Function} fn
+ * @param {Mixed} initial
+ *
+ * TODO: combatible error handling?
+ */
+
+module.exports = function(arr, fn, initial){  
+  var idx = 0;
+  var len = arr.length;
+  var curr = arguments.length == 3
+    ? initial
+    : arr[idx++];
+
+  while (idx < len) {
+    curr = fn.call(null, curr, arr[idx], ++idx, arr);
+  }
+  
+  return curr;
+};
+},{}]},{},[1])(1)
+});
+/*globals define, _, requirejs, GME*/
 
 define('client/js/client',[
     'common/util/assert',
@@ -16608,7 +18014,8 @@ define('client/js/client',[
     'common/core/users/import',
     'common/core/users/copyimport',
     'common/core/users/serialization',
-    'common/core/tasync'
+    'common/core/tasync',
+    'superagent'
   ],
   function (
     ASSERT,
@@ -16625,7 +18032,8 @@ define('client/js/client',[
     MergeImport,
     Import,
     Serialization,
-    TASYNC) {
+    TASYNC,
+    superagent) {
 
     
 
@@ -16639,10 +18047,10 @@ define('client/js/client',[
     }
 
 
-    function getNewCore(project, gmeConfig) {
+    function getNewCore(project, gmeConfig, logger) {
       //return new NullPointerCore(new DescriptorCore(new SetCore(new GuidCore(new Core(project)))));
         // FIXME: why usertype is nodejs when it is running from the browser?
-      var options = {usertype: 'nodejs', globConf: gmeConfig};
+      var options = {usertype: 'nodejs', globConf: gmeConfig, logger: logger.fork('core')};
       return Core(project, options);
     }
 
@@ -16763,28 +18171,34 @@ define('client/js/client',[
         _redoer = null,
         _selfCommits = {},
         _configuration = {},
+        req,
         AllPlugins, AllDecorators;
 
-
-        //FIXME remove TESTING and leave only require here
-      if(typeof TESTING === 'undefined') {
-          if (window) {
-              _configuration.host = window.location.protocol + '//' + window.location.host;
-          } else {
-              _configuration.host = '';
-          }
-        require([_configuration.host + '/listAllDecorators', _configuration.host + '/listAllPlugins'], function (d, p) {
-          AllDecorators = WebGMEGlobal.allDecorators;
-          AllPlugins = WebGMEGlobal.allPlugins;
-        });
-      } else {
-        _configuration.host = ' ';
-        console.warn('TESTING is defined - we are not getting plugins and decorators.');
-      }
-
-
-
-
+        if (window) {
+            _configuration.host = window.location.protocol + '//' + window.location.host;
+        } else {
+            //TODO: Is this ever applicable?
+            _configuration.host = '';
+        }
+        // FIXME: These are asynchronous
+        superagent.get('/listAllPlugins')
+          .end(function (err, res) {
+             if (res.status !== 200) {
+               logger.error('/listAllPlugins failed', err);
+             } else {
+               AllPlugins = res.body.allPlugins;
+               logger.debug('/listAllPlugins', AllPlugins);
+             }
+          });
+        superagent.get('/listAllDecorators')
+          .end(function (err, res) {
+            if (res.status !== 200) {
+              logger.error('/listAllDecorators failed', err);
+            } else {
+               AllDecorators = res.body.allDecorators;
+               logger.debug('/listAllDecorators', AllDecorators);
+            }
+          });
         //TODO remove it
       //function print_nodes(pretext) {
       //  if (pretext) {
@@ -16853,7 +18267,7 @@ define('client/js/client',[
 
         //FIXME remove TESTING
       function newDatabase() {
-        var storageOptions ={log: Logger.create('gme:client:storage', gmeConfig.client.log), host: _configuration.host},
+        var storageOptions ={logger: Logger.create('gme:client:storage', gmeConfig.client.log), host: _configuration.host},
             protocolStr;
         if(typeof TESTING !== 'undefined'){
           protocolStr = gmeConfig.server.https.enable ? 'https' : 'http';
@@ -17145,9 +18559,10 @@ define('client/js/client',[
         refreshToken();
 
         //TODO check if this is okay to set it here
-        if(typeof WebGMEGlobal !== 'undefined') {
-           WebGMEGlobal.getToken = getToken;
-        }
+        //ANS: It is not and now it is removed - p
+        //if(typeof WebGMEGlobal !== 'undefined') {
+        //   WebGMEGlobal.getToken = getToken;
+        //}
         return {
           getToken: getToken
         };
@@ -17225,6 +18640,7 @@ define('client/js/client',[
                     canRedo = true;
                   }
                 }
+
                 _self.dispatchEvent(_self.events.UNDO_AVAILABLE, canUndo);
                 _self.dispatchEvent(_self.events.REDO_AVAILABLE, canRedo);
 
@@ -17364,7 +18780,7 @@ define('client/js/client',[
           }
         }
       }
-      
+
       function networkWatcher() {
         _networkStatus = "";
         //FIXME: Are these gme options or not??
@@ -17375,52 +18791,57 @@ define('client/js/client',[
               running = false;
             },
             checking = false,
-            reconneting = function(finished){
+            reconnecting = function (finished) {
               var connecting = false,
                   counter = 0,
                   frequency = _configuration.reconndelay || 10,
-                  timerId = setInterval(function(){
-                    if(!connecting){
-                      _database.openDatabase(function(err){
+                  timerId = setInterval(function () {
+                    if (!connecting) {
+                      connecting = true;
+                      _database.openDatabase(function (err) {
                         connecting = false;
-                        if(!err){
-                         //we are back!
+                        if (!err) {
+                          //we are back!
                           clearInterval(timerId);
                           return finished(null);
                         }
-                        if(++counter === _configuration.reconnamount){
+                        if (++counter === _configuration.reconnamount) {
                           //we failed, stop trying
                           clearInterval(timerId);
                           return finished(err);
                         }
                       });
                     }
-                  },frequency);
+                  }, frequency);
             },
-            checkId = setInterval(function(){
-              if(!checking){
+            checkId = setInterval(function () {
+              if (!checking) {
                 checking = true;
-                _database.getDatabaseStatus(_networkStatus,function(err,newStatus){
-                  if(running){
-                    _networkStatus = newStatus;
-                    if (_networkStatus === _self.networkStates.DISCONNECTED && _configuration.autoreconnect) {
-                      reconnecting(function(err){
+                _database.getDatabaseStatus(_networkStatus, function (err, newStatus) {
+                  if (running) {
+                    if (_networkStatus !== newStatus) {
+                      _networkStatus = newStatus;
+                      _self.dispatchEvent(_self.events.NETWORKSTATUS_CHANGED, _networkStatus);
+                      if (_networkStatus === _self.networkStates.DISCONNECTED && _configuration.autoreconnect) {
+                        reconnecting(function (err) {
+                          checking = false;
+                          if (err) {
+                            logger.error('permanent network failure:', err);
+                            clearInterval(checkId);
+                          }
+                        });
+                      } else {
                         checking = false;
-                        if(err){
-                          logger.error('permanent network failure:',err);
-                          clearInterval(checkId);
-                        }
-                      });
+                      }
                     } else {
                       checking = false;
                     }
-                    _self.dispatchEvent(_self.events.NETWORKSTATUS_CHANGED, _networkStatus);
                   } else {
                     clearInterval(checkId);
                   }
                 });
               }
-            },frequency);
+            }, frequency);
 
         return {
           stop: stop
@@ -17583,7 +19004,7 @@ define('client/js/client',[
                   _inTransaction = false;
                   _nodes = {};
                   _metaNodes = {};
-                  _core = getNewCore(_project, gmeConfig);
+                  _core = getNewCore(_project, gmeConfig, logger.fork('project' + name));
                   META.initialize(_core, _metaNodes, saveRoot);
                   if (_commitCache) {
                     _commitCache.clearCache();
@@ -17703,7 +19124,7 @@ define('client/js/client',[
       }
 
       function createEmptyProject(project, callback) {
-        var core = getNewCore(project, gmeConfig),
+        var core = getNewCore(project, gmeConfig, logger.fork('createEmptyProject')),
           root = core.createNode(),
           rootHash = '',
           commitHash = '';
@@ -19616,6 +21037,10 @@ define('client/js/client',[
       }
 
       function getAvailableInterpreterNames() {
+          if (!AllPlugins) {
+              logger.error('AllPlugins were never uploaded!');
+              return [];
+          }
         var names = [];
         var valids = _nodes[ROOT_PATH] ? _core.getRegistry(_nodes[ROOT_PATH].node, 'validPlugins') || "" : "";
         valids = valids.split(" ");
@@ -19632,6 +21057,10 @@ define('client/js/client',[
       }
 
       function getAvailableDecoratorNames() {
+          if (!AllDecorators) {
+              logger.error('AllDecorators were never uploaded!');
+              return [];
+          }
         return AllDecorators;
       }
 
@@ -20594,7 +22023,1872 @@ define('blob/Artifact',['blob/BlobMetadata', 'blob/BlobConfig', 'common/core/tas
     return Artifact;
 });
 
-!function(e){if("object"==typeof exports&&"undefined"!=typeof module)module.exports=e();else if("function"==typeof define&&define.amd)define('superagent',[],e);else{var f;"undefined"!=typeof window?f=window:"undefined"!=typeof global?f=global:"undefined"!=typeof self&&(f=self),f.superagent=e()}}(function(){var define,module,exports;return (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
+/*globals define*/
+/*jshint browser: true, node:true*/
+/*
+ * @author lattmann / https://github.com/lattmann
+ * @author ksmyth / https://github.com/ksmyth
+ */
+
+define('blob/BlobClient',['blob/Artifact', 'blob/BlobMetadata', 'superagent'], function (Artifact, BlobMetadata, superagent) {
+    
+
+    var BlobClient = function (parameters) {
+        this.artifacts = [];
+
+        if (parameters) {
+            this.server = parameters.server || this.server;
+            this.serverPort = parameters.serverPort || this.serverPort;
+            this.httpsecure = (parameters.httpsecure !== undefined) ? parameters.httpsecure : this.httpsecure;
+            this.webgmeclientsession = parameters.webgmeclientsession;
+            this.keepaliveAgentOptions = parameters.keepaliveAgentOptions || {
+                maxSockets: 100,
+                maxFreeSockets: 10,
+                timeout: 60000,
+                keepAliveTimeout: 30000 // free socket keep alive for 30 seconds
+            };
+        }
+        this.blobUrl = '';
+        if (this.httpsecure !== undefined && this.server && this.serverPort) {
+            this.blobUrl = (this.httpsecure ? 'https://' : 'http://') + this.server + ':' + this.serverPort;
+        }
+
+        // TODO: TOKEN???
+        this.blobUrl = this.blobUrl + '/rest/blob/'; // TODO: any ways to ask for this or get it from the configuration?
+
+        this.isNodeOrNodeWebKit = typeof process !== 'undefined';
+        if (this.isNodeOrNodeWebKit) {
+            // node or node-webkit
+            if (this.httpsecure) {
+                this.Agent = require('agentkeepalive').HttpsAgent;
+            } else {
+                this.Agent = require('agentkeepalive');
+            }
+            this.keepaliveAgent = new this.Agent(this.keepaliveAgentOptions);
+        }
+    };
+
+    BlobClient.prototype.getMetadataURL = function (hash) {
+        var metadataBase = this.blobUrl + 'metadata';
+        if (hash) {
+            return metadataBase + '/' + hash;
+        } else {
+            return metadataBase;
+        }
+    };
+
+    BlobClient.prototype._getURL = function (base, hash, subpath) {
+        var subpathURL = '';
+        if (subpath) {
+            subpathURL = subpath;
+        }
+        return this.blobUrl + base + '/' + hash + '/' + encodeURIComponent(subpathURL);
+    };
+
+    BlobClient.prototype.getViewURL = function (hash, subpath) {
+        return this._getURL('view', hash, subpath);
+    };
+
+    BlobClient.prototype.getDownloadURL = function (hash, subpath) {
+        return this._getURL('download', hash, subpath);
+    };
+
+    BlobClient.prototype.getCreateURL = function (filename, isMetadata) {
+        if (isMetadata) {
+            return this.blobUrl + 'createMetadata/';
+        } else {
+            return this.blobUrl + 'createFile/' + encodeURIComponent(filename);
+        }
+    };
+
+    BlobClient.prototype.putFile = function (name, data, callback) {
+        var contentLength,
+            req;
+        function toArrayBuffer(buffer) {
+            var ab = new ArrayBuffer(buffer.length);
+            var view = new Uint8Array(ab);
+            for (var i = 0; i < buffer.length; ++i) {
+                view[i] = buffer[i];
+            }
+            return ab;
+        }
+        // on node-webkit, we use XMLHttpRequest, but xhr.send thinks a Buffer is a string and encodes it in utf-8. Send an ArrayBuffer instead
+        if (typeof window !== 'undefined' && typeof Buffer !== 'undefined' && data instanceof Buffer) {
+            data = toArrayBuffer(data); // FIXME will this have performance problems
+        }
+        // on node, empty Buffers will cause a crash in superagent
+        if (typeof window === 'undefined' && typeof Buffer !== 'undefined' && data instanceof Buffer) {
+            if (data.length === 0) {
+                data = '';
+            }
+        }
+        contentLength = data.hasOwnProperty('length') ? data.length : data.byteLength;
+        req = superagent.post(this.getCreateURL(name));
+
+        if (typeof window === 'undefined') {
+            req.agent(this.keepaliveAgent);
+        }
+
+        if (this.webgmeclientsession) {
+            req.set('webgmeclientsession', this.webgmeclientsession);
+        }
+        req.set('Content-Type', 'application/octet-stream')
+            .set('Content-Length', contentLength)
+            .send(data)
+            .end(function (err, res) {
+                if (err || res.status > 399) {
+                    callback(err || res.status);
+                    return;
+                }
+                var response = res.body;
+                // Get the first one
+                var hash = Object.keys(response)[0];
+                callback(null, hash);
+            });
+    };
+
+    BlobClient.prototype.putMetadata = function (metadataDescriptor, callback) {
+        var metadata = new BlobMetadata(metadataDescriptor),
+            blob,
+            contentLength,
+            req;
+        // FIXME: in production mode do not indent the json file.
+        if (typeof Blob !== 'undefined') {
+            blob = new Blob([JSON.stringify(metadata.serialize(), null, 4)], {type: 'text/plain'});
+            contentLength = blob.size;
+        } else {
+            blob = new Buffer(JSON.stringify(metadata.serialize(), null, 4), 'utf8');
+            contentLength = blob.length;
+        }
+
+        req = superagent.post(this.getCreateURL(metadataDescriptor.name, true));
+        if (this.webgmeclientsession) {
+            req.set('webgmeclientsession', this.webgmeclientsession);
+        }
+
+        if (typeof window === 'undefined') {
+            req.agent(this.keepaliveAgent);
+        }
+
+        req.set('Content-Type', 'application/octet-stream')
+            .set('Content-Length', contentLength)
+            .send(blob)
+            .end(function (err, res) {
+                if (err || res.status > 399) {
+                    callback(err || res.status);
+                    return;
+                }
+                // Uploaded.
+                var response = JSON.parse(res.text);
+                // Get the first one
+                var hash = Object.keys(response)[0];
+                callback(null, hash);
+            });
+    };
+
+    BlobClient.prototype.putFiles = function (o, callback) {
+        var self = this,
+            error = '',
+            filenames = Object.keys(o),
+            remaining = filenames.length,
+            hashes = {},
+            putFile;
+        if (remaining === 0) {
+            callback(null, hashes);
+        }
+        putFile = function(filename, data) {
+            self.putFile(filename, data, function (err, hash) {
+                remaining -= 1;
+
+                hashes[filename] = hash;
+
+                if (err) {
+                    error += 'putFile error: ' + err.toString();
+                }
+
+                if (remaining === 0) {
+                    callback(error, hashes);
+                }
+            });
+        };
+
+        for (var j = 0; j < filenames.length; j += 1) {
+            putFile(filenames[j], o[filenames[j]]);
+        }
+    };
+
+    BlobClient.prototype.getSubObject = function (hash, subpath, callback) {
+        return this.getObject(hash, callback, subpath);
+    };
+
+    BlobClient.prototype.getObject = function (hash, callback, subpath) {
+        superagent.parse['application/zip'] = function (obj, parseCallback) {
+            if (parseCallback) {
+                // Running on node; this should be unreachable due to req.pipe() below
+            } else {
+                return obj;
+            }
+        };
+        //superagent.parse['application/json'] = superagent.parse['application/zip'];
+
+        var req = superagent.get(this.getViewURL(hash, subpath));
+        if (this.webgmeclientsession) {
+            req.set('webgmeclientsession', this.webgmeclientsession);
+        }
+
+        if (typeof window === 'undefined') {
+            req.agent(this.keepaliveAgent);
+        }
+
+        if (req.pipe) {
+            // running on node
+            var Writable = require('stream').Writable;
+            var BuffersWritable = function (options) {
+                Writable.call(this, options);
+
+                var self = this;
+                self.buffers = [];
+            };
+            require('util').inherits(BuffersWritable, Writable);
+
+            BuffersWritable.prototype._write = function(chunk, encoding, callback) {
+                this.buffers.push(chunk);
+                callback();
+            };
+
+            var buffers = new BuffersWritable();
+            buffers.on('finish', function () {
+                if (req.req.res.statusCode > 399) {
+                    return callback(req.req.res.statusCode);
+                }
+                callback(null, Buffer.concat(buffers.buffers));
+            });
+            buffers.on('error', function (err) {
+                callback(err);
+            });
+            req.pipe(buffers);
+        } else {
+            req.removeAllListeners('end');
+            req.on('request', function () {
+                if (typeof this.xhr !== 'undefined') {
+                    this.xhr.responseType = 'arraybuffer';
+                }
+            });
+            // req.on('error', callback);
+            req.on('end', function() {
+                if (req.xhr.status > 399) {
+                    callback(req.xhr.status);
+                } else {
+                    var contentType = req.xhr.getResponseHeader('content-type');
+                    var response = req.xhr.response; // response is an arraybuffer
+                    if (contentType === 'application/json') {
+                        var utf8ArrayToString = function (uintArray) {
+                            var inputString = '',
+                                i;
+                            for (i = 0; i < uintArray.byteLength; i++) {
+                                inputString += String.fromCharCode(uintArray[i]);
+                            }
+                            return decodeURIComponent(escape(inputString));
+                        };
+                        response = JSON.parse(utf8ArrayToString(new Uint8Array(response)));
+                    }
+                    callback(null, response);
+                }
+            });
+            req.end(callback);
+        }
+    };
+
+    BlobClient.prototype.getMetadata = function (hash, callback) {
+        var req = superagent.get(this.getMetadataURL(hash));
+        if (this.webgmeclientsession) {
+            req.set('webgmeclientsession', this.webgmeclientsession);
+        }
+
+        if (typeof window === 'undefined') {
+            req.agent(this.keepaliveAgent);
+        }
+
+        req.end(function (err, res) {
+            if (err || res.status > 399) {
+                callback(err || res.status);
+            } else {
+                callback(null, JSON.parse(res.text));
+            }
+        });
+    };
+
+    BlobClient.prototype.createArtifact = function (name) {
+        var artifact = new Artifact(name, this);
+        this.artifacts.push(artifact);
+        return artifact;
+    };
+
+    BlobClient.prototype.getArtifact = function (metadataHash, callback) {
+        // TODO: get info check if complex flag is set to true.
+        // TODO: get info get name.
+        var self = this;
+        this.getMetadata(metadataHash, function (err, info) {
+            if (err) {
+                callback(err);
+                return;
+            }
+
+            if (info.contentType === BlobMetadata.CONTENT_TYPES.COMPLEX) {
+                var artifact = new Artifact(info.name, self, info);
+                self.artifacts.push(artifact);
+                callback(null, artifact);
+            } else {
+                callback('not supported contentType ' + JSON.stringify(info, null, 4));
+            }
+
+        });
+    };
+
+    BlobClient.prototype.saveAllArtifacts = function (callback) {
+        var remaining = this.artifacts.length,
+            hashes = [],
+            error = '',
+            saveCallback;
+
+        if (remaining === 0) {
+            callback(null, hashes);
+        }
+
+        saveCallback = function(err, hash) {
+            remaining -= 1;
+
+            hashes.push(hash);
+
+            if (err) {
+                error += 'artifact.save err: ' + err.toString();
+            }
+            if (remaining === 0) {
+                callback(error, hashes);
+            }
+        };
+
+        for (var i = 0; i < this.artifacts.length; i += 1) {
+
+            this.artifacts[i].save(saveCallback);
+        }
+    };
+
+    return BlobClient;
+});
+
+/*globals define, WebGMEGlobal, require*/
+/**
+ * @author lattmann / https://github.com/lattmann
+ * @author ksmyth / https://github.com/ksmyth
+ */
+
+
+define('executor/ExecutorClient',['superagent'], function (superagent) {
+    
+
+    var ExecutorClient = function (parameters) {
+        parameters = parameters || {};
+        this.isNodeJS = (typeof window === 'undefined') && (typeof process === "object");
+        this.isNodeWebkit = (typeof window === 'object') && (typeof process === "object");
+        //console.log(isNode);
+        if (this.isNodeJS) {
+            this.server = '127.0.0.1';
+            this._clientSession = null; // parameters.sessionId;;
+        }
+        this.server = parameters.server || this.server;
+        this.serverPort = parameters.serverPort || this.serverPort;
+        this.httpsecure = (parameters.httpsecure !== undefined) ? parameters.httpsecure : this.httpsecure;
+        if (this.isNodeJS) {
+            this.http = this.httpsecure ? require('https') : require('http');
+        }
+        this.executorUrl = '';
+        if (this.httpsecure !== undefined && this.server && this.serverPort) {
+            this.executorUrl = (this.httpsecure ? 'https://' : 'http://') + this.server + ':' + this.serverPort;
+        }
+        // TODO: TOKEN???
+        this.executorUrl = this.executorUrl + '/rest/executor/'; // TODO: any ways to ask for this or get it from the configuration?
+        if (parameters.executorNonce) {
+            this.executorNonce = parameters.executorNonce;
+        }
+    };
+
+    ExecutorClient.prototype.getInfoURL = function (hash) {
+        var metadataBase = this.executorUrl + 'info';
+        if (hash) {
+            return metadataBase + '/' + hash;
+        } else {
+            return metadataBase;
+        }
+    };
+
+
+    ExecutorClient.prototype.getCreateURL = function (hash) {
+        var metadataBase = this.executorUrl + 'create';
+        if (hash) {
+            return metadataBase + '/' + hash;
+        } else {
+            return metadataBase;
+        }
+    };
+
+    ExecutorClient.prototype.createJob = function (jobInfo, callback) {
+        if (typeof jobInfo === 'string') {
+            jobInfo = { hash: jobInfo }; // old API
+        }
+        this.sendHttpRequestWithData('POST', this.getCreateURL(jobInfo.hash), jobInfo, function (err, response) {
+            if (err) {
+                callback(err);
+                return;
+            }
+
+            callback(null, JSON.parse(response));
+        });
+    };
+
+    ExecutorClient.prototype.updateJob = function (jobInfo, callback) {
+        this.sendHttpRequestWithData('POST', this.executorUrl + 'update/' + jobInfo.hash, jobInfo, function (err, response) {
+            if (err) {
+                callback(err);
+                return;
+            }
+
+            callback(null, response);
+        });
+    };
+
+    ExecutorClient.prototype.getInfo = function (hash, callback) {
+        this.sendHttpRequest('GET', this.getInfoURL(hash), function (err, response) {
+            if (err) {
+                callback(err);
+                return;
+            }
+
+            callback(null, JSON.parse(response));
+        });
+    };
+
+    ExecutorClient.prototype.getAllInfo = function (callback) {
+
+        this.sendHttpRequest('GET', this.getInfoURL(), function (err, response) {
+            if (err) {
+                callback(err);
+                return;
+            }
+
+            callback(null, JSON.parse(response));
+        });
+    };
+
+    ExecutorClient.prototype.getInfoByStatus = function (status, callback) {
+
+        this.sendHttpRequest('GET', this.executorUrl + '?status=' + status, function (err, response) {
+            if (err) {
+                callback(err);
+                return;
+            }
+
+            callback(null, JSON.parse(response));
+        });
+    };
+
+    ExecutorClient.prototype.getWorkersInfo = function (callback) {
+
+        this.sendHttpRequest('GET', this.executorUrl + 'worker', function (err, response) {
+            if (err) {
+                callback(err);
+                return;
+            }
+
+            callback(null, JSON.parse(response));
+        });
+    };
+
+    ExecutorClient.prototype.sendHttpRequest = function (method, url, callback) {
+        return this.sendHttpRequestWithData(method, url, null, callback);
+    };
+
+    ExecutorClient.prototype.sendHttpRequestWithData = function (method, url, data, callback) {
+        var req = new superagent.Request(method, url);
+        if (this.executorNonce) {
+            req.set('x-executor-nonce', this.executorNonce);
+        }
+        if (data) {
+            req.send(data);
+        }
+        req.end(function (err, res) {
+            if (err) {
+                callback(err);
+                return;
+            }
+            if (res.status > 399) {
+                callback(res.status, res.text);
+            } else {
+                callback(null, res.text);
+            }
+        });
+    };
+
+    ExecutorClient.prototype._ensureAuthenticated = function (options, callback) {
+        //this function enables the session of the client to be authenticated
+        //TODO currently this user does not have a session, so it has to upgrade the options always!!!
+//        if (options.headers) {
+//            options.headers.webgmeclientsession = this._clientSession;
+//        } else {
+//            options.headers = {
+//                'webgmeclientsession': this._clientSession
+//            }
+//        }
+        callback(null, options);
+    };
+
+    return ExecutorClient;
+});
+
+/*
+ * Copyright (C) 2014 Vanderbilt University, All rights reserved.
+ *
+ * Author: Zsolt Lattmann
+ */
+
+
+define('plugin/PluginConfig',[], function () {
+
+    /**
+     * Initializes a new instance of plugin configuration.
+     *
+     * Note: this object is JSON serializable see serialize method.
+     *
+     * @param config - deserializes an existing configuration to this object.
+     * @constructor
+     */
+    var PluginConfig = function (config) {
+        if (config) {
+            var keys = Object.keys(config);
+            for (var i = 0; i < keys.length; i += 1) {
+                // TODO: check for type on deserialization
+                this[keys[i]] = config[keys[i]];
+            }
+        }
+    };
+
+    /**
+     * Serializes this object to a JSON representation.
+     *
+     * @returns {{}}
+     */
+    PluginConfig.prototype.serialize = function () {
+        var keys = Object.keys(this);
+        var result = {};
+
+        for (var i = 0; i < keys.length; i += 1) {
+            // TODO: check for type on serialization
+            result[keys[i]] = this[keys[i]];
+        }
+
+        return result;
+    };
+
+
+    return PluginConfig;
+});
+/*
+ * Copyright (C) 2014 Vanderbilt University, All rights reserved.
+ *
+ * Author: Zsolt Lattmann
+ */
+
+
+define('plugin/PluginNodeDescription',[], function () {
+
+    /**
+     * Initializes a new instance of plugin node description object.
+     *
+     * Note: this object is JSON serializable see serialize method.
+     *
+     * @param config - deserializes an existing configuration to this object.
+     * @constructor
+     */
+    var PluginNodeDescription = function (config) {
+        if (config) {
+            this.name = config.name;
+            this.id = config.id;
+        } else {
+            this.name = '';
+            this.id = '';
+        }
+    };
+
+    /**
+     * Serializes this object to a JSON representation.
+     *
+     * @returns {{}}
+     */
+    PluginNodeDescription.prototype.serialize = function() {
+        var keys = Object.keys(this);
+        var result = {};
+
+        for (var i = 0; i < keys.length; i += 1) {
+            // TODO: check for type on serialization
+            result[keys[i]] = this[keys[i]];
+        }
+
+        return result;
+    };
+
+    return PluginNodeDescription;
+});
+/*
+ * Copyright (C) 2014 Vanderbilt University, All rights reserved.
+ *
+ * Author: Zsolt Lattmann
+ */
+
+
+define('plugin/PluginMessage',['plugin/PluginNodeDescription'], function (PluginNodeDescription) {
+
+    /**
+     * Initializes a new instance of plugin message.
+     *
+     * Note: this object is JSON serializable see serialize method.
+     *
+     * @param config - deserializes an existing configuration to this object.
+     * @constructor
+     */
+    var PluginMessage = function (config) {
+        if (config) {
+            this.commitHash = config.commitHash;
+            if (config.activeNode instanceof PluginNodeDescription) {
+                this.activeNode = config.activeNode;
+            } else {
+                this.activeNode = new PluginNodeDescription(config.activeNode);
+            }
+
+            this.message = config.message;
+            if (config.severity) {
+                this.severity = config.severity;
+            } else {
+                this.severity = 'info';
+            }
+        } else {
+            this.commitHash = '';
+            this.activeNode = new PluginNodeDescription();
+            this.message = '';
+            this.severity = 'info';
+        }
+    };
+
+    /**
+     * Serializes this object to a JSON representation.
+     *
+     * @returns {{}}
+     */
+    PluginMessage.prototype.serialize = function () {
+        var result = {
+            commitHash: this.commitHash,
+            activeNode: this.activeNode.serialize(),
+            message: this.message,
+            severity: this.severity
+        };
+
+        return result;
+    };
+
+    return PluginMessage;
+});
+/**
+ * Created by zsolt on 3/20/14.
+ */
+
+
+define('plugin/PluginResult',['plugin/PluginMessage'], function (PluginMessage) {
+
+    /**
+     * Initializes a new instance of a plugin result object.
+     *
+     * Note: this object is JSON serializable see serialize method.
+     *
+     * @param config - deserializes an existing configuration to this object.
+     * @constructor
+     */
+    var PluginResult = function (config) {
+        if (config) {
+            this.success = config.success;
+            this.pluginName = config.pluginName;
+            this.startTime = config.startTime;
+            this.finishTime = config.finishTime;
+            this.messages = [];
+            this.artifacts = config.artifacts;
+            this.error = config.error;
+
+            for (var i = 0; i < config.messages.length; i += 1) {
+                var pluginMessage;
+                if (config.messages[i] instanceof PluginMessage) {
+                    pluginMessage = config.messages[i];
+                } else {
+                    pluginMessage = new PluginMessage(config.messages[i]);
+                }
+                this.messages.push(pluginMessage);
+            }
+        } else {
+            this.success = false;
+            this.messages = []; // array of PluginMessages
+            this.artifacts = []; // array of hashes
+            this.pluginName = 'PluginName N/A';
+            this.startTime = null;
+            this.finishTime = null;
+            this.error = null;
+        }
+    };
+
+    /**
+     * Gets the success flag of this result object
+     *
+     * @returns {boolean}
+     */
+    PluginResult.prototype.getSuccess = function () {
+        return this.success;
+    };
+
+    /**
+     * Sets the success flag of this result.
+     *
+     * @param {boolean} value
+     */
+    PluginResult.prototype.setSuccess = function (value) {
+        this.success = value;
+    };
+
+    /**
+     * Returns with the plugin messages.
+     *
+     * @returns {plugin.PluginMessage[]}
+     */
+    PluginResult.prototype.getMessages = function () {
+        return this.messages;
+    };
+
+    /**
+     * Adds a new plugin message to the messages list.
+     *
+     * @param {plugin.PluginMessage} pluginMessage
+     */
+    PluginResult.prototype.addMessage = function (pluginMessage) {
+        this.messages.push(pluginMessage);
+    };
+
+    PluginResult.prototype.getArtifacts = function () {
+        return this.artifacts;
+    };
+
+    PluginResult.prototype.addArtifact = function (hash) {
+        this.artifacts.push(hash);
+    };
+
+    /**
+     * Gets the name of the plugin to which the result object belongs to.
+     *
+     * @returns {string}
+     */
+    PluginResult.prototype.getPluginName = function () {
+        return this.pluginName;
+    };
+
+    //------------------------------------------------------------------------------------------------------------------
+    //--------------- Methods used by the plugin manager
+
+    /**
+     * Sets the name of the plugin to which the result object belongs to.
+     *
+     * @param pluginName - name of the plugin
+     */
+    PluginResult.prototype.setPluginName = function (pluginName) {
+        this.pluginName = pluginName;
+    };
+
+    /**
+     * Gets the ISO 8601 representation of the time when the plugin started its execution.
+     *
+     * @returns {string}
+     */
+    PluginResult.prototype.getStartTime = function () {
+        return this.startTime;
+    };
+
+    /**
+     * Sets the ISO 8601 representation of the time when the plugin started its execution.
+     *
+     * @param {string} time
+     */
+    PluginResult.prototype.setStartTime = function (time) {
+        this.startTime = time;
+    };
+
+    /**
+     * Gets the ISO 8601 representation of the time when the plugin finished its execution.
+     *
+     * @returns {string}
+     */
+    PluginResult.prototype.getFinishTime = function () {
+        return this.finishTime;
+    };
+
+    /**
+     * Sets the ISO 8601 representation of the time when the plugin finished its execution.
+     *
+     * @param {string} time
+     */
+    PluginResult.prototype.setFinishTime = function (time) {
+        this.finishTime = time;
+    };
+
+    /**
+     * Gets error if any error occured during execution.
+     * FIXME: should this be an Error object?
+     * @returns {string}
+     */
+    PluginResult.prototype.getError = function () {
+        return this.error;
+    };
+
+    /**
+     * Sets the error string if any error occured during execution.
+     * FIXME: should this be an Error object?
+     * @param {string} time
+     */
+    PluginResult.prototype.setError = function (error) {
+        this.error = error;
+    };
+
+    /**
+     * Serializes this object to a JSON representation.
+     *
+     * @returns {{success: boolean, messages: plugin.PluginMessage[], pluginName: string, finishTime: stirng}}
+     */
+    PluginResult.prototype.serialize = function () {
+        var result = {
+            success: this.success,
+            messages: [],
+            artifacts: this.artifacts,
+            pluginName: this.pluginName,
+            startTime: this.startTime,
+            finishTime: this.finishTime,
+            error: this.error
+        };
+
+        for (var i = 0; i < this.messages.length; i += 1) {
+            result.messages.push(this.messages[i].serialize());
+        }
+
+        return result;
+    };
+
+    return PluginResult;
+});
+/*
+ * Copyright (C) 2014 Vanderbilt University, All rights reserved.
+ *
+ * Author: Zsolt Lattmann
+ */
+
+
+define('plugin/PluginBase',['plugin/PluginConfig',
+    'plugin/PluginResult',
+    'plugin/PluginMessage',
+    'plugin/PluginNodeDescription'],
+    function (PluginConfig, PluginResult, PluginMessage, PluginNodeDescription) {
+
+
+        /**
+         * Initializes a new instance of a plugin object, which should be a derived class.
+         *
+         * @constructor
+         */
+        var PluginBase = function () {
+            // set by initialize
+            this.logger = null;
+            this.blobClient = null;
+            this._currentConfig = null;
+
+            // set by configure
+            this.core = null;
+            this.project = null;
+            this.projectName = null;
+            this.branchName = null;
+            this.branchHash = null;
+            this.commitHash = null;
+            this.currentHash = null;
+            this.rootNode = null;
+            this.activeNode = null;
+            this.activeSelection = [];
+            this.META = null;
+
+            this.result = null;
+            this.isConfigured = false;
+            this.gmeConfig = null;
+        };
+
+        //--------------------------------------------------------------------------------------------------------------
+        //---------- Methods must be overridden by the derived classes
+
+        /**
+         * Main function for the plugin to execute. This will perform the execution.
+         * Notes:
+         * - do NOT use console.log use this.logger.[error,warning,info,debug] instead
+         * - do NOT put any user interaction logic UI, etc. inside this function
+         * - callback always have to be called even if error happened
+         *
+         * @param {function(string, plugin.PluginResult)} callback - the result callback
+         */
+        PluginBase.prototype.main = function (callback) {
+            throw new Error('implement this function in the derived class');
+        };
+
+        /**
+         * Readable name of this plugin that can contain spaces.
+         *
+         * @returns {string}
+         */
+        PluginBase.prototype.getName = function () {
+            throw new Error('implement this function in the derived class - getting type automatically is a bad idea,' +
+                'when the js scripts are minified names are useless.');
+        };
+
+        //--------------------------------------------------------------------------------------------------------------
+        //---------- Methods could be overridden by the derived classes
+
+        /**
+         * Current version of this plugin using semantic versioning.
+         * @returns {string}
+         */
+        PluginBase.prototype.getVersion = function () {
+            return '0.1.0';
+        };
+
+        /**
+         * A detailed description of this plugin and its purpose. It can be one or more sentences.
+         *
+         * @returns {string}
+         */
+        PluginBase.prototype.getDescription = function () {
+            return '';
+        };
+
+        /**
+         * Configuration structure with names, descriptions, minimum, maximum values, default values and
+         * type definitions.
+         *
+         * Example:
+         *
+         * [{
+         *    "name": "logChildrenNames",
+         *    "displayName": "Log Children Names",
+         *    "description": '',
+         *    "value": true, // this is the 'default config'
+         *    "valueType": "boolean",
+         *    "readOnly": false
+         * },{
+         *    "name": "logLevel",
+         *    "displayName": "Logger level",
+         *    "description": '',
+         *    "value": "info",
+         *    "valueType": "string",
+         *    "valueItems": [
+         *          "debug",
+         *          "info",
+         *          "warn",
+         *          "error"
+         *      ],
+         *    "readOnly": false
+         * },{
+         *    "name": "maxChildrenToLog",
+         *    "displayName": "Maximum children to log",
+         *    "description": 'Set this parameter to blabla',
+         *    "value": 4,
+         *    "minValue": 1,
+         *    "valueType": "number",
+         *    "readOnly": false
+         * }]
+         *
+         * @returns {object[]}
+         */
+        PluginBase.prototype.getConfigStructure = function () {
+            return [];
+        };
+
+        //--------------------------------------------------------------------------------------------------------------
+        //---------- Methods that can be used by the derived classes
+
+        /**
+         * Updates the current success flag with a new value.
+         *
+         * NewValue = OldValue && Value
+         *
+         * @param {boolean} value - apply this flag on current success value
+         * @param {string|null} message - optional detailed message
+         */
+        PluginBase.prototype.updateSuccess = function (value, message) {
+            var prevSuccess = this.result.getSuccess();
+            var newSuccessValue = prevSuccess && value;
+
+            this.result.setSuccess(newSuccessValue);
+            var msg = '';
+            if (message) {
+                msg = ' - ' + message;
+            }
+
+            this.logger.debug('Success was updated from ' + prevSuccess + ' to ' + newSuccessValue + msg);
+        };
+
+        /**
+         * WebGME can export the META types as path and this method updates the generated domain specific types with
+         * webgme node objects. These can be used to define the base class of new objects created through the webgme API.
+         *
+         * @param {object} generatedMETA
+         */
+        PluginBase.prototype.updateMETA = function (generatedMETA) {
+            var name;
+            for (name in this.META) {
+                if (this.META.hasOwnProperty(name)) {
+                    generatedMETA[name] = this.META[name];
+                }
+            }
+
+            // TODO: check if names are not the same
+            // TODO: log if META is out of date
+        };
+
+        /**
+         * Checks if the given node is of the given meta-type.
+         * Usage: <tt>self.isMetaTypeOf(aNode, self.META['FCO']);</tt>
+         * @param node - Node to be checked for type.
+         * @param metaNode - Node object defining the meta type.
+         * @returns {boolean} - True if the given object was of the META type.
+         */
+        PluginBase.prototype.isMetaTypeOf = function (node, metaNode) {
+            var self = this;
+            while (node) {
+                if (self.core.getGuid(node) === self.core.getGuid(metaNode)) {
+                    return true;
+                }
+                node = self.core.getBase(node);
+            }
+            return false;
+        };
+
+        /**
+         * Finds and returns the node object defining the meta type for the given node.
+         * @param node - Node to be checked for type.
+         * @returns {Object} - Node object defining the meta type of node.
+         */
+        PluginBase.prototype.getMetaType = function (node) {
+            var self = this,
+                name;
+            while (node) {
+                name = self.core.getAttribute(node, 'name');
+                if (self.META.hasOwnProperty(name) && self.core.getGuid(node) === self.core.getGuid(self.META[name])) {
+                    break;
+                }
+                node = self.core.getBase(node);
+            }
+            return node;
+        };
+
+        /**
+         * Returns true if node is a direct instance of a meta-type node (or a meta-type node itself).
+         * @param node - Node to be checked.
+         * @returns {boolean}
+         */
+        PluginBase.prototype.baseIsMeta = function (node) {
+            var self = this,
+                baseName,
+                baseNode = self.core.getBase(node);
+            if (!baseNode) {
+                // FCO does not have a base node, by definition function returns true.
+                return true;
+            }
+            baseName = self.core.getAttribute(baseNode, 'name');
+            return self.META.hasOwnProperty(baseName) && self.core.getGuid(self.META[baseName]) === self.core.getGuid(baseNode);
+        };
+
+        /**
+         * Gets the current configuration of the plugin that was set by the user and plugin manager.
+         *
+         * @returns {object}
+         */
+        PluginBase.prototype.getCurrentConfig = function () {
+            return this._currentConfig;
+        };
+
+        /**
+         * Creates a new message for the user and adds it to the result.
+         *
+         * @param {object} node - webgme object which is related to the message
+         * @param {string} message - feedback to the user
+         * @param {string} severity - severity level of the message: 'debug', 'info' (default), 'warning', 'error'.
+         */
+        PluginBase.prototype.createMessage = function (node, message, severity) {
+            var severityLevel = severity || 'info';
+            //this occurence of the function will always handle a single node
+
+            var descriptor = new PluginNodeDescription({
+                    name: node ? this.core.getAttribute(node, 'name') : "",
+                    id: node ? this.core.getPath(node) : ""
+                });
+            var pluginMessage = new PluginMessage({
+                    commitHash: this.currentHash,
+                    activeNode: descriptor,
+                    message: message,
+                    severity: severityLevel
+                });
+
+            this.result.addMessage(pluginMessage);
+        };
+
+        /**
+         * Saves all current changes if there is any to a new commit.
+         * If the changes were started from a branch, then tries to fast forward the branch to the new commit.
+         * Note: Does NOT handle any merges at this point.
+         *
+         * @param {string|null} message - commit message
+         * @param callback
+         */
+        PluginBase.prototype.save = function (message, callback) {
+            var self = this;
+
+            this.logger.debug('Saving project');
+
+            this.core.persist(this.rootNode,function(err){if (err) {self.logger.error(err);}});
+            var newRootHash = self.core.getHash(self.rootNode);
+
+            var commitMessage = '[Plugin] ' + self.getName() + ' (v' + self.getVersion() + ') updated the model.';
+            if (message) {
+                commitMessage += ' - ' + message;
+            }
+            self.currentHash = self.project.makeCommit([self.currentHash], newRootHash, commitMessage, function (err) {if (err) {self.logger.error(err);}});
+
+            if (self.branchName) {
+                // try to fast forward branch if there was a branch name defined
+
+                // FIXME: what if master branch is already in a different state?
+
+                // try to fast forward branch to the current commit
+                self.project.setBranchHash(self.branchName, self.branchHash, self.currentHash, function (err) {
+                    if (err) {
+                        // fast forward failed
+                        // TODO: try auto-merge
+
+                        self.logger.error(err);
+                        self.logger.info('"' + self.branchName + '" was NOT updated');
+                        self.logger.info('Project was saved to ' + self.currentHash + ' commit.');
+                    } else {
+                        // successful fast forward of branch to the new commit
+                        self.logger.info('"' + self.branchName + '" was updated to the new commit.');
+                        // roll starting point on success
+                        self.branchHash = self.currentHash;
+                    }
+                    callback(err);
+                });
+
+                // FIXME: is this call async??
+                // FIXME: we are not tracking all commits that we make
+
+            } else {
+                // making commits, we have not started from a branch
+                self.logger.info('Project was saved to ' + self.currentHash + ' commit.');
+                callback(null);
+            }
+
+            // Commit changes.
+/*            this.core.persist(this.rootNode, function (err) {
+                // TODO: any error here?
+                if (err) {
+                    self.logger.error(err);
+                }
+
+                var newRootHash = self.core.getHash(self.rootNode);
+
+                var commitMessage = '[Plugin] ' + self.getName() + ' (v' + self.getVersion() + ') updated the model.';
+                if (message) {
+                    commitMessage += ' - ' + message;
+                }
+
+                self.currentHash = self.project.makeCommit([self.currentHash], newRootHash, commitMessage, function (err) {
+                    // TODO: any error handling here?
+                    if (err) {
+                        self.logger.error(err);
+                    }
+
+                    if (self.branchName) {
+                        // try to fast forward branch if there was a branch name defined
+
+                        // FIXME: what if master branch is already in a different state?
+
+                        self.project.getBranchNames(function (err, branchNames) {
+                            if (branchNames.hasOwnProperty(self.branchName)) {
+                                var branchHash = branchNames[self.branchName];
+                                if (branchHash === self.branchHash) {
+                                    // the branch does not have any new commits
+                                    // try to fast forward branch to the current commit
+                                    self.project.setBranchHash(self.branchName, self.branchHash, self.currentHash, function (err) {
+                                        if (err) {
+                                            // fast forward failed
+                                            self.logger.error(err);
+                                            self.logger.info('"' + self.branchName + '" was NOT updated');
+                                            self.logger.info('Project was saved to ' + self.currentHash + ' commit.');
+                                        } else {
+                                            // successful fast forward of branch to the new commit
+                                            self.logger.info('"' + self.branchName + '" was updated to the new commit.');
+                                            // roll starting point on success
+                                            self.branchHash = self.currentHash;
+                                        }
+                                        callback(err);
+                                    });
+                                } else {
+                                    // branch has changes a merge is required
+                                    // TODO: try auto-merge, if fails ...
+                                    self.logger.warn('Cannot fast forward "' + self.branchName + '" branch. Merge is required but not supported yet.');
+                                    self.logger.info('Project was saved to ' + self.currentHash + ' commit.');
+                                    callback(null);
+                                }
+                            } else {
+                                // branch was deleted or not found, do nothing
+                                self.logger.info('Project was saved to ' + self.currentHash + ' commit.');
+                                callback(null);
+                            }
+                        });
+                        // FIXME: is this call async??
+                        // FIXME: we are not tracking all commits that we make
+
+                    } else {
+                        // making commits, we have not started from a branch
+                        self.logger.info('Project was saved to ' + self.currentHash + ' commit.');
+                        callback(null);
+                    }
+                });
+
+            });*/
+        };
+
+        //--------------------------------------------------------------------------------------------------------------
+        //---------- Methods that are used by the Plugin Manager. Derived classes should not use these methods
+
+        /**
+         * Initializes the plugin with objects that can be reused within the same plugin instance.
+         *
+         * @param {logManager} logger - logging capability to console (or file) based on PluginManager configuration
+         * @param {blob.BlobClient} blobClient - virtual file system where files can be generated then saved as a zip file.
+         * @param {object} gmeConfig - global configuration for webGME.
+         */
+        PluginBase.prototype.initialize = function (logger, blobClient, gmeConfig) {
+            if (logger) {
+                this.logger = logger;
+            } else {
+                this.logger = console;
+            }
+            if (!gmeConfig) {
+                // TODO: Remove this check at some point
+                throw new Error('gmeConfig was not provided to Plugin.initialize!');
+            }
+            this.blobClient = blobClient;
+            this.gmeConfig = gmeConfig;
+
+            this._currentConfig = null;
+            // initialize default configuration
+            this.setCurrentConfig(this.getDefaultConfig());
+
+            this.isConfigured = false;
+        };
+
+        /**
+         * Configures this instance of the plugin for a specific execution. This function is called before the main by
+         * the PluginManager.
+         * Initializes the result with a new object.
+         *
+         * @param {PluginContext} config - specific context: project, branch, core, active object and active selection.
+         */
+        PluginBase.prototype.configure = function (config) {
+            this.core = config.core;
+            this.project = config.project;
+            this.projectName = config.projectName;
+            this.branchName = config.branchName;
+            this.branchHash = config.branchName ? config.commitHash : null;
+            this.commitHash = config.commitHash;
+            this.currentHash = config.commitHash;
+            this.rootNode = config.rootNode;
+            this.activeNode = config.activeNode;
+            this.activeSelection = config.activeSelection;
+            this.META = config.META;
+
+            this.result = new PluginResult();
+
+
+            this.isConfigured = true;
+        };
+
+        /**
+         * Gets the default configuration based on the configuration structure for this plugin.
+         *
+         * @returns {plugin.PluginConfig}
+         */
+        PluginBase.prototype.getDefaultConfig = function () {
+            var configStructure = this.getConfigStructure();
+
+            var defaultConfig = new PluginConfig();
+
+            for (var i = 0; i < configStructure.length; i += 1) {
+                defaultConfig[configStructure[i].name] = configStructure[i].value;
+            }
+
+            return defaultConfig;
+        };
+
+        /**
+         * Sets the current configuration of the plugin.
+         *
+         * @param {object} newConfig - this is the actual configuration and NOT the configuration structure.
+         */
+        PluginBase.prototype.setCurrentConfig = function (newConfig) {
+            this._currentConfig = newConfig;
+        };
+
+        return PluginBase;
+    });
+
+/*
+ * Copyright (C) 2014 Vanderbilt University, All rights reserved.
+ *
+ * Author: Zsolt Lattmann
+ */
+
+
+define('plugin/PluginContext',[], function () {
+
+    /**
+     * Initializes a new instance of PluginContext. This context is set through PluginBase.configure method for a given
+     * plugin instance and execution.
+     *
+     * @constructor
+     */
+    var PluginContext = function () {
+
+        // TODO: something like this
+//        context.project = project;
+//        context.projectName = config.project;
+//        context.core = new Core(context.project);
+//        context.commitHash = config.commit;
+//        context.selected = config.selected;
+//        context.storage = null;
+
+    };
+
+
+    return PluginContext;
+});
+/*globals define*/
+
+/*
+ * Copyright (C) 2014 Vanderbilt University, All rights reserved.
+ *
+ * Author: Zsolt Lattmann
+ */
+
+// TODO: Use PluginManagerConfiguration
+// TODO: Load ActiveSelection objects and pass it correctly
+// TODO: Add more statistics to the result object
+// TODO: Result object rename name -> pluginName, time -> finishTime)
+// TODO: Make this class testable
+// TODO: PluginManager should download the plugins
+
+
+define('plugin/PluginManagerBase',['./PluginBase',
+        './PluginContext'],
+    function (PluginBase, PluginContext) {
+
+
+        var PluginManagerBase = function (storage, Core, logger, plugins, gmeConfig) {
+            this.gmeConfig = gmeConfig; // global configuration of webgme
+            this.logger = logger.fork('PluginManager');
+            this._Core = Core;       // webgme core class is used to operate on objects
+            this._storage = storage; // webgme storage
+            this._plugins = plugins; // key value pair of pluginName: pluginType - plugins are already loaded/downloaded
+            this._pluginConfigs = {}; // keeps track of the current configuration for each plugins by name
+
+            if (!this.gmeConfig) {
+                // TODO: this error check is temporary
+                throw new Error('PluginManagerBase takes gmeConfig as parameter!');
+            }
+
+            var pluginNames = Object.keys(this._plugins);
+            for (var i = 0; i < pluginNames.length; i += 1) {
+                var p = new this._plugins[pluginNames[i]]();
+                this._pluginConfigs[pluginNames[i]] = p.getDefaultConfig();
+            }
+        };
+
+        PluginManagerBase.prototype.initialize = function (managerConfiguration, configCallback, callbackContext) {
+            var self = this,
+                plugins = this._plugins;
+
+            //#1: PluginManagerBase should load the plugins
+
+            //#2: PluginManagerBase iterates through each plugin and collects the config data
+            var pluginConfigs = {};
+
+            for (var p in plugins) {
+                if (plugins.hasOwnProperty(p)) {
+                    var plugin = new plugins[p]();
+                    pluginConfigs[p] = plugin.getConfigStructure();
+                }
+            }
+
+            if (configCallback) {
+                configCallback.call(callbackContext, pluginConfigs, function (updatedPluginConfig) {
+                    for (var p in updatedPluginConfig) {
+                        if (updatedPluginConfig.hasOwnProperty(p)) {
+                            //save it back to the plugin
+                            self._pluginConfigs[p] = updatedPluginConfig[p];
+                        }
+                    }
+                });
+            }
+        };
+
+        /**
+         * Gets a new instance of a plugin by name.
+         *
+         * @param {string} name
+         * @returns {plugin.PluginBase}
+         */
+        PluginManagerBase.prototype.getPluginByName = function (name) {
+            return this._plugins[name];
+        };
+
+        PluginManagerBase.prototype.loadMetaNodes = function (pluginContext, callback) {
+            var self = this;
+
+            this.logger.debug('Loading meta nodes');
+
+            // get meta members
+            var metaIDs = pluginContext.core.getMemberPaths(pluginContext.rootNode, 'MetaAspectSet');
+
+            var len = metaIDs.length;
+
+            var nodeObjs = [];
+
+
+            var allObjectsLoadedHandler = function () {
+                var len2 = nodeObjs.length;
+
+                var nameObjMap = {};
+
+                while (len2--) {
+                    var nodeObj = nodeObjs[len2];
+
+                    nameObjMap[pluginContext.core.getAttribute(nodeObj, 'name')] = nodeObj;
+                }
+
+                pluginContext.META = nameObjMap;
+
+                self.logger.debug('Meta nodes are loaded');
+
+                callback(null, pluginContext);
+            };
+
+            var loadedMetaObjectHandler = function (err, nodeObj) {
+                nodeObjs.push(nodeObj);
+
+                if (nodeObjs.length === metaIDs.length) {
+                    allObjectsLoadedHandler();
+                }
+            };
+
+            while (len--) {
+                pluginContext.core.loadByPath(pluginContext.rootNode, metaIDs[len], loadedMetaObjectHandler);
+            }
+        };
+
+        /**
+         *
+         * @param {plugin.PluginManagerConfiguration} managerConfiguration
+         * @param {function} callback
+         */
+        PluginManagerBase.prototype.getPluginContext = function (managerConfiguration, callback) {
+
+            // TODO: check if callback is a function
+
+            var self = this;
+
+            var pluginContext = new PluginContext();
+
+            // based on the string values get the node objects
+            // 1) Open project
+            // 2) Load branch OR commit hash
+            // 3) Load rootNode
+            // 4) Load active object
+            // 5) Load active selection
+            // 6) Update context
+            // 7) return
+
+            pluginContext.project = this._storage;
+            pluginContext.projectName = managerConfiguration.project;
+            pluginContext.core = new self._Core(pluginContext.project, {
+                globConf: self.gmeConfig,
+                logger: self.logger.fork('core') //TODO: This logger should probably fork from the plugin logger
+            });
+            pluginContext.commitHash = managerConfiguration.commit;
+            pluginContext.activeNode = null;    // active object
+            pluginContext.activeSelection = []; // selected objects
+
+            // add activeSelection
+            var loadActiveSelectionAndMetaNodes = function () {
+                if (managerConfiguration.activeSelection.length === 0) {
+                    self.loadMetaNodes(pluginContext, callback);
+                } else {
+                    var remaining = managerConfiguration.activeSelection.length;
+
+                    for (var i = 0; i < managerConfiguration.activeSelection.length; i += 1) {
+                        (function (activeNodePath) {
+                            pluginContext.core.loadByPath(pluginContext.rootNode, activeNodePath, function (err, activeNode) {
+                                remaining -= 1;
+
+                                if (err) {
+                                    self.logger.warn('unable to load active selection: ' + activeNodePath);
+                                } else {
+                                    pluginContext.activeSelection.push(activeNode);
+                                }
+
+                                if (remaining === 0) {
+                                    // all nodes from active selection are loaded
+                                    self.loadMetaNodes(pluginContext, callback);
+                                }
+                            });
+                        })(managerConfiguration.activeSelection[i]);
+                    }
+                }
+            };
+
+            // add activeNode
+            var loadCommitHashAndRun = function (commitHash) {
+                self.logger.info('Loading commit ' + commitHash);
+                pluginContext.project.loadObject(commitHash, function (err, commitObj) {
+                    if (err) {
+                        callback(err, pluginContext);
+                        return;
+                    }
+
+                    if (typeof commitObj === 'undefined' || commitObj === null) {
+                        callback('cannot find commit', pluginContext);
+                        return;
+                    }
+
+                    pluginContext.core.loadRoot(commitObj.root, function (err, rootNode) {
+                        if (err) {
+                            callback("unable to load root", pluginContext);
+                            return;
+                        }
+
+                        pluginContext.rootNode = rootNode;
+                        if (typeof managerConfiguration.activeNode === 'string') {
+                            pluginContext.core.loadByPath(pluginContext.rootNode, managerConfiguration.activeNode, function (err, activeNode) {
+                                if (err) {
+                                    callback("unable to load selected object", pluginContext);
+                                    return;
+                                }
+
+                                pluginContext.activeNode = activeNode;
+                                loadActiveSelectionAndMetaNodes();
+                            });
+                        } else {
+                            pluginContext.activeNode = null;
+                            loadActiveSelectionAndMetaNodes();
+                        }
+                    });
+                });
+            };
+
+            // load commit hash and run based on branch name or commit hash
+            if (managerConfiguration.branchName) {
+                pluginContext.project.getBranchNames(function (err, branchNames) {
+                    self.logger.debug(branchNames);
+
+                        pluginContext.commitHash = branchNames[managerConfiguration.branchName] || pluginContext.commitHash;
+                        pluginContext.branchName = managerConfiguration.branchName;
+                        loadCommitHashAndRun(pluginContext.commitHash);
+                });
+            } else {
+                loadCommitHashAndRun(pluginContext.commitHash);
+            }
+
+        };
+
+        PluginManagerBase.prototype.executePlugin = function (name, managerConfiguration, callback) {
+            // TODO: check if name is a string
+            // TODO: check if managerConfiguration is an instance of PluginManagerConfiguration
+            // TODO: check if callback is a function
+            var self = this,
+                mainCallbackCalls = 0,
+                multiCallbackHandled = false;
+
+            var PluginClass = this.getPluginByName(name);
+
+            var plugin = new PluginClass();
+
+            var pluginLogger = this.logger.fork('gme:plugin:' + name, true);
+
+            plugin.initialize(pluginLogger, managerConfiguration.blobClient, self.gmeConfig);
+
+            plugin.setCurrentConfig(this._pluginConfigs[name]);
+            for (var key in managerConfiguration.pluginConfig) {
+                if (managerConfiguration.pluginConfig.hasOwnProperty(key) &&
+                    plugin._currentConfig.hasOwnProperty(key)) {
+
+                    plugin._currentConfig[key] = managerConfiguration.pluginConfig[key];
+                }
+            }
+            self.getPluginContext(managerConfiguration, function (err, pluginContext) {
+                if (err) {
+                    // TODO: this has to return with an empty PluginResult object and NOT with null.
+                    callback(err, null);
+                    return;
+
+                }
+
+                plugin.configure(pluginContext);
+
+                var startTime = (new Date()).toISOString();
+
+                plugin.main(function (err, result) {
+                    var stackTrace;
+                    mainCallbackCalls += 1;
+                    // set common information (meta info) about the plugin and measured execution times
+                    result.setFinishTime((new Date()).toISOString());
+                    result.setStartTime(startTime);
+
+                    result.setPluginName(plugin.getName());
+
+                    if (mainCallbackCalls > 1) {
+                        stackTrace = new Error().stack;
+                        self.logger.error('The main callback is being called more than once!', {metadata: stackTrace});
+                        result.setError('The main callback is being called more than once!');
+                        if (multiCallbackHandled === true) {
+                            plugin.createMessage(null, stackTrace);
+                            return;
+                        }
+                        multiCallbackHandled = true;
+                        result.setSuccess(false);
+                        plugin.createMessage(null, 'The main callback is being called more than once.');
+                        plugin.createMessage(null, stackTrace);
+                        callback('The main callback is being called more than once!', result);
+                    } else {
+                        result.setError(err);
+                        callback(err, result);
+                    }
+                });
+
+            });
+
+        };
+
+
+        return PluginManagerBase;
+    });
+define('js/Dialogs/PluginConfig/PluginConfigDialog',[], function () {
+   return;
+});
+
+/*globals define, _, requirejs, WebGMEGlobal*/
+
+define('js/Utils/InterpreterManager',['common/core/core',
+        'plugin/PluginManagerBase',
+        'plugin/PluginResult',
+        'blob/BlobClient',
+        'js/Dialogs/PluginConfig/PluginConfigDialog',
+        'js/logger'
+                                    ], function (Core,
+                                               PluginManagerBase,
+                                               PluginResult,
+                                               BlobClient,
+                                               PluginConfigDialog,
+                                               Logger) {
+    
+
+    var InterpreterManager = function (client, gmeConfig) {
+        this._client = client;
+        //this._manager = new PluginManagerBase();
+        this.gmeConfig = gmeConfig;
+        this._savedConfigs = {};
+        this.logger = Logger.create('gme:InterpreterManager', gmeConfig.client.log);
+        this.logger.debug('InterpreterManager ctor');
+    };
+
+    var getPlugin = function(name,callback){
+        if (WebGMEGlobal && WebGMEGlobal.plugins && WebGMEGlobal.plugins.hasOwnProperty(name)) {
+            callback(null, WebGMEGlobal.plugins[name]);
+        } else {
+            requirejs(['/plugin/' + name + '/' + name + '/' + name],
+                function (InterpreterClass) {
+                    callback(null, InterpreterClass);
+                },
+                function (err) {
+                    callback(err, null);
+                }
+            );
+        }
+    };
+
+    /**
+     *
+     * @param {string} name - name of plugin to be executed.
+     * @param {object} silentPluginCfg - if falsy dialog window will be shown.
+     * @param {object.string} silentPluginCfg.activeNode - Path to activeNode.
+     * @param {object.Array.<string>} silentPluginCfg.activeSelection - Paths to nodes in activeSelection.
+     * @param {object.boolean} silentPluginCfg.runOnServer - Whether to run the plugin on the server or not.
+     * @param {object.object} silentPluginCfg.pluginConfig - Plugin specific options.
+     * @param callback
+     */
+    InterpreterManager.prototype.run = function (name, silentPluginCfg, callback) {
+        var self = this;
+        getPlugin(name,function(err,plugin){
+            self.logger.debug('Getting getPlugin in run.');
+            if(!err && plugin) {
+                var plugins = {},
+                    runWithConfiguration;
+                plugins[name] = plugin;
+                var pluginManager = new PluginManagerBase(self._client.getProjectObject(), Core, self.logger, plugins,
+                    self.gmeConfig);
+                pluginManager.initialize(null, function (pluginConfigs, configSaveCallback) {
+                    //#1: display config to user
+                    var noServerExecution = self.gmeConfig.plugin.allowServerExecution === false,
+                        hackedConfig = {
+                        'Global Options': [
+                            {
+                                "name": "runOnServer",
+                                "displayName": "Execute on Server",
+                                "description": noServerExecution ? 'Server side execution is disabled.' : '',
+                                "value": false, // this is the 'default config'
+                                "valueType": "boolean",
+                                "readOnly": noServerExecution
+                            }
+                        ]
+                    };
+
+                    for (var i in pluginConfigs) {
+                        if (pluginConfigs.hasOwnProperty(i)) {
+                            hackedConfig[i] = pluginConfigs[i];
+
+                            // retrieve user settings from previous run
+                            if (self._savedConfigs.hasOwnProperty(i)) {
+                                var iConfig = self._savedConfigs[i];
+                                var len = hackedConfig[i].length;
+
+                                while (len--) {
+                                    if (iConfig.hasOwnProperty(hackedConfig[i][len].name)) {
+                                        hackedConfig[i][len].value = iConfig[hackedConfig[i][len].name];
+                                    }
+                                }
+
+                            }
+                        }
+                    }
+
+                    runWithConfiguration = function (updatedConfig) {
+                        //when Save&Run is clicked in the dialog (or silentPluginCfg was passed)
+                        var globalconfig = updatedConfig['Global Options'],
+                            activeNode,
+                            activeSelection;
+                        delete updatedConfig['Global Options'];
+
+                        activeNode = silentPluginCfg.activeNode;
+                        if (!activeNode && WebGMEGlobal && WebGMEGlobal.State) {
+                                activeNode = WebGMEGlobal.State.getActiveObject();
+                        }
+                        activeSelection = silentPluginCfg.activeSelection;
+                        if (!activeSelection && WebGMEGlobal && WebGMEGlobal.State) {
+                            activeSelection = WebGMEGlobal.State.getActiveSelection();
+                        }
+                        // save config from user
+                        for (var i in updatedConfig) {
+                            self._savedConfigs[i] = updatedConfig[i];
+                        }
+
+                        //#2: save it back and run the plugin
+                        if (configSaveCallback) {
+                            configSaveCallback(updatedConfig);
+
+                            // TODO: if global config says try to merge branch then we should pass the name of the branch
+                            var config = {
+                                "project": self._client.getActiveProjectName(),
+                                "token": "",
+                                "activeNode": activeNode, // active object in the editor
+                                "activeSelection": activeSelection || [],
+                                "commit": self._client.getActualCommit(), //"#668b3babcdf2ddcd7ba38b51acb62d63da859d90",
+                                "branchName": self._client.getActualBranch() // this has priority over the commit if not null
+                            };
+
+                            if(globalconfig.runOnServer === true || silentPluginCfg.runOnServer === true){
+                                var context = {
+                                    managerConfig: config,
+                                    pluginConfigs:updatedConfig
+                                };
+                                self._client.runServerPlugin(name,context,function(err,result){
+                                    if(err){
+                                        console.error(err);
+                                        callback(new PluginResult()); //TODO return proper error result
+                                    } else {
+                                        var resultObject = new PluginResult(result);
+                                        callback(resultObject);
+                                    }
+                                });
+                            } else {
+                                config.blobClient = new BlobClient();
+
+                                pluginManager.executePlugin(name, config, function (err, result) {
+                                    if (err) {
+                                        console.error(err);
+                                    }
+                                    callback(result);
+                                });
+                            }
+                        }
+                    };
+
+                    if (silentPluginCfg) {
+                        var updatedConfig = {};
+                        for (var i in hackedConfig) {
+                            updatedConfig[i] = {};
+                            var len = hackedConfig[i].length;
+                            while (len--) {
+                                updatedConfig[i][hackedConfig[i][len].name] = hackedConfig[i][len].value;
+                            }
+
+                            if (silentPluginCfg && silentPluginCfg.pluginConfig) {
+                                for (var j in silentPluginCfg.pluginConfig) {
+                                    updatedConfig[i][j] = silentPluginCfg.pluginConfig[j];
+                                }
+                            }
+                        }
+                        runWithConfiguration(updatedConfig);
+                    } else {
+                        var d = new PluginConfigDialog();
+                        silentPluginCfg = {};
+                        d.show(hackedConfig, runWithConfiguration);
+                    }
+                });
+            } else {
+                console.error(err);
+                console.error('unable to load plugin');
+                callback(null); //TODO proper result
+            }
+        });
+    };
+
+    //TODO somehow it would feel more right if we do run in async mode, but if not then we should provide getState and getResult synchronous functions as well
+
+    return InterpreterManager;
+});
+
+!function(e){if("object"==typeof exports&&"undefined"!=typeof module)module.exports=e();else if("function"==typeof define&&define.amd)define('lib/superagent/superagent-1.1.0',[],e);else{var f;"undefined"!=typeof window?f=window:"undefined"!=typeof global?f=global:"undefined"!=typeof self&&(f=self),f.superagent=e()}}(function(){var define,module,exports;return (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
 /**
  * Module dependencies.
  */
@@ -21900,1850 +25194,6 @@ module.exports = function(arr, fn, initial){
 };
 },{}]},{},[1])(1)
 });
-/*globals define*/
-/*jshint browser: true, node:true*/
-/*
- * @author lattmann / https://github.com/lattmann
- * @author ksmyth / https://github.com/ksmyth
- */
-
-define('blob/BlobClient',['blob/Artifact', 'blob/BlobMetadata', 'superagent'], function (Artifact, BlobMetadata, superagent) {
-    
-
-    var BlobClient = function (parameters) {
-        this.artifacts = [];
-
-        if (parameters) {
-            this.server = parameters.server || this.server;
-            this.serverPort = parameters.serverPort || this.serverPort;
-            this.httpsecure = (parameters.httpsecure !== undefined) ? parameters.httpsecure : this.httpsecure;
-            this.webgmeclientsession = parameters.webgmeclientsession;
-            this.keepaliveAgentOptions = parameters.keepaliveAgentOptions || {
-                maxSockets: 100,
-                maxFreeSockets: 10,
-                timeout: 60000,
-                keepAliveTimeout: 30000 // free socket keep alive for 30 seconds
-            };
-        }
-        this.blobUrl = '';
-        if (this.httpsecure !== undefined && this.server && this.serverPort) {
-            this.blobUrl = (this.httpsecure ? 'https://' : 'http://') + this.server + ':' + this.serverPort;
-        }
-
-        // TODO: TOKEN???
-        this.blobUrl = this.blobUrl + '/rest/blob/'; // TODO: any ways to ask for this or get it from the configuration?
-
-        this.isNodeOrNodeWebKit = typeof process !== 'undefined';
-        if (this.isNodeOrNodeWebKit) {
-            // node or node-webkit
-            if (this.httpsecure) {
-                this.Agent = require('agentkeepalive').HttpsAgent;
-            } else {
-                this.Agent = require('agentkeepalive');
-            }
-            this.keepaliveAgent = new this.Agent(this.keepaliveAgentOptions);
-        }
-    };
-
-    BlobClient.prototype.getMetadataURL = function (hash) {
-        var metadataBase = this.blobUrl + 'metadata';
-        if (hash) {
-            return metadataBase + '/' + hash;
-        } else {
-            return metadataBase;
-        }
-    };
-
-    BlobClient.prototype._getURL = function (base, hash, subpath) {
-        var subpathURL = '';
-        if (subpath) {
-            subpathURL = subpath;
-        }
-        return this.blobUrl + base + '/' + hash + '/' + encodeURIComponent(subpathURL);
-    };
-
-    BlobClient.prototype.getViewURL = function (hash, subpath) {
-        return this._getURL('view', hash, subpath);
-    };
-
-    BlobClient.prototype.getDownloadURL = function (hash, subpath) {
-        return this._getURL('download', hash, subpath);
-    };
-
-    BlobClient.prototype.getCreateURL = function (filename, isMetadata) {
-        if (isMetadata) {
-            return this.blobUrl + 'createMetadata/';
-        } else {
-            return this.blobUrl + 'createFile/' + encodeURIComponent(filename);
-        }
-    };
-
-    BlobClient.prototype.putFile = function (name, data, callback) {
-        var contentLength,
-            req;
-        function toArrayBuffer(buffer) {
-            var ab = new ArrayBuffer(buffer.length);
-            var view = new Uint8Array(ab);
-            for (var i = 0; i < buffer.length; ++i) {
-                view[i] = buffer[i];
-            }
-            return ab;
-        }
-        // on node-webkit, we use XMLHttpRequest, but xhr.send thinks a Buffer is a string and encodes it in utf-8. Send an ArrayBuffer instead
-        if (typeof window !== 'undefined' && typeof Buffer !== 'undefined' && data instanceof Buffer) {
-            data = toArrayBuffer(data); // FIXME will this have performance problems
-        }
-        // on node, empty Buffers will cause a crash in superagent
-        if (typeof window === 'undefined' && typeof Buffer !== 'undefined' && data instanceof Buffer) {
-            if (data.length === 0) {
-                data = '';
-            }
-        }
-        contentLength = data.hasOwnProperty('length') ? data.length : data.byteLength;
-        req = superagent.post(this.getCreateURL(name));
-
-        if (this.isNodeOrNodeWebKit) {
-            req.agent(this.keepaliveAgent);
-        }
-
-        if (this.webgmeclientsession) {
-            req.set('webgmeclientsession', this.webgmeclientsession);
-        }
-        req.set('Content-Type', 'application/octet-stream')
-            .set('Content-Length', contentLength)
-            .send(data)
-            .end(function (err, res) {
-                if (err || res.status > 399) {
-                    callback(err || res.status);
-                    return;
-                }
-                var response = res.body;
-                // Get the first one
-                var hash = Object.keys(response)[0];
-                callback(null, hash);
-            });
-    };
-
-    BlobClient.prototype.putMetadata = function (metadataDescriptor, callback) {
-        var metadata = new BlobMetadata(metadataDescriptor),
-            blob,
-            contentLength,
-            req;
-        // FIXME: in production mode do not indent the json file.
-        if (typeof Blob !== 'undefined') {
-            blob = new Blob([JSON.stringify(metadata.serialize(), null, 4)], {type: 'text/plain'});
-            contentLength = blob.size;
-        } else {
-            blob = new Buffer(JSON.stringify(metadata.serialize(), null, 4), 'utf8');
-            contentLength = blob.length;
-        }
-
-        req = superagent.post(this.getCreateURL(metadataDescriptor.name, true));
-        if (this.webgmeclientsession) {
-            req.set('webgmeclientsession', this.webgmeclientsession);
-        }
-
-        if (this.isNodeOrNodeWebKit) {
-            req.agent(this.keepaliveAgent);
-        }
-
-        req.set('Content-Type', 'application/octet-stream')
-            .set('Content-Length', contentLength)
-            .send(blob)
-            .end(function (err, res) {
-                if (err || res.status > 399) {
-                    callback(err || res.status);
-                    return;
-                }
-                // Uploaded.
-                var response = JSON.parse(res.text);
-                // Get the first one
-                var hash = Object.keys(response)[0];
-                callback(null, hash);
-            });
-    };
-
-    BlobClient.prototype.putFiles = function (o, callback) {
-        var self = this,
-            error = '',
-            filenames = Object.keys(o),
-            remaining = filenames.length,
-            hashes = {},
-            putFile;
-        if (remaining === 0) {
-            callback(null, hashes);
-        }
-        putFile = function(filename, data) {
-            self.putFile(filename, data, function (err, hash) {
-                remaining -= 1;
-
-                hashes[filename] = hash;
-
-                if (err) {
-                    error += 'putFile error: ' + err.toString();
-                }
-
-                if (remaining === 0) {
-                    callback(error, hashes);
-                }
-            });
-        };
-
-        for (var j = 0; j < filenames.length; j += 1) {
-            putFile(filenames[j], o[filenames[j]]);
-        }
-    };
-
-    BlobClient.prototype.getSubObject = function (hash, subpath, callback) {
-        return this.getObject(hash, callback, subpath);
-    };
-
-    BlobClient.prototype.getObject = function (hash, callback, subpath) {
-        superagent.parse['application/zip'] = function (obj, parseCallback) {
-            if (parseCallback) {
-                // Running on node; this should be unreachable due to req.pipe() below
-            } else {
-                return obj;
-            }
-        };
-        //superagent.parse['application/json'] = superagent.parse['application/zip'];
-
-        var req = superagent.get(this.getViewURL(hash, subpath));
-        if (this.webgmeclientsession) {
-            req.set('webgmeclientsession', this.webgmeclientsession);
-        }
-
-        if (this.isNodeOrNodeWebKit) {
-            req.agent(this.keepaliveAgent);
-        }
-
-        if (req.pipe) {
-            // running on node
-            var Writable = require('stream').Writable;
-            var BuffersWritable = function (options) {
-                Writable.call(this, options);
-
-                var self = this;
-                self.buffers = [];
-            };
-            require('util').inherits(BuffersWritable, Writable);
-
-            BuffersWritable.prototype._write = function(chunk, encoding, callback) {
-                this.buffers.push(chunk);
-                callback();
-            };
-
-            var buffers = new BuffersWritable();
-            buffers.on('finish', function () {
-                if (req.req.res.statusCode > 399) {
-                    return callback(req.req.res.statusCode);
-                }
-                callback(null, Buffer.concat(buffers.buffers));
-            });
-            buffers.on('error', function (err) {
-                callback(err);
-            });
-            req.pipe(buffers);
-        } else {
-            req.removeAllListeners('end');
-            req.on('request', function () {
-                if (typeof this.xhr !== 'undefined') {
-                    this.xhr.responseType = 'arraybuffer';
-                }
-            });
-            // req.on('error', callback);
-            req.on('end', function() {
-                if (req.xhr.status > 399) {
-                    callback(req.xhr.status);
-                } else {
-                    var contentType = req.xhr.getResponseHeader('content-type');
-                    var response = req.xhr.response; // response is an arraybuffer
-                    if (contentType === 'application/json') {
-                        var utf8ArrayToString = function (uintArray) {
-                            var inputString = '',
-                                i;
-                            for (i = 0; i < uintArray.byteLength; i++) {
-                                inputString += String.fromCharCode(uintArray[i]);
-                            }
-                            return decodeURIComponent(escape(inputString));
-                        };
-                        response = JSON.parse(utf8ArrayToString(new Uint8Array(response)));
-                    }
-                    callback(null, response);
-                }
-            });
-            req.end(callback);
-        }
-    };
-
-    BlobClient.prototype.getMetadata = function (hash, callback) {
-        var req = superagent.get(this.getMetadataURL(hash));
-        if (this.webgmeclientsession) {
-            req.set('webgmeclientsession', this.webgmeclientsession);
-        }
-
-        if (this.isNodeOrNodeWebKit) {
-            req.agent(this.keepaliveAgent);
-        }
-
-        req.end(function (err, res) {
-            if (err || res.status > 399) {
-                callback(err || res.status);
-            } else {
-                callback(null, JSON.parse(res.text));
-            }
-        });
-    };
-
-    BlobClient.prototype.createArtifact = function (name) {
-        var artifact = new Artifact(name, this);
-        this.artifacts.push(artifact);
-        return artifact;
-    };
-
-    BlobClient.prototype.getArtifact = function (metadataHash, callback) {
-        // TODO: get info check if complex flag is set to true.
-        // TODO: get info get name.
-        var self = this;
-        this.getMetadata(metadataHash, function (err, info) {
-            if (err) {
-                callback(err);
-                return;
-            }
-
-            if (info.contentType === BlobMetadata.CONTENT_TYPES.COMPLEX) {
-                var artifact = new Artifact(info.name, self, info);
-                self.artifacts.push(artifact);
-                callback(null, artifact);
-            } else {
-                callback('not supported contentType ' + JSON.stringify(info, null, 4));
-            }
-
-        });
-    };
-
-    BlobClient.prototype.saveAllArtifacts = function (callback) {
-        var remaining = this.artifacts.length,
-            hashes = [],
-            error = '',
-            saveCallback;
-
-        if (remaining === 0) {
-            callback(null, hashes);
-        }
-
-        saveCallback = function(err, hash) {
-            remaining -= 1;
-
-            hashes.push(hash);
-
-            if (err) {
-                error += 'artifact.save err: ' + err.toString();
-            }
-            if (remaining === 0) {
-                callback(error, hashes);
-            }
-        };
-
-        for (var i = 0; i < this.artifacts.length; i += 1) {
-
-            this.artifacts[i].save(saveCallback);
-        }
-    };
-
-    return BlobClient;
-});
-
-/*globals define, WebGMEGlobal, require*/
-/**
- * @author lattmann / https://github.com/lattmann
- * @author ksmyth / https://github.com/ksmyth
- */
-
-
-define('executor/ExecutorClient',['superagent'], function (superagent) {
-    
-
-    var ExecutorClient = function (parameters) {
-        parameters = parameters || {};
-        this.isNodeJS = (typeof window === 'undefined') && (typeof process === "object");
-        this.isNodeWebkit = (typeof window === 'object') && (typeof process === "object");
-        //console.log(isNode);
-        if (this.isNodeJS) {
-            this.server = '127.0.0.1';
-            this._clientSession = null; // parameters.sessionId;;
-        }
-        this.server = parameters.server || this.server;
-        this.serverPort = parameters.serverPort || this.serverPort;
-        this.httpsecure = (parameters.httpsecure !== undefined) ? parameters.httpsecure : this.httpsecure;
-        if (this.isNodeJS) {
-            this.http = this.httpsecure ? require('https') : require('http');
-        }
-        this.executorUrl = '';
-        if (this.httpsecure !== undefined && this.server && this.serverPort) {
-            this.executorUrl = (this.httpsecure ? 'https://' : 'http://') + this.server + ':' + this.serverPort;
-        }
-        // TODO: TOKEN???
-        this.executorUrl = this.executorUrl + '/rest/executor/'; // TODO: any ways to ask for this or get it from the configuration?
-        if (parameters.executorNonce) {
-            this.executorNonce = parameters.executorNonce;
-        }
-    };
-
-    ExecutorClient.prototype.getInfoURL = function (hash) {
-        var metadataBase = this.executorUrl + 'info';
-        if (hash) {
-            return metadataBase + '/' + hash;
-        } else {
-            return metadataBase;
-        }
-    };
-
-
-    ExecutorClient.prototype.getCreateURL = function (hash) {
-        var metadataBase = this.executorUrl + 'create';
-        if (hash) {
-            return metadataBase + '/' + hash;
-        } else {
-            return metadataBase;
-        }
-    };
-
-    ExecutorClient.prototype.createJob = function (jobInfo, callback) {
-        if (typeof jobInfo === 'string') {
-            jobInfo = { hash: jobInfo }; // old API
-        }
-        this.sendHttpRequestWithData('POST', this.getCreateURL(jobInfo.hash), jobInfo, function (err, response) {
-            if (err) {
-                callback(err);
-                return;
-            }
-
-            callback(null, JSON.parse(response));
-        });
-    };
-
-    ExecutorClient.prototype.updateJob = function (jobInfo, callback) {
-        this.sendHttpRequestWithData('POST', this.executorUrl + 'update/' + jobInfo.hash, jobInfo, function (err, response) {
-            if (err) {
-                callback(err);
-                return;
-            }
-
-            callback(null, response);
-        });
-    };
-
-    ExecutorClient.prototype.getInfo = function (hash, callback) {
-        this.sendHttpRequest('GET', this.getInfoURL(hash), function (err, response) {
-            if (err) {
-                callback(err);
-                return;
-            }
-
-            callback(null, JSON.parse(response));
-        });
-    };
-
-    ExecutorClient.prototype.getAllInfo = function (callback) {
-
-        this.sendHttpRequest('GET', this.getInfoURL(), function (err, response) {
-            if (err) {
-                callback(err);
-                return;
-            }
-
-            callback(null, JSON.parse(response));
-        });
-    };
-
-    ExecutorClient.prototype.getInfoByStatus = function (status, callback) {
-
-        this.sendHttpRequest('GET', this.executorUrl + '?status=' + status, function (err, response) {
-            if (err) {
-                callback(err);
-                return;
-            }
-
-            callback(null, JSON.parse(response));
-        });
-    };
-
-    ExecutorClient.prototype.getWorkersInfo = function (callback) {
-
-        this.sendHttpRequest('GET', this.executorUrl + 'worker', function (err, response) {
-            if (err) {
-                callback(err);
-                return;
-            }
-
-            callback(null, JSON.parse(response));
-        });
-    };
-
-    ExecutorClient.prototype.sendHttpRequest = function (method, url, callback) {
-        return this.sendHttpRequestWithData(method, url, null, callback);
-    };
-
-    ExecutorClient.prototype.sendHttpRequestWithData = function (method, url, data, callback) {
-        var req = new superagent.Request(method, url);
-        if (this.executorNonce) {
-            req.set('x-executor-nonce', this.executorNonce);
-        }
-        if (data) {
-            req.send(data);
-        }
-        req.end(function (err, res) {
-            if (err) {
-                callback(err);
-                return;
-            }
-            if (res.status > 399) {
-                callback(res.status, res.text);
-            } else {
-                callback(null, res.text);
-            }
-        });
-    };
-
-    ExecutorClient.prototype._ensureAuthenticated = function (options, callback) {
-        //this function enables the session of the client to be authenticated
-        //TODO currently this user does not have a session, so it has to upgrade the options always!!!
-//        if (options.headers) {
-//            options.headers.webgmeclientsession = this._clientSession;
-//        } else {
-//            options.headers = {
-//                'webgmeclientsession': this._clientSession
-//            }
-//        }
-        callback(null, options);
-    };
-
-    return ExecutorClient;
-});
-
-/*
- * Copyright (C) 2014 Vanderbilt University, All rights reserved.
- *
- * Author: Zsolt Lattmann
- */
-
-
-define('plugin/PluginConfig',[], function () {
-
-    /**
-     * Initializes a new instance of plugin configuration.
-     *
-     * Note: this object is JSON serializable see serialize method.
-     *
-     * @param config - deserializes an existing configuration to this object.
-     * @constructor
-     */
-    var PluginConfig = function (config) {
-        if (config) {
-            var keys = Object.keys(config);
-            for (var i = 0; i < keys.length; i += 1) {
-                // TODO: check for type on deserialization
-                this[keys[i]] = config[keys[i]];
-            }
-        }
-    };
-
-    /**
-     * Serializes this object to a JSON representation.
-     *
-     * @returns {{}}
-     */
-    PluginConfig.prototype.serialize = function () {
-        var keys = Object.keys(this);
-        var result = {};
-
-        for (var i = 0; i < keys.length; i += 1) {
-            // TODO: check for type on serialization
-            result[keys[i]] = this[keys[i]];
-        }
-
-        return result;
-    };
-
-
-    return PluginConfig;
-});
-/*
- * Copyright (C) 2014 Vanderbilt University, All rights reserved.
- *
- * Author: Zsolt Lattmann
- */
-
-
-define('plugin/PluginNodeDescription',[], function () {
-
-    /**
-     * Initializes a new instance of plugin node description object.
-     *
-     * Note: this object is JSON serializable see serialize method.
-     *
-     * @param config - deserializes an existing configuration to this object.
-     * @constructor
-     */
-    var PluginNodeDescription = function (config) {
-        if (config) {
-            this.name = config.name;
-            this.id = config.id;
-        } else {
-            this.name = '';
-            this.id = '';
-        }
-    };
-
-    /**
-     * Serializes this object to a JSON representation.
-     *
-     * @returns {{}}
-     */
-    PluginNodeDescription.prototype.serialize = function() {
-        var keys = Object.keys(this);
-        var result = {};
-
-        for (var i = 0; i < keys.length; i += 1) {
-            // TODO: check for type on serialization
-            result[keys[i]] = this[keys[i]];
-        }
-
-        return result;
-    };
-
-    return PluginNodeDescription;
-});
-/*
- * Copyright (C) 2014 Vanderbilt University, All rights reserved.
- *
- * Author: Zsolt Lattmann
- */
-
-
-define('plugin/PluginMessage',['plugin/PluginNodeDescription'], function (PluginNodeDescription) {
-
-    /**
-     * Initializes a new instance of plugin message.
-     *
-     * Note: this object is JSON serializable see serialize method.
-     *
-     * @param config - deserializes an existing configuration to this object.
-     * @constructor
-     */
-    var PluginMessage = function (config) {
-        if (config) {
-            this.commitHash = config.commitHash;
-            if (config.activeNode instanceof PluginNodeDescription) {
-                this.activeNode = config.activeNode;
-            } else {
-                this.activeNode = new PluginNodeDescription(config.activeNode);
-            }
-
-            this.message = config.message;
-            if (config.severity) {
-                this.severity = config.severity;
-            } else {
-                this.severity = 'info';
-            }
-        } else {
-            this.commitHash = '';
-            this.activeNode = new PluginNodeDescription();
-            this.message = '';
-            this.severity = 'info';
-        }
-    };
-
-    /**
-     * Serializes this object to a JSON representation.
-     *
-     * @returns {{}}
-     */
-    PluginMessage.prototype.serialize = function () {
-        var result = {
-            commitHash: this.commitHash,
-            activeNode: this.activeNode.serialize(),
-            message: this.message,
-            severity: this.severity
-        };
-
-        return result;
-    };
-
-    return PluginMessage;
-});
-/**
- * Created by zsolt on 3/20/14.
- */
-
-
-define('plugin/PluginResult',['plugin/PluginMessage'], function (PluginMessage) {
-
-    /**
-     * Initializes a new instance of a plugin result object.
-     *
-     * Note: this object is JSON serializable see serialize method.
-     *
-     * @param config - deserializes an existing configuration to this object.
-     * @constructor
-     */
-    var PluginResult = function (config) {
-        if (config) {
-            this.success = config.success;
-            this.pluginName = config.pluginName;
-            this.startTime = config.startTime;
-            this.finishTime = config.finishTime;
-            this.messages = [];
-            this.artifacts = config.artifacts;
-            this.error = config.error;
-
-            for (var i = 0; i < config.messages.length; i += 1) {
-                var pluginMessage;
-                if (config.messages[i] instanceof PluginMessage) {
-                    pluginMessage = config.messages[i];
-                } else {
-                    pluginMessage = new PluginMessage(config.messages[i]);
-                }
-                this.messages.push(pluginMessage);
-            }
-        } else {
-            this.success = false;
-            this.messages = []; // array of PluginMessages
-            this.artifacts = []; // array of hashes
-            this.pluginName = 'PluginName N/A';
-            this.startTime = null;
-            this.finishTime = null;
-            this.error = null;
-        }
-    };
-
-    /**
-     * Gets the success flag of this result object
-     *
-     * @returns {boolean}
-     */
-    PluginResult.prototype.getSuccess = function () {
-        return this.success;
-    };
-
-    /**
-     * Sets the success flag of this result.
-     *
-     * @param {boolean} value
-     */
-    PluginResult.prototype.setSuccess = function (value) {
-        this.success = value;
-    };
-
-    /**
-     * Returns with the plugin messages.
-     *
-     * @returns {plugin.PluginMessage[]}
-     */
-    PluginResult.prototype.getMessages = function () {
-        return this.messages;
-    };
-
-    /**
-     * Adds a new plugin message to the messages list.
-     *
-     * @param {plugin.PluginMessage} pluginMessage
-     */
-    PluginResult.prototype.addMessage = function (pluginMessage) {
-        this.messages.push(pluginMessage);
-    };
-
-    PluginResult.prototype.getArtifacts = function () {
-        return this.artifacts;
-    };
-
-    PluginResult.prototype.addArtifact = function (hash) {
-        this.artifacts.push(hash);
-    };
-
-    /**
-     * Gets the name of the plugin to which the result object belongs to.
-     *
-     * @returns {string}
-     */
-    PluginResult.prototype.getPluginName = function () {
-        return this.pluginName;
-    };
-
-    //------------------------------------------------------------------------------------------------------------------
-    //--------------- Methods used by the plugin manager
-
-    /**
-     * Sets the name of the plugin to which the result object belongs to.
-     *
-     * @param pluginName - name of the plugin
-     */
-    PluginResult.prototype.setPluginName = function (pluginName) {
-        this.pluginName = pluginName;
-    };
-
-    /**
-     * Gets the ISO 8601 representation of the time when the plugin started its execution.
-     *
-     * @returns {string}
-     */
-    PluginResult.prototype.getStartTime = function () {
-        return this.startTime;
-    };
-
-    /**
-     * Sets the ISO 8601 representation of the time when the plugin started its execution.
-     *
-     * @param {string} time
-     */
-    PluginResult.prototype.setStartTime = function (time) {
-        this.startTime = time;
-    };
-
-    /**
-     * Gets the ISO 8601 representation of the time when the plugin finished its execution.
-     *
-     * @returns {string}
-     */
-    PluginResult.prototype.getFinishTime = function () {
-        return this.finishTime;
-    };
-
-    /**
-     * Sets the ISO 8601 representation of the time when the plugin finished its execution.
-     *
-     * @param {string} time
-     */
-    PluginResult.prototype.setFinishTime = function (time) {
-        this.finishTime = time;
-    };
-
-    /**
-     * Gets error if any error occured during execution.
-     * FIXME: should this be an Error object?
-     * @returns {string}
-     */
-    PluginResult.prototype.getError = function () {
-        return this.error;
-    };
-
-    /**
-     * Sets the error string if any error occured during execution.
-     * FIXME: should this be an Error object?
-     * @param {string} time
-     */
-    PluginResult.prototype.setError = function (error) {
-        this.error = error;
-    };
-
-    /**
-     * Serializes this object to a JSON representation.
-     *
-     * @returns {{success: boolean, messages: plugin.PluginMessage[], pluginName: string, finishTime: stirng}}
-     */
-    PluginResult.prototype.serialize = function () {
-        var result = {
-            success: this.success,
-            messages: [],
-            artifacts: this.artifacts,
-            pluginName: this.pluginName,
-            startTime: this.startTime,
-            finishTime: this.finishTime,
-            error: this.error
-        };
-
-        for (var i = 0; i < this.messages.length; i += 1) {
-            result.messages.push(this.messages[i].serialize());
-        }
-
-        return result;
-    };
-
-    return PluginResult;
-});
-/*
- * Copyright (C) 2014 Vanderbilt University, All rights reserved.
- *
- * Author: Zsolt Lattmann
- */
-
-
-define('plugin/PluginBase',['plugin/PluginConfig',
-    'plugin/PluginResult',
-    'plugin/PluginMessage',
-    'plugin/PluginNodeDescription'],
-    function (PluginConfig, PluginResult, PluginMessage, PluginNodeDescription) {
-
-
-        /**
-         * Initializes a new instance of a plugin object, which should be a derived class.
-         *
-         * @constructor
-         */
-        var PluginBase = function () {
-            // set by initialize
-            this.logger = null;
-            this.blobClient = null;
-            this._currentConfig = null;
-
-            // set by configure
-            this.core = null;
-            this.project = null;
-            this.projectName = null;
-            this.branchName = null;
-            this.branchHash = null;
-            this.commitHash = null;
-            this.currentHash = null;
-            this.rootNode = null;
-            this.activeNode = null;
-            this.activeSelection = [];
-            this.META = null;
-
-            this.result = null;
-            this.isConfigured = false;
-            this.gmeConfig = null;
-        };
-
-        //--------------------------------------------------------------------------------------------------------------
-        //---------- Methods must be overridden by the derived classes
-
-        /**
-         * Main function for the plugin to execute. This will perform the execution.
-         * Notes:
-         * - do NOT use console.log use this.logger.[error,warning,info,debug] instead
-         * - do NOT put any user interaction logic UI, etc. inside this function
-         * - callback always have to be called even if error happened
-         *
-         * @param {function(string, plugin.PluginResult)} callback - the result callback
-         */
-        PluginBase.prototype.main = function (callback) {
-            throw new Error('implement this function in the derived class');
-        };
-
-        /**
-         * Readable name of this plugin that can contain spaces.
-         *
-         * @returns {string}
-         */
-        PluginBase.prototype.getName = function () {
-            throw new Error('implement this function in the derived class - getting type automatically is a bad idea,' +
-                'when the js scripts are minified names are useless.');
-        };
-
-        //--------------------------------------------------------------------------------------------------------------
-        //---------- Methods could be overridden by the derived classes
-
-        /**
-         * Current version of this plugin using semantic versioning.
-         * @returns {string}
-         */
-        PluginBase.prototype.getVersion = function () {
-            return '0.1.0';
-        };
-
-        /**
-         * A detailed description of this plugin and its purpose. It can be one or more sentences.
-         *
-         * @returns {string}
-         */
-        PluginBase.prototype.getDescription = function () {
-            return '';
-        };
-
-        /**
-         * Configuration structure with names, descriptions, minimum, maximum values, default values and
-         * type definitions.
-         *
-         * Example:
-         *
-         * [{
-         *    "name": "logChildrenNames",
-         *    "displayName": "Log Children Names",
-         *    "description": '',
-         *    "value": true, // this is the 'default config'
-         *    "valueType": "boolean",
-         *    "readOnly": false
-         * },{
-         *    "name": "logLevel",
-         *    "displayName": "Logger level",
-         *    "description": '',
-         *    "value": "info",
-         *    "valueType": "string",
-         *    "valueItems": [
-         *          "debug",
-         *          "info",
-         *          "warn",
-         *          "error"
-         *      ],
-         *    "readOnly": false
-         * },{
-         *    "name": "maxChildrenToLog",
-         *    "displayName": "Maximum children to log",
-         *    "description": 'Set this parameter to blabla',
-         *    "value": 4,
-         *    "minValue": 1,
-         *    "valueType": "number",
-         *    "readOnly": false
-         * }]
-         *
-         * @returns {object[]}
-         */
-        PluginBase.prototype.getConfigStructure = function () {
-            return [];
-        };
-
-        //--------------------------------------------------------------------------------------------------------------
-        //---------- Methods that can be used by the derived classes
-
-        /**
-         * Updates the current success flag with a new value.
-         *
-         * NewValue = OldValue && Value
-         *
-         * @param {boolean} value - apply this flag on current success value
-         * @param {string|null} message - optional detailed message
-         */
-        PluginBase.prototype.updateSuccess = function (value, message) {
-            var prevSuccess = this.result.getSuccess();
-            var newSuccessValue = prevSuccess && value;
-
-            this.result.setSuccess(newSuccessValue);
-            var msg = '';
-            if (message) {
-                msg = ' - ' + message;
-            }
-
-            this.logger.debug('Success was updated from ' + prevSuccess + ' to ' + newSuccessValue + msg);
-        };
-
-        /**
-         * WebGME can export the META types as path and this method updates the generated domain specific types with
-         * webgme node objects. These can be used to define the base class of new objects created through the webgme API.
-         *
-         * @param {object} generatedMETA
-         */
-        PluginBase.prototype.updateMETA = function (generatedMETA) {
-            var name;
-            for (name in this.META) {
-                if (this.META.hasOwnProperty(name)) {
-                    generatedMETA[name] = this.META[name];
-                }
-            }
-
-            // TODO: check if names are not the same
-            // TODO: log if META is out of date
-        };
-
-        /**
-         * Checks if the given node is of the given meta-type.
-         * Usage: <tt>self.isMetaTypeOf(aNode, self.META['FCO']);</tt>
-         * @param node - Node to be checked for type.
-         * @param metaNode - Node object defining the meta type.
-         * @returns {boolean} - True if the given object was of the META type.
-         */
-        PluginBase.prototype.isMetaTypeOf = function (node, metaNode) {
-            var self = this;
-            while (node) {
-                if (self.core.getGuid(node) === self.core.getGuid(metaNode)) {
-                    return true;
-                }
-                node = self.core.getBase(node);
-            }
-            return false;
-        };
-
-        /**
-         * Finds and returns the node object defining the meta type for the given node.
-         * @param node - Node to be checked for type.
-         * @returns {Object} - Node object defining the meta type of node.
-         */
-        PluginBase.prototype.getMetaType = function (node) {
-            var self = this,
-                name;
-            while (node) {
-                name = self.core.getAttribute(node, 'name');
-                if (self.META.hasOwnProperty(name) && self.core.getGuid(node) === self.core.getGuid(self.META[name])) {
-                    break;
-                }
-                node = self.core.getBase(node);
-            }
-            return node;
-        };
-
-        /**
-         * Returns true if node is a direct instance of a meta-type node (or a meta-type node itself).
-         * @param node - Node to be checked.
-         * @returns {boolean}
-         */
-        PluginBase.prototype.baseIsMeta = function (node) {
-            var self = this,
-                baseName,
-                baseNode = self.core.getBase(node);
-            if (!baseNode) {
-                // FCO does not have a base node, by definition function returns true.
-                return true;
-            }
-            baseName = self.core.getAttribute(baseNode, 'name');
-            return self.META.hasOwnProperty(baseName) && self.core.getGuid(self.META[baseName]) === self.core.getGuid(baseNode);
-        };
-
-        /**
-         * Gets the current configuration of the plugin that was set by the user and plugin manager.
-         *
-         * @returns {object}
-         */
-        PluginBase.prototype.getCurrentConfig = function () {
-            return this._currentConfig;
-        };
-
-        /**
-         * Creates a new message for the user and adds it to the result.
-         *
-         * @param {object} node - webgme object which is related to the message
-         * @param {string} message - feedback to the user
-         * @param {string} severity - severity level of the message: 'debug', 'info' (default), 'warning', 'error'.
-         */
-        PluginBase.prototype.createMessage = function (node, message, severity) {
-            var severityLevel = severity || 'info';
-            //this occurence of the function will always handle a single node
-
-            var descriptor = new PluginNodeDescription({
-                    name: node ? this.core.getAttribute(node, 'name') : "",
-                    id: node ? this.core.getPath(node) : ""
-                });
-            var pluginMessage = new PluginMessage({
-                    commitHash: this.currentHash,
-                    activeNode: descriptor,
-                    message: message,
-                    severity: severityLevel
-                });
-
-            this.result.addMessage(pluginMessage);
-        };
-
-        /**
-         * Saves all current changes if there is any to a new commit.
-         * If the changes were started from a branch, then tries to fast forward the branch to the new commit.
-         * Note: Does NOT handle any merges at this point.
-         *
-         * @param {string|null} message - commit message
-         * @param callback
-         */
-        PluginBase.prototype.save = function (message, callback) {
-            var self = this;
-
-            this.logger.debug('Saving project');
-
-            this.core.persist(this.rootNode,function(err){if (err) {self.logger.error(err);}});
-            var newRootHash = self.core.getHash(self.rootNode);
-
-            var commitMessage = '[Plugin] ' + self.getName() + ' (v' + self.getVersion() + ') updated the model.';
-            if (message) {
-                commitMessage += ' - ' + message;
-            }
-            self.currentHash = self.project.makeCommit([self.currentHash], newRootHash, commitMessage, function (err) {if (err) {self.logger.error(err);}});
-
-            if (self.branchName) {
-                // try to fast forward branch if there was a branch name defined
-
-                // FIXME: what if master branch is already in a different state?
-
-                // try to fast forward branch to the current commit
-                self.project.setBranchHash(self.branchName, self.branchHash, self.currentHash, function (err) {
-                    if (err) {
-                        // fast forward failed
-                        // TODO: try auto-merge
-
-                        self.logger.error(err);
-                        self.logger.info('"' + self.branchName + '" was NOT updated');
-                        self.logger.info('Project was saved to ' + self.currentHash + ' commit.');
-                    } else {
-                        // successful fast forward of branch to the new commit
-                        self.logger.info('"' + self.branchName + '" was updated to the new commit.');
-                        // roll starting point on success
-                        self.branchHash = self.currentHash;
-                    }
-                    callback(err);
-                });
-
-                // FIXME: is this call async??
-                // FIXME: we are not tracking all commits that we make
-
-            } else {
-                // making commits, we have not started from a branch
-                self.logger.info('Project was saved to ' + self.currentHash + ' commit.');
-                callback(null);
-            }
-
-            // Commit changes.
-/*            this.core.persist(this.rootNode, function (err) {
-                // TODO: any error here?
-                if (err) {
-                    self.logger.error(err);
-                }
-
-                var newRootHash = self.core.getHash(self.rootNode);
-
-                var commitMessage = '[Plugin] ' + self.getName() + ' (v' + self.getVersion() + ') updated the model.';
-                if (message) {
-                    commitMessage += ' - ' + message;
-                }
-
-                self.currentHash = self.project.makeCommit([self.currentHash], newRootHash, commitMessage, function (err) {
-                    // TODO: any error handling here?
-                    if (err) {
-                        self.logger.error(err);
-                    }
-
-                    if (self.branchName) {
-                        // try to fast forward branch if there was a branch name defined
-
-                        // FIXME: what if master branch is already in a different state?
-
-                        self.project.getBranchNames(function (err, branchNames) {
-                            if (branchNames.hasOwnProperty(self.branchName)) {
-                                var branchHash = branchNames[self.branchName];
-                                if (branchHash === self.branchHash) {
-                                    // the branch does not have any new commits
-                                    // try to fast forward branch to the current commit
-                                    self.project.setBranchHash(self.branchName, self.branchHash, self.currentHash, function (err) {
-                                        if (err) {
-                                            // fast forward failed
-                                            self.logger.error(err);
-                                            self.logger.info('"' + self.branchName + '" was NOT updated');
-                                            self.logger.info('Project was saved to ' + self.currentHash + ' commit.');
-                                        } else {
-                                            // successful fast forward of branch to the new commit
-                                            self.logger.info('"' + self.branchName + '" was updated to the new commit.');
-                                            // roll starting point on success
-                                            self.branchHash = self.currentHash;
-                                        }
-                                        callback(err);
-                                    });
-                                } else {
-                                    // branch has changes a merge is required
-                                    // TODO: try auto-merge, if fails ...
-                                    self.logger.warn('Cannot fast forward "' + self.branchName + '" branch. Merge is required but not supported yet.');
-                                    self.logger.info('Project was saved to ' + self.currentHash + ' commit.');
-                                    callback(null);
-                                }
-                            } else {
-                                // branch was deleted or not found, do nothing
-                                self.logger.info('Project was saved to ' + self.currentHash + ' commit.');
-                                callback(null);
-                            }
-                        });
-                        // FIXME: is this call async??
-                        // FIXME: we are not tracking all commits that we make
-
-                    } else {
-                        // making commits, we have not started from a branch
-                        self.logger.info('Project was saved to ' + self.currentHash + ' commit.');
-                        callback(null);
-                    }
-                });
-
-            });*/
-        };
-
-        //--------------------------------------------------------------------------------------------------------------
-        //---------- Methods that are used by the Plugin Manager. Derived classes should not use these methods
-
-        /**
-         * Initializes the plugin with objects that can be reused within the same plugin instance.
-         *
-         * @param {logManager} logger - logging capability to console (or file) based on PluginManager configuration
-         * @param {blob.BlobClient} blobClient - virtual file system where files can be generated then saved as a zip file.
-         * @param {object} gmeConfig - global configuration for webGME.
-         */
-        PluginBase.prototype.initialize = function (logger, blobClient, gmeConfig) {
-            if (logger) {
-                this.logger = logger;
-            } else {
-                this.logger = console;
-            }
-            if (!gmeConfig) {
-                // TODO: Remove this check at some point
-                throw new Error('gmeConfig was not provided to Plugin.initialize!');
-            }
-            this.blobClient = blobClient;
-            this.gmeConfig = gmeConfig;
-
-            this._currentConfig = null;
-            // initialize default configuration
-            this.setCurrentConfig(this.getDefaultConfig());
-
-            this.isConfigured = false;
-        };
-
-        /**
-         * Configures this instance of the plugin for a specific execution. This function is called before the main by
-         * the PluginManager.
-         * Initializes the result with a new object.
-         *
-         * @param {PluginContext} config - specific context: project, branch, core, active object and active selection.
-         */
-        PluginBase.prototype.configure = function (config) {
-            this.core = config.core;
-            this.project = config.project;
-            this.projectName = config.projectName;
-            this.branchName = config.branchName;
-            this.branchHash = config.branchName ? config.commitHash : null;
-            this.commitHash = config.commitHash;
-            this.currentHash = config.commitHash;
-            this.rootNode = config.rootNode;
-            this.activeNode = config.activeNode;
-            this.activeSelection = config.activeSelection;
-            this.META = config.META;
-
-            this.result = new PluginResult();
-
-
-            this.isConfigured = true;
-        };
-
-        /**
-         * Gets the default configuration based on the configuration structure for this plugin.
-         *
-         * @returns {plugin.PluginConfig}
-         */
-        PluginBase.prototype.getDefaultConfig = function () {
-            var configStructure = this.getConfigStructure();
-
-            var defaultConfig = new PluginConfig();
-
-            for (var i = 0; i < configStructure.length; i += 1) {
-                defaultConfig[configStructure[i].name] = configStructure[i].value;
-            }
-
-            return defaultConfig;
-        };
-
-        /**
-         * Sets the current configuration of the plugin.
-         *
-         * @param {object} newConfig - this is the actual configuration and NOT the configuration structure.
-         */
-        PluginBase.prototype.setCurrentConfig = function (newConfig) {
-            this._currentConfig = newConfig;
-        };
-
-        return PluginBase;
-    });
-
-/*
- * Copyright (C) 2014 Vanderbilt University, All rights reserved.
- *
- * Author: Zsolt Lattmann
- */
-
-
-define('plugin/PluginContext',[], function () {
-
-    /**
-     * Initializes a new instance of PluginContext. This context is set through PluginBase.configure method for a given
-     * plugin instance and execution.
-     *
-     * @constructor
-     */
-    var PluginContext = function () {
-
-        // TODO: something like this
-//        context.project = project;
-//        context.projectName = config.project;
-//        context.core = new Core(context.project);
-//        context.commitHash = config.commit;
-//        context.selected = config.selected;
-//        context.storage = null;
-
-    };
-
-
-    return PluginContext;
-});
-/*globals define*/
-
-/*
- * Copyright (C) 2014 Vanderbilt University, All rights reserved.
- *
- * Author: Zsolt Lattmann
- */
-
-// TODO: Use PluginManagerConfiguration
-// TODO: Load ActiveSelection objects and pass it correctly
-// TODO: Add more statistics to the result object
-// TODO: Result object rename name -> pluginName, time -> finishTime)
-// TODO: Make this class testable
-// TODO: PluginManager should download the plugins
-
-
-define('plugin/PluginManagerBase',['./PluginBase',
-        './PluginContext'],
-    function (PluginBase, PluginContext) {
-
-
-        var PluginManagerBase = function (storage, Core, Logger, plugins, gmeConfig) {
-            this.gmeConfig = gmeConfig; // global configuration of webgme
-            this.LoggerClass = Logger;
-            this.logger = Logger.createWithGmeConfig('gme:plugin:PluginManagerBase', gmeConfig);
-            this._Core = Core;       // webgme core class is used to operate on objects
-            this._storage = storage; // webgme storage
-            this._plugins = plugins; // key value pair of pluginName: pluginType - plugins are already loaded/downloaded
-            this._pluginConfigs = {}; // keeps track of the current configuration for each plugins by name
-
-            if (!this.gmeConfig) {
-                // TODO: this error check is temporary
-                throw new Error('PluginManagerBase takes gmeConfig as parameter!');
-            }
-
-            var pluginNames = Object.keys(this._plugins);
-            for (var i = 0; i < pluginNames.length; i += 1) {
-                var p = new this._plugins[pluginNames[i]]();
-                this._pluginConfigs[pluginNames[i]] = p.getDefaultConfig();
-            }
-        };
-
-        PluginManagerBase.prototype.initialize = function (managerConfiguration, configCallback, callbackContext) {
-            var self = this,
-                plugins = this._plugins;
-
-            //#1: PluginManagerBase should load the plugins
-
-            //#2: PluginManagerBase iterates through each plugin and collects the config data
-            var pluginConfigs = {};
-
-            for (var p in plugins) {
-                if (plugins.hasOwnProperty(p)) {
-                    var plugin = new plugins[p]();
-                    pluginConfigs[p] = plugin.getConfigStructure();
-                }
-            }
-
-            if (configCallback) {
-                configCallback.call(callbackContext, pluginConfigs, function (updatedPluginConfig) {
-                    for (var p in updatedPluginConfig) {
-                        if (updatedPluginConfig.hasOwnProperty(p)) {
-                            //save it back to the plugin
-                            self._pluginConfigs[p] = updatedPluginConfig[p];
-                        }
-                    }
-                });
-            }
-        };
-
-        /**
-         * Gets a new instance of a plugin by name.
-         *
-         * @param {string} name
-         * @returns {plugin.PluginBase}
-         */
-        PluginManagerBase.prototype.getPluginByName = function (name) {
-            return this._plugins[name];
-        };
-
-        PluginManagerBase.prototype.loadMetaNodes = function (pluginContext, callback) {
-            var self = this;
-
-            this.logger.debug('Loading meta nodes');
-
-            // get meta members
-            var metaIDs = pluginContext.core.getMemberPaths(pluginContext.rootNode, 'MetaAspectSet');
-
-            var len = metaIDs.length;
-
-            var nodeObjs = [];
-
-
-            var allObjectsLoadedHandler = function () {
-                var len2 = nodeObjs.length;
-
-                var nameObjMap = {};
-
-                while (len2--) {
-                    var nodeObj = nodeObjs[len2];
-
-                    nameObjMap[pluginContext.core.getAttribute(nodeObj, 'name')] = nodeObj;
-                }
-
-                pluginContext.META = nameObjMap;
-
-                self.logger.debug('Meta nodes are loaded');
-
-                callback(null, pluginContext);
-            };
-
-            var loadedMetaObjectHandler = function (err, nodeObj) {
-                nodeObjs.push(nodeObj);
-
-                if (nodeObjs.length === metaIDs.length) {
-                    allObjectsLoadedHandler();
-                }
-            };
-
-            while (len--) {
-                pluginContext.core.loadByPath(pluginContext.rootNode, metaIDs[len], loadedMetaObjectHandler);
-            }
-        };
-
-        /**
-         *
-         * @param {plugin.PluginManagerConfiguration} managerConfiguration
-         * @param {function} callback
-         */
-        PluginManagerBase.prototype.getPluginContext = function (managerConfiguration, callback) {
-
-            // TODO: check if callback is a function
-
-            var self = this;
-
-            var pluginContext = new PluginContext();
-
-            // based on the string values get the node objects
-            // 1) Open project
-            // 2) Load branch OR commit hash
-            // 3) Load rootNode
-            // 4) Load active object
-            // 5) Load active selection
-            // 6) Update context
-            // 7) return
-
-            pluginContext.project = this._storage;
-            pluginContext.projectName = managerConfiguration.project;
-            pluginContext.core = new self._Core(pluginContext.project, {globConf: self.gmeConfig});
-            pluginContext.commitHash = managerConfiguration.commit;
-            pluginContext.activeNode = null;    // active object
-            pluginContext.activeSelection = []; // selected objects
-
-            // add activeSelection
-            var loadActiveSelectionAndMetaNodes = function () {
-                if (managerConfiguration.activeSelection.length === 0) {
-                    self.loadMetaNodes(pluginContext, callback);
-                } else {
-                    var remaining = managerConfiguration.activeSelection.length;
-
-                    for (var i = 0; i < managerConfiguration.activeSelection.length; i += 1) {
-                        (function (activeNodePath) {
-                            pluginContext.core.loadByPath(pluginContext.rootNode, activeNodePath, function (err, activeNode) {
-                                remaining -= 1;
-
-                                if (err) {
-                                    self.logger.warn('unable to load active selection: ' + activeNodePath);
-                                } else {
-                                    pluginContext.activeSelection.push(activeNode);
-                                }
-
-                                if (remaining === 0) {
-                                    // all nodes from active selection are loaded
-                                    self.loadMetaNodes(pluginContext, callback);
-                                }
-                            });
-                        })(managerConfiguration.activeSelection[i]);
-                    }
-                }
-            };
-
-            // add activeNode
-            var loadCommitHashAndRun = function (commitHash) {
-                self.logger.info('Loading commit ' + commitHash);
-                pluginContext.project.loadObject(commitHash, function (err, commitObj) {
-                    if (err) {
-                        callback(err, pluginContext);
-                        return;
-                    }
-
-                    if (typeof commitObj === 'undefined' || commitObj === null) {
-                        callback('cannot find commit', pluginContext);
-                        return;
-                    }
-
-                    pluginContext.core.loadRoot(commitObj.root, function (err, rootNode) {
-                        if (err) {
-                            callback("unable to load root", pluginContext);
-                            return;
-                        }
-
-                        pluginContext.rootNode = rootNode;
-                        if (typeof managerConfiguration.activeNode === 'string') {
-                            pluginContext.core.loadByPath(pluginContext.rootNode, managerConfiguration.activeNode, function (err, activeNode) {
-                                if (err) {
-                                    callback("unable to load selected object", pluginContext);
-                                    return;
-                                }
-
-                                pluginContext.activeNode = activeNode;
-                                loadActiveSelectionAndMetaNodes();
-                            });
-                        } else {
-                            pluginContext.activeNode = null;
-                            loadActiveSelectionAndMetaNodes();
-                        }
-                    });
-                });
-            };
-
-            // load commit hash and run based on branch name or commit hash
-            if (managerConfiguration.branchName) {
-                pluginContext.project.getBranchNames(function (err, branchNames) {
-                    self.logger.debug(branchNames);
-
-                        pluginContext.commitHash = branchNames[managerConfiguration.branchName] || pluginContext.commitHash;
-                        pluginContext.branchName = managerConfiguration.branchName;
-                        loadCommitHashAndRun(pluginContext.commitHash);
-                });
-            } else {
-                loadCommitHashAndRun(pluginContext.commitHash);
-            }
-
-        };
-
-        PluginManagerBase.prototype.executePlugin = function (name, managerConfiguration, callback) {
-            // TODO: check if name is a string
-            // TODO: check if managerConfiguration is an instance of PluginManagerConfiguration
-            // TODO: check if callback is a function
-            var self = this;
-
-            var PluginClass = this.getPluginByName(name);
-
-            var plugin = new PluginClass();
-
-            var pluginLogger = this.LoggerClass.createWithGmeConfig('gme:plugin:' + name, this.gmeConfig);
-
-            plugin.initialize(pluginLogger, managerConfiguration.blobClient, self.gmeConfig);
-
-            plugin.setCurrentConfig(this._pluginConfigs[name]);
-            for (var key in managerConfiguration.pluginConfig) {
-                if (managerConfiguration.pluginConfig.hasOwnProperty(key) &&
-                    plugin._currentConfig.hasOwnProperty(key)) {
-
-                    plugin._currentConfig[key] = managerConfiguration.pluginConfig[key];
-                }
-            }
-            self.getPluginContext(managerConfiguration, function (err, pluginContext) {
-                if (err) {
-                    // TODO: this has to return with an empty PluginResult object and NOT with null.
-                    callback(err, null);
-                    return;
-
-                }
-
-                plugin.configure(pluginContext);
-
-                var startTime = (new Date()).toISOString();
-
-                plugin.main(function (err, result) {
-                    // set common information (meta info) about the plugin and measured execution times
-                    result.setFinishTime((new Date()).toISOString());
-                    result.setStartTime(startTime);
-
-                    result.setPluginName(plugin.getName());
-                    result.setError(err);
-
-                    callback(err, result);
-                });
-
-            });
-
-        };
-
-
-        return PluginManagerBase;
-    });
-define('js/Dialogs/PluginConfig/PluginConfigDialog',[], function () {
-   return;
-});
-
-/*globals define, _, requirejs, WebGMEGlobal*/
-
-define('js/Utils/InterpreterManager',['common/core/core',
-        'plugin/PluginManagerBase',
-        'plugin/PluginResult',
-        'blob/BlobClient',
-        'js/Dialogs/PluginConfig/PluginConfigDialog',
-        'js/logger'
-                                    ], function (Core,
-                                               PluginManagerBase,
-                                               PluginResult,
-                                               BlobClient,
-                                               PluginConfigDialog,
-                                               Logger) {
-    
-
-    var InterpreterManager = function (client, gmeConfig) {
-        this._client = client;
-        //this._manager = new PluginManagerBase();
-        this.gmeConfig = gmeConfig;
-        this._savedConfigs = {};
-        this.logger = Logger.create('gme:InterpreterManager', gmeConfig.client.log);
-        this.logger.debug('InterpreterManager ctor');
-    };
-
-    var getPlugin = function(name,callback){
-        if (WebGMEGlobal && WebGMEGlobal.plugins && WebGMEGlobal.plugins.hasOwnProperty(name)) {
-            callback(null, WebGMEGlobal.plugins[name]);
-        } else {
-            requirejs(['/plugin/' + name + '/' + name + '/' + name],
-                function (InterpreterClass) {
-                    callback(null, InterpreterClass);
-                },
-                function (err) {
-                    callback(err, null);
-                }
-            );
-        }
-    };
-
-    /**
-     *
-     * @param {string} name - name of plugin to be executed.
-     * @param {object} silentPluginCfg - if falsy dialog window will be shown.
-     * @param {object.string} silentPluginCfg.activeNode - Path to activeNode.
-     * @param {object.Array.<string>} silentPluginCfg.activeSelection - Paths to nodes in activeSelection.
-     * @param {object.boolean} silentPluginCfg.runOnServer - Whether to run the plugin on the server or not.
-     * @param {object.object} silentPluginCfg.pluginConfig - Plugin specific options.
-     * @param callback
-     */
-    InterpreterManager.prototype.run = function (name, silentPluginCfg, callback) {
-        var self = this;
-        getPlugin(name,function(err,plugin){
-            self.logger.debug('Getting getPlugin in run.');
-            if(!err && plugin) {
-                var plugins = {},
-                    runWithConfiguration;
-                plugins[name] = plugin;
-                var pluginManager = new PluginManagerBase(self._client.getProjectObject(), Core, Logger, plugins,
-                    self.gmeConfig);
-                pluginManager.initialize(null, function (pluginConfigs, configSaveCallback) {
-                    //#1: display config to user
-                    var noServerExecution = self.gmeConfig.plugin.allowServerExecution === false,
-                        hackedConfig = {
-                        'Global Options': [
-                            {
-                                "name": "runOnServer",
-                                "displayName": "Execute on Server",
-                                "description": noServerExecution ? 'Server side execution is disabled.' : '',
-                                "value": false, // this is the 'default config'
-                                "valueType": "boolean",
-                                "readOnly": noServerExecution
-                            }
-                        ]
-                    };
-
-                    for (var i in pluginConfigs) {
-                        if (pluginConfigs.hasOwnProperty(i)) {
-                            hackedConfig[i] = pluginConfigs[i];
-
-                            // retrieve user settings from previous run
-                            if (self._savedConfigs.hasOwnProperty(i)) {
-                                var iConfig = self._savedConfigs[i];
-                                var len = hackedConfig[i].length;
-
-                                while (len--) {
-                                    if (iConfig.hasOwnProperty(hackedConfig[i][len].name)) {
-                                        hackedConfig[i][len].value = iConfig[hackedConfig[i][len].name];
-                                    }
-                                }
-
-                            }
-                        }
-                    }
-
-                    runWithConfiguration = function (updatedConfig) {
-                        //when Save&Run is clicked in the dialog (or silentPluginCfg was passed)
-                        var globalconfig = updatedConfig['Global Options'],
-                            activeNode,
-                            activeSelection;
-                        delete updatedConfig['Global Options'];
-
-                        activeNode = silentPluginCfg.activeNode;
-                        if (!activeNode && WebGMEGlobal && WebGMEGlobal.State) {
-                                activeNode = WebGMEGlobal.State.getActiveObject();
-                        }
-                        activeSelection = silentPluginCfg.activeSelection;
-                        if (!activeSelection && WebGMEGlobal && WebGMEGlobal.State) {
-                            activeSelection = WebGMEGlobal.State.getActiveSelection();
-                        }
-                        // save config from user
-                        for (var i in updatedConfig) {
-                            self._savedConfigs[i] = updatedConfig[i];
-                        }
-
-                        //#2: save it back and run the plugin
-                        if (configSaveCallback) {
-                            configSaveCallback(updatedConfig);
-
-                            // TODO: if global config says try to merge branch then we should pass the name of the branch
-                            var config = {
-                                "project": self._client.getActiveProjectName(),
-                                "token": "",
-                                "activeNode": activeNode, // active object in the editor
-                                "activeSelection": activeSelection || [],
-                                "commit": self._client.getActualCommit(), //"#668b3babcdf2ddcd7ba38b51acb62d63da859d90",
-                                "branchName": self._client.getActualBranch() // this has priority over the commit if not null
-                            };
-
-                            if(globalconfig.runOnServer === true || silentPluginCfg.runOnServer === true){
-                                var context = {
-                                    managerConfig: config,
-                                    pluginConfigs:updatedConfig
-                                };
-                                self._client.runServerPlugin(name,context,function(err,result){
-                                    if(err){
-                                        console.error(err);
-                                        callback(new PluginResult()); //TODO return proper error result
-                                    } else {
-                                        var resultObject = new PluginResult(result);
-                                        callback(resultObject);
-                                    }
-                                });
-                            } else {
-                                config.blobClient = new BlobClient();
-
-                                pluginManager.executePlugin(name, config, function (err, result) {
-                                    if (err) {
-                                        console.error(err);
-                                    }
-                                    callback(result);
-                                });
-                            }
-                        }
-                    };
-
-                    if (silentPluginCfg) {
-                        var updatedConfig = {};
-                        for (var i in hackedConfig) {
-                            updatedConfig[i] = {};
-                            var len = hackedConfig[i].length;
-                            while (len--) {
-                                updatedConfig[i][hackedConfig[i][len].name] = hackedConfig[i][len].value;
-                            }
-
-                            if (silentPluginCfg && silentPluginCfg.pluginConfig) {
-                                for (var j in silentPluginCfg.pluginConfig) {
-                                    updatedConfig[i][j] = silentPluginCfg.pluginConfig[j];
-                                }
-                            }
-                        }
-                        runWithConfiguration(updatedConfig);
-                    } else {
-                        var d = new PluginConfigDialog();
-                        silentPluginCfg = {};
-                        d.show(hackedConfig, runWithConfiguration);
-                    }
-                });
-            } else {
-                console.error(err);
-                console.error('unable to load plugin');
-                callback(null); //TODO proper result
-            }
-        });
-    };
-
-    //TODO somehow it would feel more right if we do run in async mode, but if not then we should provide getState and getResult synchronous functions as well
-
-    return InterpreterManager;
-});
-
 /*globals define, document, console, window, GME, docReady, setTimeout*/
 /*jshint browser:true, evil:false*/
 
@@ -23754,8 +25204,10 @@ define('webgme.classes',
         'executor/ExecutorClient',
         'js/Utils/InterpreterManager',
         'common/core/core',
-        'common/storage/clientstorage'
-    ], function (Client, BlobClient, ExecutorClient, InterpreterManager, Core, Storage) {
+        'common/storage/clientstorage',
+        'js/logger',
+        'lib/superagent/superagent-1.1.0'
+    ], function (Client, BlobClient, ExecutorClient, InterpreterManager, Core, Storage, Logger, superagent) {
 
         
         // Setting global classes
@@ -23766,6 +25218,10 @@ define('webgme.classes',
         GME.classes.InterpreterManager = InterpreterManager;
         GME.classes.Core = Core;
         GME.classes.Storage = Storage;
+        GME.classes.Logger = Logger;
+
+        // Exposing built in libraries
+        GME.utils.superagent = superagent;
 
         // Pure JavaScript equivalent to jQuery's $.ready() from https://github.com/jfriend00/docReady
 

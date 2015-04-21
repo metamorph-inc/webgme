@@ -2111,7 +2111,6 @@ define('common/util/assert',[],function () {
 			console.log();
 			}
 			
-			debugger;
 			throw error;
 		}
 	};
@@ -4494,7 +4493,6 @@ define('common/core/coretree',[ "common/util/assert", "common/util/key", "common
 
 		var __test = function (text, cond) {
 			if (!cond) {
-				debugger;
 				throw new Error(text);
 			}
 		};

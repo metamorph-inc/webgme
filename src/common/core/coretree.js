@@ -874,7 +874,6 @@ define([ "common/util/assert", "common/util/key", "common/core/future", "common/
 
 		var __test = function (text, cond) {
 			if (!cond) {
-				debugger;
 				throw new Error(text);
 			}
 		};

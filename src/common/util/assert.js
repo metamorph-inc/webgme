@@ -16,7 +16,6 @@ define(function () {
 			console.log();
 			}
 			
-			debugger;
 			throw error;
 		}
 	};

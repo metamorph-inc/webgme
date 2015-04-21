@@ -35,7 +35,7 @@ function createAPI(app, mountPath, middlewareOpts) {
         versionedAPIPath = mountPath + '/v1',
         latestAPIPath = mountPath;
 
-    if (global.TESTING) {
+    if (true || global.TESTING) {
         htmlDocDeferred.resolve();
     } else {
         // FIXME: this does not work with tests well.

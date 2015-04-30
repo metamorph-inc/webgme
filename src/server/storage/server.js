@@ -193,7 +193,9 @@ var server = function (_database, options) {
 
     function open(callback) {
         _socket = IO.listen(options.combined ? options.combined : gmeConfig.server.port, {
-            'transports': gmeConfig.socketIO.transports
+            'transports': gmeConfig.socketIO.transports,
+            // TODO: perMessageDeflate: gmeConfig.socketIO.perMessageDeflate,
+            perMessageDeflate: false
         }); // FIXME: does this listen have a callback?
 
         _socket.use(function (socket, next) {

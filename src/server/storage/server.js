@@ -1,10 +1,8 @@
 /*globals requireJS*/
 /*jshint node:true*/
 
-/*
- * Copyright (C) 2012-2013 Vanderbilt University, All rights reserved.
- *
- * Author: Tamas Kecskes
+/**
+ * @author kecso / https://github.com/kecso
  */
 
 'use strict';
@@ -14,9 +12,7 @@ var COOKIE = require('cookie-parser'),
 
     ASSERT = requireJS('common/util/assert'),
     GUID = requireJS('common/util/guid'),
-    URL = requireJS('common/util/url'),
-
-    SWM = require('../worker/serverworkermanager');
+    URL = requireJS('common/util/url');
 
 
 var server = function (_database, options) {
@@ -30,46 +26,53 @@ var server = function (_database, options) {
     options.authorization = options.authorization || function (sessionID, projectName, type, callback) {
         callback(null, true);
     };
-    options.auth_deleteProject = options.auth_deleteProject || function () {
+    options.authDeleteProject = options.authDeleteProject || function () {
     };
     options.sessioncheck = options.sessioncheck || function (sessionID, callback) {
         callback(null, true);
     };
     options.getAuthorizationInfo = options.getAuthorizationInfo || function (sessionID, projectName, callback) {
-        callback(null, {'read': true, 'write': true, 'delete': true});
+        callback(null, {read: true, write: true, delete: true});
     };
 
     var _socket = null,
         _objects = {},
         _projects = {},
-    /*_references = {},*/
         _databaseOpenCallbacks = [],
         _databaseOpened = false,
-        ERROR_DEAD_GUID = 'the given object does not exists',
         _connectedWorkers = {},
         _eventHistory = [],
         _events = {},
         _waitingEventCallbacks = [],
         SERVER_EVENT = {
-            PROJECT_CREATED: "PROJECT_CREATED",
-            PROJECT_DELETED: "PROJECT_DELETED",
-            PROJECT_UPDATED: "PROJECT_UPDATED",
-            BRANCH_CREATED: "BRANCH_CREATED",
-            BRANCH_DELETED: "BRANCH_DELETED",
-            BRANCH_UPDATED: "BRANCH_UPDATED"
+            PROJECT_CREATED: 'PROJECT_CREATED',
+            PROJECT_DELETED: 'PROJECT_DELETED',
+            PROJECT_UPDATED: 'PROJECT_UPDATED',
+            BRANCH_CREATED: 'BRANCH_CREATED',
+            BRANCH_DELETED: 'BRANCH_DELETED',
+            BRANCH_UPDATED: 'BRANCH_UPDATED'
         };
 
     function getSessionID(handshakeData) {
         var sessionId;
         if (handshakeData) {
-            if (handshakeData.query && handshakeData.query.webGMESessionId && handshakeData.query.webGMESessionId !== 'undefined') {
+            if (handshakeData.query &&
+                handshakeData.query.webGMESessionId &&
+                handshakeData.query.webGMESessionId !== 'undefined') {
                 // TODO: Isn't this branch deprecated?
                 sessionId = handshakeData.query.webGMESessionId;
-            } else if (handshakeData.query && handshakeData.query[gmeConfig.server.sessionCookieId] && handshakeData.query[gmeConfig.server.sessionCookieId] !== 'undefined') {
-                sessionId = COOKIE.signedCookie(handshakeData.query[gmeConfig.server.sessionCookieId], gmeConfig.server.sessionCookieSecret);
-            } else if (gmeConfig.server.sessionCookieId && gmeConfig.server.sessionCookieSecret && handshakeData.headers && handshakeData.headers.cookie) {
+            } else if (handshakeData.query &&
+                handshakeData.query[gmeConfig.server.sessionCookieId] &&
+                handshakeData.query[gmeConfig.server.sessionCookieId] !== 'undefined') {
+                sessionId = COOKIE.signedCookie(handshakeData.query[gmeConfig.server.sessionCookieId],
+                    gmeConfig.server.sessionCookieSecret);
+            } else if (gmeConfig.server.sessionCookieId &&
+                gmeConfig.server.sessionCookieSecret &&
+                handshakeData.headers && handshakeData.headers.cookie) {
                 //we try to dig it from the signed cookie
-                sessionId = COOKIE.signedCookie(URL.parseCookie(handshakeData.headers.cookie)[gmeConfig.server.sessionCookieId], gmeConfig.server.sessionCookieSecret);
+                sessionId = COOKIE.signedCookie(
+                    URL.parseCookie(handshakeData.headers.cookie)[gmeConfig.server.sessionCookieId],
+                    gmeConfig.server.sessionCookieSecret);
             }
         }
         return sessionId;
@@ -119,7 +122,7 @@ var server = function (_database, options) {
                 if (_projects[project]) {
                     //TODO we should find the real reason behind collection loose
                     try {
-                        _projects[project].getBranchNames(function (err, names) {
+                        _projects[project].getBranchNames(function (err/*, names*/) {
                             if (err) {
                                 delete _projects[project];
                                 checkProject(client, project, callback);
@@ -201,7 +204,8 @@ var server = function (_database, options) {
         _socket.use(function (socket, next) {
             var handshakeData = socket.handshake;
             //either the html header contains some webgme signed cookie with the sessionID
-            // or the data has a webGMESession member which should also contain the sessionID - currently the same as the cookie
+            // or the data has a webGMESession member which should also contain the sessionID
+            // - currently the same as the cookie
             if (gmeConfig.authentication.enable === true) {
                 var sessionID = getSessionID(handshakeData);
                 options.sessioncheck(sessionID, function (err, isOk) {
@@ -235,15 +239,19 @@ var server = function (_database, options) {
             //first we connect our socket id to the session
 
             socket.on('error', function (err) {
+                if (err instanceof Error) {
+                    err = err.stack;
+                }
                 logger.error('error raised by socket: ' + err);
             });
 
-            if (process.env['LOG_WEBGME_TIMING']) {
+            if (process.env.LOG_WEBGME_TIMING) {
                 var msgno = 0;
                 var oldon = socket.on;
                 socket.on = function (msg, cb) {
                     oldon.apply(socket, [msg, function () {
-                        var logmsg = socket.id + " " + msgno++ + " " + msg;
+                        //jshint bitwise: false
+                        var logmsg = socket.id + ' ' + msgno++ + ' ' + msg;
                         var args = [];
                         for (var i = 0; i < arguments.length; i++) {
                             args[i] = arguments[i];
@@ -260,15 +268,16 @@ var server = function (_database, options) {
                         if (msg === 'getBranchHash') {
                             logmsg = logmsg + ' ' + args[1] + ': ' + args[2];
                         }
-                        logger.debug(logmsg + " recvd");
+                        logger.debug(logmsg + ' recvd');
                         var time1 = process.hrtime();
                         var callback2 = args[args.length - 1];
                         args[args.length - 1] = function (err) {
                             var time2 = process.hrtime(time1);
                             if (msg === 'getBranchHash') {
-                                logmsg = logmsg + ' ' + arguments[1] + (arguments[2] ? ' ERROR: forked ' + arguments[2] : '');
+                                logmsg = logmsg + ' ' +
+                                arguments[1] + (arguments[2] ? ' ERROR: forked ' + arguments[2] : '');
                             }
-                            logger.debug(logmsg + " " + ((time2[0] * 1000) + (time2[1] / 1000 / 1000 | 0)) + " " + err);
+                            logger.debug(logmsg + ' ' + ((time2[0] * 1000) + (time2[1] / 1000 / 1000 | 0)) + ' ' + err);
                             callback2.apply(this, arguments);
                         };
                         cb.apply(this, args);
@@ -344,25 +353,29 @@ var server = function (_database, options) {
                     } else {
                         _database.getProjectNames(function (err, names) {
                             if (!err) {
-                                var allowedNames = [];
-                                var answerNeeded = names.length;
-                                var isProjectReadable = function (name, callback) {
-                                    options.getAuthorizationInfo(getSessionID(socket.handshake), name, function (err, authObj) {
+                                var allowedNames = [],
+                                    answerNeeded = names.length,
+                                    isProjectReadable = function (name, callback) {
+                                        options.getAuthorizationInfo(getSessionID(socket.handshake),
+                                            name,
+                                            function (err, authObj) {
                                         if (!err) {
                                             if (authObj && authObj.read === true) {
                                                 allowedNames.push(name);
                                             }
                                         }
                                         callback(err);
-                                    });
-                                };
-                                if (answerNeeded > 0) {
-                                    for (var i = 0; i < names.length; i++) {
-                                        isProjectReadable(names[i], function (err) {
+                                            }
+                                        );
+                                    },
+                                    projectReadableResponse = function (/*err*/) {
                                             if (--answerNeeded === 0) {
                                                 callback(null, allowedNames);
                                             }
-                                        });
+                                    };
+                                if (answerNeeded > 0) {
+                                    for (var i = 0; i < names.length; i++) {
+                                        isProjectReadable(names[i], projectReadableResponse);
                                     }
                                 } else {
                                     callback(null, allowedNames);
@@ -394,7 +407,7 @@ var server = function (_database, options) {
                             if (err) {
                                 callback(err);
                             } else {
-                                options.auth_deleteProject(projectName);
+                                options.authDeleteProject(projectName);
                                 //TODO what to do with the object itself???
                                 fireEvent({type: SERVER_EVENT.PROJECT_DELETED, project: projectName});
                                 callback(null);
@@ -434,7 +447,7 @@ var server = function (_database, options) {
             socket.on('closeProject', function (projectName, callback) {
                 callback = callback || function () {
                 };
-                checkProject(getSessionID(socket.handshake), projectName, function (err, project) {
+                checkProject(getSessionID(socket.handshake), projectName, function (err/*, project*/) {
                     if (err) {
                         callback(err);
                     } else {
@@ -503,13 +516,17 @@ var server = function (_database, options) {
                     if (err) {
                         callback(err);
                     } else {
-                        options.authorization(getSessionID(socket.handshake), projectName, 'write', function (err, cando) {
+                        options.authorization(getSessionID(socket.handshake),
+                            projectName,
+                            'write',
+                            function (err, cando) {
                             if (!err && cando === true) {
                                 project.insertObject(object, callback);
                             } else {
                                 callback(err);
                             }
-                        });
+                            }
+                        );
                     }
                 });
             });
@@ -533,7 +550,10 @@ var server = function (_database, options) {
                         callback(err);
                     } else {
                         project = p;
-                        options.authorization(getSessionID(socket.handshake), projectName, 'write', function (err, cando) {
+                        options.authorization(getSessionID(socket.handshake),
+                            projectName,
+                            'write',
+                            function (err, cando) {
                             if (!err && cando === true) {
                                 if (needed > 0) {
                                     for (i = 0; i < keys.length; i++) {
@@ -546,7 +566,8 @@ var server = function (_database, options) {
                             } else {
                                 callback(err);
                             }
-                        });
+                            }
+                        );
 
                     }
                 });
@@ -566,13 +587,17 @@ var server = function (_database, options) {
                     if (err) {
                         callback(err);
                     } else {
-                        options.authorization(getSessionID(socket.handshake), projectName, 'write', function (err, cando) {
+                        options.authorization(getSessionID(socket.handshake),
+                            projectName,
+                            'write',
+                            function (err, cando) {
                             if (!err && cando === true) {
                                 project.setInfo(info, callback);
                             } else {
-                                callback(err || "insufficient authorization for operation");
+                                    callback(err || 'insufficient authorization for operation');
                             }
-                        });
+                            }
+                        );
                     }
                 });
             });
@@ -622,7 +647,10 @@ var server = function (_database, options) {
                     if (err) {
                         callback(err);
                     } else {
-                        options.authorization(getSessionID(socket.handshake), projectName, 'write', function (err, cando) {
+                        options.authorization(getSessionID(socket.handshake),
+                            projectName,
+                            'write',
+                            function (err, cando) {
                             if (!err && cando === true) {
                                 project.setBranchHash(branch, oldhash, newhash, function (err) {
                                     if (!err) {
@@ -650,7 +678,8 @@ var server = function (_database, options) {
                                         }
                                     }
                                     callback(err);
-                                });
+                                        }
+                                    );
                             } else {
                                 callback(err);
                             }
@@ -790,7 +819,7 @@ var server = function (_database, options) {
             var stop = function (worker) {
                 options.workerManager.result(_connectedWorkers[socketId][i], function (err) {
                     if (err) {
-                        logger.error("unable to stop connected worker [" + worker + "] of socket " + socketId);
+                        logger.error('unable to stop connected worker [' + worker + '] of socket ' + socketId);
                     }
                 });
             };

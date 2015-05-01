@@ -1,20 +1,27 @@
-/*
- * Copyright (C) 2012 Vanderbilt University, All rights reserved.
- *
- * Author: Miklos Maroti
+/*globals define*/
+/*jshint node: true, browser: true*/
+
+/**
+ * @author mmaroti / https://github.com/mmaroti
  */
 
-define([ "common/util/assert", "common/util/key", "common/core/future", "common/core/tasync", 'common/util/canon' ], function (ASSERT, GENKEY, FUTURE, TASYNC, CANON) {
-	"use strict";
+define([
+    'common/util/assert',
+    'common/util/key',
+    'common/core/future',
+    'common/core/tasync'
+], function (ASSERT, GENKEY, FUTURE, TASYNC) {
 
-	var HASH_REGEXP = new RegExp("#[0-9a-f]{40}");
+    'use strict';
+
+    var HASH_REGEXP = new RegExp('#[0-9a-f]{40}');
 	var isValidHash = function (key) {
-		return typeof key === "string" && key.length === 41 && HASH_REGEXP.test(key);
+        return typeof key === 'string' && key.length === 41 && HASH_REGEXP.test(key);
 	};
 
 	var MAX_RELID = Math.pow(2, 31);
 	var createRelid = function (data) {
-		ASSERT(data && typeof data === "object");
+        ASSERT(data && typeof data === 'object');
 
 		var relid;
 		do {
@@ -22,21 +29,21 @@ define([ "common/util/assert", "common/util/key", "common/core/future", "common/
 			// relid = relid.toString();
 		} while (data[relid] !== undefined);
 
-		return "" + relid;
+        return '' + relid;
 	};
 
 	// make relids deterministic
 	if (false) {
 		var nextRelid = 0;
 		createRelid = function (data) {
-			ASSERT(data && typeof data === "object");
+            ASSERT(data && typeof data === 'object');
 
 			var relid;
 			do {
 				relid = (nextRelid += -1);
 			} while (data[relid] !== undefined);
 
-			return "" + relid;
+            return '' + relid;
 		};
 	}
 
@@ -48,7 +55,7 @@ define([ "common/util/assert", "common/util/key", "common/core/future", "common/
         ASSERT(typeof options.logger !== 'undefined');
 
         var gmeConfig = options.globConf;
-        var logger = options.logger.fork('coretree');
+        //var logger = options.logger.fork('coretree');
 
 		var MAX_AGE = 3; // MAGIC NUMBER
 		var MAX_TICKS = 2000; // MAGIC NUMBER
@@ -67,13 +74,13 @@ define([ "common/util/assert", "common/util/key", "common/core/future", "common/
 		// ------- static methods
 
 		var getParent = function (node) {
-			ASSERT(typeof node.parent === "object");
+            ASSERT(typeof node.parent === 'object');
 
 			return node.parent;
 		};
 
 		var getRelid = function (node) {
-			ASSERT(node.relid === null || typeof node.relid === "string");
+            ASSERT(node.relid === null || typeof node.relid === 'string');
 
 			return node.relid;
 		};
@@ -99,22 +106,22 @@ define([ "common/util/assert", "common/util/key", "common/core/future", "common/
 				return null;
 			}
 
-			var path = "";
+            var path = '';
 			while (node.relid !== null && node !== base) {
-				path = "/" + node.relid + path;
+                path = '/' + node.relid + path;
 				node = node.parent;
 			}
 			return path;
 		};
 
 		var isValidPath = function (path) {
-			return typeof path === "string" && (path === "" || path.charAt(0) === "/");
+            return typeof path === 'string' && (path === '' || path.charAt(0) === '/');
 		};
 
 		var splitPath = function (path) {
 			ASSERT(isValidPath(path));
 
-			path = path.split("/");
+            path = path.split('/');
 			path.splice(0, 1);
 
 			return path;
@@ -123,7 +130,7 @@ define([ "common/util/assert", "common/util/key", "common/core/future", "common/
 		var buildPath = function (path) {
 			ASSERT(path instanceof Array);
 
-			return path.length === 0 ? "" : "/" + path.join("/");
+            return path.length === 0 ? '' : '/' + path.join('/');
 		};
 
 		var joinPaths = function (first, second) {
@@ -133,7 +140,7 @@ define([ "common/util/assert", "common/util/key", "common/core/future", "common/
 		};
 
         var getCommonPathPrefixData = function (first, second) {
-            ASSERT(typeof first === "string" && typeof second === "string");
+            ASSERT(typeof first === 'string' && typeof second === 'string');
 
             first = splitPath(first);
             second = splitPath(second);
@@ -191,7 +198,7 @@ define([ "common/util/assert", "common/util/key", "common/core/future", "common/
 		};
 
 		var __getChildNode = function (children, relid) {
-			ASSERT(children instanceof Array && typeof relid === "string");
+            ASSERT(children instanceof Array && typeof relid === 'string');
 
 			for (var i = 0; i < children.length; ++i) {
 				var child = children[i];
@@ -207,11 +214,11 @@ define([ "common/util/assert", "common/util/key", "common/core/future", "common/
 		};
 
 		var __getChildData = function (data, relid) {
-			ASSERT(typeof relid === "string");
+            ASSERT(typeof relid === 'string');
 
-			if (typeof data === "object" && data !== null) {
+            if (typeof data === 'object' && data !== null) {
 				data = data[relid];
-				return typeof data === "undefined" ? EMPTY_DATA : data;
+                return typeof data === 'undefined' ? EMPTY_DATA : data;
 			} else {
 				return null;
 			}
@@ -219,7 +226,7 @@ define([ "common/util/assert", "common/util/key", "common/core/future", "common/
 
 		var normalize = function (node) {
 			ASSERT(isValidNode(node));
-			// console.log("normalize start", printNode(getRoot(node)));
+            // console.log('normalize start', printNode(getRoot(node)));
 
 			var parent;
 
@@ -233,7 +240,7 @@ define([ "common/util/assert", "common/util/key", "common/core/future", "common/
 					if (temp !== null) {
 						// TODO: make the current node close to the returned one
 
-						// console.log("normalize end1",
+                        // console.log('normalize end1',
 						// printNode(getRoot(temp)));
 						return temp;
 					}
@@ -262,7 +269,7 @@ define([ "common/util/assert", "common/util/key", "common/core/future", "common/
 				} while (parent !== null && parent.age !== 0);
 			}
 
-			// console.log("normalize end2", printNode(getRoot(node)));
+            // console.log('normalize end2', printNode(getRoot(node)));
 			return node;
 		};
 
@@ -325,7 +332,7 @@ define([ "common/util/assert", "common/util/key", "common/core/future", "common/
 				},
 				rootid: ++rootCounter
 			};
-			root.data[ID_NAME] = "";
+            root.data[ID_NAME] = '';
 			roots.push(root);
 
 			__ageRoots();
@@ -333,7 +340,7 @@ define([ "common/util/assert", "common/util/key", "common/core/future", "common/
 		};
 
 		var getChild = function (node, relid) {
-			ASSERT(typeof relid === "string" && relid !== ID_NAME);
+            ASSERT(typeof relid === 'string' && relid !== ID_NAME);
 
 			node = normalize(node);
 
@@ -358,8 +365,8 @@ define([ "common/util/assert", "common/util/key", "common/core/future", "common/
 		var createChild = function (node) {
 			node = normalize(node);
 
-			if (typeof node.data !== "object" || node.data === null) {
-				throw new Error("invalid node data");
+            if (typeof node.data !== 'object' || node.data === null) {
+                throw new Error('invalid node data');
 			}
 
 			var relid = createRelid(node.data);
@@ -379,11 +386,11 @@ define([ "common/util/assert", "common/util/key", "common/core/future", "common/
 		};
 
 		var getDescendant = function (node, head, base) {
-			ASSERT(typeof base === "undefined" || isAncestor(head, base));
+            ASSERT(typeof base === 'undefined' || isAncestor(head, base));
 
 			node = normalize(node);
 			head = normalize(head);
-			base = typeof base === "undefined" ? null : normalize(base.parent);
+            base = typeof base === 'undefined' ? null : normalize(base.parent);
 
 			var path = [];
 			while (head.parent !== base) {
@@ -400,9 +407,9 @@ define([ "common/util/assert", "common/util/key", "common/core/future", "common/
 		};
 
 		var getDescendantByPath = function (node, path) {
-			ASSERT(path === "" || path.charAt(0) === "/");
+            ASSERT(path === '' || path.charAt(0) === '/');
 
-			path = path.split("/");
+            path = path.split('/');
 
 			for (var i = 1; i < path.length; ++i) {
 				node = getChild(node, path[i]);
@@ -414,7 +421,7 @@ define([ "common/util/assert", "common/util/key", "common/core/future", "common/
 		// ------- data manipulation
 
 		var __isMutableData = function (data) {
-			return typeof data === "object" && data !== null && data._mutable === true;
+            return typeof data === 'object' && data !== null && data._mutable === true;
 		};
 
 		var isMutable = function (node) {
@@ -424,12 +431,12 @@ define([ "common/util/assert", "common/util/key", "common/core/future", "common/
 
 		var isObject = function (node) {
 			node = normalize(node);
-			return typeof node.data === "object" && node.data !== null;
+            return typeof node.data === 'object' && node.data !== null;
 		};
 
 		var isEmpty = function (node) {
 			node = normalize(node);
-			if (typeof node.data !== "object" || node.data === null) {
+            if (typeof node.data !== 'object' || node.data === null) {
 				return false;
 			} else if (node.data === EMPTY_DATA) {
 				return true;
@@ -439,6 +446,7 @@ define([ "common/util/assert", "common/util/key", "common/core/future", "common/
 		};
 
 		var __isEmptyData = function (data) {
+            // TODO: better way to check if object has keys?
 			for (var keys in data) {
 				return false;
 			}
@@ -446,7 +454,8 @@ define([ "common/util/assert", "common/util/key", "common/core/future", "common/
 		};
 
 		var __areEquivalent = function (data1, data2) {
-            return data1 === data2 || (typeof data1 === "string" && data1 === __getChildData(data2, ID_NAME)) || (__isEmptyData(data1) && __isEmptyData(data2));
+            return data1 === data2 || (typeof data1 === 'string' && data1 === __getChildData(data2, ID_NAME)) ||
+                (__isEmptyData(data1) && __isEmptyData(data2));
 		};
 
 		var mutateCount = 0;
@@ -456,7 +465,7 @@ define([ "common/util/assert", "common/util/key", "common/core/future", "common/
 			node = normalize(node);
 			var data = node.data;
 
-			if (typeof data !== "object" || data === null) {
+            if (typeof data !== 'object' || data === null) {
 				return false;
 			} else if (data._mutable === true) {
 				return true;
@@ -487,8 +496,8 @@ define([ "common/util/assert", "common/util/key", "common/core/future", "common/
 
             copy._mutable = true;
 
-			if (typeof data[ID_NAME] === "string") {
-				copy[ID_NAME] = "";
+            if (typeof data[ID_NAME] === 'string') {
+                copy[ID_NAME] = '';
 			}
 
 			if (node.parent !== null) {
@@ -520,12 +529,12 @@ define([ "common/util/assert", "common/util/key", "common/core/future", "common/
 		};
 
 		var setData = function (node, data) {
-			ASSERT(data !== null && typeof data !== "undefined");
+            ASSERT(data !== null && typeof data !== 'undefined');
 
 			node = normalize(node);
 			if (node.parent !== null) {
 				if (!mutate(node.parent)) {
-					throw new Error("incorrect node data");
+                    throw new Error('incorrect node data');
 				}
 
 				node.parent.data[node.relid] = data;
@@ -540,7 +549,7 @@ define([ "common/util/assert", "common/util/key", "common/core/future", "common/
 
 			if (node.parent !== null) {
 				if (!mutate(node.parent)) {
-					throw new Error("incorrect node data");
+                    throw new Error('incorrect node data');
 				}
 
 				delete node.parent.data[node.relid];
@@ -557,7 +566,7 @@ define([ "common/util/assert", "common/util/key", "common/core/future", "common/
 		var copyData = function (node) {
 			node = normalize(node);
 
-			if (typeof node.data !== "object" || node.data === null) {
+            if (typeof node.data !== 'object' || node.data === null) {
 				return node.data;
 			}
 
@@ -566,12 +575,12 @@ define([ "common/util/assert", "common/util/key", "common/core/future", "common/
 		};
 
 		var getProperty = function (node, name) {
-			ASSERT(typeof name === "string" && name !== ID_NAME);
+            ASSERT(typeof name === 'string' && name !== ID_NAME);
 
 			var data;
 			node = normalize(node);
 
-			if (typeof node.data === "object" && node.data !== null) {
+            if (typeof node.data === 'object' && node.data !== null) {
 				data = node.data[name];
 			}
 
@@ -581,12 +590,13 @@ define([ "common/util/assert", "common/util/key", "common/core/future", "common/
 		};
 
 		var setProperty = function (node, name, data) {
-			ASSERT(typeof name === "string" && name !== ID_NAME);
-			ASSERT(!__isMutableData(data) /*&& data !== null*/ && data !== undefined); //TODO is the 'null' really can be a value of a property???
+            ASSERT(typeof name === 'string' && name !== ID_NAME);
+            ASSERT(!__isMutableData(data) /*&& data !== null*/ && data !== undefined);
+            //TODO is the 'null' really can be a value of a property???
 
 			node = normalize(node);
 			if (!mutate(node)) {
-				throw new Error("incorrect node data");
+                throw new Error('incorrect node data');
 			}
 
 			node.data[name] = data;
@@ -599,11 +609,11 @@ define([ "common/util/assert", "common/util/key", "common/core/future", "common/
 		};
 
 		var deleteProperty = function (node, name) {
-			ASSERT(typeof name === "string" && name !== ID_NAME);
+            ASSERT(typeof name === 'string' && name !== ID_NAME);
 
 			node = normalize(node);
 			if (!mutate(node)) {
-				throw new Error("incorrect node data");
+                throw new Error('incorrect node data');
 			}
 
 			delete node.data[name];
@@ -616,17 +626,17 @@ define([ "common/util/assert", "common/util/key", "common/core/future", "common/
 		};
 
 		var noUnderscore = function (relid) {
-			ASSERT(typeof relid === "string");
-			return relid.charAt(0) !== "_";
+            ASSERT(typeof relid === 'string');
+            return relid.charAt(0) !== '_';
 		};
 
 		var getKeys = function (node, predicate) {
-			ASSERT(typeof predicate === "undefined" || typeof predicate === "function");
+            ASSERT(typeof predicate === 'undefined' || typeof predicate === 'function');
 
 			node = normalize(node);
 			predicate = predicate || noUnderscore;
 
-			if (typeof node.data !== "object" || node.data === null) {
+            if (typeof node.data !== 'object' || node.data === null) {
 				return null;
 			}
 
@@ -647,7 +657,7 @@ define([ "common/util/assert", "common/util/key", "common/core/future", "common/
 		};
 
         var getRawKeys = function(object,predicate){
-            ASSERT(typeof predicate === "undefined" || typeof predicate === "function");
+            ASSERT(typeof predicate === 'undefined' || typeof predicate === 'function');
             predicate = predicate || noUnderscore;
 
             var keys = Object.keys(object);
@@ -664,7 +674,7 @@ define([ "common/util/assert", "common/util/key", "common/core/future", "common/
             }
 
             return keys;
-        }
+        };
 
 		// ------- persistence
 
@@ -675,36 +685,36 @@ define([ "common/util/assert", "common/util/key", "common/core/future", "common/
 
 			var hash;
 			node = normalize(node);
-			if (typeof node.data === "object" && node.data !== null) {
+            if (typeof node.data === 'object' && node.data !== null) {
 				hash = node.data[ID_NAME];
 			}
 
-			ASSERT(typeof hash === "string" || typeof hash === "undefined");
+            ASSERT(typeof hash === 'string' || typeof hash === 'undefined');
 			return hash;
 		};
 
 		var isHashed = function (node) {
 			node = normalize(node);
-			return typeof node.data === "object" && node.data !== null && typeof node.data[ID_NAME] === "string";
+            return typeof node.data === 'object' && node.data !== null && typeof node.data[ID_NAME] === 'string';
 		};
 
 		var setHashed = function (node, hashed, noMutate) {
-			ASSERT(typeof hashed === "boolean");
+            ASSERT(typeof hashed === 'boolean');
 
 			node = normalize(node);
             if(!noMutate){
                 if (!mutate(node)) {
-                    throw new Error("incorrect node data");
+                    throw new Error('incorrect node data');
                 }
             }
 
 			if (hashed) {
-				node.data[ID_NAME] = "";
+                node.data[ID_NAME] = '';
 			} else {
 				delete node.data[ID_NAME];
 			}
 
-			ASSERT(typeof node.children[ID_NAME] === "undefined");
+            ASSERT(typeof node.children[ID_NAME] === 'undefined');
 		};
 
 		var __saveData = function (data) {
@@ -721,7 +731,7 @@ define([ "common/util/assert", "common/util/key", "common/core/future", "common/
 						delete data[relid];
 					} else {
 						done = FUTURE.join(done, sub);
-						if (typeof child[ID_NAME] === "string") {
+                        if (typeof child[ID_NAME] === 'string') {
 							data[relid] = child[ID_NAME];
 						}
 					}
@@ -732,10 +742,10 @@ define([ "common/util/assert", "common/util/key", "common/core/future", "common/
 
 			if (done !== EMPTY_DATA) {
 				var hash = data[ID_NAME];
-				ASSERT(hash === "" || typeof hash === "undefined");
+                ASSERT(hash === '' || typeof hash === 'undefined');
 
-				if (hash === "") {
-					hash = "#" + GENKEY(data, gmeConfig);
+                if (hash === '') {
+                    hash = '#' + GENKEY(data, gmeConfig);
 					data[ID_NAME] = hash;
 
 					done = FUTURE.join(done, storage.insertObject(data));
@@ -787,7 +797,7 @@ define([ "common/util/assert", "common/util/key", "common/core/future", "common/
 				// times
 				return TASYNC.call(__loadChild2, node, storage.loadObject(node.data));
 			} else {
-				return typeof node.data === "object" && node.data !== null ? node : null;
+                return typeof node.data === 'object' && node.data !== null ? node : null;
 			}
 		};
 
@@ -801,10 +811,9 @@ define([ "common/util/assert", "common/util/key", "common/core/future", "common/
 				// times
 				return node.data;
 			} else {
-				return typeof node.data === "object" && node.data !== null ? getHash(node) : null;
+                return typeof node.data === 'object' && node.data !== null ? getHash(node) : null;
 			}
 		};
-
 
 
 		var __loadChild2 = function (node, newdata) {
@@ -819,7 +828,7 @@ define([ "common/util/assert", "common/util/key", "common/core/future", "common/
 			} else {
 				// TODO: if this bites you, use the Cache
                 /*if(node.data !== newdata){
-                    console.log("kecso",node);
+                 console.log('kecso',node);
                 }
 				ASSERT(node.data === newdata);*/
 			}
@@ -829,9 +838,9 @@ define([ "common/util/assert", "common/util/key", "common/core/future", "common/
 
 		var loadByPath = function (node, path) {
 			ASSERT(isValidNode(node));
-			ASSERT(path === "" || path.charAt(0) === "/");
+            ASSERT(path === '' || path.charAt(0) === '/');
 
-			path = path.split("/");
+            path = path.split('/');
 			return __loadDescendantByPath2(node, path, 1);
 		};
 
@@ -847,28 +856,28 @@ define([ "common/util/assert", "common/util/key", "common/core/future", "common/
 		// ------- valid -------
 
 		var printNode = function (node) {
-			var str = "{";
-			str += "age:" + node.age;
+            var str = '{';
+            str += 'age:' + node.age;
 
-			if (typeof node.relid === "string") {
-				str += ", relid: \"" + node.relid + "\"";
+            if (typeof node.relid === 'string') {
+                str += ', relid: "' + node.relid + '"';
 			}
 
-			str += ", children:";
+            str += ', children:';
 			if (node.children === null) {
-				str += "null";
+                str += 'null';
 			} else {
-				str += "[";
+                str += '[';
 				for (var i = 0; i < node.children.length; ++i) {
 					if (i !== 0) {
-						str += ", ";
+                        str += ', ';
 					}
 					str += printNode(node.children[i]);
 				}
-				str += "]";
+                str += ']';
 			}
 
-			str += "}";
+            str += '}';
 			return str;
 		};
 
@@ -893,19 +902,20 @@ define([ "common/util/assert", "common/util/key", "common/core/future", "common/
 
 		var isValidNode = function (node) {
 			try {
-				__test("object", typeof node === "object" && node !== null);
-				__test("object 2", node.hasOwnProperty("parent") && node.hasOwnProperty("relid"));
-				__test("parent", typeof node.parent === "object");
-				__test("relid", typeof node.relid === "string" || node.relid === null);
-				__test("parent 2", (node.parent === null) === (node.relid === null));
-				__test("age", node.age >= 0 && node.age <= MAX_AGE);
-				__test("children", node.children === null || node.children instanceof Array);
-				__test("children 2", (node.age === MAX_AGE) === (node.children === null));
-				__test("data", typeof node.data === "object" || typeof node.data === "string" || typeof node.data === "number");
+                __test('object', typeof node === 'object' && node !== null);
+                __test('object 2', node.hasOwnProperty('parent') && node.hasOwnProperty('relid'));
+                __test('parent', typeof node.parent === 'object');
+                __test('relid', typeof node.relid === 'string' || node.relid === null);
+                __test('parent 2', (node.parent === null) === (node.relid === null));
+                __test('age', node.age >= 0 && node.age <= MAX_AGE);
+                __test('children', node.children === null || node.children instanceof Array);
+                __test('children 2', (node.age === MAX_AGE) === (node.children === null));
+                __test('data', typeof node.data === 'object' || typeof node.data === 'string' ||
+                typeof node.data === 'number');
 
 				if (node.parent !== null) {
-					__test("age 2", node.age >= node.parent.age);
-					__test("mutable", !__isMutableData(node.data) || __isMutableData(node.parent.data));
+                    __test('age 2', node.age >= node.parent.age);
+                    __test('mutable', !__isMutableData(node.data) || __isMutableData(node.parent.data));
 				}
 
 				if (!checkValidTreeRunning) {
@@ -916,7 +926,7 @@ define([ "common/util/assert", "common/util/key", "common/core/future", "common/
 
 				return true;
 			} catch (error) {
-				console.log("Wrong node", error.stack);
+                console.log('Wrong node', error.stack);
 				return false;
 			}
 		};

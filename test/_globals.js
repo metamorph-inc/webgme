@@ -36,7 +36,7 @@ var WebGME = require('../webgme'),
                 colorize: true,
                 timestamp: true,
                 prettyPrint: true,
-                //handleExceptions: true, // ignored by default when you create the logger, see the logger.create function
+                //handleExceptions: true, // ignored by default when you create the logger, see the logger.create
                 //exitOnError: false,
                 depth: 2,
                 debugStdout: true
@@ -245,8 +245,29 @@ function exportProject(/*parameters, done*/) {
     //in case of mongoUri it should open the connection before and close after - or just simply use the exportCLI
 }
 
-function deleteProject(/*parameters, done*/) {
-    //TODO should work with storage object and mongoUri although probably we only need to delete if we use mongo
+function deleteProject(parameters, done) {
+    /*
+     parameters:
+     storage - a storage object, where the project should be created (if not given and mongoUri is not defined we
+     create a new local one and use it
+     projectName - the name of the project
+     */
+
+    if (!parameters.storage) {
+        return done(new Error('cannot delete project without database'));
+    }
+
+    if (!parameters.projectName) {
+        return done(new Error('no project name was given'));
+    }
+
+    parameters.storage.openDatabase(function (err) {
+        if (err) {
+            return done(err);
+        }
+
+        parameters.storage.deleteProject(parameters.projectName, done);
+    });
 }
 
 WebGME.addToRequireJsPaths(gmeConfig);

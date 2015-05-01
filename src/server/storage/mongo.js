@@ -1,10 +1,8 @@
 /*globals requireJS*/
 /*jshint node:true*/
 
-/*
- * Copyright (C) 2012-2013 Vanderbilt University, All rights reserved.
- *
- * Author: Miklos Maroti
+/**
+ * @author mmaroti / https://github.com/mmaroti
  */
 
 'use strict';
@@ -253,6 +251,7 @@ function Database(options) {
 
         function setInfo(info, callback) {
             ASSERT(typeof info === 'object' && typeof callback === 'function');
+            info['_id'] = PROJECT_INFO_ID;
             collection.update({_id: PROJECT_INFO_ID}, info, {upsert: true}, callback);
         }
 

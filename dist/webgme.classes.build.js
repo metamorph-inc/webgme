@@ -2093,43 +2093,43 @@ var requirejs, require, define;
 
 define("../node_modules/requirejs/require", function(){});
 
-/*
- * Copyright (C) 2012 Vanderbilt University, All rights reserved.
- * 
- * Author: Miklos Maroti
+/*globals define*/
+/*jshint node: true, browser: true*/
+
+/**
+ * @author mmaroti / https://github.com/mmaroti
  */
+
 
 define('common/util/assert',[],function () {
-	
+    
 
-	var assert = function (cond, msg) {
-		if( !cond ) {
-			var error = new Error(msg || "ASSERT failed");
+    var assert = function (cond, msg) {
+        if (!cond) {
+            var error = new Error(msg || 'ASSERT failed');
 
-			if (typeof TESTING === 'undefined') {
-			console.log("Throwing", error.stack);
-			console.log();
-			}
-			
-			throw error;
-		}
-	};
+            if (typeof TESTING === 'undefined') {
+                console.log('Throwing', error.stack);
+                console.log();
+            }
 
-	return assert;
+            throw error;
+        }
+    };
+
+    return assert;
 });
 
-/*
- * Copyright (C) 2012 Vanderbilt University, All rights reserved.
- *
- * Author: Robert Kereskenyi
- */
+/*globals define*/
+/*jshint node: true, browser: true*/
 
-
-/*
- * -------- EVENT DIASPATCHER -------
+/**
+ * @author rkereskenyi / https://github.com/rkereskenyi
  */
 
 define('common/EventDispatcher',[], function () {
+    
+
     var EventDispatcher = function () {
         this._eventList = {};
     };
@@ -2228,32 +2228,35 @@ define('common/EventDispatcher',[], function () {
 
     return EventDispatcher;
 });
-/*
- * Copyright (C) 2012 Vanderbilt University, All rights reserved.
- * 
- * Author: Tamas Kecskes
+/*globals define*/
+/*jshint node: true, browser: true, bitwise: false*/
+
+/**
+ * @author kecso / https://github.com/kecso
  */
 
 define('common/util/guid',[],function () {
-	
+    
 
-	var guid = function () {
-		var S4 = function () {
-                return (((1 + Math.random()) * 0x10000) | 0).toString(16).substring(1);
-            };
+    var guid = function () {
+        var S4 = function () {
+            return (((1 + Math.random()) * 0x10000) | 0).toString(16).substring(1);
+        };
 
-            //return GUID
-            return (S4() + S4() + "-" + S4() + "-" + S4() + "-" + S4() + "-" + S4() + S4() + S4());
-	};
+        //return GUID
+        return (S4() + S4() + '-' + S4() + '-' + S4() + '-' + S4() + '-' + S4() + S4() + S4());
+    };
 
-	return guid;
+    return guid;
 });
+//jshint ignore: start
 //SHA1 in Javascript 862 bytes, MIT License, http://antimatter15.com/
 define('common/util/sha1',[],function() {
 return function(l){function p(b,a){return b<<a|b>>>32-a}l+="";for(var n=Math,c=[1518500249,1859775393,2400959708,3395469782,1732584193,4023233417,2562383102,271733878,3285377520,4294967295],s=n.ceil(l.length/4)+2,q=n.ceil(s/16),g=[],a=0,h=[],j,d,e,f,m,i,b,k;a<q;a++){g[a]=[];for(k=0;k<16;k++){function o(b,c){return l.charCodeAt(a*64+k*4+b)<<c}g[a][k]=o(0,24)|o(1,16)|o(2,8)|o(3,0)}}i=l.length*8-8;a=q-1;g[a][14]=i/(c[9]+1);g[a][14]=n.floor(g[a][14]);g[a][15]=i&c[9];for(a=0;a<q;a++){for(b=0;b<16;b++)h[b]=g[a][b];for(b=16;b<80;b++)h[b]=p(h[b-3]^h[b-8]^h[b-14]^h[b-16],1);j=c[4];d=c[5];e=c[6];f=c[7];m=c[8];for(b=0;b<80;b++){var r=n.floor(b/20),t=p(j,5)+(r<1?d&e^~d&f:r==2?d&e^d&f^e&f:d^e^f)+m+c[r]+h[b]&c[9];m=f;f=e;e=p(d,30);d=j;j=t}c[4]+=j;c[5]+=d;c[6]+=e;c[7]+=f;c[8]+=m}i="";for(z=4;z<9;z++)for(a=7;a>=0;a--)i+=((c[z]&c[9])>>>a*4&15).toString(16);return i};
 });
 
-define('common/util/zssha1',[],function(){
+//jshint ignore: start
+define('common/util/zssha1.min',[],function(){
     function SHA1() {
 
         this.pp = function (b, a) {
@@ -2313,6 +2316,7 @@ define('common/util/zssha1',[],function(){
     return SHA1;
 });
 
+//jshint ignore: start
 /* 2012 David Chambers <dc@hashify.me>  */
 define('common/util/canon',[], function() {
     var CANON = {},
@@ -2434,22 +2438,27 @@ define('common/util/canon',[], function() {
 
 });
 
+/*globals define*/
+/*jshint node: true, browser: true*/
+
 /**
- * Created by tkecskes on 1/6/2015.
+ * @author kecso / https://github.com/kecso
  */
-/* globals define, WebGMEGlobal, GME */
+
 define('common/util/key',[
-    './sha1',
-    './zssha1',
-    './assert',
-    './canon'
+    'common/util/sha1',
+    'common/util/zssha1.min',
+    'common/util/assert',
+    'common/util/canon'
 ], function (SHA1, ZS, ASSERT, CANON) {
     
+
     var keyType = null,
         ZSSHA = new ZS();
 
     function rand160Bits() {
-        var result = '', i, code;
+        var result = '',
+            i, code;
         for (i = 0; i < 40; i++) {
             code = Math.floor(Math.random() * 16);
             code = code > 9 ? code + 87 : code + 48;
@@ -2472,1168 +2481,1180 @@ define('common/util/key',[
         }
     };
 });
-/*
- * Copyright (C) 2012 Vanderbilt University, All rights reserved.
- * 
- * Author: Miklos Maroti
+/*globals define*/
+/*jshint node: true, browser: true*/
+
+/**
+ * @author mmaroti / https://github.com/mmaroti
  */
 
 define('common/core/future',[], function () {
-	
-
-	var maxDepth = 5;
-
-	var ASSERT = function (cond) {
-		if (!cond) {
-			var error = new Error("future assertion failed");
-			console.log(error.stack);
-			throw error;
-		}
-	};
-
-	// ------- Future -------
-
-	var UNRESOLVED = {};
-
-	var Future = function () {
-		this.value = UNRESOLVED;
-		this.listener = null;
-		this.param = null;
-	};
-
-	var setValue = function (future, value) {
-		ASSERT(future instanceof Future && future.value === UNRESOLVED);
-
-		if (value instanceof Future) {
-			setListener(value, setValue, future);
-		} else {
-			future.value = value;
-
-			if (future.listener !== null) {
-				future.listener(future.param, value);
-			}
-		}
-	};
-
-	var setListener = function (future, listener, param) {
-		ASSERT(future instanceof Future && future.listener === null && future.value === UNRESOLVED);
-		ASSERT(typeof listener === "function" && listener.length === 2);
-
-		future.listener = listener;
-		future.param = param;
-
-		if (future.value !== UNRESOLVED) {
-			listener(param, future);
-		}
-	};
-
-	var isUnresolved = function (value) {
-		return (value instanceof Future) && value.value === UNRESOLVED;
-	};
-
-	var getValue = function (value) {
-		if (value instanceof Future) {
-			if (value.value instanceof Error) {
-				throw value.value;
-			} else if (value.value !== UNRESOLVED) {
-				return value.value;
-			}
-		}
-		return value;
-	};
-
-	// ------- adapt
-
-	var adapt = function (func) {
-		ASSERT(typeof func === "function");
-
-		return function adaptx () {
-			var args = arguments;
-			var future = new Future();
-
-			args[args.length++] = function adaptCallback (error, value) {
-				if (error) {
-					value = error instanceof Error ? error : new Error(error);
-				} else {
-					ASSERT(!(value instanceof Error));
-				}
-				setValue(future, value);
-			};
-
-			func.apply(this, args);
-
-			return getValue(future);
-		};
-	};
-
-	var unadapt = function (func) {
-		ASSERT(typeof func === "function");
-
-		if (func.length === 0) {
-			return function unadapt0 (callback) {
-				var value;
-				try {
-					value = func.call(this);
-				} catch (error) {
-					callback(error);
-					return;
-				}
-				then(value, callback);
-			};
-		} else if (func.length === 1) {
-			return function unadapt1 (arg, callback) {
-				var value;
-				try {
-					value = func.call(this, arg);
-				} catch (error) {
-					callback(error);
-					return;
-				}
-				then(value, callback);
-			};
-		} else {
-			return function unadaptx () {
-				var args = arguments;
-
-				var callback = args[--args.length];
-				ASSERT(typeof callback === "function");
-
-				var value;
-				try {
-					value = func.apply(this, args);
-				} catch (error) {
-					callback(error);
-					return;
-				}
-				then(value, callback);
-			};
-		}
-	};
-
-	var delay = function (delay, value) {
-		var future = new Future();
-		setTimeout(setValue, delay, future, value);
-		return future;
-	};
-
-	// ------- call -------
-
-	var Func = function (func, that, args, index) {
-		this.value = UNRESOLVED;
-		this.listener = null;
-		this.param = null;
-
-		this.func = func;
-		this.that = that;
-		this.args = args;
-		this.index = index;
-
-		setListener(args[index], setArgument, this);
-	};
-
-	Func.prototype = Future.prototype;
-
-	var setArgument = function (future, value) {
-		if (!(value instanceof Error)) {
-			try {
-				var args = future.args;
-				args[future.index] = value;
-
-				while (++future.index < args.length) {
-					value = args[future.index];
-					if (isUnresolved(value)) {
-						setListener(value, setArgument, future);
-						return;
-					} else {
-						args[future.index] = getValue(value);
-					}
-				}
-
-				value = future.func.apply(future.that, args);
-				ASSERT(!(value instanceof Error));
-			} catch (error) {
-				value = error instanceof Error ? error : new Error(error);
-			}
-		}
-
-		setValue(future, value);
-	};
-
-	var call = function () {
-		var args = arguments;
-
-		var func = args[--args.length];
-		ASSERT(typeof func === "function");
-
-		for ( var i = 0; i < args.length; ++i) {
-			if (isUnresolved(args[i])) {
-				return new Func(func, this, args, i);
-			} else {
-				args[i] = getValue(args[i]);
-			}
-		}
-		return func.apply(this, args);
-	};
-
-	// ------- join -------
-
-	var Join = function (first, second) {
-		this.value = UNRESOLVED;
-		this.listener = null;
-		this.param = null;
-
-		this.missing = 2;
-		setListener(first, setJoinand, this);
-		setListener(second, setJoinand, this);
-	};
-
-	Join.prototype = Object.create(Future.prototype);
-
-	var setJoinand = function (future, value) {
-		if (value instanceof Error) {
-			setValue(future, value);
-		} else if (--future.missing <= 0) {
-			setValue(future, undefined);
-		}
-	};
-
-	var join = function (first, second) {
-		if (getValue(first) instanceof Future) {
-			if (getValue(second) instanceof Future) {
-				if (first instanceof Join) {
-					first.missing += 1;
-					setListener(second, setJoinand, first);
-					return first;
-				} else if (second instanceof Join) {
-					second.missing += 1;
-					setListener(first, setJoinand, second);
-					return second;
-				} else {
-					return new Join(first, second);
-				}
-			} else {
-				return first;
-			}
-		} else {
-			return getValue(second);
-		}
-	};
-
-	// ------- hide -------
-
-	var Hide = function (future, handler) {
-		this.value = UNRESOLVED;
-		this.listener = null;
-		this.param = null;
-
-		this.handler = handler;
-		setListener(future, hideValue, this);
-	};
-
-	Hide.prototype = Future.prototype;
-
-	var hideValue = function (future, value) {
-		try {
-			if (value instanceof Error) {
-				value = future.handler(value);
-			}
-		} catch (error) {
-			value = error instanceof Error ? error : new Error(error);
-		}
-
-		setValue(future, value);
-	};
-
-	var printStack = function (error) {
-		console.log(error.stack);
-	};
-
-	var hide = function (future, handler) {
-		if (typeof handler !== "function") {
-			handler = printStack;
-		}
-
-		if (isUnresolved(future)) {
-			return new Hide(future, handler);
-		} else if (future.value instanceof Error) {
-			return handler(future.value);
-		} else {
-			return getValue(future);
-		}
-	};
-
-	// ------- array -------
-
-	var Arr = function (array, index) {
-		this.value = UNRESOLVED;
-		this.listener = null;
-		this.param = null;
-
-		this.array = array;
-		this.index = index;
-
-		setListener(array[index], setMember, this);
-	};
-
-	Arr.prototype = Future.prototype;
-
-	var setMember = function (future, value) {
-		if (!(value instanceof Error)) {
-			try {
-				var array = future.array;
-				array[future.index] = value;
-
-				while (++future.index < array.length) {
-					value = array[future.index];
-					if (isUnresolved(value)) {
-						setListener(value, setMember, future);
-						return;
-					} else {
-						array[future.index] = getValue(value);
-					}
-				}
-
-				value = array;
-			} catch (error) {
-				value = error instanceof Error ? error : new Error(error);
-			}
-		}
-
-		setValue(future, value);
-	};
-
-	var array = function (array) {
-		ASSERT(array instanceof Array);
-
-		for ( var i = 0; i < array.length; ++i) {
-			if (isUnresolved(array[i])) {
-				return new Arr(array, i);
-			}
-		}
-
-		return array;
-	};
-
-	// ------- then -------
-
-	var thenHandler = function (callback, value) {
-		if (value instanceof Error) {
-			callback(value);
-		} else {
-			callback(null, value);
-		}
-	};
-
-	var calldepth = 0;
-	var then = function (future, callback) {
-		var error = null, value;
-
-		if (!(future instanceof Future)) {
-			value = future;
-		} else if (future.value === UNRESOLVED) {
-			setListener(future, thenHandler, callback);
-			return;
-		} else if (future.value instanceof Error) {
-			error = future.value;
-		} else {
-			value = future.value;
-		}
-
-		if (calldepth < maxDepth) {
-			++calldepth;
-			try {
-				callback(error, value);
-			} catch (err) {
-				console.log("unhandled error from callback", err);
-			}
-			--calldepth;
-		} else {
-			setTimeout(callback, 0, error, value);
-		}
-	};
-
-	// -------
-
-	return {
-		adapt: adapt,
-		unadapt: unadapt,
-		delay: delay,
-		call: call,
-		array: array,
-		join: join,
-		hide: hide,
-		then: then
-	};
+    
+
+    var maxDepth = 5;
+
+    var ASSERT = function (cond) {
+        if (!cond) {
+            var error = new Error('future assertion failed');
+            console.log(error.stack);
+            throw error;
+        }
+    };
+
+    // ------- Future -------
+
+    var UNRESOLVED = {};
+
+    var Future = function () {
+        this.value = UNRESOLVED;
+        this.listener = null;
+        this.param = null;
+    };
+
+    var setValue = function (future, value) {
+        ASSERT(future instanceof Future && future.value === UNRESOLVED);
+
+        if (value instanceof Future) {
+            setListener(value, setValue, future);
+        } else {
+            future.value = value;
+
+            if (future.listener !== null) {
+                future.listener(future.param, value);
+            }
+        }
+    };
+
+    var setListener = function (future, listener, param) {
+        ASSERT(future instanceof Future && future.listener === null && future.value === UNRESOLVED);
+        ASSERT(typeof listener === 'function' && listener.length === 2);
+
+        future.listener = listener;
+        future.param = param;
+
+        if (future.value !== UNRESOLVED) {
+            listener(param, future);
+        }
+    };
+
+    var isUnresolved = function (value) {
+        return (value instanceof Future) && value.value === UNRESOLVED;
+    };
+
+    var getValue = function (value) {
+        if (value instanceof Future) {
+            if (value.value instanceof Error) {
+                throw value.value;
+            } else if (value.value !== UNRESOLVED) {
+                return value.value;
+            }
+        }
+        return value;
+    };
+
+    // ------- adapt
+
+    var adapt = function (func) {
+        ASSERT(typeof func === 'function');
+
+        return function adaptx() {
+            var args = arguments;
+            var future = new Future();
+
+            args[args.length++] = function adaptCallback(error, value) {
+                if (error) {
+                    value = error instanceof Error ? error : new Error(error);
+                } else {
+                    ASSERT(!(value instanceof Error));
+                }
+                setValue(future, value);
+            };
+
+            func.apply(this, args);
+
+            return getValue(future);
+        };
+    };
+
+    var unadapt = function (func) {
+        ASSERT(typeof func === 'function');
+
+        if (func.length === 0) {
+            return function unadapt0(callback) {
+                var value;
+                try {
+                    value = func.call(this);
+                } catch (error) {
+                    callback(error);
+                    return;
+                }
+                then(value, callback);
+            };
+        } else if (func.length === 1) {
+            return function unadapt1(arg, callback) {
+                var value;
+                try {
+                    value = func.call(this, arg);
+                } catch (error) {
+                    callback(error);
+                    return;
+                }
+                then(value, callback);
+            };
+        } else {
+            return function unadaptx() {
+                var args = arguments;
+
+                var callback = args[--args.length];
+                ASSERT(typeof callback === 'function');
+
+                var value;
+                try {
+                    value = func.apply(this, args);
+                } catch (error) {
+                    callback(error);
+                    return;
+                }
+                then(value, callback);
+            };
+        }
+    };
+
+    var delay = function (delay, value) {
+        var future = new Future();
+        setTimeout(setValue, delay, future, value);
+        return future;
+    };
+
+    // ------- call -------
+
+    var Func = function (func, that, args, index) {
+        this.value = UNRESOLVED;
+        this.listener = null;
+        this.param = null;
+
+        this.func = func;
+        this.that = that;
+        this.args = args;
+        this.index = index;
+
+        setListener(args[index], setArgument, this);
+    };
+
+    Func.prototype = Future.prototype;
+
+    var setArgument = function (future, value) {
+        if (!(value instanceof Error)) {
+            try {
+                var args = future.args;
+                args[future.index] = value;
+
+                while (++future.index < args.length) {
+                    value = args[future.index];
+                    if (isUnresolved(value)) {
+                        setListener(value, setArgument, future);
+                        return;
+                    } else {
+                        args[future.index] = getValue(value);
+                    }
+                }
+
+                value = future.func.apply(future.that, args);
+                ASSERT(!(value instanceof Error));
+            } catch (error) {
+                value = error instanceof Error ? error : new Error(error);
+            }
+        }
+
+        setValue(future, value);
+    };
+
+    var call = function () {
+        var args = arguments;
+
+        var func = args[--args.length];
+        ASSERT(typeof func === 'function');
+
+        for (var i = 0; i < args.length; ++i) {
+            if (isUnresolved(args[i])) {
+                return new Func(func, this, args, i);
+            } else {
+                args[i] = getValue(args[i]);
+            }
+        }
+        return func.apply(this, args);
+    };
+
+    // ------- join -------
+
+    var Join = function (first, second) {
+        this.value = UNRESOLVED;
+        this.listener = null;
+        this.param = null;
+
+        this.missing = 2;
+        setListener(first, setJoinand, this);
+        setListener(second, setJoinand, this);
+    };
+
+    Join.prototype = Object.create(Future.prototype);
+
+    var setJoinand = function (future, value) {
+        if (value instanceof Error) {
+            setValue(future, value);
+        } else if (--future.missing <= 0) {
+            setValue(future, undefined);
+        }
+    };
+
+    var join = function (first, second) {
+        if (getValue(first) instanceof Future) {
+            if (getValue(second) instanceof Future) {
+                if (first instanceof Join) {
+                    first.missing += 1;
+                    setListener(second, setJoinand, first);
+                    return first;
+                } else if (second instanceof Join) {
+                    second.missing += 1;
+                    setListener(first, setJoinand, second);
+                    return second;
+                } else {
+                    return new Join(first, second);
+                }
+            } else {
+                return first;
+            }
+        } else {
+            return getValue(second);
+        }
+    };
+
+    // ------- hide -------
+
+    var Hide = function (future, handler) {
+        this.value = UNRESOLVED;
+        this.listener = null;
+        this.param = null;
+
+        this.handler = handler;
+        setListener(future, hideValue, this);
+    };
+
+    Hide.prototype = Future.prototype;
+
+    var hideValue = function (future, value) {
+        try {
+            if (value instanceof Error) {
+                value = future.handler(value);
+            }
+        } catch (error) {
+            value = error instanceof Error ? error : new Error(error);
+        }
+
+        setValue(future, value);
+    };
+
+    var printStack = function (error) {
+        console.log(error.stack);
+    };
+
+    var hide = function (future, handler) {
+        if (typeof handler !== 'function') {
+            handler = printStack;
+        }
+
+        if (isUnresolved(future)) {
+            return new Hide(future, handler);
+        } else if (future.value instanceof Error) {
+            return handler(future.value);
+        } else {
+            return getValue(future);
+        }
+    };
+
+    // ------- array -------
+
+    var Arr = function (array, index) {
+        this.value = UNRESOLVED;
+        this.listener = null;
+        this.param = null;
+
+        this.array = array;
+        this.index = index;
+
+        setListener(array[index], setMember, this);
+    };
+
+    Arr.prototype = Future.prototype;
+
+    var setMember = function (future, value) {
+        if (!(value instanceof Error)) {
+            try {
+                var array = future.array;
+                array[future.index] = value;
+
+                while (++future.index < array.length) {
+                    value = array[future.index];
+                    if (isUnresolved(value)) {
+                        setListener(value, setMember, future);
+                        return;
+                    } else {
+                        array[future.index] = getValue(value);
+                    }
+                }
+
+                value = array;
+            } catch (error) {
+                value = error instanceof Error ? error : new Error(error);
+            }
+        }
+
+        setValue(future, value);
+    };
+
+    var array = function (array) {
+        ASSERT(array instanceof Array);
+
+        for (var i = 0; i < array.length; ++i) {
+            if (isUnresolved(array[i])) {
+                return new Arr(array, i);
+            }
+        }
+
+        return array;
+    };
+
+    // ------- then -------
+
+    var thenHandler = function (callback, value) {
+        if (value instanceof Error) {
+            callback(value);
+        } else {
+            callback(null, value);
+        }
+    };
+
+    var calldepth = 0;
+    var then = function (future, callback) {
+        var error = null,
+            value;
+
+        if (!(future instanceof Future)) {
+            value = future;
+        } else if (future.value === UNRESOLVED) {
+            setListener(future, thenHandler, callback);
+            return;
+        } else if (future.value instanceof Error) {
+            error = future.value;
+        } else {
+            value = future.value;
+        }
+
+        if (calldepth < maxDepth) {
+            ++calldepth;
+            try {
+                callback(error, value);
+            } catch (err) {
+                console.log('unhandled error from callback', err);
+            }
+            --calldepth;
+        } else {
+            setTimeout(callback, 0, error, value);
+        }
+    };
+
+    // -------
+
+    return {
+        adapt: adapt,
+        unadapt: unadapt,
+        delay: delay,
+        call: call,
+        array: array,
+        join: join,
+        hide: hide,
+        then: then
+    };
 });
 
+/*globals define*/
+/*jshint node: true, browser: true, camelcase: false*/
+
 /**
- * The MIT License (MIT)
- * Copyright (c) 2013, Miklos Maroti
+ * @author mmaroti / https://github.com/mmaroti
  */
 
 (function () {
-	
+    
 
-	// ------- assert -------
+    // ------- assert -------
 
-	var TASYNC_TRACE_ENABLE = true;
+    var TASYNC_TRACE_ENABLE = true;
 
-	function setTrace (value) {
-		TASYNC_TRACE_ENABLE = value;
-	}
+    function setTrace(value) {
+        TASYNC_TRACE_ENABLE = value;
+    }
 
-	function assert (cond) {
-		if (!cond) {
-			throw new Error("tasync internal error");
-		}
-	}
+    function assert(cond) {
+        if (!cond) {
+            throw new Error('tasync internal error');
+        }
+    }
 
-	// ------- Future -------
-
-	var STATE_LISTEN = 0;
-	var STATE_REJECTED = 1;
-	var STATE_RESOLVED = 2;
-
-	var Future = function () {
-		this.state = STATE_LISTEN;
-		this.value = [];
-	};
-
-	Future.prototype.register = function (target) {
-		assert(this.state === STATE_LISTEN);
-		assert(typeof target === "object" && target !== null);
-
-		this.value.push(target);
-	};
-
-	Future.prototype.resolve = function (value) {
-		assert(this.state === STATE_LISTEN && !(value instanceof Future));
-
-		var listeners = this.value;
-
-		this.state = STATE_RESOLVED;
-		this.value = value;
-
-		var i;
-		for (i = 0; i < listeners.length; ++i) {
-			listeners[i].onResolved(value);
-		}
-	};
-
-	Future.prototype.reject = function (error) {
-		assert(this.state === STATE_LISTEN && error instanceof Error);
-
-		var listeners = this.value;
-
-		this.state = STATE_REJECTED;
-		this.value = error;
-
-		var i;
-		for (i = 0; i < listeners.length; ++i) {
-			listeners[i].onRejected(error);
-		}
-	};
-
-	// ------- Delay -------
-
-	function delay (timeout, value) {
-		if (timeout < 0) {
-			return value;
-		}
-
-		var future = new Future();
-		setTimeout(function () {
-			future.resolve(value);
-		}, timeout);
-		return future;
-	}
-
-	// ------- Lift -------
-
-	var FutureLift = function (array, index) {
-		Future.call(this);
-
-		this.array = array;
-		this.index = index;
-	};
-
-	FutureLift.prototype = Object.create(Future.prototype);
-
-	FutureLift.prototype.onResolved = function (value) {
-		assert(this.state === STATE_LISTEN);
-
-		var array = this.array;
-		array[this.index] = value;
-
-		while (++this.index < array.length) {
-			value = array[this.index];
-			if (value instanceof Future) {
-				if (value.state === STATE_RESOLVED) {
-					array[this.index] = value.value;
-				} else if (value.state === STATE_LISTEN) {
-					value.register(this);
-					return;
-				} else {
-					assert(value.state === STATE_REJECTED);
-					this.reject(value.value);
-					return;
-				}
-			}
-		}
-
-		this.array = null;
-		this.resolve(array);
-	};
-
-	FutureLift.prototype.onRejected = function (error) {
-		this.array = null;
-		this.reject(error);
-	};
-
-	var lift = function (array) {
-		if (!(array instanceof Array)) {
-			throw new Error("array argument is expected");
-		}
-
-		var index;
-		for (index = 0; index < array.length; ++index) {
-			var value = array[index];
-			if (value instanceof Future) {
-				if (value.state === STATE_RESOLVED) {
-					array[index] = value.value;
-				} else if (value.state === STATE_LISTEN) {
-					var future = new FutureLift(array, index);
-					value.register(future);
-					return future;
-				} else {
-					assert(value.state === STATE_REJECTED);
-					return value;
-				}
-			}
-		}
-
-		return array;
-	};
-
-	// ------- Apply -------
-
-	var ROOT = {
-		subframes: 0
-	};
-
-	var FRAME = ROOT;
-
-	var FutureApply = function tasync_trace_end (func, that, args, index) {
-		Future.call(this);
-
-		this.caller = FRAME;
-		this.position = ++FRAME.subframes;
-		this.subframes = 0;
-
-		if (TASYNC_TRACE_ENABLE) {
-			this.trace = new Error();
-		}
-
-		this.func = func;
-		this.that = that;
-		this.args = args;
-		this.index = index;
-	};
-
-	FutureApply.prototype = Object.create(Future.prototype);
-
-	FutureApply.prototype.getPath = function () {
-		var future = this.caller, path = [ this.position ];
-
-		while (future !== ROOT) {
-			path.push(future.position);
-			future = future.caller;
-		}
-
-		return path;
-	};
-
-	function getSlice (trace) {
-		assert(typeof trace === "string");
-
-		var end = trace.indexOf("tasync_trace_start");
-		if (end >= 0) {
-			end = trace.lastIndexOf("\n", end) + 1;
-		} else {
-			if (trace.charAt(trace.length - 1) !== "\n") {
-				// trace += "\n";
-			}
-			end = undefined;
-		}
-
-		var start = trace.indexOf("tasync_trace_end");
-		if (start >= 0) {
-			start = trace.indexOf("\n", start) + 1;
-			if (start >= 0) {
-				start = trace.indexOf("\n", start) + 1;
-			}
-		} else {
-			start = 0;
-		}
-
-		return trace.substring(start, end);
-	}
-
-	function createError (error, future) {
-		if (!(error instanceof Error)) {
-			error = new Error(error);
-		}
-
-		if (TASYNC_TRACE_ENABLE) {
-			error.trace = getSlice(error.stack);
-			do {
-				error.trace += "*** callback ***\n";
-				error.trace += getSlice(future.trace.stack);
-				future = future.caller;
-			} while (future !== ROOT);
-		}
-
-		return error;
-	}
-
-	FutureApply.prototype.onRejected = function (error) {
-		this.args = null;
-		this.reject(error);
-	};
-
-	FutureApply.prototype.onResolved = function tasync_trace_start (value) {
-		assert(this.state === STATE_LISTEN);
-
-		var args = this.args;
-		args[this.index] = value;
-
-		while (--this.index >= 0) {
-			value = args[this.index];
-			if (value instanceof Future) {
-				if (value.state === STATE_RESOLVED) {
-					args[this.index] = value.value;
-				} else if (value.state === STATE_LISTEN) {
-					value.register(this);
-					return;
-				} else {
-					assert(value.state === STATE_REJECTED);
-					this.reject(value.value);
-					return;
-				}
-			}
-		}
-
-		assert(FRAME === ROOT);
-		FRAME = this;
-
-		this.args = null;
-		try {
-			value = this.func.apply(this.that, args);
-		} catch (error) {
-			FRAME = ROOT;
-
-			this.reject(createError(error, this));
-			return;
-		}
-
-		FRAME = ROOT;
-
-		if (value instanceof Future) {
-			assert(value.state === STATE_LISTEN);
-
-			this.onResolved = this.resolve;
-			value.register(this);
-		} else {
-			this.resolve(value);
-		}
-	};
-
-	var apply = function (func, args, that) {
-		if (typeof func !== "function") {
-			throw new Error("function argument is expected");
-		} else if (!(args instanceof Array)) {
-			throw new Error("array argument is expected");
-		}
-
-		var index = args.length;
-		while (--index >= 0) {
-			var value = args[index];
-			if (value instanceof Future) {
-				if (value.state === STATE_LISTEN) {
-					var future = new FutureApply(func, that, args, index);
-					value.register(future);
-					return future;
-				} else if (value.state === STATE_RESOLVED) {
-					args[index] = value.value;
-				} else {
-					assert(value.state === STATE_REJECTED);
-					return value;
-				}
-			}
-		}
-
-		return func.apply(that, args);
-	};
-
-	// ------- Call -------
-
-	var FutureCall = function tasync_trace_end (args, index) {
-		Future.call(this);
-
-		this.caller = FRAME;
-		this.position = ++FRAME.subframes;
-		this.subframes = 0;
-
-		if (TASYNC_TRACE_ENABLE) {
-			this.trace = new Error();
-		}
-
-		this.args = args;
-		this.index = index;
-	};
-
-	FutureCall.prototype = Object.create(Future.prototype);
-
-	FutureCall.prototype.getPath = FutureApply.prototype.getPath;
-	FutureCall.prototype.onRejected = FutureApply.prototype.onRejected;
-
-	var FUNCTION_CALL = Function.call;
-
-	FutureCall.prototype.onResolved = function tasync_trace_start (value) {
-		assert(this.state === STATE_LISTEN);
-
-		var args = this.args;
-		args[this.index] = value;
-
-		while (--this.index >= 0) {
-			value = args[this.index];
-			if (value instanceof Future) {
-				if (value.state === STATE_RESOLVED) {
-					args[this.index] = value.value;
-				} else if (value.state === STATE_LISTEN) {
-					value.register(this);
-					return;
-				} else {
-					assert(value.state === STATE_REJECTED);
-					this.reject(value.value);
-					return;
-				}
-			}
-		}
-
-		assert(FRAME === ROOT);
-		FRAME = this;
-
-		this.args = null;
-		try {
-			var func = args[0];
-			args[0] = null;
-			value = FUNCTION_CALL.apply(func, args);
-		} catch (error) {
-			FRAME = ROOT;
-
-			this.reject(createError(error, this));
-			return;
-		}
-
-		FRAME = ROOT;
-
-		if (value instanceof Future) {
-			assert(value.state === STATE_LISTEN);
-
-			this.onResolved = this.resolve;
-			value.register(this);
-		} else {
-			this.resolve(value);
-		}
-	};
-
-	var call = function () {
-		var index = arguments.length;
-		while (--index >= 0) {
-			var value = arguments[index];
-			if (value instanceof Future) {
-				if (value.state === STATE_LISTEN) {
-					var future = new FutureCall(arguments, index);
-					value.register(future);
-					return future;
-				} else if (value.state === STATE_RESOLVED) {
-					arguments[index] = value.value;
-				} else {
-					assert(value.state === STATE_REJECTED);
-					return value;
-				}
-			}
-		}
-
-		var func = arguments[0];
-		return FUNCTION_CALL.apply(func, arguments);
-	};
-
-	// ------- TryCatch -------
-
-	function FutureTryCatch (handler) {
-		Future.call(this);
-
-		this.handler = handler;
-	}
-
-	FutureTryCatch.prototype = Object.create(Future.prototype);
-
-	FutureTryCatch.prototype.onRejected = function (error) {
-		try {
-			var value = this.handler(error);
-
-			if (value instanceof Future) {
-				this.onRejected = Future.prorotype.reject;
-				value.register(this);
-			} else {
-				this.resolve(value);
-			}
-		} catch (err) {
-			this.reject(err);
-		}
-	};
-
-	FutureTryCatch.prototype.onResolved = Future.prototype.resolve;
-
-	function trycatch (func, handler) {
-		if (typeof func !== "function" || typeof handler !== "function") {
-			throw new Error("function arguments are expected");
-		}
-
-		try {
-			var value = func();
-
-			if (value instanceof Future) {
-				var future = new FutureTryCatch(handler);
-				value.register(future);
-
-				return future;
-			} else {
-				return value;
-			}
-		} catch (error) {
-			return handler(error);
-		}
-	}
-
-	// ------- Wrap -------
-
-	function wrap (func) {
-		if (typeof func !== "function") {
-			throw new Error("function argument is expected");
-		}
-
-		if (typeof func.tasync_wraped === "undefined") {
-			func.tasync_wraped = function () {
-				var args = arguments;
-				var future = new Future();
-
-				args[args.length++] = function (error, value) {
-					if (error) {
-						future.reject(error instanceof Error ? error : new Error(error));
-					} else {
-						future.resolve(value);
-					}
-				};
-
-				func.apply(this, args);
-
-				if (future.state === STATE_LISTEN) {
-					return future;
-				} else if (future.state === STATE_RESOLVED) {
-					return future.value;
-				} else {
-					assert(future.state === STATE_REJECTED);
-					throw future.value;
-				}
-			};
-
-			func.tasync_wraped.tasync_unwraped = func;
-		}
-
-		return func.tasync_wraped;
-	}
-
-	// ------- Unwrap -------
-
-	function UnwrapListener (callback) {
-		this.callback = callback;
-	}
-
-	UnwrapListener.prototype.onRejected = function (error) {
-		this.callback(error);
-	};
-
-	UnwrapListener.prototype.onResolved = function (value) {
-		this.callback(null, value);
-	};
-
-	function unwrap (func) {
-		if (typeof func !== "function") {
-			throw new Error("function argument is expected");
-		}
-
-		if (typeof func.tasync_unwraped === "undefined") {
-			func.tasync_unwraped = function () {
-				var args = arguments;
-
-				var callback = args[--args.length];
-				assert(typeof callback === "function");
-
-				var value;
-				try {
-					value = func.apply(this, args);
-				} catch (error) {
-					callback(error);
-					return;
-				}
-
-				if (value instanceof Future) {
-					assert(value.state === STATE_LISTEN);
-
-					var listener = new UnwrapListener(callback);
-					value.register(listener);
-				} else {
-					callback(null, value);
-				}
-			};
-
-			func.tasync_unwraped.tasync_wraped = func;
-		}
-
-		return func.tasync_unwraped;
-	}
-
-	// ------- Throttle -------
-
-	function FutureThrottle (func, that, args) {
-		Future.call(this);
-
-		this.func = func;
-		this.that = that;
-		this.args = args;
-
-		this.caller = FRAME;
-		this.position = ++FRAME.subframes;
-
-		this.path = this.getPath();
-	}
-
-	FutureThrottle.prototype = Object.create(Future.prototype);
-
-	FutureThrottle.prototype.execute = function () {
-		var value;
-		try {
-			assert(FRAME === ROOT);
-			FRAME = this;
-
-			value = this.func.apply(this.that, this.args);
-
-			FRAME = ROOT;
-		} catch (error) {
-			FRAME = ROOT;
-
-			this.reject(error);
-			return;
-		}
-
-		if (value instanceof Future) {
-			assert(value.state === STATE_LISTEN);
-			value.register(this);
-		} else {
-			this.resolve(value);
-		}
-	};
-
-	FutureThrottle.prototype.getPath = FutureApply.prototype.getPath;
-	FutureThrottle.prototype.onResolved = Future.prototype.resolve;
-	FutureThrottle.prototype.onRejected = Future.prototype.reject;
-
-	FutureThrottle.prototype.compare = function (second) {
-		var first = this.path;
-		second = second.path;
-
-		var i, limit = first.length < second.length ? first.length : second.length;
-		for (i = 0; i < limit; ++i) {
-			if (first[i] !== second[i]) {
-				return first[i] - second[i];
-			}
-		}
-
-		return first.length - second.length;
-	};
-
-	function ThrottleListener (limit) {
-		this.running = 0;
-		this.limit = limit;
-		this.queue = [];
-	}
-
-	function priorityQueueInsert (queue, elem) {
-		var low = 0;
-		var high = queue.length;
-
-		while (low < high) {
-			var mid = Math.floor((low + high) / 2);
-			assert(low <= mid && mid < high);
-
-			if (elem.compare(queue[mid]) < 0) {
-				low = mid + 1;
-			} else {
-				high = mid;
-			}
-		}
-
-		queue.splice(low, 0, elem);
-	}
-
-	ThrottleListener.prototype.execute = function (func, that, args) {
-		if (this.running < this.limit) {
-			var value = func.apply(that, args);
-
-			if (value instanceof Future) {
-				assert(value.state === STATE_LISTEN);
-
-				++this.running;
-				value.register(this);
-			}
-
-			return value;
-		} else {
-			var future = new FutureThrottle(func, that, args);
-			priorityQueueInsert(this.queue, future);
-
-			return future;
-		}
-	};
-
-	ThrottleListener.prototype.onResolved = function () {
-		if (this.queue.length > 0) {
-			var future = this.queue.pop();
-			future.register(this);
-
-			future.execute();
-		} else {
-			--this.running;
-		}
-	};
-
-	ThrottleListener.prototype.onRejected = ThrottleListener.prototype.onResolved;
-
-	// TODO: prevent recursion, otheriwise throttle will not work
-	function throttle (func, limit) {
-		if (typeof func !== "function") {
-			throw new Error("function argument is expected");
-		} else if (typeof limit !== "number") {
-			throw new Error("number argument is expected");
-		}
-
-		var listener = new ThrottleListener(limit);
-
-		return function () {
-			return listener.execute(func, this, arguments);
-		};
-	}
-
-	// ------- Join -------
-
-	function FutureJoin (first) {
-		Future.call(this);
-
-		this.first = first;
-		this.missing = first instanceof Future && first.state === STATE_LISTEN ? 1 : 0;
-	}
-
-	FutureJoin.prototype = Object.create(Future.prototype);
-
-	FutureJoin.prototype.onResolved = function (value) {
-		if (--this.missing === 0) {
-			assert(this.state !== STATE_RESOLVED);
-
-			if (this.state === STATE_LISTEN) {
-				if (this.first instanceof Future) {
-					assert(this.first.state === STATE_RESOLVED);
-
-					this.resolve(this.first.value);
-				} else {
-					this.resolve(this.first);
-				}
-			}
-		}
-	};
-
-	FutureJoin.prototype.onRejected = function (error) {
-		if (this.state === STATE_LISTEN) {
-			this.reject(error);
-		}
-	};
-
-	function join (first, second) {
-		if (first instanceof Future && first.state === STATE_REJECTED) {
-			return first;
-		} else if (second instanceof Future) {
-			if (second.state === STATE_RESOLVED) {
-				return first;
-			} else if (second.state === STATE_REJECTED) {
-				return second;
-			}
-		} else {
-			return first;
-		}
-
-		if (!(first instanceof FutureJoin)) {
-			first = new FutureJoin(first);
-		}
-
-		first.missing += 1;
-		second.register(first);
-
-		return first;
-	}
-
-	// ------- TASYNC -------
-
-	var TASYNC = {
-		setTrace: setTrace,
-		delay: delay,
-		lift: lift,
-		apply: apply,
-		call: call,
-		trycatch: trycatch,
-		wrap: wrap,
-		unwrap: unwrap,
-		throttle: throttle,
-		join: join
-	};
-
-	if (typeof define === "function" && define.amd) {
-		define('common/core/tasync',[], function () {
-			return TASYNC;
-		});
-	} else {
-		module.exports = TASYNC;
-	}
+    // ------- Future -------
+
+    var STATE_LISTEN = 0;
+    var STATE_REJECTED = 1;
+    var STATE_RESOLVED = 2;
+
+    var Future = function () {
+        this.state = STATE_LISTEN;
+        this.value = [];
+    };
+
+    Future.prototype.register = function (target) {
+        assert(this.state === STATE_LISTEN);
+        assert(typeof target === 'object' && target !== null);
+
+        this.value.push(target);
+    };
+
+    Future.prototype.resolve = function (value) {
+        assert(this.state === STATE_LISTEN && !(value instanceof Future));
+
+        var listeners = this.value;
+
+        this.state = STATE_RESOLVED;
+        this.value = value;
+
+        var i;
+        for (i = 0; i < listeners.length; ++i) {
+            listeners[i].onResolved(value);
+        }
+    };
+
+    Future.prototype.reject = function (error) {
+        assert(this.state === STATE_LISTEN && error instanceof Error);
+
+        var listeners = this.value;
+
+        this.state = STATE_REJECTED;
+        this.value = error;
+
+        var i;
+        for (i = 0; i < listeners.length; ++i) {
+            listeners[i].onRejected(error);
+        }
+    };
+
+    // ------- Delay -------
+
+    function delay(timeout, value) {
+        if (timeout < 0) {
+            return value;
+        }
+
+        var future = new Future();
+        setTimeout(function () {
+            future.resolve(value);
+        }, timeout);
+        return future;
+    }
+
+    // ------- Lift -------
+
+    var FutureLift = function (array, index) {
+        Future.call(this);
+
+        this.array = array;
+        this.index = index;
+    };
+
+    FutureLift.prototype = Object.create(Future.prototype);
+
+    FutureLift.prototype.onResolved = function (value) {
+        assert(this.state === STATE_LISTEN);
+
+        var array = this.array;
+        array[this.index] = value;
+
+        while (++this.index < array.length) {
+            value = array[this.index];
+            if (value instanceof Future) {
+                if (value.state === STATE_RESOLVED) {
+                    array[this.index] = value.value;
+                } else if (value.state === STATE_LISTEN) {
+                    value.register(this);
+                    return;
+                } else {
+                    assert(value.state === STATE_REJECTED);
+                    this.reject(value.value);
+                    return;
+                }
+            }
+        }
+
+        this.array = null;
+        this.resolve(array);
+    };
+
+    FutureLift.prototype.onRejected = function (error) {
+        this.array = null;
+        this.reject(error);
+    };
+
+    var lift = function (array) {
+        if (!(array instanceof Array)) {
+            throw new Error('array argument is expected');
+        }
+
+        var index;
+        for (index = 0; index < array.length; ++index) {
+            var value = array[index];
+            if (value instanceof Future) {
+                if (value.state === STATE_RESOLVED) {
+                    array[index] = value.value;
+                } else if (value.state === STATE_LISTEN) {
+                    var future = new FutureLift(array, index);
+                    value.register(future);
+                    return future;
+                } else {
+                    assert(value.state === STATE_REJECTED);
+                    return value;
+                }
+            }
+        }
+
+        return array;
+    };
+
+    // ------- Apply -------
+
+    var ROOT = {
+        subframes: 0
+    };
+
+    var FRAME = ROOT;
+
+    var FutureApply = function tasync_trace_end(func, that, args, index) {
+        Future.call(this);
+
+        this.caller = FRAME;
+        this.position = ++FRAME.subframes;
+        this.subframes = 0;
+
+        if (TASYNC_TRACE_ENABLE) {
+            this.trace = new Error();
+        }
+
+        this.func = func;
+        this.that = that;
+        this.args = args;
+        this.index = index;
+    };
+
+    FutureApply.prototype = Object.create(Future.prototype);
+
+    FutureApply.prototype.getPath = function () {
+        var future = this.caller,
+            path = [this.position];
+
+        while (future !== ROOT) {
+            path.push(future.position);
+            future = future.caller;
+        }
+
+        return path;
+    };
+
+    function getSlice(trace) {
+        assert(typeof trace === 'string');
+
+        var end = trace.indexOf('tasync_trace_start');
+        if (end >= 0) {
+            end = trace.lastIndexOf('\n', end) + 1;
+        } else {
+            if (trace.charAt(trace.length - 1) !== '\n') {
+                // trace += '\n';
+            }
+            end = undefined;
+        }
+
+        var start = trace.indexOf('tasync_trace_end');
+        if (start >= 0) {
+            start = trace.indexOf('\n', start) + 1;
+            if (start >= 0) {
+                start = trace.indexOf('\n', start) + 1;
+            }
+        } else {
+            start = 0;
+        }
+
+        return trace.substring(start, end);
+    }
+
+    function createError(error, future) {
+        if (!(error instanceof Error)) {
+            error = new Error(error);
+        }
+
+        if (TASYNC_TRACE_ENABLE) {
+            error.trace = getSlice(error.stack);
+            do {
+                error.trace += '*** callback ***\n';
+                error.trace += getSlice(future.trace.stack);
+                future = future.caller;
+            } while (future !== ROOT);
+        }
+
+        return error;
+    }
+
+    FutureApply.prototype.onRejected = function (error) {
+        this.args = null;
+        this.reject(error);
+    };
+
+    FutureApply.prototype.onResolved = function tasync_trace_start(value) {
+        assert(this.state === STATE_LISTEN);
+
+        var args = this.args;
+        args[this.index] = value;
+
+        while (--this.index >= 0) {
+            value = args[this.index];
+            if (value instanceof Future) {
+                if (value.state === STATE_RESOLVED) {
+                    args[this.index] = value.value;
+                } else if (value.state === STATE_LISTEN) {
+                    value.register(this);
+                    return;
+                } else {
+                    assert(value.state === STATE_REJECTED);
+                    this.reject(value.value);
+                    return;
+                }
+            }
+        }
+
+        assert(FRAME === ROOT);
+        FRAME = this;
+
+        this.args = null;
+        try {
+            value = this.func.apply(this.that, args);
+        } catch (error) {
+            FRAME = ROOT;
+
+            this.reject(createError(error, this));
+            return;
+        }
+
+        FRAME = ROOT;
+
+        if (value instanceof Future) {
+            assert(value.state === STATE_LISTEN);
+
+            this.onResolved = this.resolve;
+            value.register(this);
+        } else {
+            this.resolve(value);
+        }
+    };
+
+    var apply = function (func, args, that) {
+        if (typeof func !== 'function') {
+            throw new Error('function argument is expected');
+        } else if (!(args instanceof Array)) {
+            throw new Error('array argument is expected');
+        }
+
+        var index = args.length;
+        while (--index >= 0) {
+            var value = args[index];
+            if (value instanceof Future) {
+                if (value.state === STATE_LISTEN) {
+                    var future = new FutureApply(func, that, args, index);
+                    value.register(future);
+                    return future;
+                } else if (value.state === STATE_RESOLVED) {
+                    args[index] = value.value;
+                } else {
+                    assert(value.state === STATE_REJECTED);
+                    return value;
+                }
+            }
+        }
+
+        return func.apply(that, args);
+    };
+
+    // ------- Call -------
+
+    var FutureCall = function tasync_trace_end(args, index) {
+        Future.call(this);
+
+        this.caller = FRAME;
+        this.position = ++FRAME.subframes;
+        this.subframes = 0;
+
+        if (TASYNC_TRACE_ENABLE) {
+            this.trace = new Error();
+        }
+
+        this.args = args;
+        this.index = index;
+    };
+
+    FutureCall.prototype = Object.create(Future.prototype);
+
+    FutureCall.prototype.getPath = FutureApply.prototype.getPath;
+    FutureCall.prototype.onRejected = FutureApply.prototype.onRejected;
+
+    var FUNCTION_CALL = Function.call;
+
+    FutureCall.prototype.onResolved = function tasync_trace_start(value) {
+        assert(this.state === STATE_LISTEN);
+
+        var args = this.args;
+        args[this.index] = value;
+
+        while (--this.index >= 0) {
+            value = args[this.index];
+            if (value instanceof Future) {
+                if (value.state === STATE_RESOLVED) {
+                    args[this.index] = value.value;
+                } else if (value.state === STATE_LISTEN) {
+                    value.register(this);
+                    return;
+                } else {
+                    assert(value.state === STATE_REJECTED);
+                    this.reject(value.value);
+                    return;
+                }
+            }
+        }
+
+        assert(FRAME === ROOT);
+        FRAME = this;
+
+        this.args = null;
+        try {
+            var func = args[0];
+            args[0] = null;
+            value = FUNCTION_CALL.apply(func, args);
+        } catch (error) {
+            FRAME = ROOT;
+
+            this.reject(createError(error, this));
+            return;
+        }
+
+        FRAME = ROOT;
+
+        if (value instanceof Future) {
+            assert(value.state === STATE_LISTEN);
+
+            this.onResolved = this.resolve;
+            value.register(this);
+        } else {
+            this.resolve(value);
+        }
+    };
+
+    var call = function () {
+        var index = arguments.length;
+        while (--index >= 0) {
+            var value = arguments[index];
+            if (value instanceof Future) {
+                if (value.state === STATE_LISTEN) {
+                    var future = new FutureCall(arguments, index);
+                    value.register(future);
+                    return future;
+                } else if (value.state === STATE_RESOLVED) {
+                    arguments[index] = value.value;
+                } else {
+                    assert(value.state === STATE_REJECTED);
+                    return value;
+                }
+            }
+        }
+
+        var func = arguments[0];
+        return FUNCTION_CALL.apply(func, arguments);
+    };
+
+    // ------- TryCatch -------
+
+    function FutureTryCatch(handler) {
+        Future.call(this);
+
+        this.handler = handler;
+    }
+
+    FutureTryCatch.prototype = Object.create(Future.prototype);
+
+    FutureTryCatch.prototype.onRejected = function (error) {
+        try {
+            var value = this.handler(error);
+
+            if (value instanceof Future) {
+                this.onRejected = Future.prorotype.reject;
+                value.register(this);
+            } else {
+                this.resolve(value);
+            }
+        } catch (err) {
+            this.reject(err);
+        }
+    };
+
+    FutureTryCatch.prototype.onResolved = Future.prototype.resolve;
+
+    function trycatch(func, handler) {
+        if (typeof func !== 'function' || typeof handler !== 'function') {
+            throw new Error('function arguments are expected');
+        }
+
+        try {
+            var value = func();
+
+            if (value instanceof Future) {
+                var future = new FutureTryCatch(handler);
+                value.register(future);
+
+                return future;
+            } else {
+                return value;
+            }
+        } catch (error) {
+            return handler(error);
+        }
+    }
+
+    // ------- Wrap -------
+
+    function wrap(func) {
+        if (typeof func !== 'function') {
+            throw new Error('function argument is expected');
+        }
+
+        if (typeof func.tasync_wraped === 'undefined') {
+            func.tasync_wraped = function () {
+                var args = arguments;
+                var future = new Future();
+
+                args[args.length++] = function (error, value) {
+                    if (error) {
+                        future.reject(error instanceof Error ? error : new Error(error));
+                    } else {
+                        future.resolve(value);
+                    }
+                };
+
+                func.apply(this, args);
+
+                if (future.state === STATE_LISTEN) {
+                    return future;
+                } else if (future.state === STATE_RESOLVED) {
+                    return future.value;
+                } else {
+                    assert(future.state === STATE_REJECTED);
+                    throw future.value;
+                }
+            };
+
+            func.tasync_wraped.tasync_unwraped = func;
+        }
+
+        return func.tasync_wraped;
+    }
+
+    // ------- Unwrap -------
+
+    function UnwrapListener(callback) {
+        this.callback = callback;
+    }
+
+    UnwrapListener.prototype.onRejected = function (error) {
+        this.callback(error);
+    };
+
+    UnwrapListener.prototype.onResolved = function (value) {
+        this.callback(null, value);
+    };
+
+    function unwrap(func) {
+        if (typeof func !== 'function') {
+            throw new Error('function argument is expected');
+        }
+
+        if (typeof func.tasync_unwraped === 'undefined') {
+            func.tasync_unwraped = function () {
+                var args = arguments;
+
+                var callback = args[--args.length];
+                assert(typeof callback === 'function');
+
+                var value;
+                try {
+                    value = func.apply(this, args);
+                } catch (error) {
+                    callback(error);
+                    return;
+                }
+
+                if (value instanceof Future) {
+                    assert(value.state === STATE_LISTEN);
+
+                    var listener = new UnwrapListener(callback);
+                    value.register(listener);
+                } else {
+                    callback(null, value);
+                }
+            };
+
+            func.tasync_unwraped.tasync_wraped = func;
+        }
+
+        return func.tasync_unwraped;
+    }
+
+    // ------- Throttle -------
+
+    function FutureThrottle(func, that, args) {
+        Future.call(this);
+
+        this.func = func;
+        this.that = that;
+        this.args = args;
+
+        this.caller = FRAME;
+        this.position = ++FRAME.subframes;
+
+        this.path = this.getPath();
+    }
+
+    FutureThrottle.prototype = Object.create(Future.prototype);
+
+    FutureThrottle.prototype.execute = function () {
+        var value;
+        try {
+            assert(FRAME === ROOT);
+            FRAME = this;
+
+            value = this.func.apply(this.that, this.args);
+
+            FRAME = ROOT;
+        } catch (error) {
+            FRAME = ROOT;
+
+            this.reject(error);
+            return;
+        }
+
+        if (value instanceof Future) {
+            assert(value.state === STATE_LISTEN);
+            value.register(this);
+        } else {
+            this.resolve(value);
+        }
+    };
+
+    FutureThrottle.prototype.getPath = FutureApply.prototype.getPath;
+    FutureThrottle.prototype.onResolved = Future.prototype.resolve;
+    FutureThrottle.prototype.onRejected = Future.prototype.reject;
+
+    FutureThrottle.prototype.compare = function (second) {
+        var first = this.path;
+        second = second.path;
+
+        var i, limit = first.length < second.length ? first.length : second.length;
+        for (i = 0; i < limit; ++i) {
+            if (first[i] !== second[i]) {
+                return first[i] - second[i];
+            }
+        }
+
+        return first.length - second.length;
+    };
+
+    function ThrottleListener(limit) {
+        this.running = 0;
+        this.limit = limit;
+        this.queue = [];
+    }
+
+    function priorityQueueInsert(queue, elem) {
+        var low = 0;
+        var high = queue.length;
+
+        while (low < high) {
+            var mid = Math.floor((low + high) / 2);
+            assert(low <= mid && mid < high);
+
+            if (elem.compare(queue[mid]) < 0) {
+                low = mid + 1;
+            } else {
+                high = mid;
+            }
+        }
+
+        queue.splice(low, 0, elem);
+    }
+
+    ThrottleListener.prototype.execute = function (func, that, args) {
+        if (this.running < this.limit) {
+            var value = func.apply(that, args);
+
+            if (value instanceof Future) {
+                assert(value.state === STATE_LISTEN);
+
+                ++this.running;
+                value.register(this);
+            }
+
+            return value;
+        } else {
+            var future = new FutureThrottle(func, that, args);
+            priorityQueueInsert(this.queue, future);
+
+            return future;
+        }
+    };
+
+    ThrottleListener.prototype.onResolved = function () {
+        if (this.queue.length > 0) {
+            var future = this.queue.pop();
+            future.register(this);
+
+            future.execute();
+        } else {
+            --this.running;
+        }
+    };
+
+    ThrottleListener.prototype.onRejected = ThrottleListener.prototype.onResolved;
+
+    // TODO: prevent recursion, otheriwise throttle will not work
+    function throttle(func, limit) {
+        if (typeof func !== 'function') {
+            throw new Error('function argument is expected');
+        } else if (typeof limit !== 'number') {
+            throw new Error('number argument is expected');
+        }
+
+        var listener = new ThrottleListener(limit);
+
+        return function () {
+            return listener.execute(func, this, arguments);
+        };
+    }
+
+    // ------- Join -------
+
+    function FutureJoin(first) {
+        Future.call(this);
+
+        this.first = first;
+        this.missing = first instanceof Future && first.state === STATE_LISTEN ? 1 : 0;
+    }
+
+    FutureJoin.prototype = Object.create(Future.prototype);
+
+    FutureJoin.prototype.onResolved = function (/*value*/) {
+        if (--this.missing === 0) {
+            assert(this.state !== STATE_RESOLVED);
+
+            if (this.state === STATE_LISTEN) {
+                if (this.first instanceof Future) {
+                    assert(this.first.state === STATE_RESOLVED);
+
+                    this.resolve(this.first.value);
+                } else {
+                    this.resolve(this.first);
+                }
+            }
+        }
+    };
+
+    FutureJoin.prototype.onRejected = function (error) {
+        if (this.state === STATE_LISTEN) {
+            this.reject(error);
+        }
+    };
+
+    function join(first, second) {
+        if (first instanceof Future && first.state === STATE_REJECTED) {
+            return first;
+        } else if (second instanceof Future) {
+            if (second.state === STATE_RESOLVED) {
+                return first;
+            } else if (second.state === STATE_REJECTED) {
+                return second;
+            }
+        } else {
+            return first;
+        }
+
+        if (!(first instanceof FutureJoin)) {
+            first = new FutureJoin(first);
+        }
+
+        first.missing += 1;
+        second.register(first);
+
+        return first;
+    }
+
+    // ------- TASYNC -------
+
+    var TASYNC = {
+        setTrace: setTrace,
+        delay: delay,
+        lift: lift,
+        apply: apply,
+        call: call,
+        trycatch: trycatch,
+        wrap: wrap,
+        unwrap: unwrap,
+        throttle: throttle,
+        join: join
+    };
+
+    if (typeof define === 'function' && define.amd) {
+        define('common/core/tasync',[], function () {
+            return TASYNC;
+        });
+    } else {
+        module.exports = TASYNC;
+    }
 }());
 
-/*
- * Copyright (C) 2012 Vanderbilt University, All rights reserved.
- *
- * Author: Miklos Maroti
+/*globals define*/
+/*jshint node: true, browser: true*/
+
+/**
+ * @author mmaroti / https://github.com/mmaroti
  */
 
-define('common/core/coretree',[ "common/util/assert", "common/util/key", "common/core/future", "common/core/tasync", 'common/util/canon' ], function (ASSERT, GENKEY, FUTURE, TASYNC, CANON) {
-	
+define('common/core/coretree',[
+    'common/util/assert',
+    'common/util/key',
+    'common/core/future',
+    'common/core/tasync'
+], function (ASSERT, GENKEY, FUTURE, TASYNC) {
 
-	var HASH_REGEXP = new RegExp("#[0-9a-f]{40}");
+    
+
+    var HASH_REGEXP = new RegExp('#[0-9a-f]{40}');
 	var isValidHash = function (key) {
-		return typeof key === "string" && key.length === 41 && HASH_REGEXP.test(key);
+        return typeof key === 'string' && key.length === 41 && HASH_REGEXP.test(key);
 	};
 
 	var MAX_RELID = Math.pow(2, 31);
 	var createRelid = function (data) {
-		ASSERT(data && typeof data === "object");
+        ASSERT(data && typeof data === 'object');
 
 		var relid;
 		do {
@@ -3641,21 +3662,21 @@ define('common/core/coretree',[ "common/util/assert", "common/util/key", "common
 			// relid = relid.toString();
 		} while (data[relid] !== undefined);
 
-		return "" + relid;
+        return '' + relid;
 	};
 
 	// make relids deterministic
 	if (false) {
 		var nextRelid = 0;
 		createRelid = function (data) {
-			ASSERT(data && typeof data === "object");
+            ASSERT(data && typeof data === 'object');
 
 			var relid;
 			do {
 				relid = (nextRelid += -1);
 			} while (data[relid] !== undefined);
 
-			return "" + relid;
+            return '' + relid;
 		};
 	}
 
@@ -3667,7 +3688,7 @@ define('common/core/coretree',[ "common/util/assert", "common/util/key", "common
         ASSERT(typeof options.logger !== 'undefined');
 
         var gmeConfig = options.globConf;
-        var logger = options.logger.fork('coretree');
+        //var logger = options.logger.fork('coretree');
 
 		var MAX_AGE = 3; // MAGIC NUMBER
 		var MAX_TICKS = 2000; // MAGIC NUMBER
@@ -3686,13 +3707,13 @@ define('common/core/coretree',[ "common/util/assert", "common/util/key", "common
 		// ------- static methods
 
 		var getParent = function (node) {
-			ASSERT(typeof node.parent === "object");
+            ASSERT(typeof node.parent === 'object');
 
 			return node.parent;
 		};
 
 		var getRelid = function (node) {
-			ASSERT(node.relid === null || typeof node.relid === "string");
+            ASSERT(node.relid === null || typeof node.relid === 'string');
 
 			return node.relid;
 		};
@@ -3718,22 +3739,22 @@ define('common/core/coretree',[ "common/util/assert", "common/util/key", "common
 				return null;
 			}
 
-			var path = "";
+            var path = '';
 			while (node.relid !== null && node !== base) {
-				path = "/" + node.relid + path;
+                path = '/' + node.relid + path;
 				node = node.parent;
 			}
 			return path;
 		};
 
 		var isValidPath = function (path) {
-			return typeof path === "string" && (path === "" || path.charAt(0) === "/");
+            return typeof path === 'string' && (path === '' || path.charAt(0) === '/');
 		};
 
 		var splitPath = function (path) {
 			ASSERT(isValidPath(path));
 
-			path = path.split("/");
+            path = path.split('/');
 			path.splice(0, 1);
 
 			return path;
@@ -3742,7 +3763,7 @@ define('common/core/coretree',[ "common/util/assert", "common/util/key", "common
 		var buildPath = function (path) {
 			ASSERT(path instanceof Array);
 
-			return path.length === 0 ? "" : "/" + path.join("/");
+            return path.length === 0 ? '' : '/' + path.join('/');
 		};
 
 		var joinPaths = function (first, second) {
@@ -3752,7 +3773,7 @@ define('common/core/coretree',[ "common/util/assert", "common/util/key", "common
 		};
 
         var getCommonPathPrefixData = function (first, second) {
-            ASSERT(typeof first === "string" && typeof second === "string");
+            ASSERT(typeof first === 'string' && typeof second === 'string');
 
             first = splitPath(first);
             second = splitPath(second);
@@ -3810,7 +3831,7 @@ define('common/core/coretree',[ "common/util/assert", "common/util/key", "common
 		};
 
 		var __getChildNode = function (children, relid) {
-			ASSERT(children instanceof Array && typeof relid === "string");
+            ASSERT(children instanceof Array && typeof relid === 'string');
 
 			for (var i = 0; i < children.length; ++i) {
 				var child = children[i];
@@ -3826,11 +3847,11 @@ define('common/core/coretree',[ "common/util/assert", "common/util/key", "common
 		};
 
 		var __getChildData = function (data, relid) {
-			ASSERT(typeof relid === "string");
+            ASSERT(typeof relid === 'string');
 
-			if (typeof data === "object" && data !== null) {
+            if (typeof data === 'object' && data !== null) {
 				data = data[relid];
-				return typeof data === "undefined" ? EMPTY_DATA : data;
+                return typeof data === 'undefined' ? EMPTY_DATA : data;
 			} else {
 				return null;
 			}
@@ -3838,7 +3859,7 @@ define('common/core/coretree',[ "common/util/assert", "common/util/key", "common
 
 		var normalize = function (node) {
 			ASSERT(isValidNode(node));
-			// console.log("normalize start", printNode(getRoot(node)));
+            // console.log('normalize start', printNode(getRoot(node)));
 
 			var parent;
 
@@ -3852,7 +3873,7 @@ define('common/core/coretree',[ "common/util/assert", "common/util/key", "common
 					if (temp !== null) {
 						// TODO: make the current node close to the returned one
 
-						// console.log("normalize end1",
+                        // console.log('normalize end1',
 						// printNode(getRoot(temp)));
 						return temp;
 					}
@@ -3881,7 +3902,7 @@ define('common/core/coretree',[ "common/util/assert", "common/util/key", "common
 				} while (parent !== null && parent.age !== 0);
 			}
 
-			// console.log("normalize end2", printNode(getRoot(node)));
+            // console.log('normalize end2', printNode(getRoot(node)));
 			return node;
 		};
 
@@ -3944,7 +3965,7 @@ define('common/core/coretree',[ "common/util/assert", "common/util/key", "common
 				},
 				rootid: ++rootCounter
 			};
-			root.data[ID_NAME] = "";
+            root.data[ID_NAME] = '';
 			roots.push(root);
 
 			__ageRoots();
@@ -3952,7 +3973,7 @@ define('common/core/coretree',[ "common/util/assert", "common/util/key", "common
 		};
 
 		var getChild = function (node, relid) {
-			ASSERT(typeof relid === "string" && relid !== ID_NAME);
+            ASSERT(typeof relid === 'string' && relid !== ID_NAME);
 
 			node = normalize(node);
 
@@ -3977,8 +3998,8 @@ define('common/core/coretree',[ "common/util/assert", "common/util/key", "common
 		var createChild = function (node) {
 			node = normalize(node);
 
-			if (typeof node.data !== "object" || node.data === null) {
-				throw new Error("invalid node data");
+            if (typeof node.data !== 'object' || node.data === null) {
+                throw new Error('invalid node data');
 			}
 
 			var relid = createRelid(node.data);
@@ -3998,11 +4019,11 @@ define('common/core/coretree',[ "common/util/assert", "common/util/key", "common
 		};
 
 		var getDescendant = function (node, head, base) {
-			ASSERT(typeof base === "undefined" || isAncestor(head, base));
+            ASSERT(typeof base === 'undefined' || isAncestor(head, base));
 
 			node = normalize(node);
 			head = normalize(head);
-			base = typeof base === "undefined" ? null : normalize(base.parent);
+            base = typeof base === 'undefined' ? null : normalize(base.parent);
 
 			var path = [];
 			while (head.parent !== base) {
@@ -4019,9 +4040,9 @@ define('common/core/coretree',[ "common/util/assert", "common/util/key", "common
 		};
 
 		var getDescendantByPath = function (node, path) {
-			ASSERT(path === "" || path.charAt(0) === "/");
+            ASSERT(path === '' || path.charAt(0) === '/');
 
-			path = path.split("/");
+            path = path.split('/');
 
 			for (var i = 1; i < path.length; ++i) {
 				node = getChild(node, path[i]);
@@ -4033,7 +4054,7 @@ define('common/core/coretree',[ "common/util/assert", "common/util/key", "common
 		// ------- data manipulation
 
 		var __isMutableData = function (data) {
-			return typeof data === "object" && data !== null && data._mutable === true;
+            return typeof data === 'object' && data !== null && data._mutable === true;
 		};
 
 		var isMutable = function (node) {
@@ -4043,12 +4064,12 @@ define('common/core/coretree',[ "common/util/assert", "common/util/key", "common
 
 		var isObject = function (node) {
 			node = normalize(node);
-			return typeof node.data === "object" && node.data !== null;
+            return typeof node.data === 'object' && node.data !== null;
 		};
 
 		var isEmpty = function (node) {
 			node = normalize(node);
-			if (typeof node.data !== "object" || node.data === null) {
+            if (typeof node.data !== 'object' || node.data === null) {
 				return false;
 			} else if (node.data === EMPTY_DATA) {
 				return true;
@@ -4058,6 +4079,7 @@ define('common/core/coretree',[ "common/util/assert", "common/util/key", "common
 		};
 
 		var __isEmptyData = function (data) {
+            // TODO: better way to check if object has keys?
 			for (var keys in data) {
 				return false;
 			}
@@ -4065,7 +4087,8 @@ define('common/core/coretree',[ "common/util/assert", "common/util/key", "common
 		};
 
 		var __areEquivalent = function (data1, data2) {
-            return data1 === data2 || (typeof data1 === "string" && data1 === __getChildData(data2, ID_NAME)) || (__isEmptyData(data1) && __isEmptyData(data2));
+            return data1 === data2 || (typeof data1 === 'string' && data1 === __getChildData(data2, ID_NAME)) ||
+                (__isEmptyData(data1) && __isEmptyData(data2));
 		};
 
 		var mutateCount = 0;
@@ -4075,7 +4098,7 @@ define('common/core/coretree',[ "common/util/assert", "common/util/key", "common
 			node = normalize(node);
 			var data = node.data;
 
-			if (typeof data !== "object" || data === null) {
+            if (typeof data !== 'object' || data === null) {
 				return false;
 			} else if (data._mutable === true) {
 				return true;
@@ -4106,8 +4129,8 @@ define('common/core/coretree',[ "common/util/assert", "common/util/key", "common
 
             copy._mutable = true;
 
-			if (typeof data[ID_NAME] === "string") {
-				copy[ID_NAME] = "";
+            if (typeof data[ID_NAME] === 'string') {
+                copy[ID_NAME] = '';
 			}
 
 			if (node.parent !== null) {
@@ -4139,12 +4162,12 @@ define('common/core/coretree',[ "common/util/assert", "common/util/key", "common
 		};
 
 		var setData = function (node, data) {
-			ASSERT(data !== null && typeof data !== "undefined");
+            ASSERT(data !== null && typeof data !== 'undefined');
 
 			node = normalize(node);
 			if (node.parent !== null) {
 				if (!mutate(node.parent)) {
-					throw new Error("incorrect node data");
+                    throw new Error('incorrect node data');
 				}
 
 				node.parent.data[node.relid] = data;
@@ -4159,7 +4182,7 @@ define('common/core/coretree',[ "common/util/assert", "common/util/key", "common
 
 			if (node.parent !== null) {
 				if (!mutate(node.parent)) {
-					throw new Error("incorrect node data");
+                    throw new Error('incorrect node data');
 				}
 
 				delete node.parent.data[node.relid];
@@ -4176,7 +4199,7 @@ define('common/core/coretree',[ "common/util/assert", "common/util/key", "common
 		var copyData = function (node) {
 			node = normalize(node);
 
-			if (typeof node.data !== "object" || node.data === null) {
+            if (typeof node.data !== 'object' || node.data === null) {
 				return node.data;
 			}
 
@@ -4185,12 +4208,12 @@ define('common/core/coretree',[ "common/util/assert", "common/util/key", "common
 		};
 
 		var getProperty = function (node, name) {
-			ASSERT(typeof name === "string" && name !== ID_NAME);
+            ASSERT(typeof name === 'string' && name !== ID_NAME);
 
 			var data;
 			node = normalize(node);
 
-			if (typeof node.data === "object" && node.data !== null) {
+            if (typeof node.data === 'object' && node.data !== null) {
 				data = node.data[name];
 			}
 
@@ -4200,12 +4223,13 @@ define('common/core/coretree',[ "common/util/assert", "common/util/key", "common
 		};
 
 		var setProperty = function (node, name, data) {
-			ASSERT(typeof name === "string" && name !== ID_NAME);
-			ASSERT(!__isMutableData(data) /*&& data !== null*/ && data !== undefined); //TODO is the 'null' really can be a value of a property???
+            ASSERT(typeof name === 'string' && name !== ID_NAME);
+            ASSERT(!__isMutableData(data) /*&& data !== null*/ && data !== undefined);
+            //TODO is the 'null' really can be a value of a property???
 
 			node = normalize(node);
 			if (!mutate(node)) {
-				throw new Error("incorrect node data");
+                throw new Error('incorrect node data');
 			}
 
 			node.data[name] = data;
@@ -4218,11 +4242,11 @@ define('common/core/coretree',[ "common/util/assert", "common/util/key", "common
 		};
 
 		var deleteProperty = function (node, name) {
-			ASSERT(typeof name === "string" && name !== ID_NAME);
+            ASSERT(typeof name === 'string' && name !== ID_NAME);
 
 			node = normalize(node);
 			if (!mutate(node)) {
-				throw new Error("incorrect node data");
+                throw new Error('incorrect node data');
 			}
 
 			delete node.data[name];
@@ -4235,17 +4259,17 @@ define('common/core/coretree',[ "common/util/assert", "common/util/key", "common
 		};
 
 		var noUnderscore = function (relid) {
-			ASSERT(typeof relid === "string");
-			return relid.charAt(0) !== "_";
+            ASSERT(typeof relid === 'string');
+            return relid.charAt(0) !== '_';
 		};
 
 		var getKeys = function (node, predicate) {
-			ASSERT(typeof predicate === "undefined" || typeof predicate === "function");
+            ASSERT(typeof predicate === 'undefined' || typeof predicate === 'function');
 
 			node = normalize(node);
 			predicate = predicate || noUnderscore;
 
-			if (typeof node.data !== "object" || node.data === null) {
+            if (typeof node.data !== 'object' || node.data === null) {
 				return null;
 			}
 
@@ -4266,7 +4290,7 @@ define('common/core/coretree',[ "common/util/assert", "common/util/key", "common
 		};
 
         var getRawKeys = function(object,predicate){
-            ASSERT(typeof predicate === "undefined" || typeof predicate === "function");
+            ASSERT(typeof predicate === 'undefined' || typeof predicate === 'function');
             predicate = predicate || noUnderscore;
 
             var keys = Object.keys(object);
@@ -4283,7 +4307,7 @@ define('common/core/coretree',[ "common/util/assert", "common/util/key", "common
             }
 
             return keys;
-        }
+        };
 
 		// ------- persistence
 
@@ -4294,36 +4318,36 @@ define('common/core/coretree',[ "common/util/assert", "common/util/key", "common
 
 			var hash;
 			node = normalize(node);
-			if (typeof node.data === "object" && node.data !== null) {
+            if (typeof node.data === 'object' && node.data !== null) {
 				hash = node.data[ID_NAME];
 			}
 
-			ASSERT(typeof hash === "string" || typeof hash === "undefined");
+            ASSERT(typeof hash === 'string' || typeof hash === 'undefined');
 			return hash;
 		};
 
 		var isHashed = function (node) {
 			node = normalize(node);
-			return typeof node.data === "object" && node.data !== null && typeof node.data[ID_NAME] === "string";
+            return typeof node.data === 'object' && node.data !== null && typeof node.data[ID_NAME] === 'string';
 		};
 
 		var setHashed = function (node, hashed, noMutate) {
-			ASSERT(typeof hashed === "boolean");
+            ASSERT(typeof hashed === 'boolean');
 
 			node = normalize(node);
             if(!noMutate){
                 if (!mutate(node)) {
-                    throw new Error("incorrect node data");
+                    throw new Error('incorrect node data');
                 }
             }
 
 			if (hashed) {
-				node.data[ID_NAME] = "";
+                node.data[ID_NAME] = '';
 			} else {
 				delete node.data[ID_NAME];
 			}
 
-			ASSERT(typeof node.children[ID_NAME] === "undefined");
+            ASSERT(typeof node.children[ID_NAME] === 'undefined');
 		};
 
 		var __saveData = function (data) {
@@ -4340,7 +4364,7 @@ define('common/core/coretree',[ "common/util/assert", "common/util/key", "common
 						delete data[relid];
 					} else {
 						done = FUTURE.join(done, sub);
-						if (typeof child[ID_NAME] === "string") {
+                        if (typeof child[ID_NAME] === 'string') {
 							data[relid] = child[ID_NAME];
 						}
 					}
@@ -4351,10 +4375,10 @@ define('common/core/coretree',[ "common/util/assert", "common/util/key", "common
 
 			if (done !== EMPTY_DATA) {
 				var hash = data[ID_NAME];
-				ASSERT(hash === "" || typeof hash === "undefined");
+                ASSERT(hash === '' || typeof hash === 'undefined');
 
-				if (hash === "") {
-					hash = "#" + GENKEY(data, gmeConfig);
+                if (hash === '') {
+                    hash = '#' + GENKEY(data, gmeConfig);
 					data[ID_NAME] = hash;
 
 					done = FUTURE.join(done, storage.insertObject(data));
@@ -4406,7 +4430,7 @@ define('common/core/coretree',[ "common/util/assert", "common/util/key", "common
 				// times
 				return TASYNC.call(__loadChild2, node, storage.loadObject(node.data));
 			} else {
-				return typeof node.data === "object" && node.data !== null ? node : null;
+                return typeof node.data === 'object' && node.data !== null ? node : null;
 			}
 		};
 
@@ -4420,10 +4444,9 @@ define('common/core/coretree',[ "common/util/assert", "common/util/key", "common
 				// times
 				return node.data;
 			} else {
-				return typeof node.data === "object" && node.data !== null ? getHash(node) : null;
+                return typeof node.data === 'object' && node.data !== null ? getHash(node) : null;
 			}
 		};
-
 
 
 		var __loadChild2 = function (node, newdata) {
@@ -4438,7 +4461,7 @@ define('common/core/coretree',[ "common/util/assert", "common/util/key", "common
 			} else {
 				// TODO: if this bites you, use the Cache
                 /*if(node.data !== newdata){
-                    console.log("kecso",node);
+                 console.log('kecso',node);
                 }
 				ASSERT(node.data === newdata);*/
 			}
@@ -4448,9 +4471,9 @@ define('common/core/coretree',[ "common/util/assert", "common/util/key", "common
 
 		var loadByPath = function (node, path) {
 			ASSERT(isValidNode(node));
-			ASSERT(path === "" || path.charAt(0) === "/");
+            ASSERT(path === '' || path.charAt(0) === '/');
 
-			path = path.split("/");
+            path = path.split('/');
 			return __loadDescendantByPath2(node, path, 1);
 		};
 
@@ -4466,28 +4489,28 @@ define('common/core/coretree',[ "common/util/assert", "common/util/key", "common
 		// ------- valid -------
 
 		var printNode = function (node) {
-			var str = "{";
-			str += "age:" + node.age;
+            var str = '{';
+            str += 'age:' + node.age;
 
-			if (typeof node.relid === "string") {
-				str += ", relid: \"" + node.relid + "\"";
+            if (typeof node.relid === 'string') {
+                str += ', relid: "' + node.relid + '"';
 			}
 
-			str += ", children:";
+            str += ', children:';
 			if (node.children === null) {
-				str += "null";
+                str += 'null';
 			} else {
-				str += "[";
+                str += '[';
 				for (var i = 0; i < node.children.length; ++i) {
 					if (i !== 0) {
-						str += ", ";
+                        str += ', ';
 					}
 					str += printNode(node.children[i]);
 				}
-				str += "]";
+                str += ']';
 			}
 
-			str += "}";
+            str += '}';
 			return str;
 		};
 
@@ -4512,19 +4535,20 @@ define('common/core/coretree',[ "common/util/assert", "common/util/key", "common
 
 		var isValidNode = function (node) {
 			try {
-				__test("object", typeof node === "object" && node !== null);
-				__test("object 2", node.hasOwnProperty("parent") && node.hasOwnProperty("relid"));
-				__test("parent", typeof node.parent === "object");
-				__test("relid", typeof node.relid === "string" || node.relid === null);
-				__test("parent 2", (node.parent === null) === (node.relid === null));
-				__test("age", node.age >= 0 && node.age <= MAX_AGE);
-				__test("children", node.children === null || node.children instanceof Array);
-				__test("children 2", (node.age === MAX_AGE) === (node.children === null));
-				__test("data", typeof node.data === "object" || typeof node.data === "string" || typeof node.data === "number");
+                __test('object', typeof node === 'object' && node !== null);
+                __test('object 2', node.hasOwnProperty('parent') && node.hasOwnProperty('relid'));
+                __test('parent', typeof node.parent === 'object');
+                __test('relid', typeof node.relid === 'string' || node.relid === null);
+                __test('parent 2', (node.parent === null) === (node.relid === null));
+                __test('age', node.age >= 0 && node.age <= MAX_AGE);
+                __test('children', node.children === null || node.children instanceof Array);
+                __test('children 2', (node.age === MAX_AGE) === (node.children === null));
+                __test('data', typeof node.data === 'object' || typeof node.data === 'string' ||
+                typeof node.data === 'number');
 
 				if (node.parent !== null) {
-					__test("age 2", node.age >= node.parent.age);
-					__test("mutable", !__isMutableData(node.data) || __isMutableData(node.parent.data));
+                    __test('age 2', node.age >= node.parent.age);
+                    __test('mutable', !__isMutableData(node.data) || __isMutableData(node.parent.data));
 				}
 
 				if (!checkValidTreeRunning) {
@@ -4535,7 +4559,7 @@ define('common/core/coretree',[ "common/util/assert", "common/util/key", "common
 
 				return true;
 			} catch (error) {
-				console.log("Wrong node", error.stack);
+                console.log('Wrong node', error.stack);
 				return false;
 			}
 		};
@@ -4590,44 +4614,46 @@ define('common/core/coretree',[ "common/util/assert", "common/util/key", "common
 	};
 });
 
-/*
- * Copyright (C) 2012 Vanderbilt University, All rights reserved.
- *
- * Author: Miklos Maroti
+/*globals define*/
+/*jshint node: true, browser: true*/
+
+/**
+ * @author mmaroti / https://github.com/mmaroti
  */
 
-define('common/core/corerel',[ "common/util/assert", "common/core/coretree", "common/core/tasync", "common/util/canon" ], function (ASSERT, CoreTree, TASYNC, CANON) {
-	
+define('common/core/corerel',['common/util/assert', 'common/core/coretree', 'common/core/tasync'], function (ASSERT, CoreTree, TASYNC) {
 
-	// ----------------- RELID -----------------
+    
 
-	var ATTRIBUTES = "atr";
-	var REGISTRY = "reg";
-	var OVERLAYS = "ovr";
-	var COLLSUFFIX = "-inv";
+    // ----------------- RELID -----------------
 
-	function isPointerName(name) {
-		ASSERT(typeof name === "string");
+    var ATTRIBUTES = 'atr';
+    var REGISTRY = 'reg';
+    var OVERLAYS = 'ovr';
+    var COLLSUFFIX = '-inv';
+
+    function isPointerName(name) {
+        ASSERT(typeof name === 'string');
         //TODO this is needed as now we work with modified data as well
-        if(name === "_mutable"){
+        if (name === '_mutable') {
             return false;
         }
-		return name.slice(-COLLSUFFIX.length) !== COLLSUFFIX;
-	}
+        return name.slice(-COLLSUFFIX.length) !== COLLSUFFIX;
+    }
 
-	function isValidRelid(relid) {
-		return typeof relid === "string" && parseInt(relid, 10).toString() === relid;
-	}
+    function isValidRelid(relid) {
+        return typeof relid === 'string' && parseInt(relid, 10).toString() === relid;
+    }
 
-	function __test(text, cond) {
-		if (!cond) {
-			throw new Error(text);
-		}
-	}
+    function __test(text, cond) {
+        if (!cond) {
+            throw new Error(text);
+        }
+    }
 
-	// ----------------- Core -----------------
+    // ----------------- Core -----------------
 
-	function CoreRel(coretree, options) {
+    function CoreRel(coretree, options) {
         ASSERT(typeof options === 'object');
         ASSERT(typeof options.globConf === 'object');
         ASSERT(typeof options.logger !== 'undefined');
@@ -4637,27 +4663,27 @@ define('common/core/corerel',[ "common/util/assert", "common/core/coretree", "co
 
         logger.debug('initialized');
 
-		function isValidNode(node) {
-			try {
-				__test("coretree", coretree.isValidNode(node));
-				__test("isobject", coretree.isObject(node));
+        function isValidNode(node) {
+            try {
+                __test('coretree', coretree.isValidNode(node));
+                __test('isobject', coretree.isObject(node));
 
-				return true;
-			} catch (error) {
-				console.log("Wrong node", error.stack);
-				return false;
-			}
-		}
+                return true;
+            } catch (error) {
+                console.log('Wrong node', error.stack);
+                return false;
+            }
+        }
 
-		function getAttributeNames(node) {
+        function getAttributeNames(node) {
             ASSERT(isValidNode(node));
 
             node = (coretree.getProperty(node, ATTRIBUTES) || {});
             var keys = coretree.getRawKeys(node);
             var i = keys.length;
             while (--i >= 0) {
-                if (keys[i].charAt(0) === "") {
-                    console.log("***** This happens?");
+                if (keys[i].charAt(0) === '') {
+                    console.log('***** This happens?');
                     keys.splice(i, 1);
                 }
             }
@@ -4665,308 +4691,310 @@ define('common/core/corerel',[ "common/util/assert", "common/core/coretree", "co
             return keys;
         }
 
-		function getRegistryNames(node) {
-			ASSERT(isValidNode(node));
+        function getRegistryNames(node) {
+            ASSERT(isValidNode(node));
 
-			node = (coretree.getProperty(node, REGISTRY) || {});
-			var keys = coretree.getRawKeys(node);
-			var i = keys.length;
-			while (--i >= 0) {
-				if (keys[i].charAt(0) === "") {
-					console.log("***** This happens?");
-					keys.splice(i, 1);
-				}
-			}
+            node = (coretree.getProperty(node, REGISTRY) || {});
+            var keys = coretree.getRawKeys(node);
+            var i = keys.length;
+            while (--i >= 0) {
+                if (keys[i].charAt(0) === '') {
+                    console.log('***** This happens?');
+                    keys.splice(i, 1);
+                }
+            }
 
-			return keys;
-		}
+            return keys;
+        }
 
-		function getAttribute(node, name) {
-			/*node = coretree.getChild(node, ATTRIBUTES);
-			return coretree.getProperty(node, name);*/
-            return (coretree.getProperty(node,ATTRIBUTES) || {})[name];
-		}
+        function getAttribute(node, name) {
+            /*node = coretree.getChild(node, ATTRIBUTES);
+             return coretree.getProperty(node, name);*/
+            return (coretree.getProperty(node, ATTRIBUTES) || {})[name];
+        }
 
-		function delAttribute(node, name) {
-			node = coretree.getChild(node, ATTRIBUTES);
-			coretree.deleteProperty(node, name);
-		}
+        function delAttribute(node, name) {
+            node = coretree.getChild(node, ATTRIBUTES);
+            coretree.deleteProperty(node, name);
+        }
 
-		function setAttribute(node, name, value) {
-			node = coretree.getChild(node, ATTRIBUTES);
-			coretree.setProperty(node, name, value);
-		}
+        function setAttribute(node, name, value) {
+            node = coretree.getChild(node, ATTRIBUTES);
+            coretree.setProperty(node, name, value);
+        }
 
-		function getRegistry(node, name) {
-			/*node = coretree.getChild(node, REGISTRY);
-			return coretree.getProperty(node, name);*/
+        function getRegistry(node, name) {
+            /*node = coretree.getChild(node, REGISTRY);
+             return coretree.getProperty(node, name);*/
             return (coretree.getProperty(node, REGISTRY) || {})[name];
-		}
+        }
 
-		function delRegistry(node, name) {
-			node = coretree.getChild(node, REGISTRY);
-			coretree.deleteProperty(node, name);
-		}
+        function delRegistry(node, name) {
+            node = coretree.getChild(node, REGISTRY);
+            coretree.deleteProperty(node, name);
+        }
 
-		function setRegistry(node, name, value) {
-			node = coretree.getChild(node, REGISTRY);
-			coretree.setProperty(node, name, value);
-		}
+        function setRegistry(node, name, value) {
+            node = coretree.getChild(node, REGISTRY);
+            coretree.setProperty(node, name, value);
+        }
 
-		function overlayInsert(overlays, source, name, target) {
-			ASSERT(isValidNode(overlays) && coretree.getRelid(overlays) === OVERLAYS);
-			ASSERT(coretree.isValidPath(source) && coretree.isValidPath(target) && isPointerName(name));
-			ASSERT(coretree.getCommonPathPrefixData(source, target).common === "");
+        function overlayInsert(overlays, source, name, target) {
+            ASSERT(isValidNode(overlays) && coretree.getRelid(overlays) === OVERLAYS);
+            ASSERT(coretree.isValidPath(source) && coretree.isValidPath(target) && isPointerName(name));
+            ASSERT(coretree.getCommonPathPrefixData(source, target).common === '');
 
-			// console.log("insert", overlays.parent.data.atr.name, source, name, target);
+            // console.log('insert', overlays.parent.data.atr.name, source, name, target);
 
-			var node = coretree.getChild(overlays, source);
+            var node = coretree.getChild(overlays, source);
 
-			ASSERT(coretree.getProperty(node, name) === undefined);
-			coretree.setProperty(node, name, target);
+            ASSERT(coretree.getProperty(node, name) === undefined);
+            coretree.setProperty(node, name, target);
 
-			node = coretree.getChild(overlays, target);
-			name = name + COLLSUFFIX;
+            node = coretree.getChild(overlays, target);
+            name = name + COLLSUFFIX;
 
-			var array = coretree.getProperty(node, name);
-			if (array) {
-				ASSERT(array.indexOf(source) < 0);
+            var array = coretree.getProperty(node, name);
+            if (array) {
+                ASSERT(array.indexOf(source) < 0);
 
-				array = array.slice(0);
-				array.push(source);
-			} else {
-				array = [ source ];
-			}
+                array = array.slice(0);
+                array.push(source);
+            } else {
+                array = [source];
+            }
 
-			coretree.setProperty(node, name, array);
-		}
+            coretree.setProperty(node, name, array);
+        }
 
-		function overlayRemove(overlays, source, name, target) {
-			ASSERT(isValidNode(overlays) && coretree.getRelid(overlays) === OVERLAYS);
-			ASSERT(coretree.isValidPath(source) && coretree.isValidPath(target) && isPointerName(name));
-			ASSERT(coretree.getCommonPathPrefixData(source, target).common === "");
+        function overlayRemove(overlays, source, name, target) {
+            ASSERT(isValidNode(overlays) && coretree.getRelid(overlays) === OVERLAYS);
+            ASSERT(coretree.isValidPath(source) && coretree.isValidPath(target) && isPointerName(name));
+            ASSERT(coretree.getCommonPathPrefixData(source, target).common === '');
 
-			// console.log("remove", overlays.parent.data.atr.name, source, name, target);
+            // console.log('remove', overlays.parent.data.atr.name, source, name, target);
 
-			var node = coretree.getChild(overlays, source);
-			ASSERT(node && coretree.getProperty(node, name) === target);
-			coretree.deleteProperty(node, name);
+            var node = coretree.getChild(overlays, source);
+            ASSERT(node && coretree.getProperty(node, name) === target);
+            coretree.deleteProperty(node, name);
 
-			node = coretree.getChild(overlays, target);
-			ASSERT(node);
+            node = coretree.getChild(overlays, target);
+            ASSERT(node);
 
-			name = name + COLLSUFFIX;
+            name = name + COLLSUFFIX;
 
-			var array = coretree.getProperty(node, name);
-			ASSERT(Array.isArray(array) && array.length >= 1);
+            var array = coretree.getProperty(node, name);
+            ASSERT(Array.isArray(array) && array.length >= 1);
 
-			if (array.length === 1) {
-				ASSERT(array[0] === source);
+            if (array.length === 1) {
+                ASSERT(array[0] === source);
 
-				coretree.deleteProperty(node, name);
-			} else {
-				var index = array.indexOf(source);
-				ASSERT(index >= 0);
+                coretree.deleteProperty(node, name);
+            } else {
+                var index = array.indexOf(source);
+                ASSERT(index >= 0);
 
-				array = array.slice(0);
-				array.splice(index, 1);
+                array = array.slice(0);
+                array.splice(index, 1);
 
-				coretree.setProperty(node, name, array);
-			}
-		}
+                coretree.setProperty(node, name, array);
+            }
+        }
 
-		function overlayQuery(overlays, prefix) {
-			ASSERT(isValidNode(overlays) && coretree.isValidPath(prefix));
+        function overlayQuery(overlays, prefix) {
+            ASSERT(isValidNode(overlays) && coretree.isValidPath(prefix));
 
-			var prefix2 = prefix + "/";
-			var list = [];
-			var paths = coretree.getKeys(overlays);
+            var prefix2 = prefix + '/';
+            var list = [];
+            var paths = coretree.getKeys(overlays);
 
-			for (var i = 0; i < paths.length; ++i) {
-				var path = paths[i];
-				if (path === prefix || path.substr(0, prefix2.length) === prefix2) {
-					var node = coretree.getChild(overlays, path);
-					var names = coretree.getKeys(node);
-					for (var j = 0; j < names.length; ++j) {
-						var name = names[j];
-						if (isPointerName(name)) {
-							list.push({
-								s: path,
-								n: name,
-								t: coretree.getProperty(node, name),
-								p: true
-							});
-						} else {
-							var array = coretree.getProperty(node, name);
-							ASSERT(Array.isArray(array));
-							name = name.slice(0, -COLLSUFFIX.length);
-							for (var k = 0; k < array.length; ++k) {
-								list.push({
-									s: array[k],
-									n: name,
-									t: path,
-									p: false
-								});
-							}
-						}
-					}
-				}
-			}
+            for (var i = 0; i < paths.length; ++i) {
+                var path = paths[i];
+                if (path === prefix || path.substr(0, prefix2.length) === prefix2) {
+                    var node = coretree.getChild(overlays, path);
+                    var names = coretree.getKeys(node);
+                    for (var j = 0; j < names.length; ++j) {
+                        var name = names[j];
+                        if (isPointerName(name)) {
+                            list.push({
+                                s: path,
+                                n: name,
+                                t: coretree.getProperty(node, name),
+                                p: true
+                            });
+                        } else {
+                            var array = coretree.getProperty(node, name);
+                            ASSERT(Array.isArray(array));
+                            name = name.slice(0, -COLLSUFFIX.length);
+                            for (var k = 0; k < array.length; ++k) {
+                                list.push({
+                                    s: array[k],
+                                    n: name,
+                                    t: path,
+                                    p: false
+                                });
+                            }
+                        }
+                    }
+                }
+            }
 
-			// console.log("query", overlays.parent.data.atr.name, prefix, list);
+            // console.log('query', overlays.parent.data.atr.name, prefix, list);
 
-			return list;
-		}
+            return list;
+        }
 
-		function createNode(parameters) {
-			parameters = parameters || {};
-			var relid = parameters.relid,
-				parent = parameters.parent;
+        function createNode(parameters) {
+            parameters = parameters || {};
+            var relid = parameters.relid,
+                parent = parameters.parent;
 
-			ASSERT(!parent || isValidNode(parent));
-			ASSERT(!relid || typeof relid === 'string');
+            ASSERT(!parent || isValidNode(parent));
+            ASSERT(!relid || typeof relid === 'string');
 
-			var node;
-			if (parent) {
-				if (relid) {
-					node = coretree.getChild(parent, relid);
-				} else {
-					node = coretree.createChild(parent);
-				}
-				coretree.setHashed(node, true);
-			} else {
-				node = coretree.createRoot();
-			}
+            var node;
+            if (parent) {
+                if (relid) {
+                    node = coretree.getChild(parent, relid);
+                } else {
+                    node = coretree.createChild(parent);
+                }
+                coretree.setHashed(node, true);
+            } else {
+                node = coretree.createRoot();
+            }
 
-			return node;
-		}
+            return node;
+        }
 
-		function deleteNode(node) {
-			ASSERT(isValidNode(node));
+        function deleteNode(node) {
+            ASSERT(isValidNode(node));
 
-			var parent = coretree.getParent(node);
-			var prefix = "/" + coretree.getRelid(node);
-			ASSERT(parent !== null);
+            var parent = coretree.getParent(node);
+            var prefix = '/' + coretree.getRelid(node);
+            ASSERT(parent !== null);
 
-			coretree.deleteProperty(parent, coretree.getRelid(node));
+            coretree.deleteProperty(parent, coretree.getRelid(node));
 
-			while (parent) {
-				var overlays = coretree.getChild(parent, OVERLAYS);
+            while (parent) {
+                var overlays = coretree.getChild(parent, OVERLAYS);
 
-				var list = overlayQuery(overlays, prefix);
-				for (var i = 0; i < list.length; ++i) {
-					var entry = list[i];
-					overlayRemove(overlays, entry.s, entry.n, entry.t);
-				}
+                var list = overlayQuery(overlays, prefix);
+                for (var i = 0; i < list.length; ++i) {
+                    var entry = list[i];
+                    overlayRemove(overlays, entry.s, entry.n, entry.t);
+                }
 
-				prefix = "/" + coretree.getRelid(parent) + prefix;
-				parent = coretree.getParent(parent);
-			}
-		}
+                prefix = '/' + coretree.getRelid(parent) + prefix;
+                parent = coretree.getParent(parent);
+            }
+        }
 
-		function copyNode(node, parent) {
-			ASSERT(isValidNode(node));
-			ASSERT(!parent || isValidNode(parent));
+        function copyNode(node, parent) {
+            ASSERT(isValidNode(node));
+            ASSERT(!parent || isValidNode(parent));
 
-			node = coretree.normalize(node);
-			var newNode;
+            node = coretree.normalize(node);
+            var newNode;
 
-			if (parent) {
-				var ancestor = coretree.getAncestor(node, parent);
+            if (parent) {
+                var ancestor = coretree.getAncestor(node, parent);
 
-				// cannot copy inside of itself
-				if (ancestor === node) {
-					return null;
-				}
+                // cannot copy inside of itself
+                if (ancestor === node) {
+                    return null;
+                }
 
-				newNode = coretree.createChild(parent);
-				coretree.setHashed(newNode, true);
-				coretree.setData(newNode, coretree.copyData(node));
+                newNode = coretree.createChild(parent);
+                coretree.setHashed(newNode, true);
+                coretree.setData(newNode, coretree.copyData(node));
 
-				var ancestorOverlays = coretree.getChild(ancestor, OVERLAYS);
-				var ancestorNewPath = coretree.getPath(newNode, ancestor);
+                var ancestorOverlays = coretree.getChild(ancestor, OVERLAYS);
+                var ancestorNewPath = coretree.getPath(newNode, ancestor);
 
-				var base = coretree.getParent(node);
-				var baseOldPath = "/" + coretree.getRelid(node);
-				var aboveAncestor = 1;
+                var base = coretree.getParent(node);
+                var baseOldPath = '/' + coretree.getRelid(node);
+                var aboveAncestor = 1;
 
-				while (base) {
-					var baseOverlays = coretree.getChild(base, OVERLAYS);
-					var list = overlayQuery(baseOverlays, baseOldPath);
-					var tempAncestor = coretree.getAncestor(base,ancestor);
+                while (base) {
+                    var baseOverlays = coretree.getChild(base, OVERLAYS);
+                    var list = overlayQuery(baseOverlays, baseOldPath);
+                    var tempAncestor = coretree.getAncestor(base, ancestor);
 
-					aboveAncestor = (base === ancestor ? 0 : tempAncestor === base ? 1 : -1);
+                    aboveAncestor = (base === ancestor ? 0 : tempAncestor === base ? 1 : -1);
 
-					var relativePath = aboveAncestor < 0 ? coretree.getPath(base, ancestor) : coretree.getPath(ancestor, base);
+                    var relativePath = aboveAncestor < 0 ?
+                        coretree.getPath(base, ancestor) : coretree.getPath(ancestor, base);
 
-					for (var i = 0; i < list.length; ++i) {
-						var entry = list[i];
+                    for (var i = 0; i < list.length; ++i) {
+                        var entry = list[i];
 
-						if (entry.p) {
-							ASSERT(entry.s.substr(0, baseOldPath.length) === baseOldPath);
-							ASSERT(entry.s === baseOldPath || entry.s.charAt(baseOldPath.length) === "/");
+                        if (entry.p) {
+                            ASSERT(entry.s.substr(0, baseOldPath.length) === baseOldPath);
+                            ASSERT(entry.s === baseOldPath || entry.s.charAt(baseOldPath.length) === '/');
 
-							var source, target, overlays;
+                            var source, target, overlays;
 
-							if (aboveAncestor < 0) {
-								//below ancestor node - further from root
-								source = ancestorNewPath + entry.s.substr(baseOldPath.length);
-								target = coretree.joinPaths(relativePath, entry.t);
-								overlays = ancestorOverlays;
-							} else if (aboveAncestor === 0) {
-								//at ancestor node
-								var data = coretree.getCommonPathPrefixData(ancestorNewPath, entry.t);
+                            if (aboveAncestor < 0) {
+                                //below ancestor node - further from root
+                                source = ancestorNewPath + entry.s.substr(baseOldPath.length);
+                                target = coretree.joinPaths(relativePath, entry.t);
+                                overlays = ancestorOverlays;
+                            } else if (aboveAncestor === 0) {
+                                //at ancestor node
+                                var data = coretree.getCommonPathPrefixData(ancestorNewPath, entry.t);
 
-								overlays = newNode;
-								while (data.firstLength-- > 0) {
-									overlays = coretree.getParent(overlays);
-								}
-								overlays = coretree.getChild(overlays, OVERLAYS);
+                                overlays = newNode;
+                                while (data.firstLength-- > 0) {
+                                    overlays = coretree.getParent(overlays);
+                                }
+                                overlays = coretree.getChild(overlays, OVERLAYS);
 
-								source = coretree.joinPaths(data.first, entry.s.substr(baseOldPath.length));
-								target = data.second;
-							} else {
-								//above ancestor node - closer to root
-								ASSERT(entry.s.substr(0, baseOldPath.length) === baseOldPath);
+                                source = coretree.joinPaths(data.first, entry.s.substr(baseOldPath.length));
+                                target = data.second;
+                            } else {
+                                //above ancestor node - closer to root
+                                ASSERT(entry.s.substr(0, baseOldPath.length) === baseOldPath);
 
-								source = relativePath + ancestorNewPath + entry.s.substr(baseOldPath.length);
-								target = entry.t;
-								overlays = baseOverlays;
-							}
+                                source = relativePath + ancestorNewPath + entry.s.substr(baseOldPath.length);
+                                target = entry.t;
+                                overlays = baseOverlays;
+                            }
 
-							overlayInsert(overlays, source, entry.n, target);
-						}
-					}
+                            overlayInsert(overlays, source, entry.n, target);
+                        }
+                    }
 
-					baseOldPath = "/" + coretree.getRelid(base) + baseOldPath;
-					base = coretree.getParent(base);
-				}
-			} else {
-				newNode = coretree.createRoot();
-				coretree.setData(newNode, coretree.copyData(node));
-			}
+                    baseOldPath = '/' + coretree.getRelid(base) + baseOldPath;
+                    base = coretree.getParent(base);
+                }
+            } else {
+                newNode = coretree.createRoot();
+                coretree.setData(newNode, coretree.copyData(node));
+            }
 
-			return newNode;
-		}
+            return newNode;
+        }
 
         //kecso
-        function copyNodes(nodes,parent){
+        function copyNodes(nodes, parent) {
             //copying multiple nodes at once for keeping their internal relations
             var paths = [],
-                i, j,index,names,pointer,
+                i, j, index, names, pointer,
                 copiedNodes = [],
-                internalRelationPaths=[]; //every single element will be an object with the internally pointing relations and the index of the target
+                internalRelationPaths = []; // Every single element will be an object with the
+                                            // internally pointing relations and the index of the target.
 
-            for(i=0;i<nodes.length;i++){
+            for (i = 0; i < nodes.length; i++) {
                 paths.push(coretree.getPath(nodes[i]));
             }
 
-            for(i=0;i<nodes.length;i++){
+            for (i = 0; i < nodes.length; i++) {
                 names = getPointerNames(nodes[i]);
                 pointer = {};
-                for(j=0;j<names.length;j++){
-                    index = paths.indexOf(getPointerPath(nodes[i],names[j]));
-                    if(index !== -1){
+                for (j = 0; j < names.length; j++) {
+                    index = paths.indexOf(getPointerPath(nodes[i], names[j]));
+                    if (index !== -1) {
                         pointer[names[j]] = index;
                     }
                 }
@@ -4974,151 +5002,152 @@ define('common/core/corerel',[ "common/util/assert", "common/core/coretree", "co
             }
 
             //now we use our simple copy
-            for(i=0;i<nodes.length;i++){
-                copiedNodes.push(copyNode(nodes[i],parent));
+            for (i = 0; i < nodes.length; i++) {
+                copiedNodes.push(copyNode(nodes[i], parent));
             }
 
             //and now back to the relations
-            for(i=0;i<internalRelationPaths.length;i++){
+            for (i = 0; i < internalRelationPaths.length; i++) {
                 names = Object.keys(internalRelationPaths[i]);
-                for(j=0;j<names.length;j++){
-                    setPointer(copiedNodes[i],names[j],copiedNodes[internalRelationPaths[i][names[j]]]);
+                for (j = 0; j < names.length; j++) {
+                    setPointer(copiedNodes[i], names[j], copiedNodes[internalRelationPaths[i][names[j]]]);
                 }
             }
 
             return copiedNodes;
         }
 
-		function moveNode(node, parent) {
-			ASSERT(isValidNode(node) && isValidNode(parent));
+        function moveNode(node, parent) {
+            ASSERT(isValidNode(node) && isValidNode(parent));
 
-			node = coretree.normalize(node);
-			var ancestor = coretree.getAncestor(node, parent);
+            node = coretree.normalize(node);
+            var ancestor = coretree.getAncestor(node, parent);
 
-			// cannot move inside of itself
-			if (ancestor === node) {
-				return null;
-			}
+            // cannot move inside of itself
+            if (ancestor === node) {
+                return null;
+            }
 
-			var base = coretree.getParent(node);
-			var baseOldPath = "/" + coretree.getRelid(node);
-			var aboveAncestor = 1;
+            var base = coretree.getParent(node);
+            var baseOldPath = '/' + coretree.getRelid(node);
+            var aboveAncestor = 1;
 
-			var oldNode = node;
-			node = coretree.getChild(parent, coretree.getRelid(oldNode));
-			if (!coretree.isEmpty(node)) {
-				// we have to change the relid of the node, to fit into its new
-				// place...
-				node = coretree.createChild(parent);
-			}
-			coretree.setHashed(node, true);
-			coretree.setData(node, coretree.copyData(oldNode));
+            var oldNode = node;
+            node = coretree.getChild(parent, coretree.getRelid(oldNode));
+            if (!coretree.isEmpty(node)) {
+                // we have to change the relid of the node, to fit into its new
+                // place...
+                node = coretree.createChild(parent);
+            }
+            coretree.setHashed(node, true);
+            coretree.setData(node, coretree.copyData(oldNode));
 
-			var ancestorOverlays = coretree.getChild(ancestor, OVERLAYS);
-			var ancestorNewPath = coretree.getPath(node, ancestor);
+            var ancestorOverlays = coretree.getChild(ancestor, OVERLAYS);
+            var ancestorNewPath = coretree.getPath(node, ancestor);
 
-			while (base) {
-				var baseOverlays = coretree.getChild(base, OVERLAYS);
-				var list = overlayQuery(baseOverlays, baseOldPath);
-				var tempAncestor = coretree.getAncestor(base,ancestor);
+            while (base) {
+                var baseOverlays = coretree.getChild(base, OVERLAYS);
+                var list = overlayQuery(baseOverlays, baseOldPath);
+                var tempAncestor = coretree.getAncestor(base, ancestor);
 
-				aboveAncestor = (base === ancestor ? 0 : tempAncestor === base ? 1 : -1);
+                aboveAncestor = (base === ancestor ? 0 : tempAncestor === base ? 1 : -1);
 
-				var relativePath = aboveAncestor < 0 ? coretree.getPath(base, ancestor) : coretree.getPath(ancestor, base);
+                var relativePath = aboveAncestor < 0 ?
+                    coretree.getPath(base, ancestor) : coretree.getPath(ancestor, base);
 
-				for (var i = 0; i < list.length; ++i) {
-					var entry = list[i];
+                for (var i = 0; i < list.length; ++i) {
+                    var entry = list[i];
 
-					overlayRemove(baseOverlays, entry.s, entry.n, entry.t);
+                    overlayRemove(baseOverlays, entry.s, entry.n, entry.t);
 
-					var tmp;
-					if (!entry.p) {
-						tmp = entry.s;
-						entry.s = entry.t;
-						entry.t = tmp;
-					}
+                    var tmp;
+                    if (!entry.p) {
+                        tmp = entry.s;
+                        entry.s = entry.t;
+                        entry.t = tmp;
+                    }
 
-					ASSERT(entry.s.substr(0, baseOldPath.length) === baseOldPath);
-					ASSERT(entry.s === baseOldPath || entry.s.charAt(baseOldPath.length) === "/");
+                    ASSERT(entry.s.substr(0, baseOldPath.length) === baseOldPath);
+                    ASSERT(entry.s === baseOldPath || entry.s.charAt(baseOldPath.length) === '/');
 
-					var source, target, overlays;
+                    var source, target, overlays;
 
-					if (aboveAncestor < 0) {
-						//below ancestor node
-						source = ancestorNewPath + entry.s.substr(baseOldPath.length);
-						target = coretree.joinPaths(relativePath, entry.t);
-						overlays = ancestorOverlays;
-					} else if (aboveAncestor === 0) {
-						//at ancestor node
-						var data = coretree.getCommonPathPrefixData(ancestorNewPath, entry.t);
+                    if (aboveAncestor < 0) {
+                        //below ancestor node
+                        source = ancestorNewPath + entry.s.substr(baseOldPath.length);
+                        target = coretree.joinPaths(relativePath, entry.t);
+                        overlays = ancestorOverlays;
+                    } else if (aboveAncestor === 0) {
+                        //at ancestor node
+                        var data = coretree.getCommonPathPrefixData(ancestorNewPath, entry.t);
 
-						overlays = node;
-						while (data.firstLength-- > 0) {
-							overlays = coretree.getParent(overlays);
-						}
-						overlays = coretree.getChild(overlays, OVERLAYS);
+                        overlays = node;
+                        while (data.firstLength-- > 0) {
+                            overlays = coretree.getParent(overlays);
+                        }
+                        overlays = coretree.getChild(overlays, OVERLAYS);
 
-						source = coretree.joinPaths(data.first, entry.s.substr(baseOldPath.length));
-						target = data.second;
-					} else {
-						//above ancestor node
-						ASSERT(entry.s.substr(0, baseOldPath.length) === baseOldPath);
+                        source = coretree.joinPaths(data.first, entry.s.substr(baseOldPath.length));
+                        target = data.second;
+                    } else {
+                        //above ancestor node
+                        ASSERT(entry.s.substr(0, baseOldPath.length) === baseOldPath);
 
-						source = relativePath + ancestorNewPath + entry.s.substr(baseOldPath.length);
-						target = entry.t;
-						overlays = baseOverlays;
-					}
+                        source = relativePath + ancestorNewPath + entry.s.substr(baseOldPath.length);
+                        target = entry.t;
+                        overlays = baseOverlays;
+                    }
 
-					if (!entry.p) {
-						tmp = entry.s;
-						entry.s = entry.t;
-						entry.t = tmp;
+                    if (!entry.p) {
+                        tmp = entry.s;
+                        entry.s = entry.t;
+                        entry.t = tmp;
 
-						tmp = source;
-						source = target;
-						target = tmp;
-					}
+                        tmp = source;
+                        source = target;
+                        target = tmp;
+                    }
 
-					//console.log(source, target);
-					overlayInsert(overlays, source, entry.n, target);
-				}
+                    //console.log(source, target);
+                    overlayInsert(overlays, source, entry.n, target);
+                }
 
-				baseOldPath = "/" + coretree.getRelid(base) + baseOldPath;
-				base = coretree.getParent(base);
-			}
+                baseOldPath = '/' + coretree.getRelid(base) + baseOldPath;
+                base = coretree.getParent(base);
+            }
 
-			deleteNode(oldNode);
+            deleteNode(oldNode);
 
-			return node;
-		}
+            return node;
+        }
 
-		function getChildrenRelids(node) {
-			ASSERT(isValidNode(node));
+        function getChildrenRelids(node) {
+            ASSERT(isValidNode(node));
 
-			return coretree.getKeys(node, isValidRelid);
-		}
+            return coretree.getKeys(node, isValidRelid);
+        }
 
-		function getChildrenPaths(node) {
-			var path = coretree.getPath(node);
+        function getChildrenPaths(node) {
+            var path = coretree.getPath(node);
 
-			var relids = getChildrenRelids(node);
-			for (var i = 0; i < relids.length; ++i) {
-				relids[i] = path + "/" + relids[i];
-			}
+            var relids = getChildrenRelids(node);
+            for (var i = 0; i < relids.length; ++i) {
+                relids[i] = path + '/' + relids[i];
+            }
 
-			return relids;
-		}
+            return relids;
+        }
 
-		function loadChildren(node) {
-			ASSERT(isValidNode(node));
+        function loadChildren(node) {
+            ASSERT(isValidNode(node));
 
-			var children = coretree.getKeys(node, isValidRelid);
-			for (var i = 0; i < children.length; ++i) {
-				children[i] = coretree.loadChild(node, children[i]);
-			}
+            var children = coretree.getKeys(node, isValidRelid);
+            for (var i = 0; i < children.length; ++i) {
+                children[i] = coretree.loadChild(node, children[i]);
+            }
 
-			return TASYNC.lift(children);
-		}
+            return TASYNC.lift(children);
+        }
 
         function getPointerNames(node) {
             ASSERT(isValidNode(node));
@@ -5127,7 +5156,7 @@ define('common/core/corerel',[ "common/util/assert", "common/core/coretree", "co
             var names = [];
 
             do {
-                var child = (coretree.getProperty(node,OVERLAYS) || {})[source];
+                var child = (coretree.getProperty(node, OVERLAYS) || {})[source];
                 if (child) {
                     for (var name in child) {
                         ASSERT(names.indexOf(name) === -1);
@@ -5151,12 +5180,12 @@ define('common/core/corerel',[ "common/util/assert", "common/core/coretree", "co
             var target;
 
             do {
-                var child = (coretree.getProperty(node,OVERLAYS) || {})[source];
-                if(child){
-                 target = child[name];
-                 if(target !== undefined){
-                     break;
-                 }
+                var child = (coretree.getProperty(node, OVERLAYS) || {})[source];
+                if (child) {
+                    target = child[name];
+                    if (target !== undefined) {
+                        break;
+                    }
                 }
 
                 source = '/' + coretree.getRelid(node) + source;
@@ -5177,7 +5206,7 @@ define('common/core/corerel',[ "common/util/assert", "common/core/coretree", "co
             var source = '';
 
             do {
-                var child = (coretree.getProperty(node,OVERLAYS) || {})[source];
+                var child = (coretree.getProperty(node, OVERLAYS) || {})[source];
                 if (child && child[name] !== undefined) {
                     return true;
                 }
@@ -5196,10 +5225,10 @@ define('common/core/corerel',[ "common/util/assert", "common/core/coretree", "co
             var target;
 
             do {
-                var child = (coretree.getProperty(node,OVERLAYS) || {})[source];
-                if(child){
+                var child = (coretree.getProperty(node, OVERLAYS) || {})[source];
+                if (child) {
                     target = child[name];
-                    if(target !== undefined){
+                    if (target !== undefined) {
                         break;
                     }
                 }
@@ -5223,10 +5252,10 @@ define('common/core/corerel',[ "common/util/assert", "common/core/coretree", "co
             var target;
 
             do {
-                var child = (coretree.getProperty(node,OVERLAYS) || {})[source];
-                if(child){
+                var child = (coretree.getProperty(node, OVERLAYS) || {})[source];
+                if (child) {
                     target = child[name];
-                    if(target !== undefined){
+                    if (target !== undefined) {
                         break;
                     }
                 }
@@ -5243,297 +5272,311 @@ define('common/core/corerel',[ "common/util/assert", "common/core/coretree", "co
             }
         }
 
-		function getCollectionNames(node) {
-			ASSERT(isValidNode(node));
+        function getCollectionNames(node) {
+            ASSERT(isValidNode(node));
 
-			var target = "";
-			var names = [];
+            var target = '';
+            var names = [];
 
-			do {
-				var child = coretree.getProperty(coretree.getChild(node, OVERLAYS), target);
-				if (child) {
-					for (var name in child) {
-						if (!isPointerName(name) && name !== '_mutable') {
-							name = name.slice(0, -COLLSUFFIX.length);
-							if (isPointerName(name) && names.indexOf(name) < 0) {
-								names.push(name);
-							}
-						}
-					}
-				}
+            do {
+                var child = coretree.getProperty(coretree.getChild(node, OVERLAYS), target);
+                if (child) {
+                    for (var name in child) {
+                        if (!isPointerName(name) && name !== '_mutable') {
+                            name = name.slice(0, -COLLSUFFIX.length);
+                            if (isPointerName(name) && names.indexOf(name) < 0) {
+                                names.push(name);
+                            }
+                        }
+                    }
+                }
 
-				target = "/" + coretree.getRelid(node) + target;
-				node = coretree.getParent(node);
-			} while (node);
+                target = '/' + coretree.getRelid(node) + target;
+                node = coretree.getParent(node);
+            } while (node);
 
-			return names;
-		}
+            return names;
+        }
 
-		function loadCollection(node, name) {
-			ASSERT(isValidNode(node) && name);
+        function loadCollection(node, name) {
+            ASSERT(isValidNode(node) && name);
 
-			name += COLLSUFFIX;
+            name += COLLSUFFIX;
 
-			var collection = [];
-			var target = "";
+            var collection = [];
+            var target = '';
 
-			do {
-				var child = coretree.getChild(node, OVERLAYS);
+            do {
+                var child = coretree.getChild(node, OVERLAYS);
 
-				child = coretree.getChild(child, target);
-				if (child) {
-					var sources = coretree.getProperty(child, name);
-					if (sources) {
-						ASSERT(Array.isArray(sources) && sources.length >= 1);
+                child = coretree.getChild(child, target);
+                if (child) {
+                    var sources = coretree.getProperty(child, name);
+                    if (sources) {
+                        ASSERT(Array.isArray(sources) && sources.length >= 1);
 
-						for (var i = 0; i < sources.length; ++i) {
-							collection.push(coretree.loadByPath(node, sources[i]));
-						}
-					}
-				}
+                        for (var i = 0; i < sources.length; ++i) {
+                            collection.push(coretree.loadByPath(node, sources[i]));
+                        }
+                    }
+                }
 
-				target = "/" + coretree.getRelid(node) + target;
-				node = coretree.getParent(node);
-			} while (node);
+                target = '/' + coretree.getRelid(node) + target;
+                node = coretree.getParent(node);
+            } while (node);
 
-			return TASYNC.lift(collection);
-		}
+            return TASYNC.lift(collection);
+        }
 
-		function getCollectionPaths(node, name) {
-			ASSERT(isValidNode(node) && name);
+        function getCollectionPaths(node, name) {
+            ASSERT(isValidNode(node) && name);
 
-			name += COLLSUFFIX;
+            name += COLLSUFFIX;
 
-			var result = [];
-			var target = "";
+            var result = [];
+            var target = '';
 
-			do {
-				var child = coretree.getChild(node, OVERLAYS);
+            do {
+                var child = coretree.getChild(node, OVERLAYS);
 
-				child = coretree.getChild(child, target);
-				if (child) {
-					var sources = coretree.getProperty(child, name);
-					if (sources) {
-						ASSERT(Array.isArray(sources) && sources.length >= 1);
+                child = coretree.getChild(child, target);
+                if (child) {
+                    var sources = coretree.getProperty(child, name);
+                    if (sources) {
+                        ASSERT(Array.isArray(sources) && sources.length >= 1);
 
-						var prefix = coretree.getPath(node);
+                        var prefix = coretree.getPath(node);
 
-						for (var i = 0; i < sources.length; ++i) {
-							result.push(coretree.joinPaths(prefix, sources[i]));
-						}
-					}
-				}
+                        for (var i = 0; i < sources.length; ++i) {
+                            result.push(coretree.joinPaths(prefix, sources[i]));
+                        }
+                    }
+                }
 
-				target = "/" + coretree.getRelid(node) + target;
-				node = coretree.getParent(node);
-			} while (node);
+                target = '/' + coretree.getRelid(node) + target;
+                node = coretree.getParent(node);
+            } while (node);
 
-			return result;
-		}
+            return result;
+        }
 
-		function deletePointer(node, name) {
-			ASSERT(isValidNode(node) && typeof name === "string");
+        function deletePointer(node, name) {
+            ASSERT(isValidNode(node) && typeof name === 'string');
 
-			var source = "";
+            var source = '';
 
-			do {
-				var overlays = coretree.getChild(node, OVERLAYS);
-				ASSERT(overlays);
+            do {
+                var overlays = coretree.getChild(node, OVERLAYS);
+                ASSERT(overlays);
 
-				var target = coretree.getProperty(coretree.getChild(overlays, source), name);
-				if (target !== undefined) {
-					overlayRemove(overlays, source, name, target);
-					return true;
-				}
+                var target = coretree.getProperty(coretree.getChild(overlays, source), name);
+                if (target !== undefined) {
+                    overlayRemove(overlays, source, name, target);
+                    return true;
+                }
 
-				source = "/" + coretree.getRelid(node) + source;
-				node = coretree.getParent(node);
-			} while (node);
+                source = '/' + coretree.getRelid(node) + source;
+                node = coretree.getParent(node);
+            } while (node);
 
-			return false;
-		}
+            return false;
+        }
 
-		function setPointer(node, name, target) {
-			ASSERT(isValidNode(node) && typeof name === "string" && (!target || isValidNode(target)));
+        function setPointer(node, name, target) {
+            ASSERT(isValidNode(node) && typeof name === 'string' && (!target || isValidNode(target)));
 
-			deletePointer(node, name);
+            deletePointer(node, name);
 
-			if (target) {
-				var ancestor = coretree.getAncestor(node, target);
+            if (target) {
+                var ancestor = coretree.getAncestor(node, target);
 
-				var overlays = coretree.getChild(ancestor, OVERLAYS);
-				var sourcePath = coretree.getPath(node, ancestor);
-				var targetPath = coretree.getPath(target, ancestor);
+                var overlays = coretree.getChild(ancestor, OVERLAYS);
+                var sourcePath = coretree.getPath(node, ancestor);
+                var targetPath = coretree.getPath(target, ancestor);
 
-				overlayInsert(overlays, sourcePath, name, targetPath);
-			}
-		}
+                overlayInsert(overlays, sourcePath, name, targetPath);
+            }
+        }
 
-		function getChildrenHashes(node){
-			var keys = getChildrenRelids(node),
-				i,hashes = {};
+        function getChildrenHashes(node) {
+            var keys = getChildrenRelids(node),
+                i, hashes = {};
 
-			for(i=0;i<keys.length;i++){
-				hashes[keys[i]] = coretree.getChildHash(node,keys[i]);
-			}
+            for (i = 0; i < keys.length; i++) {
+                hashes[keys[i]] = coretree.getChildHash(node, keys[i]);
+            }
 
-			return hashes;
-		}
+            return hashes;
+        }
 
-		// copy everything from coretree
-		var corerel = {};
-		for( var key in coretree) {
-			corerel[key] = coretree[key];
-		}
+        // copy everything from coretree
+        var corerel = {};
+        for (var key in coretree) {
+            corerel[key] = coretree[key];
+        }
 
-		corerel.isValidNode = isValidNode;
-		corerel.isValidRelid = isValidRelid;
+        corerel.isValidNode = isValidNode;
+        corerel.isValidRelid = isValidRelid;
 
-		corerel.getChildrenRelids = getChildrenRelids;
-		corerel.getChildrenPaths = getChildrenPaths;
+        corerel.getChildrenRelids = getChildrenRelids;
+        corerel.getChildrenPaths = getChildrenPaths;
 
-		corerel.loadChildren = loadChildren;
-		corerel.createNode = createNode;
-		corerel.deleteNode = deleteNode;
-		corerel.copyNode = copyNode;
+        corerel.loadChildren = loadChildren;
+        corerel.createNode = createNode;
+        corerel.deleteNode = deleteNode;
+        corerel.copyNode = copyNode;
         corerel.copyNodes = copyNodes;
-		corerel.moveNode = moveNode;
+        corerel.moveNode = moveNode;
 
-		corerel.getAttributeNames = getAttributeNames;
-		corerel.getAttribute = getAttribute;
-		corerel.setAttribute = setAttribute;
-		corerel.delAttribute = delAttribute;
+        corerel.getAttributeNames = getAttributeNames;
+        corerel.getAttribute = getAttribute;
+        corerel.setAttribute = setAttribute;
+        corerel.delAttribute = delAttribute;
 
-		corerel.getRegistryNames = getRegistryNames;
-		corerel.getRegistry = getRegistry;
-		corerel.setRegistry = setRegistry;
-		corerel.delRegistry = delRegistry;
+        corerel.getRegistryNames = getRegistryNames;
+        corerel.getRegistry = getRegistry;
+        corerel.setRegistry = setRegistry;
+        corerel.delRegistry = delRegistry;
 
-		corerel.getPointerNames = getPointerNames;
-		corerel.getPointerPath = getPointerPath;
-		corerel.hasPointer = hasPointer;
-		corerel.getOutsidePointerPath = getOutsidePointerPath;
-		corerel.loadPointer = loadPointer;
-		corerel.deletePointer = deletePointer;
-		corerel.setPointer = setPointer;
-		corerel.getCollectionNames = getCollectionNames;
-		corerel.getCollectionPaths = getCollectionPaths;
-		corerel.loadCollection = loadCollection;
+        corerel.getPointerNames = getPointerNames;
+        corerel.getPointerPath = getPointerPath;
+        corerel.hasPointer = hasPointer;
+        corerel.getOutsidePointerPath = getOutsidePointerPath;
+        corerel.loadPointer = loadPointer;
+        corerel.deletePointer = deletePointer;
+        corerel.setPointer = setPointer;
+        corerel.getCollectionNames = getCollectionNames;
+        corerel.getCollectionPaths = getCollectionPaths;
+        corerel.loadCollection = loadCollection;
 
-		corerel.getCoreTree = function() {
-			return coretree;
-		};
+        corerel.getCoreTree = function () {
+            return coretree;
+        };
 
-		corerel.getChildrenHashes = getChildrenHashes;
+        corerel.getChildrenHashes = getChildrenHashes;
 
-		corerel.overlayInsert = overlayInsert;
+        corerel.overlayInsert = overlayInsert;
 
-		return corerel;
-	}
+        return corerel;
+    }
 
-	return CoreRel;
+    return CoreRel;
 });
 
-/*
- * Copyright (C) 2012 Vanderbilt University, All rights reserved.
- *
- * Author: Tamas Kecskes
+/*globals define*/
+/*jshint node: true, browser: true*/
+
+/**
+ * @author kecso / https://github.com/kecso
  */
 
-define('common/core/setcore',[ "common/util/assert"], function (ASSERT) {
+define('common/core/setcore',['common/util/assert'], function (ASSERT) {
     
 
     var SETS_ID = '_sets';
     var REL_ID = 'member';
 
-    function SetCore(innerCore, options){
+    function SetCore(innerCore, options) {
         ASSERT(typeof options === 'object');
         ASSERT(typeof options.globConf === 'object');
         ASSERT(typeof options.logger !== 'undefined');
 
         var logger = options.logger.fork('setcore');
         //help functions
-        var setModified = function(node){
-            innerCore.setRegistry(node,'_sets_',(innerCore.getRegistry(node,'_sets_') || 0)+1);
+        var setModified = function (node) {
+            innerCore.setRegistry(node, '_sets_', (innerCore.getRegistry(node, '_sets_') || 0) + 1);
         };
-        var getMemberPath = function(node,setElementNode){
+        var getMemberPath = function (node, setElementNode) {
             var ownPath = innerCore.getPath(node),
-                memberPath = innerCore.getPointerPath(setElementNode,REL_ID);
-            ownPath = ownPath.substring(0,ownPath.indexOf('/_')); //TODO this is a hack and should be solved some other way if possible
-            if(ownPath !== memberPath){
+                memberPath = innerCore.getPointerPath(setElementNode, REL_ID);
+
+            //TODO this is a hack and should be solved some other way if possible
+            ownPath = ownPath.substring(0, ownPath.indexOf('/_'));
+
+            if (ownPath !== memberPath) {
                 return memberPath;
             }
 
             //now we should check who really set this member as its own
-            while(innerCore.getBase(node) !== null && innerCore.getBase(setElementNode) !== null && innerCore.getRegistry(innerCore.getBase(setElementNode),'_') === '_'){
+            while (innerCore.getBase(node) !== null && innerCore.getBase(setElementNode) !== null &&
+            innerCore.getRegistry(innerCore.getBase(setElementNode), '_') === '_') {
+
                 node = innerCore.getBase(node);
                 setElementNode = innerCore.getBase(setElementNode);
                 ownPath = innerCore.getPath(node);
-                ownPath = ownPath.substring(0,ownPath.indexOf('/_')); //TODO this is a hack and should be solved some other way if possible
+
+                //TODO this is a hack and should be solved some other way if possible
+                ownPath = ownPath.substring(0, ownPath.indexOf('/_'));
             }
-            memberPath = innerCore.getPointerPath(setElementNode,REL_ID);
+            memberPath = innerCore.getPointerPath(setElementNode, REL_ID);
 
 
             return memberPath;
 
         };
-        var getMemberRelId = function(node,setName,memberPath){
+        var getMemberRelId = function (node, setName, memberPath) {
             ASSERT(typeof setName === 'string');
-            var setNode = innerCore.getChild(innerCore.getChild(node,SETS_ID),setName);
+            var setNode = innerCore.getChild(innerCore.getChild(node, SETS_ID), setName);
             var elements = innerCore.getChildrenRelids(setNode);
 
-            for(var i=0;i<elements.length;i++){
-                if(getMemberPath(node,innerCore.getChild(setNode,elements[i])) === memberPath){
+            for (var i = 0; i < elements.length; i++) {
+                if (getMemberPath(node, innerCore.getChild(setNode, elements[i])) === memberPath) {
                     return elements[i];
                 }
             }
             return null;
         };
-        var createNewMemberRelid = function(setNode){
+        var createNewMemberRelid = function (setNode) {
             var MAX_RELID = Math.pow(2, 31);
             var existingRelIds = innerCore.getChildrenRelids(setNode);
             var relid;
-            do{
+            do {
                 relid = Math.floor(Math.random() * MAX_RELID);
             } while (existingRelIds.indexOf(relid) !== -1);
-            return "" + relid;
+            return '' + relid;
         };
 
-        var harmonizeMemberData = function(node,setName){
-            var setNode = innerCore.getChild(innerCore.getChild(node,SETS_ID),setName),
-              base = innerCore.getBase(setNode),
-              allMembers = innerCore.getChildrenRelids(setNode),
-              ownMembers, inheritedMembers, i, j, path, names, ownMember, inheritedMember, k;
-            if(base){
-                harmonizeMemberData(base,setName); //recursively harmonize base members first
+        var harmonizeMemberData = function (node, setName) {
+            var setNode = innerCore.getChild(innerCore.getChild(node, SETS_ID), setName),
+                base = innerCore.getBase(setNode),
+                allMembers = innerCore.getChildrenRelids(setNode),
+                ownMembers, inheritedMembers, i, j, path, names, ownMember, inheritedMember, k;
+            if (base) {
+                harmonizeMemberData(base, setName); //recursively harmonize base members first
                 inheritedMembers = innerCore.getChildrenRelids(base);
                 ownMembers = [];
-                for(i=0;i<allMembers.length;i++){
-                    if(inheritedMembers.indexOf(allMembers[i]) === -1){
+                for (i = 0; i < allMembers.length; i++) {
+                    if (inheritedMembers.indexOf(allMembers[i]) === -1) {
                         ownMembers.push(allMembers[i]);
                     }
                 }
 
-                for(i=0;i<ownMembers.length;i++){
-                    ownMember = innerCore.getChild(setNode,ownMembers[i]);
-                    path = innerCore.getPointerPath(ownMember,'member');
-                    for(j=0;j<inheritedMembers.length;j++){
-                        inheritedMember = innerCore.getChild(setNode,inheritedMembers[j]);
-                        if(getMemberPath(node,inheritedMember) === path){
+                for (i = 0; i < ownMembers.length; i++) {
+                    ownMember = innerCore.getChild(setNode, ownMembers[i]);
+                    path = innerCore.getPointerPath(ownMember, 'member');
+                    for (j = 0; j < inheritedMembers.length; j++) {
+                        inheritedMember = innerCore.getChild(setNode, inheritedMembers[j]);
+                        if (getMemberPath(node, inheritedMember) === path) {
                             //redundancy...
                             names = innerCore.getAttributeNames(ownMember);
-                            for(k=0;k<names.length;k++){
-                                if(innerCore.getAttribute(ownMember,names[k]) !== innerCore.getAttribute(inheritedMember,names[k])){
-                                    innerCore.setAttribute(inheritedMember,names[k],innerCore.getAttribute(ownMember,names[k]));
+                            for (k = 0; k < names.length; k++) {
+                                if (innerCore.getAttribute(ownMember, names[k]) !==
+                                    innerCore.getAttribute(inheritedMember, names[k])) {
+
+                                    innerCore.setAttribute(inheritedMember, names[k],
+                                        innerCore.getAttribute(ownMember, names[k]));
                                 }
                             }
                             names = innerCore.getRegistryNames(ownMember);
-                            for(k=0;k<names.length;k++){
-                                if(innerCore.getRegistry(ownMember,names[k]) !== innerCore.getRegistry(inheritedMember,names[k])){
-                                    innerCore.setRegistry(inheritedMember,names[k],innerCore.getRegistry(ownMember,names[k]));
+                            for (k = 0; k < names.length; k++) {
+                                if (innerCore.getRegistry(ownMember, names[k]) !==
+                                    innerCore.getRegistry(inheritedMember, names[k])) {
+
+                                    innerCore.setRegistry(inheritedMember, names[k],
+                                        innerCore.getRegistry(ownMember, names[k]));
                                 }
                             }
-                            innerCore.deleteNode(innerCore.getChild(setNode,ownMembers[i]),true);
+                            innerCore.deleteNode(innerCore.getChild(setNode, ownMembers[i]), true);
                         }
                     }
                 }
@@ -5542,140 +5585,170 @@ define('common/core/setcore',[ "common/util/assert"], function (ASSERT) {
 
         //copy lower layer
         var setcore = {};
-        for(var i in innerCore){
+        for (var i in innerCore) {
             setcore[i] = innerCore[i];
         }
         logger.debug('initialized');
         //adding new functions
-        setcore.getSetNumbers = function(node){
+        setcore.getSetNumbers = function (node) {
             return this.getSetNames(node).length;
         };
-        setcore.getSetNames = function(node){
-            return  innerCore.getPointerNames(innerCore.getChild(node,SETS_ID))|| [];
+
+        setcore.getSetNames = function (node) {
+            return innerCore.getPointerNames(innerCore.getChild(node, SETS_ID)) || [];
         };
-        setcore.getPointerNames = function(node){
+
+        setcore.getPointerNames = function (node) {
             var sorted = [],
                 raw = innerCore.getPointerNames(node);
-            for(var i=0;i<raw.length;i++){
-                if(raw[i].indexOf(REL_ID) === -1){
+            for (var i = 0; i < raw.length; i++) {
+                if (raw[i].indexOf(REL_ID) === -1) {
                     sorted.push(raw[i]);
                 }
             }
             return sorted;
         };
-        setcore.getCollectionNames = function(node){
+
+        setcore.getCollectionNames = function (node) {
             var sorted = [],
                 raw = innerCore.getCollectionNames(node);
-            for(var i=0;i<raw.length;i++){
-                if(raw[i].indexOf(REL_ID) === -1){
+            for (var i = 0; i < raw.length; i++) {
+                if (raw[i].indexOf(REL_ID) === -1) {
                     sorted.push(raw[i]);
                 }
             }
             return sorted;
         };
-        setcore.getMemberPaths = function(node,setName){
+
+        setcore.getMemberPaths = function (node, setName) {
             ASSERT(typeof setName === 'string');
-            harmonizeMemberData(node,setName);
-            var setNode = innerCore.getChild(innerCore.getChild(node,SETS_ID),setName);
+            harmonizeMemberData(node, setName);
+            var setNode = innerCore.getChild(innerCore.getChild(node, SETS_ID), setName);
             var members = [];
             var elements = innerCore.getChildrenRelids(setNode);
             elements = elements.sort(); //TODO this should be removed at some point
-            for(var i=0;i<elements.length;i++){
-                var path = getMemberPath(node,innerCore.getChild(setNode,elements[i]));
-                if(path){
+            for (var i = 0; i < elements.length; i++) {
+                var path = getMemberPath(node, innerCore.getChild(setNode, elements[i]));
+                if (path) {
                     members.push(path);
                 }
             }
             return members;
         };
-        setcore.delMember = function(node,setName,memberPath){
+
+        setcore.delMember = function (node, setName, memberPath) {
             ASSERT(typeof setName === 'string');
-            harmonizeMemberData(node,setName);
+            harmonizeMemberData(node, setName);
             //we only need the path of the member so we allow to enter only it
-            if(typeof memberPath !== 'string'){
+            if (typeof memberPath !== 'string') {
                 memberPath = innerCore.getPath(memberPath);
             }
 
-            var setMemberRelId = getMemberRelId(node,setName,memberPath);
-            if(setMemberRelId){
-                var setMemberNode = innerCore.getChild(innerCore.getChild(innerCore.getChild(node,SETS_ID),setName),setMemberRelId);
-                innerCore.deleteNode(setMemberNode,true);
-                setModified(node);
-            }
-        };
-        setcore.addMember = function(node,setName,member){
-            ASSERT(typeof setName === 'string');
-            var setsNode = innerCore.getChild(node,SETS_ID);
-            //TODO decide if the member addition should really create the set or it should fail...
-            if(innerCore.getPointerPath(setsNode,setName) === undefined){
-                setcore.createSet(node,setName);
-            }
-            harmonizeMemberData(node,setName);
-            var setNode = innerCore.getChild(setsNode,setName);
-            var setMemberRelId = getMemberRelId(node,setName,setcore.getPath(member));
-            if(setMemberRelId === null){
-                var setMember =  innerCore.getChild(setNode,createNewMemberRelid(setNode));
-                innerCore.setPointer(setMember,'member',member);
-                innerCore.setRegistry(setMember,"_","_");//TODO hack, somehow the empty children have been removed during persist
+            var setMemberRelId = getMemberRelId(node, setName, memberPath);
+            if (setMemberRelId) {
+                var setMemberNode = innerCore.getChild(
+                    innerCore.getChild(innerCore.getChild(node, SETS_ID), setName), setMemberRelId);
+
+                innerCore.deleteNode(setMemberNode, true);
                 setModified(node);
             }
         };
 
-        setcore.getMemberAttributeNames = function(node,setName,memberPath){
+        setcore.addMember = function (node, setName, member) {
             ASSERT(typeof setName === 'string');
-            harmonizeMemberData(node,setName);
-            var memberRelId = getMemberRelId(node,setName,memberPath);
-            if(memberRelId){
-                var memberNode = innerCore.getChild(innerCore.getChild(innerCore.getChild(node,SETS_ID),setName),memberRelId);
+            var setsNode = innerCore.getChild(node, SETS_ID);
+            //TODO decide if the member addition should really create the set or it should fail...
+            if (innerCore.getPointerPath(setsNode, setName) === undefined) {
+                setcore.createSet(node, setName);
+            }
+            harmonizeMemberData(node, setName);
+            var setNode = innerCore.getChild(setsNode, setName);
+            var setMemberRelId = getMemberRelId(node, setName, setcore.getPath(member));
+            if (setMemberRelId === null) {
+                var setMember = innerCore.getChild(setNode, createNewMemberRelid(setNode));
+                innerCore.setPointer(setMember, 'member', member);
+
+                //TODO hack, somehow the empty children have been removed during persist
+                innerCore.setRegistry(setMember, '_', '_');
+                setModified(node);
+            }
+        };
+
+        //TODO: Refactor out getMemberNode:
+        //TODO: var memberNode = innerCore.getChild(
+        //TODO: innerCore.getChild(innerCore.getChild(node, SETS_ID), setName), memberRelId);
+
+        setcore.getMemberAttributeNames = function (node, setName, memberPath) {
+            ASSERT(typeof setName === 'string');
+            harmonizeMemberData(node, setName);
+            var memberRelId = getMemberRelId(node, setName, memberPath);
+            if (memberRelId) {
+                var memberNode = innerCore.getChild(
+                    innerCore.getChild(innerCore.getChild(node, SETS_ID), setName), memberRelId);
+
                 return innerCore.getAttributeNames(memberNode);
             }
             return [];
         };
+
         setcore.getMemberOwnAttributeNames = function (node, setName, memberPath) {
             ASSERT(typeof setName === 'string');
             var memberRelId = getMemberRelId(node, setName, memberPath);
             if (memberRelId) {
-                var memberNode = innerCore.getChild(innerCore.getChild(innerCore.getChild(node, SETS_ID), setName), memberRelId);
+                var memberNode = innerCore.getChild(
+                    innerCore.getChild(innerCore.getChild(node, SETS_ID), setName), memberRelId);
+
                 return innerCore.getOwnAttributeNames(memberNode);
             }
             return [];
         };
-        setcore.getMemberAttribute = function(node,setName,memberPath,attrName){
+
+        setcore.getMemberAttribute = function (node, setName, memberPath, attrName) {
             ASSERT(typeof setName === 'string' && typeof attrName === 'string');
-            harmonizeMemberData(node,setName);
-            var memberRelId = getMemberRelId(node,setName,memberPath);
-            if(memberRelId){
-                var memberNode = innerCore.getChild(innerCore.getChild(innerCore.getChild(node,SETS_ID),setName),memberRelId);
-                return innerCore.getAttribute(memberNode,attrName);
+            harmonizeMemberData(node, setName);
+            var memberRelId = getMemberRelId(node, setName, memberPath);
+            if (memberRelId) {
+                var memberNode = innerCore.getChild(
+                    innerCore.getChild(innerCore.getChild(node, SETS_ID), setName), memberRelId);
+
+                return innerCore.getAttribute(memberNode, attrName);
             }
         };
-        setcore.setMemberAttribute = function(node,setName,memberPath,attrName,attrValue){
+
+        setcore.setMemberAttribute = function (node, setName, memberPath, attrName, attrValue) {
             ASSERT(typeof setName === 'string' && typeof attrName === 'string' && attrValue !== undefined);
-            harmonizeMemberData(node,setName);
-            var memberRelId = getMemberRelId(node,setName,memberPath);
-            if(memberRelId){
-                var memberNode = innerCore.getChild(innerCore.getChild(innerCore.getChild(node,SETS_ID),setName),memberRelId);
-                innerCore.setAttribute(memberNode,attrName,attrValue);
-                setModified(node);
-            }
-        };
-        setcore.delMemberAttribute = function(node,setName,memberPath,attrName){
-            ASSERT(typeof setName === 'string' && typeof attrName === 'string');
-            harmonizeMemberData(node,setName);
-            var memberRelId = getMemberRelId(node,setName,memberPath);
-            if(memberRelId){
-                var memberNode = innerCore.getChild(innerCore.getChild(innerCore.getChild(node,SETS_ID),setName),memberRelId);
-                innerCore.delAttribute(memberNode,attrName);
+            harmonizeMemberData(node, setName);
+            var memberRelId = getMemberRelId(node, setName, memberPath);
+            if (memberRelId) {
+                var memberNode = innerCore.getChild(
+                    innerCore.getChild(innerCore.getChild(node, SETS_ID), setName), memberRelId);
+
+                innerCore.setAttribute(memberNode, attrName, attrValue);
                 setModified(node);
             }
         };
 
-        setcore.getMemberRegistryNames = function(node,setName,memberPath){
+        setcore.delMemberAttribute = function (node, setName, memberPath, attrName) {
+            ASSERT(typeof setName === 'string' && typeof attrName === 'string');
+            harmonizeMemberData(node, setName);
+            var memberRelId = getMemberRelId(node, setName, memberPath);
+            if (memberRelId) {
+                var memberNode = innerCore.getChild(
+                    innerCore.getChild(innerCore.getChild(node, SETS_ID), setName), memberRelId);
+
+                innerCore.delAttribute(memberNode, attrName);
+                setModified(node);
+            }
+        };
+
+        setcore.getMemberRegistryNames = function (node, setName, memberPath) {
             ASSERT(typeof setName === 'string');
-            harmonizeMemberData(node,setName);
-            var memberRelId = getMemberRelId(node,setName,memberPath);
-            if(memberRelId){
-                var memberNode = innerCore.getChild(innerCore.getChild(innerCore.getChild(node,SETS_ID),setName),memberRelId);
+            harmonizeMemberData(node, setName);
+            var memberRelId = getMemberRelId(node, setName, memberPath);
+            if (memberRelId) {
+                var memberNode = innerCore.getChild(
+                    innerCore.getChild(innerCore.getChild(node, SETS_ID), setName), memberRelId);
+
                 return innerCore.getRegistryNames(memberNode);
             }
             return [];
@@ -5684,73 +5757,84 @@ define('common/core/setcore',[ "common/util/assert"], function (ASSERT) {
             ASSERT(typeof setName === 'string');
             var memberRelId = getMemberRelId(node, setName, memberPath);
             if (memberRelId) {
-                var memberNode = innerCore.getChild(innerCore.getChild(innerCore.getChild(node, SETS_ID), setName), memberRelId);
+                var memberNode = innerCore.getChild(
+                    innerCore.getChild(innerCore.getChild(node, SETS_ID), setName), memberRelId);
+
                 return innerCore.getOwnRegistryNames(memberNode);
             }
             return [];
         };
-        setcore.getMemberRegistry = function(node,setName,memberPath,regName){
+        setcore.getMemberRegistry = function (node, setName, memberPath, regName) {
             ASSERT(typeof setName === 'string' && typeof regName === 'string');
-            harmonizeMemberData(node,setName);
-            var memberRelId = getMemberRelId(node,setName,memberPath);
-            if(memberRelId){
-                var memberNode = innerCore.getChild(innerCore.getChild(innerCore.getChild(node,SETS_ID),setName),memberRelId);
-                return innerCore.getRegistry(memberNode,regName);
+            harmonizeMemberData(node, setName);
+            var memberRelId = getMemberRelId(node, setName, memberPath);
+            if (memberRelId) {
+                var memberNode = innerCore.getChild(
+                    innerCore.getChild(innerCore.getChild(node, SETS_ID), setName), memberRelId);
+
+                return innerCore.getRegistry(memberNode, regName);
             }
         };
-        setcore.setMemberRegistry = function(node,setName,memberPath,regName,regValue){
+        setcore.setMemberRegistry = function (node, setName, memberPath, regName, regValue) {
             ASSERT(typeof setName === 'string' && typeof regName === 'string' && regValue !== undefined);
-            harmonizeMemberData(node,setName);
-            var memberRelId = getMemberRelId(node,setName,memberPath);
-            if(memberRelId){
-                var memberNode = innerCore.getChild(innerCore.getChild(innerCore.getChild(node,SETS_ID),setName),memberRelId);
-                innerCore.setRegistry(memberNode,regName,regValue);
+            harmonizeMemberData(node, setName);
+            var memberRelId = getMemberRelId(node, setName, memberPath);
+            if (memberRelId) {
+                var memberNode = innerCore.getChild(
+                    innerCore.getChild(innerCore.getChild(node, SETS_ID), setName), memberRelId);
+
+                innerCore.setRegistry(memberNode, regName, regValue);
                 setModified(node);
             }
         };
-        setcore.delMemberRegistry = function(node,setName,memberPath,regName){
+        setcore.delMemberRegistry = function (node, setName, memberPath, regName) {
             ASSERT(typeof setName === 'string' && typeof regName === 'string');
-            harmonizeMemberData(node,setName);
-            var memberRelId = getMemberRelId(node,setName,memberPath);
-            if(memberRelId){
-                var memberNode = innerCore.getChild(innerCore.getChild(innerCore.getChild(node,SETS_ID),setName),memberRelId);
-                innerCore.delRegistry(memberNode,regName);
+            harmonizeMemberData(node, setName);
+            var memberRelId = getMemberRelId(node, setName, memberPath);
+            if (memberRelId) {
+                var memberNode = innerCore.getChild(
+                    innerCore.getChild(innerCore.getChild(node, SETS_ID), setName), memberRelId);
+
+                innerCore.delRegistry(memberNode, regName);
                 setModified(node);
             }
         };
-        setcore.createSet = function(node,setName) {
+        setcore.createSet = function (node, setName) {
             ASSERT(typeof setName === 'string');
-            var setsNode = innerCore.getChild(node,SETS_ID),
-                setNode = innerCore.getChild(setsNode,setName);
-            innerCore.setRegistry(setNode,"_","_");//TODO hack, somehow the empty children have been removed during persist
-            innerCore.setPointer(innerCore.getChild(node,SETS_ID), setName, null);
+            var setsNode = innerCore.getChild(node, SETS_ID),
+                setNode = innerCore.getChild(setsNode, setName);
+
+            //FIXME: hack, somehow the empty children have been removed during persist
+            innerCore.setRegistry(setNode, '_', '_');
+
+            innerCore.setPointer(innerCore.getChild(node, SETS_ID), setName, null);
             setModified(node);
         };
-        setcore.deleteSet = function(node,setName) {
+        setcore.deleteSet = function (node, setName) {
             ASSERT(typeof setName === 'string');
-            var setsNode = innerCore.getChild(node,SETS_ID),
-                setNode = innerCore.getChild(setsNode,setName);
-            innerCore.deletePointer(setsNode,setName);
-            innerCore.deleteNode(setNode,true);
+            var setsNode = innerCore.getChild(node, SETS_ID),
+                setNode = innerCore.getChild(setsNode, setName);
+            innerCore.deletePointer(setsNode, setName);
+            innerCore.deleteNode(setNode, true);
             setModified(node);
         };
 
-        setcore.isMemberOf = function(node){
+        setcore.isMemberOf = function (node) {
             //TODO we should find a proper way to do this - or at least some support from lower layers would be fine
-            var coll = setcore.getCollectionPaths(node,REL_ID);
+            var coll = setcore.getCollectionPaths(node, REL_ID);
             var sets = {};
-            for(var i=0;i<coll.length;i++){
+            for (var i = 0; i < coll.length; i++) {
                 var pathArray = coll[i].split('/');
-                if(pathArray.indexOf('_meta') === -1){
+                if (pathArray.indexOf('_meta') === -1) {
                     //now we simply skip META sets...
                     var index = pathArray.indexOf(SETS_ID);
-                    if(index>0 && pathArray.length>index+1){
+                    if (index > 0 && pathArray.length > index + 1) {
                         //otherwise it is not a real set
-                        var ownerPath = pathArray.slice(0,index).join('/');
-                        if(sets[ownerPath] === undefined){
+                        var ownerPath = pathArray.slice(0, index).join('/');
+                        if (sets[ownerPath] === undefined) {
                             sets[ownerPath] = [];
                         }
-                        sets[ownerPath].push(pathArray[index+1]);
+                        sets[ownerPath].push(pathArray[index + 1]);
                     }
                 }
             }
@@ -5758,21 +5842,21 @@ define('common/core/setcore',[ "common/util/assert"], function (ASSERT) {
         };
 
         /*setcore.getDataForSingleHash = function(node){
-            ASSERT(setcore.isValidNode(node));
-            var datas = innerCore.getDataForSingleHash(node);
+         ASSERT(setcore.isValidNode(node));
+         var datas = innerCore.getDataForSingleHash(node);
 
-            //now we should stir all the sets hashes into the node's hash to get changes deep inside
-            var names = setcore.getSetNames(node);
-            for(var i=0;i<names.length;i++){
-                var setNode = setcore.getChild(setcore.getChild(node,SETS_ID),names[i]);
-                var memberRelids = setcore.getChildrenRelids(setNode);
-                for(var j=0;j<memberRelids.length;j++){
-                    datas = datas.concat(innerCore.getDataForSingleHash(setcore.getChild(setNode,memberRelids[j])));
-                }
-            }
+         //now we should stir all the sets hashes into the node's hash to get changes deep inside
+         var names = setcore.getSetNames(node);
+         for(var i=0;i<names.length;i++){
+         var setNode = setcore.getChild(setcore.getChild(node,SETS_ID),names[i]);
+         var memberRelids = setcore.getChildrenRelids(setNode);
+         for(var j=0;j<memberRelids.length;j++){
+         datas = datas.concat(innerCore.getDataForSingleHash(setcore.getChild(setNode,memberRelids[j])));
+         }
+         }
 
-            return datas;
-        };*/
+         return datas;
+         };*/
 
         return setcore;
 
@@ -5813,10 +5897,12 @@ define('common/regexp',[], function () {
  * @author kecso / https://github.com/kecso
  */
 
-define('common/core/guidcore',['common/util/assert',
+define('common/core/guidcore',[
+    'common/util/assert',
     'common/util/guid',
     'common/core/tasync',
-    'common/regexp'], function (ASSERT, GUID, TASYNC, REGEXP) {
+    'common/regexp'
+], function (ASSERT, GUID, TASYNC, REGEXP) {
 
     
 
@@ -5850,7 +5936,8 @@ define('common/core/guidcore',['common/util/assert',
         }
 
         function getRelidGuid(node) {
-            //TODO we always should know what structure we should expect as a relid, now we think it is a number so it can be converted to 0xsomething
+            //TODO we always should know what structure we should expect as a relid -
+            // now we think it is a number so it can be converted to 0xsomething
             var relid = _core.getRelid(node);
             relid = Number(relid);
             if (relid === 'NaN') {
@@ -5877,6 +5964,7 @@ define('common/core/guidcore',['common/util/assert',
 
             var arrayOut = [];
             for (var i = 0; i < arrayA.length; i++) {
+                /*jshint bitwise: false*/
                 arrayOut.push(arrayA[i] ^ arrayB[i]);
             }
             for (i = 0; i < arrayOut.length; i++) {
@@ -5993,58 +6081,60 @@ define('common/core/guidcore',['common/util/assert',
     return guidCore;
 });
 
-/*
- * Copyright (C) 2013 Vanderbilt University, All rights reserved.
- *
- * Author: Tamas Kecskes
+/*globals define*/
+/*jshint node: true, browser: true*/
+
+/**
+ * @author kecso / https://github.com/kecso
  */
 
 define('common/core/nullpointercore',['common/util/assert'], function (ASSERT) {
     
 
-    var NULLPTR_NAME = "_null_pointer";
-    var NULLPTR_RELID = "_nullptr";
+    var NULLPTR_NAME = '_null_pointer';
+    var NULLPTR_RELID = '_nullptr';
 
 
-    function nullPointerCore (_innerCore, options) {
+    function nullPointerCore(_innerCore, options) {
         ASSERT(typeof options === 'object');
         ASSERT(typeof options.globConf === 'object');
         ASSERT(typeof options.logger !== 'undefined');
         var _core = {},
             logger = options.logger.fork('nullpointercore');
-        for(var i in _innerCore){
+        for (var i in _innerCore) {
             _core[i] = _innerCore[i];
         }
         logger.debug('initialized');
-        
+
         //extra functions
-        _core.setPointer = function(node,name, target){
-            if(target === null){
-                var nullChild = _innerCore.getChild(node,NULLPTR_RELID);
-                _innerCore.setAttribute(nullChild,'name',NULLPTR_NAME);
-                _innerCore.setPointer(node,name,nullChild);
+        _core.setPointer = function (node, name, target) {
+            if (target === null) {
+                var nullChild = _innerCore.getChild(node, NULLPTR_RELID);
+                _innerCore.setAttribute(nullChild, 'name', NULLPTR_NAME);
+                _innerCore.setPointer(node, name, nullChild);
             } else {
-                _innerCore.setPointer(node,name,target);
+                _innerCore.setPointer(node, name, target);
             }
         };
-        _core.getPointerPath = function(node,name){
-            var path = _innerCore.getPointerPath(node,name);
-            if(path && path.indexOf(NULLPTR_RELID) !== -1){
+
+        _core.getPointerPath = function (node, name) {
+            var path = _innerCore.getPointerPath(node, name);
+            if (path && path.indexOf(NULLPTR_RELID) !== -1) {
                 return null;
             } else {
                 return path;
             }
         };
-        _core.loadPointer = function(node,name){
-            var path = _core.getPointerPath(node,name);
-            if(path === null){
+
+        _core.loadPointer = function (node, name) {
+            var path = _core.getPointerPath(node, name);
+            if (path === null) {
                 return null;
             } else {
-                return _innerCore.loadPointer(node,name);
+                return _innerCore.loadPointer(node, name);
             }
         };
 
-        
         return _core;
     }
 
@@ -6053,214 +6143,218 @@ define('common/core/nullpointercore',['common/util/assert'], function (ASSERT) {
 
 
 
-/*
- * Copyright (C) 2012 Vanderbilt University, All rights reserved.
- * 
- * Author: Miklos Maroti
+/*globals define*/
+/*jshint node: true, browser: true*/
+
+/**
+ * @author mmaroti / https://github.com/mmaroti
  */
 
-define('common/core/coreunwrap',[ "common/util/assert", "common/core/tasync" ], function(ASSERT, TASYNC) {
-	
+define('common/core/coreunwrap',['common/util/assert', 'common/core/tasync'], function (ASSERT, TASYNC) {
+    
 
-	// ----------------- CoreUnwrap -----------------
+    // ----------------- CoreUnwrap -----------------
 
-	var CoreUnwrap = function(oldcore, options) {
+    var CoreUnwrap = function (oldcore, options) {
         ASSERT(typeof options === 'object');
         ASSERT(typeof options.globConf === 'object');
         ASSERT(typeof options.logger !== 'undefined');
         var logger = options.logger.fork('coreunwrap');
-		function checkNode(node) {
-			if (node === null || oldcore.isValidNode(node)) {
-				return node;
-			} else {
-				throw new Error("Invalid result node");
-			}
-		}
 
-		function checkNodes(nodes) {
-			ASSERT(nodes instanceof Array);
+        function checkNode(node) {
+            if (node === null || oldcore.isValidNode(node)) {
+                return node;
+            } else {
+                throw new Error('Invalid result node');
+            }
+        }
 
-			var i;
-			for (i = 0; i < nodes.length; ++i) {
-				if (!oldcore.isValidNode(nodes[i])) {
-					throw new Error("Invalid result node array");
-				}
-			}
+        function checkNodes(nodes) {
+            ASSERT(nodes instanceof Array);
 
-			return nodes;
-		}
+            var i;
+            for (i = 0; i < nodes.length; ++i) {
+                if (!oldcore.isValidNode(nodes[i])) {
+                    throw new Error('Invalid result node array');
+                }
+            }
 
-		// copy all operations
-		var core = {};
-		for ( var key in oldcore) {
-			core[key] = oldcore[key];
-		}
+            return nodes;
+        }
+
+        // copy all operations
+        var core = {};
+        for (var key in oldcore) {
+            core[key] = oldcore[key];
+        }
         logger.debug('initialized');
-		core.loadRoot = TASYNC.unwrap(oldcore.loadRoot);
-		core.persist = TASYNC.unwrap(oldcore.persist);
+        core.loadRoot = TASYNC.unwrap(oldcore.loadRoot);
+        core.persist = TASYNC.unwrap(oldcore.persist);
 
-		// core.loadChild = TASYNC.unwrap(oldcore.loadChild);
-		core.loadChild = TASYNC.unwrap(function(node, relid) {
-			return TASYNC.call(checkNode, oldcore.loadChild(node, relid));
-		});
+        // core.loadChild = TASYNC.unwrap(oldcore.loadChild);
+        core.loadChild = TASYNC.unwrap(function (node, relid) {
+            return TASYNC.call(checkNode, oldcore.loadChild(node, relid));
+        });
 
-		// core.loadByPath = TASYNC.unwrap(oldcore.loadByPath);
-		core.loadByPath = TASYNC.unwrap(function(node, path) {
-			return TASYNC.call(checkNode, oldcore.loadByPath(node, path));
-		});
+        // core.loadByPath = TASYNC.unwrap(oldcore.loadByPath);
+        core.loadByPath = TASYNC.unwrap(function (node, path) {
+            return TASYNC.call(checkNode, oldcore.loadByPath(node, path));
+        });
 
-		// core.loadChildren = TASYNC.unwrap(oldcore.loadChildren);
-		core.loadChildren = TASYNC.unwrap(function(node) {
-			return TASYNC.call(checkNodes, oldcore.loadChildren(node));
-		});
+        // core.loadChildren = TASYNC.unwrap(oldcore.loadChildren);
+        core.loadChildren = TASYNC.unwrap(function (node) {
+            return TASYNC.call(checkNodes, oldcore.loadChildren(node));
+        });
 
-		core.loadPointer = TASYNC.unwrap(oldcore.loadPointer);
-		core.loadCollection = TASYNC.unwrap(oldcore.loadCollection);
+        core.loadPointer = TASYNC.unwrap(oldcore.loadPointer);
+        core.loadCollection = TASYNC.unwrap(oldcore.loadCollection);
 
-		core.loadSubTree = TASYNC.unwrap(oldcore.loadSubTree);
-		core.loadTree = TASYNC.unwrap(oldcore.loadTree);
+        core.loadSubTree = TASYNC.unwrap(oldcore.loadSubTree);
+        core.loadTree = TASYNC.unwrap(oldcore.loadTree);
 
-		//core diff async functions
-		if(typeof oldcore.generateTreeDiff === 'function'){
-			core.generateTreeDiff = TASYNC.unwrap(oldcore.generateTreeDiff);
-		}
+        //core diff async functions
+        if (typeof oldcore.generateTreeDiff === 'function') {
+            core.generateTreeDiff = TASYNC.unwrap(oldcore.generateTreeDiff);
+        }
 
-		if(typeof  oldcore.generateLightTreeDiff === 'function'){
-		  core.generateLightTreeDiff = TASYNC.unwrap(oldcore.generateLightTreeDiff);
-		}
+        if (typeof oldcore.generateLightTreeDiff === 'function') {
+            core.generateLightTreeDiff = TASYNC.unwrap(oldcore.generateLightTreeDiff);
+        }
 
-		if(typeof oldcore.applyTreeDiff === 'function'){
-		  core.applyTreeDiff = TASYNC.unwrap(oldcore.applyTreeDiff);
-		}
+        if (typeof oldcore.applyTreeDiff === 'function') {
+            core.applyTreeDiff = TASYNC.unwrap(oldcore.applyTreeDiff);
+        }
 
-		return core;
-	};
+        return core;
+    };
 
-	return CoreUnwrap;
+    return CoreUnwrap;
 });
 
-/*
- * Copyright (C) 2012 Vanderbilt University, All rights reserved.
- * 
- * Author: Miklos Maroti
+/*globals define*/
+/*jshint node: true, browser: true*/
+
+/**
+ * @author mmaroti / https://github.com/mmaroti
  */
 
-define('common/core/coretype',[ "common/util/assert", "common/core/core", "common/core/tasync" ], function(ASSERT, Core, TASYNC) {
-	
+define('common/core/coretype',['common/util/assert', 'common/core/core', 'common/core/tasync'], function (ASSERT, Core, TASYNC) {
+    
 
-	// ----------------- CoreType -----------------
+    // ----------------- CoreType -----------------
 
     //FIXME TODO these stuff have been simply copied from lower layer, probably it should be put to some constant place
-    var OVERLAYS = "ovr";
-    var COLLSUFFIX = "-inv";
+    var OVERLAYS = 'ovr';
+    var COLLSUFFIX = '-inv';
 
-    var CoreType = function(oldcore, options) {
-		// copy all operations
+    var CoreType = function (oldcore, options) {
+        // copy all operations
         ASSERT(typeof options === 'object');
         ASSERT(typeof options.globConf === 'object');
         ASSERT(typeof options.logger !== 'undefined');
-		var core = {},
+        var core = {},
             logger = options.logger.fork('coretype');
-		for ( var key in oldcore) {
-			core[key] = oldcore[key];
-		}
+        for (var key in oldcore) {
+            core[key] = oldcore[key];
+        }
         logger.debug('initialized');
-		// ----- validity
+        // ----- validity
 
-		function __test(text, cond) {
-			if (!cond) {
-				throw new Error(text);
-			}
-		}
+        function __test(text, cond) {
+            if (!cond) {
+                throw new Error(text);
+            }
+        }
 
-		function isValidNode(node) {
-			try {
-				__test("core", oldcore.isValidNode(node));
-				__test("base", typeof node.base === "object");
-				return true;
-			} catch (error) {
-				console.log("Wrong node", error.stack);
-				return false;
-			}
-		}
+        function isValidNode(node) {
+            try {
+                __test('core', oldcore.isValidNode(node));
+                __test('base', typeof node.base === 'object');
+                return true;
+            } catch (error) {
+                console.log('Wrong node', error.stack);
+                return false;
+            }
+        }
 
         function isFalseNode(node) {
             //TODO this hack should be removed, but now it seems just fine :)
-            if(typeof oldcore.getPointerPath(node,"base") === "undefined"){
+            if (typeof oldcore.getPointerPath(node, 'base') === 'undefined') {
                 return true;
             }
             return false;
         }
 
-		core.isValidNode = isValidNode;
+        core.isValidNode = isValidNode;
 
-		// ----- navigation
+        // ----- navigation
 
-		core.getBase = function(node) {
-			ASSERT(isValidNode(node));
-
-			// TODO: check if base has moved
-			return node.base;
-		};
-
-        core.getBaseRoot = function(node) {
+        core.getBase = function (node) {
             ASSERT(isValidNode(node));
-            while (node.base !== null){
+
+            // TODO: check if base has moved
+            return node.base;
+        };
+
+        core.getBaseRoot = function (node) {
+            ASSERT(isValidNode(node));
+            while (node.base !== null) {
                 node = node.base;
             }
 
             return node;
         };
 
-		core.loadRoot = function(hash) {
-			return TASYNC.call(__loadRoot2, oldcore.loadRoot(hash));
-		};
+        core.loadRoot = function (hash) {
+            return TASYNC.call(__loadRoot2, oldcore.loadRoot(hash));
+        };
 
-		function __loadRoot2(node) {
-            ASSERT(typeof node.base === "undefined" || node.base === null); //kecso - TODO it should be undefined, but maybe because of the cache it can be null
+        function __loadRoot2(node) {
+            ASSERT(typeof node.base === 'undefined' || node.base === null);
+            //kecso - TODO it should be undefined, but maybe because of the cache it can be null
 
-			node.base = null;
-			return node;
-		}
+            node.base = null;
+            return node;
+        }
 
-        core.loadChild = function(node,relid){
+        core.loadChild = function (node, relid) {
             var child = null,
                 base = core.getBase(node),
                 basechild = null;
-            if(base){
+            if (base) {
                 //the parent is inherited
-                if(oldcore.getChildrenRelids(base).indexOf(relid) !== -1) {
+                if (oldcore.getChildrenRelids(base).indexOf(relid) !== -1) {
                     //inherited child
                     if (oldcore.getChildrenRelids(node).indexOf(relid) !== -1) {
                         //but it is overwritten so we should load it
                         child = oldcore.loadChild(node, relid);
                     }
-                    basechild = core.loadChild( base, relid);
-                    return TASYNC.call(function(b,c,n,r){
-                        if(c){
+                    basechild = core.loadChild(base, relid);
+                    return TASYNC.call(function (b, c, n, r) {
+                        if (c) {
                             child = c;
                             child.base = b;
                             return child;
                         } else {
-                            child = core.getChild(n,r);
-                            core.setHashed(child,true,true);
+                            child = core.getChild(n, r);
+                            core.setHashed(child, true, true);
                             child.base = b;
                             return child;
                         }
-                    },basechild,child,node,relid);
+                    }, basechild, child, node, relid);
                 }
             }
             //normal child
-            return TASYNC.call(__loadBase,oldcore.loadChild(node,relid));
+            return TASYNC.call(__loadBase, oldcore.loadChild(node, relid));
         };
 
-        core.loadByPath = function(node,path){
+        core.loadByPath = function (node, path) {
             ASSERT(isValidNode(node));
-            ASSERT(path === "" || path.charAt(0) === "/");
-            path = path.split("/");
+            ASSERT(path === '' || path.charAt(0) === '/');
+            path = path.split('/');
             return loadDescendantByPath(node, path, 1);
         };
-        var loadDescendantByPath = function(node,pathArray,index){
+        var loadDescendantByPath = function (node, pathArray, index) {
             if (node === null || index === pathArray.length) {
                 return node;
             }
@@ -6270,32 +6364,32 @@ define('common/core/coretype',[ "common/util/assert", "common/core/core", "commo
         };
 
         //TODO the pointer loading is totally based upon the loadByPath...
-        core.loadPointer = function(node,name){
-            var pointerPath = core.getPointerPath(node,name);
-            return TASYNC.call(core.loadByPath,core.getRoot(node),pointerPath);
+        core.loadPointer = function (node, name) {
+            var pointerPath = core.getPointerPath(node, name);
+            return TASYNC.call(core.loadByPath, core.getRoot(node), pointerPath);
         };
 
         function __loadBase(node) {
-            ASSERT(node === null || typeof node.base === "undefined" || typeof node.base === "object");
+            ASSERT(node === null || typeof node.base === 'undefined' || typeof node.base === 'object');
 
-            if (typeof node.base === "undefined") {
-                if(core.isEmpty(node)) {
+            if (typeof node.base === 'undefined') {
+                if (core.isEmpty(node)) {
                     //empty nodes do not have a base
                     node.base = null;
                     return node;
-                } else if(isFalseNode(node)){
+                } else if (isFalseNode(node)) {
                     var root = core.getRoot(node);
                     oldcore.deleteNode(node);
                     core.persist(root);
                     return null;
                 } else {
-                    var basepath = oldcore.getPointerPath(node,'base');
+                    var basepath = oldcore.getPointerPath(node, 'base');
                     ASSERT(basepath !== undefined);
-                    if(basepath === null){
+                    if (basepath === null) {
                         node.base = null;
                         return node;
                     } else {
-                        return TASYNC.call(__loadBase2, node, core.loadByPath(core.getRoot(node),basepath));
+                        return TASYNC.call(__loadBase2, node, core.loadByPath(core.getRoot(node), basepath));
                     }
                 }
             } else {
@@ -6304,104 +6398,110 @@ define('common/core/coretype',[ "common/util/assert", "common/core/core", "commo
             }
         }
 
-		function __loadBase2(node, target) {
-            if(typeof node.base !== null && typeof node.base === 'object' && (oldcore.getPath(node.base) === oldcore.getPath(target))){
+        function __loadBase2(node, target) {
+            if (typeof node.base !== null && typeof node.base === 'object' &&
+                (oldcore.getPath(node.base) === oldcore.getPath(target))) {
                 //TODO somehow the object already loaded properly and we do no know about it!!!
                 return node;
             } else {
-                ASSERT(typeof node.base === "undefined" || node.base === null); //kecso
+                ASSERT(typeof node.base === 'undefined' || node.base === null); //kecso
 
-                if(target === null) {
+                if (target === null) {
                     node.base = null;
                     return node;
-                }  else {
-                    return TASYNC.call(function(n,b){n.base = b; return n;},node,__loadBase(target));
+                } else {
+                    return TASYNC.call(function (n, b) {
+                        n.base = b;
+                        return n;
+                    }, node, __loadBase(target));
                 }
             }
-		}
+        }
 
-        core.getChildrenRelids = function(node){
+        core.getChildrenRelids = function (node) {
             var inheritRelIds = node.base === null ? [] : core.getChildrenRelids(core.getBase(node));
             var ownRelIds = oldcore.getChildrenRelids(node);
-            for(var i=0;i<inheritRelIds.length;i++){
-                if(ownRelIds.indexOf(inheritRelIds[i]) === -1){
+            for (var i = 0; i < inheritRelIds.length; i++) {
+                if (ownRelIds.indexOf(inheritRelIds[i]) === -1) {
                     ownRelIds.push(inheritRelIds[i]);
                 }
             }
             return ownRelIds;
         };
-        
-        core.loadChildren = function(node) {
+
+        core.loadChildren = function (node) {
             ASSERT(isValidNode(node));
             var relids = core.getChildrenRelids(node);
             relids = relids.sort(); //TODO this should be temporary
             var children = [];
-            for(var i = 0; i< relids.length; i++)
-                children[i] = core.loadChild(node,relids[i]);
-            return TASYNC.call(function(n){
+            for (var i = 0; i < relids.length; i++) {
+                children[i] = core.loadChild(node, relids[i]);
+            }
+            return TASYNC.call(function (n) {
                 var newn = [];
-                for(var i=0; i<n.length;i++){
-                    if(n[i] !== null){
+                for (var i = 0; i < n.length; i++) {
+                    if (n[i] !== null) {
                         newn.push(n[i]);
                     }
                 }
                 return newn;
-            },TASYNC.lift(children));
+            }, TASYNC.lift(children));
         };
 
         //collection handling and needed functions
-        function _isInheritedChild(node){
+        function _isInheritedChild(node) {
             var parent = core.getParent(node),
                 base = core.getBase(node),
                 parentBase = parent ? core.getBase(parent) : null,
                 baseParent = base ? core.getParent(base) : null;
 
-            if(baseParent && parentBase && core.getPath(baseParent) === core.getPath(parentBase)){
+            if (baseParent && parentBase && core.getPath(baseParent) === core.getPath(parentBase)) {
                 return true;
             }
             return false;
         }
 
-        function _getInstanceRoot(node){
+        function _getInstanceRoot(node) {
 
-            while(_isInheritedChild(node)){
+            while (_isInheritedChild(node)) {
                 node = core.getParent(node);
             }
 
             return node;
         }
+
         //TODO copied function from corerel
         function isPointerName(name) {
-            ASSERT(typeof name === "string");
+            ASSERT(typeof name === 'string');
 
             return name.slice(-COLLSUFFIX.length) !== COLLSUFFIX;
         }
 
-        function _getInheritedCollectionNames(node){
-            var target = "",
+        function _getInheritedCollectionNames(node) {
+            var target = '',
                 names = [],
                 coretree = core.getCoreTree(),
                 startNode = node,
                 endNode = _getInstanceRoot(node),
                 exit;
 
-            if(core.getPath(startNode) === core.getPath(endNode)){
+            if (core.getPath(startNode) === core.getPath(endNode)) {
                 return names;
             }
 
-            do{
+            do {
                 startNode = core.getBase(startNode);
                 endNode = core.getBase(endNode);
                 node = startNode;
                 exit = false;
-                target = "";
+                target = '';
                 do {
-                    if(core.getPath(node) === core.getPath(endNode)){
+                    if (core.getPath(node) === core.getPath(endNode)) {
                         exit = true;
                     }
                     var child = coretree.getProperty(coretree.getChild(node, OVERLAYS), target);
                     if (child) {
-                        for ( var name in child) {
+                        for (var name in child) {
                             if (!isPointerName(name)) {
                                 name = name.slice(0, -COLLSUFFIX.length);
                                 if (names.indexOf(name) < 0) {
@@ -6411,15 +6511,16 @@ define('common/core/coretype',[ "common/util/assert", "common/core/core", "commo
                         }
                     }
 
-                    target = "/" + coretree.getRelid(node) + target;
+                    target = '/' + coretree.getRelid(node) + target;
                     node = coretree.getParent(node);
                 } while (!exit);
             } while (_isInheritedChild(startNode));
 
             return names;
         }
-        function _getInheritedCollectionPaths(node,name){
-            var target = "",
+
+        function _getInheritedCollectionPaths(node, name) {
+            var target = '',
                 result = [],
                 coretree = core.getCoreTree(),
                 startNode = node,
@@ -6428,17 +6529,17 @@ define('common/core/coretype',[ "common/util/assert", "common/core/core", "commo
                 prefixNode = prefixStart,
                 exit,
                 collName = name + COLLSUFFIX,
-                notOverwritten = function(sNode,eNode,source){
+                notOverwritten = function (sNode, eNode, source) {
                     var result = true,
                         tNode = sNode,
-                        child,target;
+                        child, target;
 
-                    while(core.getPath(tNode) !== core.getPath(eNode)){
-                        child = coretree.getChild(tNode,OVERLAYS);
-                        child = coretree.getChild(child,source);
-                        if(child){
-                            target = coretree.getProperty(child,name);
-                            if(target){
+                    while (core.getPath(tNode) !== core.getPath(eNode)) {
+                        child = coretree.getChild(tNode, OVERLAYS);
+                        child = coretree.getChild(child, source);
+                        if (child) {
+                            target = coretree.getProperty(child, name);
+                            if (target) {
                                 return false;
                             }
                         }
@@ -6448,23 +6549,23 @@ define('common/core/coretype',[ "common/util/assert", "common/core/core", "commo
                     return result;
                 };
 
-            if(core.getPath(startNode) === core.getPath(endNode)){
+            if (core.getPath(startNode) === core.getPath(endNode)) {
                 return result;
             }
 
-            do{
+            do {
                 startNode = core.getBase(startNode);
                 endNode = core.getBase(endNode);
                 node = startNode;
                 prefixNode = prefixStart;
                 exit = false;
-                target = "";
+                target = '';
                 do {
-                    if(core.getPath(node) === core.getPath(endNode)){
+                    if (core.getPath(node) === core.getPath(endNode)) {
                         exit = true;
                     }
                     var child = coretree.getChild(node, OVERLAYS);
-                    child = coretree.getChild(child,target);
+                    child = coretree.getChild(child, target);
                     if (child) {
                         var sources = coretree.getProperty(child, collName);
                         if (sources) {
@@ -6472,15 +6573,15 @@ define('common/core/coretype',[ "common/util/assert", "common/core/core", "commo
 
                             var prefix = coretree.getPath(prefixNode);
 
-                            for ( var i = 0; i < sources.length; ++i) {
-                                if(notOverwritten(prefixNode,node,sources[i])){
+                            for (var i = 0; i < sources.length; ++i) {
+                                if (notOverwritten(prefixNode, node, sources[i])) {
                                     result.push(coretree.joinPaths(prefix, sources[i]));
                                 }
                             }
                         }
                     }
 
-                    target = "/" + coretree.getRelid(node) + target;
+                    target = '/' + coretree.getRelid(node) + target;
                     node = coretree.getParent(node);
                     prefixNode = core.getParent(prefixNode);
                 } while (!exit);
@@ -6488,14 +6589,16 @@ define('common/core/coretype',[ "common/util/assert", "common/core/core", "commo
 
             return result;
         }
-        core.getCollectionNames = function(node){
+
+        core.getCollectionNames = function (node) {
             ASSERT(isValidNode(node));
-            var checkCollNames = function(draft){
-                    var i,filtered = [],sources;
-                    for(i=0;i<draft.length;i++){
-                        sources = core.getCollectionPaths(node,draft[i]);
-                        if(sources.length > 0){
-                            filtered.push(draft[i])
+            var checkCollNames = function (draft) {
+                    var filtered = [],
+                        i, sources;
+                    for (i = 0; i < draft.length; i++) {
+                        sources = core.getCollectionPaths(node, draft[i]);
+                        if (sources.length > 0) {
+                            filtered.push(draft[i]);
                         }
                     }
                     return filtered;
@@ -6503,177 +6606,177 @@ define('common/core/coretype',[ "common/util/assert", "common/core/core", "commo
                 ownNames = oldcore.getCollectionNames(node),
                 inhNames = checkCollNames(_getInheritedCollectionNames(node)),
                 i;
-            for(i=0;i<ownNames.length;i++){
-                if(inhNames.indexOf(ownNames[i]) < 0){
-                    inhNames.push(ownNames[i])
+            for (i = 0; i < ownNames.length; i++) {
+                if (inhNames.indexOf(ownNames[i]) < 0) {
+                    inhNames.push(ownNames[i]);
                 }
             }
 
             return inhNames;
         };
 
-        core.getCollectionPaths = function(node,name){
+        core.getCollectionPaths = function (node, name) {
             ASSERT(isValidNode(node) && name);
-            var ownPaths = oldcore.getCollectionPaths(node,name),
-                inhPaths = _getInheritedCollectionPaths(node,name);
+            var ownPaths = oldcore.getCollectionPaths(node, name),
+                inhPaths = _getInheritedCollectionPaths(node, name);
 
             inhPaths = inhPaths.concat(ownPaths);
 
             return inhPaths;
         };
 
-        core.loadCollection = function(node, name) {
-            var root =  core.getRoot(node);
-            var paths = core.getCollectionPaths(node,name);
+        core.loadCollection = function (node, name) {
+            var root = core.getRoot(node);
+            var paths = core.getCollectionPaths(node, name);
 
             var nodes = [];
-            for(var i = 0; i < paths.length; i++) {
+            for (var i = 0; i < paths.length; i++) {
                 nodes[i] = core.loadByPath(root, paths[i]);
             }
 
             return TASYNC.lift(nodes);
         };
 
-		// ----- creation
+        // ----- creation
 
-		core.createNode = function(parameters) {
-			parameters = parameters || {};
-			var base = parameters.base || null,
-				parent = parameters.parent;
+        core.createNode = function (parameters) {
+            parameters = parameters || {};
+            var base = parameters.base || null,
+                parent = parameters.parent;
 
 
-			ASSERT(!parent || isValidNode(parent));
-			ASSERT(!base || isValidNode(base));
+            ASSERT(!parent || isValidNode(parent));
+            ASSERT(!base || isValidNode(base));
             ASSERT(!base || core.getPath(base) !== core.getPath(parent));
 
-			var node = oldcore.createNode(parameters);
+            var node = oldcore.createNode(parameters);
             node.base = base;
-            oldcore.setPointer(node,"base",base);
+            oldcore.setPointer(node, 'base', base);
 
-			return node;
-		};
+            return node;
+        };
 
-		// ----- properties
+        // ----- properties
 
-		core.getAttributeNames = function(node) {
-			ASSERT(isValidNode(node));
+        core.getAttributeNames = function (node) {
+            ASSERT(isValidNode(node));
 
-			var merged = {};
-			do {
-				var names = oldcore.getAttributeNames(node);
-				for ( var i = 0; i < names.length; ++i) {
-					if (!(names[i] in merged)) {
-						merged[names[i]] = true;
-					}
-				}
+            var merged = {};
+            do {
+                var names = oldcore.getAttributeNames(node);
+                for (var i = 0; i < names.length; ++i) {
+                    if (!(names[i] in merged)) {
+                        merged[names[i]] = true;
+                    }
+                }
 
-				node = node.base;
-			} while (node);
+                node = node.base;
+            } while (node);
 
-			return Object.keys(merged);
-		};
-        core.getOwnAttributeNames = function(node){
+            return Object.keys(merged);
+        };
+        core.getOwnAttributeNames = function (node) {
             return oldcore.getAttributeNames(node);
         };
 
-		core.getRegistryNames = function(node) {
-			ASSERT(isValidNode(node));
+        core.getRegistryNames = function (node) {
+            ASSERT(isValidNode(node));
 
-			var merged = {};
-			do {
-				var names = oldcore.getRegistryNames(node);
-				for ( var i = 0; i < names.length; ++i) {
-					if (!(names[i] in merged)) {
-						merged[names[i]] = true;
-					}
-				}
+            var merged = {};
+            do {
+                var names = oldcore.getRegistryNames(node);
+                for (var i = 0; i < names.length; ++i) {
+                    if (!(names[i] in merged)) {
+                        merged[names[i]] = true;
+                    }
+                }
 
-				node = node.base;
-			} while (node);
+                node = node.base;
+            } while (node);
 
-			return Object.keys(merged);
-		};
-        core.getOwnRegistryNames = function(node){
+            return Object.keys(merged);
+        };
+        core.getOwnRegistryNames = function (node) {
             return oldcore.getRegistryNames(node);
         };
 
-		core.getAttribute = function(node, name) {
-			ASSERT(isValidNode(node));
+        core.getAttribute = function (node, name) {
+            ASSERT(isValidNode(node));
             var value;
-			do {
-				value = oldcore.getAttribute(node, name);
-				node = node.base;
-			} while (typeof value === "undefined" && node !== null);
+            do {
+                value = oldcore.getAttribute(node, name);
+                node = node.base;
+            } while (typeof value === 'undefined' && node !== null);
 
-			return value;
-		};
-        core.getOwnAttribute = function(node,name) {
-            return oldcore.getAttribute(node,name);
+            return value;
+        };
+        core.getOwnAttribute = function (node, name) {
+            return oldcore.getAttribute(node, name);
         };
 
-		core.getRegistry = function(node, name) {
-			ASSERT(isValidNode(node));
+        core.getRegistry = function (node, name) {
+            ASSERT(isValidNode(node));
             var value;
-			do {
-				value = oldcore.getRegistry(node, name);
-				node = node.base;
-			} while (typeof value === "undefined" && node !== null);
+            do {
+                value = oldcore.getRegistry(node, name);
+                node = node.base;
+            } while (typeof value === 'undefined' && node !== null);
 
-			return value;
-		};
-        core.getOwnRegistry = function(node,name) {
-            return oldcore.getRegistry(node,name);
+            return value;
+        };
+        core.getOwnRegistry = function (node, name) {
+            return oldcore.getRegistry(node, name);
         };
 
 
-		// ----- pointers
+        // ----- pointers
 
-		core.getPointerNames = function(node) {
-			ASSERT(isValidNode(node));
+        core.getPointerNames = function (node) {
+            ASSERT(isValidNode(node));
 
-			var merged = {};
-			do {
-				var names = oldcore.getPointerNames(node);
-				for ( var i = 0; i < names.length; ++i) {
-					if (!(names[i] in merged)) {
-						merged[names[i]] = true;
-					}
-				}
+            var merged = {};
+            do {
+                var names = oldcore.getPointerNames(node);
+                for (var i = 0; i < names.length; ++i) {
+                    if (!(names[i] in merged)) {
+                        merged[names[i]] = true;
+                    }
+                }
 
-				node = node.base;
-			} while (node);
+                node = node.base;
+            } while (node);
 
-			return Object.keys(merged);
-		};
-        core.getOwnPointerNames = function(node){
+            return Object.keys(merged);
+        };
+        core.getOwnPointerNames = function (node) {
             ASSERT(isValidNode(node));
             return oldcore.getPointerNames(node);
         };
 
         core.getPointerPath = function (node, name) {
-            ASSERT(isValidNode(node) && typeof name === "string");
+            ASSERT(isValidNode(node) && typeof name === 'string');
 
-            var ownPointerPath = oldcore.getPointerPath(node,name);
-            if(ownPointerPath !== undefined){
+            var ownPointerPath = oldcore.getPointerPath(node, name);
+            if (ownPointerPath !== undefined) {
                 return ownPointerPath;
             }
-            var source = "",
+            var source = '',
                 target,
                 coretree = core.getCoreTree(),
                 basePath,
                 hasNullTarget = false,
-                getProperty = function(node,name){
+                getProperty = function (node, name) {
                     var property;
-                    while(property === undefined && node !== null){
-                        property = coretree.getProperty(node,name);
+                    while (property === undefined && node !== null) {
+                        property = coretree.getProperty(node, name);
                         node = core.getBase(node);
                     }
                     return property;
                 },
-                getSimpleBasePath = function(node){
-                    var path = oldcore.getPointerPath(node,name);
-                    if(path === undefined){
-                        if(node.base !== null && node.base !== undefined){
+                getSimpleBasePath = function (node) {
+                    var path = oldcore.getPointerPath(node, name);
+                    if (path === undefined) {
+                        if (node.base !== null && node.base !== undefined) {
                             return getSimpleBasePath(node.base);
                         } else {
                             return undefined;
@@ -6682,10 +6785,10 @@ define('common/core/coretype',[ "common/util/assert", "common/core/core", "commo
                         return path;
                     }
                 },
-                getParentOfBasePath = function(node){
-                    if(node.base){
+                getParentOfBasePath = function (node) {
+                    if (node.base) {
                         var parent = core.getParent(node.base);
-                        if(parent){
+                        if (parent) {
                             return core.getPath(parent);
                         } else {
                             return undefined;
@@ -6694,10 +6797,10 @@ define('common/core/coretype',[ "common/util/assert", "common/core/core", "commo
                         return undefined;
                     }
                 },
-                getBaseOfParentPath = function(node){
+                getBaseOfParentPath = function (node) {
                     var parent = core.getParent(node);
-                    if(parent){
-                        if(parent.base){
+                    if (parent) {
+                        if (parent.base) {
                             return core.getPath(parent.base);
                         } else {
                             return undefined;
@@ -6706,18 +6809,18 @@ define('common/core/coretype',[ "common/util/assert", "common/core/core", "commo
                         return undefined;
                     }
                 },
-                getTargetRelPath = function(node,relSource,name){
-                    var ovr = core.getChild(node,'ovr');
-                    var source = core.getChild(ovr,relSource);
-                    return getProperty(source,name);
+                getTargetRelPath = function (node, relSource, name) {
+                    var ovr = core.getChild(node, 'ovr');
+                    var source = core.getChild(ovr, relSource);
+                    return getProperty(source, name);
                 };
 
             basePath = node.base ? getSimpleBasePath(node.base) : undefined;
 
-            while(node){
-                target = getTargetRelPath(node,source,name);
-                if( target !== undefined){
-                    if(target.indexOf('_nullptr') !== -1){
+            while (node) {
+                target = getTargetRelPath(node, source, name);
+                if (target !== undefined) {
+                    if (target.indexOf('_nullptr') !== -1) {
                         hasNullTarget = true;
                         target = undefined;
                     } else {
@@ -6725,8 +6828,8 @@ define('common/core/coretype',[ "common/util/assert", "common/core/core", "commo
                     }
                 }
 
-                source = "/" + core.getRelid(node) + source;
-                if(getParentOfBasePath(node) === getBaseOfParentPath(node)){
+                source = '/' + core.getRelid(node) + source;
+                if (getParentOfBasePath(node) === getBaseOfParentPath(node)) {
                     node = core.getParent(node);
                 } else {
                     node = null;
@@ -6739,63 +6842,63 @@ define('common/core/coretype',[ "common/util/assert", "common/core/core", "commo
                 target = coretree.joinPaths(oldcore.getPath(node), target);
             }
 
-            if(typeof target === 'string'){
+            if (typeof target === 'string') {
                 return target;
             }
-            if(typeof basePath === 'string'){
+            if (typeof basePath === 'string') {
                 return basePath;
             }
-            if(hasNullTarget === true){
+            if (hasNullTarget === true) {
                 return null;
             }
             return undefined;
 
         };
-        core.getOwnPointerPath = function(node,name){
-            oldcore.getPointerPath(node,name);
+        core.getOwnPointerPath = function (node, name) {
+            oldcore.getPointerPath(node, name);
         };
 
-        core.setBase = function(node,base){
+        core.setBase = function (node, base) {
             ASSERT(isValidNode(node) && (base === undefined || base === null || isValidNode(base)));
             ASSERT(!base || core.getPath(core.getParent(node)) !== core.getPath(base));
             ASSERT(!base || core.getPath(node) !== core.getPath(base));
-            if(!!base){
+            if (!!base) {
                 //TODO maybe this is not the best way, needs to be double checked
                 node.base = base;
                 var parent = core.getParent(node),
-                    parentBase,baseParent;
-                if(parent){
+                    parentBase, baseParent;
+                if (parent) {
                     parentBase = core.getBase(parent);
                     baseParent = core.getParent(base);
-                    if(core.getPath(parentBase) !== core.getPath(baseParent)){
+                    if (core.getPath(parentBase) !== core.getPath(baseParent)) {
                         //we have to set an exact pointer only if it is not inherited child
-                        oldcore.setPointer(node, "base", base);
+                        oldcore.setPointer(node, 'base', base);
                     } else {
-                        oldcore.deletePointer(node,"base"); //we remove the pointer just in case
+                        oldcore.deletePointer(node, 'base'); //we remove the pointer just in case
                     }
                 } else {
                     //if for some reason the node doesn't have a parent it is surely not an inherited child
-                    oldcore.setPointer(node,"base",base);
+                    oldcore.setPointer(node, 'base', base);
                 }
             } else {
-                oldcore.setPointer(node,'base',null);
+                oldcore.setPointer(node, 'base', null);
                 node.base = null;
             }
         };
 
-        core.getChild = function(node,relid){
+        core.getChild = function (node, relid) {
             ASSERT(isValidNode(node) && (typeof node.base === 'undefined' || typeof node.base === 'object'));
-            var child = oldcore.getChild(node,relid);
-            if(node.base !== null && node.base !== undefined){
-                if(child.base === null || child.base === undefined){
-                    child.base = core.getChild(node.base,relid);
+            var child = oldcore.getChild(node, relid);
+            if (node.base !== null && node.base !== undefined) {
+                if (child.base === null || child.base === undefined) {
+                    child.base = core.getChild(node.base, relid);
                 }
             } else {
                 child.base = null;
             }
             return child;
         };
-        core.moveNode = function(node,parent){
+        core.moveNode = function (node, parent) {
             //TODO we have to check if the move is really allowed!!!
             ASSERT(isValidNode(node) && isValidNode(parent));
             var base = node.base,
@@ -6803,27 +6906,27 @@ define('common/core/coretype',[ "common/util/assert", "common/core/core", "commo
             ASSERT(!base || core.getPath(base) !== core.getPath(parent));
             ASSERT(!parentBase || core.getPath(parentBase) !== core.getPath(node));
 
-            var moved = oldcore.moveNode(node,parent);
+            var moved = oldcore.moveNode(node, parent);
             moved.base = base;
             return moved;
         };
-        core.copyNode = function(node,parent){
+        core.copyNode = function (node, parent) {
             var base = node.base;
             ASSERT(!base || core.getPath(base) !== core.getPath(parent));
 
-            var newnode = oldcore.copyNode(node,parent);
+            var newnode = oldcore.copyNode(node, parent);
             newnode.base = base;
-            oldcore.setPointer(newnode,'base',base);
+            oldcore.setPointer(newnode, 'base', base);
             return newnode;
         };
-        function _inheritedPointerNames(node){
+        function _inheritedPointerNames(node) {
             var allNames = core.getPointerNames(node),
                 ownNames = core.getOwnPointerNames(node),
                 names = [],
                 i;
 
-            for(i=0;i<allNames.length;i++){
-                if(ownNames.indexOf(allNames[i]) === -1){
+            for (i = 0; i < allNames.length; i++) {
+                if (ownNames.indexOf(allNames[i]) === -1) {
                     names.push(allNames[i]);
                 }
             }
@@ -6831,24 +6934,24 @@ define('common/core/coretype',[ "common/util/assert", "common/core/core", "commo
             return names;
         }
 
-        core.copyNodes = function(nodes,parent){
+        core.copyNodes = function (nodes, parent) {
             var copiedNodes,
-                i, j,index,base,
+                i, j, index, base,
                 relations = [],
-                names,pointer,
+                names, pointer,
                 paths = [];
 
             //here we also have to copy the inherited relations which points inside the copy area
-            for(i=0;i<nodes.length;i++){
+            for (i = 0; i < nodes.length; i++) {
                 paths.push(core.getPath(nodes[i]));
             }
 
-            for(i=0;i<nodes.length;i++){
+            for (i = 0; i < nodes.length; i++) {
                 names = _inheritedPointerNames(nodes[i]);
                 pointer = {};
-                for(j=0;j<names.length;j++){
-                    index = paths.indexOf(core.getPointerPath(nodes[i],names[j]));
-                    if(index !== -1){
+                for (j = 0; j < names.length; j++) {
+                    index = paths.indexOf(core.getPointerPath(nodes[i], names[j]));
+                    if (index !== -1) {
                         pointer[names[j]] = index;
                     }
                 }
@@ -6856,48 +6959,48 @@ define('common/core/coretype',[ "common/util/assert", "common/core/core", "commo
             }
 
             //making the actual copy
-            copiedNodes = oldcore.copyNodes(nodes,parent);
-            
+            copiedNodes = oldcore.copyNodes(nodes, parent);
+
             //setting internal-inherited relations
-            for(i=0;i<nodes.length;i++){
+            for (i = 0; i < nodes.length; i++) {
                 names = Object.keys(relations[i]);
-                for(j=0;j<names.length;j++){
-                    core.setPointer(copiedNodes[i],names[j],copiedNodes[relations[i][names[j]]]);
+                for (j = 0; j < names.length; j++) {
+                    core.setPointer(copiedNodes[i], names[j], copiedNodes[relations[i][names[j]]]);
                 }
             }
 
             //setting base relation
-            for(i=0;i<nodes.length;i++){
+            for (i = 0; i < nodes.length; i++) {
                 base = nodes[i].base;
                 copiedNodes[i].base = base;
-                oldcore.setPointer(copiedNodes[i],'base',base);
+                oldcore.setPointer(copiedNodes[i], 'base', base);
             }
 
 
             return copiedNodes;
         };
 
-        core.getChildrenPaths = function(node){
+        core.getChildrenPaths = function (node) {
             var path = core.getPath(node);
 
             var relids = core.getChildrenRelids(node);
-            for ( var i = 0; i < relids.length; ++i) {
-                relids[i] = path + "/" + relids[i];
+            for (var i = 0; i < relids.length; ++i) {
+                relids[i] = path + '/' + relids[i];
             }
 
             return relids;
         };
 
-        core.deleteNode = function(node,technical){
+        core.deleteNode = function (node, technical) {
             //currently we only check if the node is inherited from its parents children
-            if(node && (node.base !== null || technical === true)){
+            if (node && (node.base !== null || technical === true)) {
                 var parent = core.getParent(node),
                     parentsBase = parent ? core.getBase(node) : null,
                     base = core.getBase(node),
                     basesParent = base ? core.getParent(node) : null;
 
-                if(parent && parentsBase && base && basesParent){
-                    if(core.getPath(parentsBase) !== core.getPath(basesParent)){
+                if (parent && parentsBase && base && basesParent) {
+                    if (core.getPath(parentsBase) !== core.getPath(basesParent)) {
                         oldcore.deleteNode(node);
                     }
                 } else {
@@ -6906,9 +7009,9 @@ define('common/core/coretype',[ "common/util/assert", "common/core/core", "commo
             }
         };
 
-        core.getTypeRoot = function(node){
-            if(node.base){
-                while(node.base !== null){
+        core.getTypeRoot = function (node) {
+            if (node.base) {
+                while (node.base !== null) {
                     node = core.getBase(node);
                 }
                 return node;
@@ -6919,144 +7022,148 @@ define('common/core/coretype',[ "common/util/assert", "common/core/core", "commo
 
         // -------- kecso
 
-		return core;
-	};
+        return core;
+    };
 
-	return CoreType;
+    return CoreType;
 });
 
-/*
- * Copyright (C) 2013 Vanderbilt University, All rights reserved.
+/*globals define*/
+/*jshint node: true, browser: true*/
+
+/**
+ * @author kecso / https://github.com/kecso
  *
- * Author: Tamas Kecskes
+ * example constraint structure for the outside world:
+ * {
+ *  script:string,
+ *  priority:integer,
+ *  name:string,
+ *  message:string
+ * }
+ * provided API:
+ * getConstraint(node,name) -> constraintObj
+ * setConstraint(node,constraintObj)
+ * getConstraintNames(node)
+ * delConstraint(node,name)
  */
-/*
-example constraint structure for the outside world:
-{
-script:string,
-priority:integer,
-name:string,
-message:string
-}
-provided API:
-getConstraint(node,name) -> constraintObj
-setConstraint(node,constraintObj)
-getConstraintNames(node)
-delConstraint(node,name)
- */
-define('common/core/constraintcore',[ "common/util/assert" ], function (ASSERT) {
+
+define('common/core/constraintcore',['common/util/assert'], function (ASSERT) {
     
-    var CONSTRAINTS_RELID = "_constraints";
+    var CONSTRAINTS_RELID = '_constraints';
     var C_DEF_PRIORITY = 1;
-    function constraintCore (_innerCore, options) {
+
+    function constraintCore(_innerCore, options) {
         ASSERT(typeof options === 'object');
         ASSERT(typeof options.globConf === 'object');
         ASSERT(typeof options.logger !== 'undefined');
         var _core = {},
             logger = options.logger.fork('constraintcore');
-        for(var i in _innerCore){
+        for (var i in _innerCore) {
             _core[i] = _innerCore[i];
         }
         logger.debug('initialized');
-        var createNewConstraintRelId = function(constraintsNode){
+        var createNewConstraintRelId = function (constraintsNode) {
             var max = Math.pow(2, 31);
             var existingRelIds = _innerCore.getChildrenRelids(constraintsNode);
             var relId;
-            do{
+            do {
                 relId = Math.floor(Math.random() * max);
             } while (existingRelIds.indexOf(relId) !== -1);
-            return "" + relId;
+            return '' + relId;
         };
 
-        var getConstraintRelId = function(constraintsNode,name){
+        var getConstraintRelId = function (constraintsNode, name) {
             var relIds = _innerCore.getChildrenRelids(constraintsNode);
             var relId;
-            for(var i=0;i<relIds.length;i++){
-                if(name === _innerCore.getAttribute(_innerCore.getChild(constraintsNode,relIds[i]),"name")){
+            for (var i = 0; i < relIds.length; i++) {
+                if (name === _innerCore.getAttribute(_innerCore.getChild(constraintsNode, relIds[i]), 'name')) {
                     relId = relIds[i];
                     break;
                 }
             }
             return relId;
         };
-        var getRegConstName = function(name){
-            return "_ch#_"+name;
+        var getRegConstName = function (name) {
+            return '_ch#_' + name;
         };
-        
-        _core.getConstraint = function(node,name){
+
+        _core.getConstraint = function (node, name) {
             ASSERT(_innerCore.isValidNode(node));
-            var constraintsNode = _innerCore.getChild(node,CONSTRAINTS_RELID);
-            var constRelId = getConstraintRelId(constraintsNode,name);
-            if(constRelId){
-                var constraintNode = _innerCore.getChild(constraintsNode,constRelId);
+            var constraintsNode = _innerCore.getChild(node, CONSTRAINTS_RELID);
+            var constRelId = getConstraintRelId(constraintsNode, name);
+            if (constRelId) {
+                var constraintNode = _innerCore.getChild(constraintsNode, constRelId);
                 return {
-                    "script":_innerCore.getAttribute(constraintNode,"script"),
-                    "priority":_innerCore.getAttribute(constraintNode,"priority"),
-                    "info":_innerCore.getAttribute(constraintNode,"info")
+                    script: _innerCore.getAttribute(constraintNode, 'script'),
+                    priority: _innerCore.getAttribute(constraintNode, 'priority'),
+                    info: _innerCore.getAttribute(constraintNode, 'info')
                 };
             } else {
                 return null;
             }
         };
 
-        _core.setConstraint = function(node,name,constraintObj){
+        _core.setConstraint = function (node, name, constraintObj) {
             ASSERT(_innerCore.isValidNode(node));
             ASSERT(typeof constraintObj === 'object' && typeof name === 'string');
-            var constraintsNode = _innerCore.getChild(node,CONSTRAINTS_RELID);
-            var constRelId = getConstraintRelId(constraintsNode,name);
-            if(!constRelId){
+            var constraintsNode = _innerCore.getChild(node, CONSTRAINTS_RELID);
+            var constRelId = getConstraintRelId(constraintsNode, name);
+            if (!constRelId) {
                 //we should create a new one
                 constRelId = createNewConstraintRelId(constraintsNode);
             }
 
-            var constraintNode = _innerCore.getChild(constraintsNode,constRelId);
+            var constraintNode = _innerCore.getChild(constraintsNode, constRelId);
             constraintObj.priority = constraintObj.priority || C_DEF_PRIORITY;
-            constraintObj.script = constraintObj.script || "console.log(\"empty constraint\");";
-            constraintObj.info = constraintObj.info || "";
-            _innerCore.setAttribute(constraintNode,"name",name);
-            _innerCore.setAttribute(constraintNode,"script",constraintObj.script);
-            _innerCore.setAttribute(constraintNode,"priority",constraintObj.priority);
-            _innerCore.setAttribute(constraintNode,"info",constraintObj.info);
-            _innerCore.setRegistry(node,getRegConstName(name),(_innerCore.getRegistry(node,getRegConstName(name)) || 0)+1);
+            constraintObj.script = constraintObj.script || 'console.log("empty constraint");';
+            constraintObj.info = constraintObj.info || '';
+            _innerCore.setAttribute(constraintNode, 'name', name);
+            _innerCore.setAttribute(constraintNode, 'script', constraintObj.script);
+            _innerCore.setAttribute(constraintNode, 'priority', constraintObj.priority);
+            _innerCore.setAttribute(constraintNode, 'info', constraintObj.info);
+            _innerCore.setRegistry(node, getRegConstName(name),
+                (_innerCore.getRegistry(node, getRegConstName(name)) || 0) + 1);
         };
 
-        _core.delConstraint = function(node,name){
+        _core.delConstraint = function (node, name) {
             ASSERT(_innerCore.isValidNode(node));
-            var constraintsNode = _innerCore.getChild(node,CONSTRAINTS_RELID);
-            var constRelId = getConstraintRelId(constraintsNode,name);
-            if(constRelId){
-                var constraintNode = _innerCore.getChild(constraintsNode,constRelId);
-                _innerCore.deleteNode(constraintNode,true);
+            var constraintsNode = _innerCore.getChild(node, CONSTRAINTS_RELID);
+            var constRelId = getConstraintRelId(constraintsNode, name);
+            if (constRelId) {
+                var constraintNode = _innerCore.getChild(constraintsNode, constRelId);
+                _innerCore.deleteNode(constraintNode, true);
             }
-            _innerCore.delRegistry(node,getRegConstName(name));
+            _innerCore.delRegistry(node, getRegConstName(name));
         };
 
-        _core.getConstraintNames = function(node){
+        _core.getConstraintNames = function (node) {
             ASSERT(_innerCore.isValidNode(node));
-            var constraintsNode = _innerCore.getChild(node,CONSTRAINTS_RELID);
+            var constraintsNode = _innerCore.getChild(node, CONSTRAINTS_RELID);
             var relIds = _innerCore.getChildrenRelids(constraintsNode);
             var names = [];
-            for(var i=0;i<relIds.length;i++){
-                names.push(_innerCore.getAttribute(_innerCore.getChild(constraintsNode,relIds[i]),"name"));
+            for (var i = 0; i < relIds.length; i++) {
+                names.push(_innerCore.getAttribute(_innerCore.getChild(constraintsNode, relIds[i]), 'name'));
             }
             return names;
         };
 
         //TODO this means we always have to have this layer above type/inheritance layer
-        _core.getOwnConstraintNames = function(node){
+        _core.getOwnConstraintNames = function (node) {
             ASSERT(_innerCore.isValidNode(node));
             var names = _core.getConstraintNames(node),
                 base = _core.getBase(node),
-                baseNames = [], i,index;
+                baseNames = [],
+                i, index;
 
-            if(base){
+            if (base) {
                 baseNames = _core.getConstraintNames(base);
             }
 
-            for(i=0;i<baseNames.length;i++){
+            for (i = 0; i < baseNames.length; i++) {
                 index = names.indexOf(baseNames[i]);
-                if(index !== -1){
-                    names.splice(index,1);
+                if (index !== -1) {
+                    names.splice(index, 1);
                 }
             }
 
@@ -7069,6 +7176,7 @@ define('common/core/constraintcore',[ "common/util/assert" ], function (ASSERT) 
     return constraintCore;
 });
 
+//jshint ignore: start
 /* jshint proto: true */
 
 /**
@@ -7767,82 +7875,95 @@ define('common/core/constraintcore',[ "common/util/assert" ], function (ASSERT) 
     window.jjv = Environment;
 })();
 
-define('common/core/metacore',[ "common/util/assert", "common/core/core", "common/core/tasync", "common/util/jjv", "common/util/canon" ], function(ASSERT, Core, TASYNC, JsonValidator, CANON) {
+/*globals define*/
+/*jshint node: true, browser: true*/
+
+/**
+ * @author mmaroti / https://github.com/mmaroti
+ */
+
+define('common/core/metacore',[
+    'common/util/assert',
+    'common/core/core',
+    'common/core/tasync',
+    'common/util/jjv',
+    'common/util/canon'
+], function (ASSERT, Core, TASYNC, JsonValidator, CANON) {
     
 
     // ----------------- CoreType -----------------
 
-    var MetaCore = function(oldcore, options) {
+    var MetaCore = function (oldcore, options) {
         ASSERT(typeof options === 'object');
         ASSERT(typeof options.globConf === 'object');
         ASSERT(typeof options.logger !== 'undefined');
         // copy all operations
         var core = {},
             logger = options.logger.fork('metacore');
-        for ( var key in oldcore) {
+        for (var key in oldcore) {
             core[key] = oldcore[key];
         }
         logger.debug('initialized');
-        var sameNode = function(nodeA,nodeB){
-            if(core.getPath(nodeA) === core.getPath(nodeB)){
+        var sameNode = function (nodeA, nodeB) {
+            if (core.getPath(nodeA) === core.getPath(nodeB)) {
                 return true;
             }
             return false;
         };
 
-        var realNode = function(node){ //TODO we have to make some more sophisticated distinction
-            if(core.getPath(node).indexOf('_') !== -1){
+        var realNode = function (node) { //TODO we have to make some more sophisticated distinction
+            if (core.getPath(node).indexOf('_') !== -1) {
                 return false;
             }
             return true;
         };
 
-        var MetaNode = function(node){
-            return core.getChild(node,"_meta");
+        var getMetaNode = function (node) {
+            return core.getChild(node, '_meta');
         };
-        var MetaChildrenNode = function(node){
-            return core.getChild(MetaNode(node),"children");
+        var getMetaChildrenNode = function (node) {
+            return core.getChild(getMetaNode(node), 'children');
         };
-        var MetaPointerNode = function(node,name){
-            var meta = MetaNode(node),
+        var getMetaPointerNode = function (node, name) {
+            var meta = getMetaNode(node),
                 pointerNames = core.getPointerNames(meta) || [];
-            if(pointerNames.indexOf(name) !== -1){
-                return core.getChild(meta,"_p_"+name);
+            if (pointerNames.indexOf(name) !== -1) {
+                return core.getChild(meta, '_p_' + name);
             }
             return null;
         };
-        var _MetaPointerNode = function(node,name){
+        var _MetaPointerNode = function (node, name) {
             //this function always gives back a node, use this if you just want to create the node as well
-            core.setPointer(MetaNode(node),name,null);
-            return core.getChild(MetaNode(node),"_p_"+name);
+            core.setPointer(getMetaNode(node), name, null);
+            return core.getChild(getMetaNode(node), '_p_' + name);
         };
 
-        var MetaAspectsNode = function(node){
-            return core.getChild(MetaNode(node),'aspects');
+        var getMetaAspectsNode = function (node) {
+            return core.getChild(getMetaNode(node), 'aspects');
         };
-        var MetaAspectNode = function(node,name){
-            var aspectNode = MetaAspectsNode(node),
-                names = core.getPointerNames(aspectNode) ||[];
-            if(names.indexOf(name) !== -1){
-                return core.getChild(aspectNode,"_a_"+name);
+        var getMetaAspectNode = function (node, name) {
+            var aspectNode = getMetaAspectsNode(node),
+                names = core.getPointerNames(aspectNode) || [];
+            if (names.indexOf(name) !== -1) {
+                return core.getChild(aspectNode, '_a_' + name);
             }
             return null;
         };
 
-        var _MetaAspectNode = function(node,name){
+        var _MetaAspectNode = function (node, name) {
             //this function always gives back a node, use this if you just want to create the node as well
-            var aspectNode = core.getChild(MetaNode(node),'aspects');
+            var aspectNode = core.getChild(getMetaNode(node), 'aspects');
 
-            core.setPointer(aspectNode,name,null);
-            return core.getChild(aspectNode,"_a_"+name);
+            core.setPointer(aspectNode, name, null);
+            return core.getChild(aspectNode, '_a_' + name);
         };
         //now the additional functions
-        core.isTypeOf = function(node, typeNode){
-            if(!realNode(node)){
+        core.isTypeOf = function (node, typeNode) {
+            if (!realNode(node)) {
                 return false;
             }
-            while(node){
-                if(sameNode(node,typeNode)){
+            while (node) {
+                if (sameNode(node, typeNode)) {
                     return true;
                 }
                 node = core.getBase(node);
@@ -7850,13 +7971,13 @@ define('common/core/metacore',[ "common/util/assert", "common/core/core", "commo
             return false;
         };
 
-        core.isValidChildOf = function(node,parentNode){
-            if(!realNode(node)){
+        core.isValidChildOf = function (node, parentNode) {
+            if (!realNode(node)) {
                 return true;
             }
-            var validChildTypePaths = core.getMemberPaths(MetaChildrenNode(parentNode),"items") || [];
-            while(node){
-                if(validChildTypePaths.indexOf(core.getPath(node)) !== -1){
+            var validChildTypePaths = core.getMemberPaths(getMetaChildrenNode(parentNode), 'items') || [];
+            while (node) {
+                if (validChildTypePaths.indexOf(core.getPath(node)) !== -1) {
                     return true;
                 }
                 node = core.getBase(node);
@@ -7864,15 +7985,16 @@ define('common/core/metacore',[ "common/util/assert", "common/core/core", "commo
             return false;
         };
 
-        core.getValidPointerNames = function(node){
-            var validNames = core.getPointerNames(MetaNode(node)) || [],
+        core.getValidPointerNames = function (node) {
+            var validNames = core.getPointerNames(getMetaNode(node)) || [],
                 i,
                 validPointerNames = [],
                 metaPointerNode, max;
-            for(i=0;i<validNames.length;i++){
-                metaPointerNode = MetaPointerNode(node,validNames[i]);
-                max = core.getAttribute(metaPointerNode,'max');
-                if(max === 1){ //TODO specify what makes something a pointer and what a set??? - can you extend a pointer to a set????
+            for (i = 0; i < validNames.length; i++) {
+                metaPointerNode = getMetaPointerNode(node, validNames[i]);
+                max = core.getAttribute(metaPointerNode, 'max');
+                if (max === 1) {
+                    //TODO specify what makes something a pointer and what a set??? - can you extend a pointer to a set????
                     validPointerNames.push(validNames[i]);
                 }
             }
@@ -7880,16 +8002,17 @@ define('common/core/metacore',[ "common/util/assert", "common/core/core", "commo
             return validPointerNames;
         };
 
-        core.getValidSetNames = function(node){
-            var validNames = core.getPointerNames(MetaNode(node)) || [],
+        core.getValidSetNames = function (node) {
+            var validNames = core.getPointerNames(getMetaNode(node)) || [],
                 i,
                 validSetNames = [],
                 metaPointerNode, max;
 
-            for(i=0;i<validNames.length;i++){
-                metaPointerNode = MetaPointerNode(node,validNames[i]);
-                max = core.getAttribute(metaPointerNode,'max');
-                if(max === undefined || max === -1 || max > 1){ //TODO specify what makes something a pointer and what a set??? - can you extend a pointer to a set????
+            for (i = 0; i < validNames.length; i++) {
+                metaPointerNode = getMetaPointerNode(node, validNames[i]);
+                max = core.getAttribute(metaPointerNode, 'max');
+                if (max === undefined || max === -1 || max > 1) {
+                    //TODO specify what makes something a pointer and what a set??? - can you extend a pointer to a set????
                     validSetNames.push(validNames[i]);
                 }
             }
@@ -7897,15 +8020,15 @@ define('common/core/metacore',[ "common/util/assert", "common/core/core", "commo
             return validSetNames;
         };
 
-        core.isValidTargetOf = function(node,source,name){
-            if(!realNode(source) || node === null){ //we position ourselves over the null-pointer layer
+        core.isValidTargetOf = function (node, source, name) {
+            if (!realNode(source) || node === null) { //we position ourselves over the null-pointer layer
                 return true;
             }
-            var pointerMetaNode = MetaPointerNode(source,name);
-            if(pointerMetaNode){
-                var validTargetTypePaths = core.getMemberPaths(pointerMetaNode,"items") || [];
-                while(node){
-                    if(validTargetTypePaths.indexOf(core.getPath(node)) !== -1){
+            var pointerMetaNode = getMetaPointerNode(source, name);
+            if (pointerMetaNode) {
+                var validTargetTypePaths = core.getMemberPaths(pointerMetaNode, 'items') || [];
+                while (node) {
+                    if (validTargetTypePaths.indexOf(core.getPath(node)) !== -1) {
                         return true;
                     }
                     node = core.getBase(node);
@@ -7914,97 +8037,101 @@ define('common/core/metacore',[ "common/util/assert", "common/core/core", "commo
             return false;
         };
 
-        core.getValidAttributeNames = function(node){
+        core.getValidAttributeNames = function (node) {
             var names = [];
-            if(realNode(node)){
-                names = core.getAttributeNames(MetaNode(node)) || [];
+            if (realNode(node)) {
+                names = core.getAttributeNames(getMetaNode(node)) || [];
             }
             return names;
         };
 
-        core.isValidAttributeValueOf = function(node,name,value){
+        core.isValidAttributeValueOf = function (node, name, value) {
             //currently it only checks the name and the type
-            if(!realNode(node)){
+            if (!realNode(node)) {
                 return true;
             }
-            if(core.getValidAttributeNames(node).indexOf(name) === -1){
+            if (core.getValidAttributeNames(node).indexOf(name) === -1) {
                 return false;
             }
-            var meta = core.getAttribute(MetaNode(node),name);
-            switch(meta.type){
-                case "boolean":
-                    if(value === true || value === false){
+            var meta = core.getAttribute(getMetaNode(node), name);
+            switch (meta.type) {
+                case 'boolean':
+                    if (value === true || value === false) {
                         return true;
                     }
                     break;
-                case "string":
-                case "asset":
-                    if(typeof value === 'string'){
+                case 'string':
+                case 'asset':
+                    if (typeof value === 'string') {
                         return true;
                     }
                     break;
-                case "integer":
-                    if(!isNaN(parseInt(value)) && parseFloat(value) === parseInt(value)) {
+                case 'integer':
+                    if (!isNaN(parseInt(value)) && parseFloat(value) === parseInt(value)) {
                         return true;
                     }
                     break;
-                case "float":
-                    if(!isNaN(parseFloat(value))) {
+                case 'float':
+                    if (!isNaN(parseFloat(value))) {
                         return true;
                     }
+                    break;
+                default:
                     break;
             }
             return false;
         };
 
 
-
-        core.getValidAspectNames = function(node){
-            return core.getPointerNames(MetaAspectsNode(node)) ||[];
+        core.getValidAspectNames = function (node) {
+            return core.getPointerNames(getMetaAspectsNode(node)) || [];
         };
 
         //additional meta functions for getting meta definitions
-        core.getJsonMeta = function(node){
-            var meta = {children:{},attributes:{},pointers:{},aspects:{},constraints:{}},
+        core.getJsonMeta = function (node) {
+            var meta = {children: {}, attributes: {}, pointers: {}, aspects: {}, constraints: {}},
                 tempNode,
                 names,
                 pointer,
-                i,j;
+                i, j;
 
             //fill children part
-            tempNode = MetaChildrenNode(node);
+            tempNode = getMetaChildrenNode(node);
 
             meta.children.minItems = [];
             meta.children.maxItems = [];
-            meta.children.items = core.getMemberPaths(tempNode,"items");
-            for(i=0;i<meta.children.items.length;i++){
-                meta.children.minItems.push(core.getMemberAttribute(tempNode,"items",meta.children.items[i],"min") || -1);
-                meta.children.maxItems.push(core.getMemberAttribute(tempNode,"items",meta.children.items[i],"max") || -1);
+            meta.children.items = core.getMemberPaths(tempNode, 'items');
+            for (i = 0; i < meta.children.items.length; i++) {
+                meta.children.minItems.push(
+                    core.getMemberAttribute(tempNode, 'items', meta.children.items[i], 'min') || -1);
+
+                meta.children.maxItems.push(
+                    core.getMemberAttribute(tempNode, 'items', meta.children.items[i], 'max') || -1);
             }
-            meta.children.min = core.getAttribute(tempNode,"min");
-            meta.children.max = core.getAttribute(tempNode,"max");
+            meta.children.min = core.getAttribute(tempNode, 'min');
+            meta.children.max = core.getAttribute(tempNode, 'max');
 
             //attributes
             names = core.getValidAttributeNames(node);
-            for(i=0;i<names.length;i++){
-                meta.attributes[names[i]] = core.getAttribute(MetaNode(node),names[i]);
+            for (i = 0; i < names.length; i++) {
+                meta.attributes[names[i]] = core.getAttribute(getMetaNode(node), names[i]);
             }
 
             //pointers
-            names = core.getPointerNames(MetaNode(node));
-            for(i=0;i<names.length;i++){
-                tempNode = MetaPointerNode(node,names[i]);
+            names = core.getPointerNames(getMetaNode(node));
+            for (i = 0; i < names.length; i++) {
+                tempNode = getMetaPointerNode(node, names[i]);
                 pointer = {};
 
-                pointer.items = core.getMemberPaths(tempNode,"items");
-                pointer.min = core.getAttribute(tempNode,"min");
-                pointer.max = core.getAttribute(tempNode,"max");
+                pointer.items = core.getMemberPaths(tempNode, 'items');
+                pointer.min = core.getAttribute(tempNode, 'min');
+                pointer.max = core.getAttribute(tempNode, 'max');
                 pointer.minItems = [];
                 pointer.maxItems = [];
 
-                for(j=0;j<pointer.items.length;j++){
-                    pointer.minItems.push(core.getMemberAttribute(tempNode,"items",pointer.items[j],"min") || -1);
-                    pointer.maxItems.push(core.getMemberAttribute(tempNode,"items",pointer.items[j],"max") || -1);
+                for (j = 0; j < pointer.items.length; j++) {
+                    pointer.minItems.push(core.getMemberAttribute(tempNode, 'items', pointer.items[j], 'min') || -1);
+                    pointer.maxItems.push(core.getMemberAttribute(tempNode, 'items', pointer.items[j], 'max') || -1);
 
                 }
 
@@ -8014,56 +8141,60 @@ define('common/core/metacore',[ "common/util/assert", "common/core/core", "commo
             //aspects
             names = core.getValidAspectNames(node);
 
-            for(i=0;i<names.length;i++){
-                tempNode = MetaAspectNode(node,names[i]);
-                meta.aspects[names[i]] = core.getMemberPaths(tempNode,'items') || [];
+            for (i = 0; i < names.length; i++) {
+                tempNode = getMetaAspectNode(node, names[i]);
+                meta.aspects[names[i]] = core.getMemberPaths(tempNode, 'items') || [];
             }
 
             //constraints
             names = core.getConstraintNames(node);
-            for(i=0;i<names.length;i++){
-                meta.constraints[names[i]] = core.getConstraint(node,names[i]);
+            for (i = 0; i < names.length; i++) {
+                meta.constraints[names[i]] = core.getConstraint(node, names[i]);
             }
 
             return meta;
         };
 
-        var getMetaObjectDiff = function(bigger,smaller){
+        var getMetaObjectDiff = function (bigger, smaller) {
             //TODO this is a specific diff calculation for META rule JSONs
-            var diff = {},names, i,
-              itemedElementDiff = function(bigItem,smallItem){
-                  var diff, diffItems = {}, i,index,names;
-                  for(i=0;i<bigItem.items.length;i++){
-                      if(smallItem.items.indexOf(bigItem.items[i]) === -1){
-                          diffItems[bigItem.items[i]] = true;
-                      }
-                  }
-                  names = Object.keys(diffItems);
-                  for(i=0;i<names.length;i++){
-                      diff = diff || {items:[],minItems:[],maxItems:[]};
-                      index = bigItem.items.indexOf(names[i]);
-                      diff.items.push(bigItem.items[index]);
-                      diff.minItems.push(bigItem.minItems[index]);
-                      diff.maxItems.push(bigItem.maxItems[index]);
+            var diff = {},
+                names, i,
+                itemedElementDiff = function (bigItem, smallItem) {
+                    var diffItems = {},
+                        diff, i, index, names;
+                    for (i = 0; i < bigItem.items.length; i++) {
+                        if (smallItem.items.indexOf(bigItem.items[i]) === -1) {
+                            diffItems[bigItem.items[i]] = true;
+                        }
+                    }
+                    names = Object.keys(diffItems);
+                    for (i = 0; i < names.length; i++) {
+                        diff = diff || {items: [], minItems: [], maxItems: []};
+                        index = bigItem.items.indexOf(names[i]);
+                        diff.items.push(bigItem.items[index]);
+                        diff.minItems.push(bigItem.minItems[index]);
+                        diff.maxItems.push(bigItem.maxItems[index]);
 
-                  }
-                  if(bigItem.min && ((smallItem.min && bigItem.min !== smallItem.min) || !smallItem.min)){
-                      diff = diff || {};
-                      diff.min = bigItem.min;
-                  }
-                  if(bigItem.max && ((smallItem.max && bigItem.max !== smallItem.max) || !smallItem.max)){
-                      diff = diff || {};
-                      diff.max = bigItem.max;
-                  }
-                  return diff || {};
-              };
+                    }
+                    if (bigItem.min && ((smallItem.min && bigItem.min !== smallItem.min) || !smallItem.min)) {
+                        diff = diff || {};
+                        diff.min = bigItem.min;
+                    }
+                    if (bigItem.max && ((smallItem.max && bigItem.max !== smallItem.max) || !smallItem.max)) {
+                        diff = diff || {};
+                        diff.max = bigItem.max;
+                    }
+                    return diff || {};
+                };
             //attributes
-            if(smaller.attributes){
+            if (smaller.attributes) {
                 names = Object.keys(bigger.attributes);
-                for(i=0;i<names.length;i++){
-                    if(smaller.attributes[names[i]]){
+                for (i = 0; i < names.length; i++) {
+                    if (smaller.attributes[names[i]]) {
                         //they both have the attribute - if it differs we keep the whole of the bigger
-                        if(CANON.stringify(smaller.attributes[names[i]] !== CANON.stringify(bigger.attributes[names[i]]))){
+                        if (CANON.stringify(smaller.attributes[names[i]] !==
+                            CANON.stringify(bigger.attributes[names[i]]))) {
+
                             diff.attributes = diff.attributes || {};
                             diff.attributes[names[i]] = bigger.attributes[names[i]];
                         }
@@ -8072,174 +8203,176 @@ define('common/core/metacore',[ "common/util/assert", "common/core/core", "commo
                         diff.attributes[names[i]] = bigger.attributes[names[i]];
                     }
                 }
-            } else if(bigger.attributes){
+            } else if (bigger.attributes) {
                 diff.attributes = bigger.attributes;
             }
             //children
-            if(smaller.children){
-                diff.children = itemedElementDiff(bigger.children,smaller.children);
-                if(Object.keys(diff.children).length < 1){
+            if (smaller.children) {
+                diff.children = itemedElementDiff(bigger.children, smaller.children);
+                if (Object.keys(diff.children).length < 1) {
                     delete diff.children;
                 }
-            } else if(bigger.children){
+            } else if (bigger.children) {
                 diff.children = bigger.children;
             }
             //pointers
-            if(smaller.pointers){
+            if (smaller.pointers) {
                 diff.pointers = {};
                 names = Object.keys(bigger.pointers);
-                for(i=0;i<names.length;i++){
-                    if(smaller.pointers[names[i]]){
-                        diff.pointers[names[i]] = itemedElementDiff(bigger.pointers[names[i]],smaller.pointers[names[i]]);
-                        if(Object.keys(diff.pointers[names[i]]).length < 1){
+                for (i = 0; i < names.length; i++) {
+                    if (smaller.pointers[names[i]]) {
+                        diff.pointers[names[i]] = itemedElementDiff(bigger.pointers[names[i]],
+                            smaller.pointers[names[i]]);
+                        if (Object.keys(diff.pointers[names[i]]).length < 1) {
                             delete diff.pointers[names[i]];
                         }
                     } else {
                         diff.pointers[names[i]] = bigger.pointers[names[i]];
                     }
                 }
-            } else if(bigger.pointers){
+            } else if (bigger.pointers) {
                 diff.pointers = bigger.pointers;
             }
-            if(Object.keys(diff.pointers).length < 1){
+            if (Object.keys(diff.pointers).length < 1) {
                 delete diff.pointers;
             }
             //aspects
-            if(smaller.aspects){
+            if (smaller.aspects) {
                 diff.aspects = {};
                 names = Object.keys(bigger.aspects);
-                for(i=0;i<names.length;i++){
-                    if(smaller.aspects[names[i]]){
+                for (i = 0; i < names.length; i++) {
+                    if (smaller.aspects[names[i]]) {
                         smaller.aspects[names[i]] = smaller.aspects[names[i]].sort();
                         bigger.aspects[names[i]] = bigger.aspects[names[i]].sort();
-                        if(bigger.aspects[names[i]].length > smaller.aspects[names[i]].length){
+                        if (bigger.aspects[names[i]].length > smaller.aspects[names[i]].length) {
                             diff.aspects[names[i]] = bigger.aspects[names[i]].slice(smaller.aspects[names[i]].length);
                         }
                     } else {
                         diff.aspects[names[i]] = bigger.aspects[names[i]];
                     }
                 }
-            } else if(bigger.aspects){
+            } else if (bigger.aspects) {
                 diff.aspects = bigger.aspects;
             }
 
-            if(Object.keys(diff.aspects).length < 1){
+            if (Object.keys(diff.aspects).length < 1) {
                 delete diff.aspects;
             }
             return diff;
         };
 
-        core.getOwnJsonMeta = function(node){
+        core.getOwnJsonMeta = function (node) {
             var base = core.getBase(node),
                 baseMeta = base ? core.getJsonMeta(base) : {},
                 meta = core.getJsonMeta(node);
 
-            return getMetaObjectDiff(meta,baseMeta);
+            return getMetaObjectDiff(meta, baseMeta);
         };
 
-        core.clearMetaRules = function(node){
-            core.deleteNode(MetaNode(node),true);
+        core.clearMetaRules = function (node) {
+            core.deleteNode(getMetaNode(node), true);
         };
 
-        core.setAttributeMeta = function(node,name,value){
+        core.setAttributeMeta = function (node, name, value) {
             ASSERT(typeof value === 'object' && typeof name === 'string' && name);
 
-            core.setAttribute(MetaNode(node),name,value);
+            core.setAttribute(getMetaNode(node), name, value);
         };
-        core.delAttributeMeta = function(node,name){
-            core.delAttribute(MetaNode(node),name);
+        core.delAttributeMeta = function (node, name) {
+            core.delAttribute(getMetaNode(node), name);
         };
-        core.getAttributeMeta = function(node,name){
-            return core.getAttribute(MetaNode(node),name);
+        core.getAttributeMeta = function (node, name) {
+            return core.getAttribute(getMetaNode(node), name);
         };
 
-        core.getValidChildrenPaths = function(node){
-            return core.getMemberPaths(MetaChildrenNode(node),'items');
+        core.getValidChildrenPaths = function (node) {
+            return core.getMemberPaths(getMetaChildrenNode(node), 'items');
         };
-        core.setChildMeta = function(node,child,min,max){
-            core.addMember(MetaChildrenNode(node),'items',child);
+        core.setChildMeta = function (node, child, min, max) {
+            core.addMember(getMetaChildrenNode(node), 'items', child);
             min = min || -1;
             max = max || -1;
-            core.setMemberAttribute(MetaChildrenNode(node),'items',core.getPath(child),'min',min);
-            core.setMemberAttribute(MetaChildrenNode(node),'items',core.getPath(child),'max',max);
+            core.setMemberAttribute(getMetaChildrenNode(node), 'items', core.getPath(child), 'min', min);
+            core.setMemberAttribute(getMetaChildrenNode(node), 'items', core.getPath(child), 'max', max);
         };
-        core.delChildMeta = function(node,childPath){
-            core.delMember(MetaChildrenNode(node),'items',childPath);
+        core.delChildMeta = function (node, childPath) {
+            core.delMember(getMetaChildrenNode(node), 'items', childPath);
         };
-        core.setChildrenMetaLimits = function(node,min,max){
-            if(min){
-                core.setAttribute(MetaChildrenNode(node),'min',min);
+        core.setChildrenMetaLimits = function (node, min, max) {
+            if (min) {
+                core.setAttribute(getMetaChildrenNode(node), 'min', min);
             }
-            if(max){
-                core.setAttribute(MetaChildrenNode(node),'max',max);
+            if (max) {
+                core.setAttribute(getMetaChildrenNode(node), 'max', max);
             }
         };
 
-        core.setPointerMetaTarget = function(node,name,target,min,max){
-            core.addMember(_MetaPointerNode(node,name),'items',target);
+        core.setPointerMetaTarget = function (node, name, target, min, max) {
+            core.addMember(_MetaPointerNode(node, name), 'items', target);
             min = min || -1;
-            core.setMemberAttribute(_MetaPointerNode(node,name),'items',core.getPath(target),'min',min);
+            core.setMemberAttribute(_MetaPointerNode(node, name), 'items', core.getPath(target), 'min', min);
             max = max || -1;
-            core.setMemberAttribute(_MetaPointerNode(node,name),'items',core.getPath(target),'max',max);
+            core.setMemberAttribute(_MetaPointerNode(node, name), 'items', core.getPath(target), 'max', max);
         };
-        core.delPointerMetaTarget = function(node,name,targetPath){
-            var metaNode = MetaPointerNode(node,name);
-            if(metaNode){
-                core.delMember(metaNode,'items',targetPath);
+        core.delPointerMetaTarget = function (node, name, targetPath) {
+            var metaNode = getMetaPointerNode(node, name);
+            if (metaNode) {
+                core.delMember(metaNode, 'items', targetPath);
             }
         };
-        core.setPointerMetaLimits = function(node,name,min,max){
-            if(min){
-                core.setAttribute(_MetaPointerNode(node,name),'min',min);
+        core.setPointerMetaLimits = function (node, name, min, max) {
+            if (min) {
+                core.setAttribute(_MetaPointerNode(node, name), 'min', min);
             }
-            if(max){
-                core.setAttribute(_MetaPointerNode(node,name),'max',max);
+            if (max) {
+                core.setAttribute(_MetaPointerNode(node, name), 'max', max);
             }
         };
-        core.delPointerMeta = function(node,name){
-            core.deleteNode(_MetaPointerNode(node,name),true);
-            core.deletePointer(MetaNode(node),name);
+        core.delPointerMeta = function (node, name) {
+            core.deleteNode(_MetaPointerNode(node, name), true);
+            core.deletePointer(getMetaNode(node), name);
         };
 
-        core.setAspectMetaTarget = function(node,name,target){
-            core.addMember(_MetaAspectNode(node,name),'items',target);
+        core.setAspectMetaTarget = function (node, name, target) {
+            core.addMember(_MetaAspectNode(node, name), 'items', target);
         };
-        core.delAspectMetaTarget = function(node,name,targetPath){
-            var metaNode = MetaAspectNode(node,name);
-            if(metaNode){
-                core.delMember(metaNode,'items',targetPath);
+        core.delAspectMetaTarget = function (node, name, targetPath) {
+            var metaNode = getMetaAspectNode(node, name);
+            if (metaNode) {
+                core.delMember(metaNode, 'items', targetPath);
             }
         };
-        core.delAspectMeta = function(node,name){
-            core.deleteNode(_MetaAspectNode(node,name),true);
-            core.deletePointer(MetaAspectsNode(node),name);
+        core.delAspectMeta = function (node, name) {
+            core.deleteNode(_MetaAspectNode(node, name), true);
+            core.deletePointer(getMetaAspectsNode(node), name);
         };
 
         //type related extra query functions
-        var isOnMetaSheet = function(node){
+        var isOnMetaSheet = function (node) {
             //MetaAspectSet
             var sets = core.isMemberOf(node);
 
-            if(sets && sets[""] && sets[""].indexOf("MetaAspectSet") !== -1){ //TODO this is all should be global constant values
+            if (sets && sets[''] && sets[''].indexOf('MetaAspectSet') !== -1) {
+                //TODO this is all should be global constant values
                 return true;
             }
             return false;
         };
-        core.getBaseType = function(node){
+        core.getBaseType = function (node) {
             //TODO this functions now uses the fact that we think of META as the MetaSetContainer of the ROOT
-            while(node){
-                if(isOnMetaSheet(node)){
+            while (node) {
+                if (isOnMetaSheet(node)) {
                     return node;
                 }
                 node = core.getBase(node);
             }
             return null;
         };
-        core.isInstanceOf = function(node,name){
+        core.isInstanceOf = function (node, name) {
             //TODO this is name based query - doesn't check the node's own name
             node = core.getBase(node);
-            while(node){
-                if(core.getAttribute(node,'name') === name){
+            while (node) {
+                if (core.getAttribute(node, 'name') === name) {
                     return true;
                 }
                 node = core.getBase(node);
@@ -8254,2198 +8387,2365 @@ define('common/core/metacore',[ "common/util/assert", "common/core/core", "commo
     return MetaCore;
 });
 
+/*globals define*/
+/*jshint node: true, browser: true*/
+
 /**
- * Created by tkecskes on 12/11/2014.
+ * @author kecso / https://github.com/kecso
  */
-define('common/core/coretreeloader',[ "common/util/assert", "common/core/core", "common/core/tasync" ], function(ASSERT, Core, TASYNC) {
-  
 
-  // ----------------- CoreTreeLoader -----------------
+define('common/core/coretreeloader',['common/util/assert', 'common/core/core', 'common/core/tasync'], function (ASSERT, Core, TASYNC) {
+    
 
-  var MetaCore = function (innerCore, options) {
-      ASSERT(typeof options === 'object');
-      ASSERT(typeof options.globConf === 'object');
-      ASSERT(typeof options.logger !== 'undefined');
-    var core = {},
-      key,
-        logger = options.logger.fork('coretreeloader');
-    for ( key in innerCore) {
-      core[key] = innerCore[key];
-    }
-      logger.debug('initialized');
-    //adding load functions
-    core.loadSubTree = function(root){
-      var loadSubTrees = function(nodes){
-        for (var i = 0; i < nodes.length; i++) {
-          nodes[i] = core.loadSubTree(nodes[i]);
+    // ----------------- CoreTreeLoader -----------------
+
+    var MetaCore = function (innerCore, options) {
+        ASSERT(typeof options === 'object');
+        ASSERT(typeof options.globConf === 'object');
+        ASSERT(typeof options.logger !== 'undefined');
+        var core = {},
+            key,
+            logger = options.logger.fork('coretreeloader');
+        for (key in innerCore) {
+            core[key] = innerCore[key];
         }
-        return TASYNC.lift(nodes);
+        logger.debug('initialized');
+        //adding load functions
+        core.loadSubTree = function (root) {
+            var loadSubTrees = function (nodes) {
+                for (var i = 0; i < nodes.length; i++) {
+                    nodes[i] = core.loadSubTree(nodes[i]);
+                }
+                return TASYNC.lift(nodes);
 
-      };
-      return TASYNC.call(function(children){
-        if(children.length<1){
-          return [root];
-        } else {
-          return TASYNC.call(function(subArrays){
-            var nodes = [],
-              i;
-            for(i=0;i<subArrays.length;i++){
-              nodes = nodes.concat(subArrays[i]);
-            }
-            nodes.unshift(root);
-            return nodes;
-          },loadSubTrees(children));
-        }
-      },core.loadChildren(root));
-    };
-    core.loadTree = function(rootHash) {
-      return TASYNC.call(core.loadSubTree, core.loadRoot(rootHash));
-    };
+            };
+            return TASYNC.call(function (children) {
+                if (children.length < 1) {
+                    return [root];
+                } else {
+                    return TASYNC.call(function (subArrays) {
+                        var nodes = [],
+                            i;
+                        for (i = 0; i < subArrays.length; i++) {
+                            nodes = nodes.concat(subArrays[i]);
+                        }
+                        nodes.unshift(root);
+                        return nodes;
+                    }, loadSubTrees(children));
+                }
+            }, core.loadChildren(root));
+        };
+        core.loadTree = function (rootHash) {
+            return TASYNC.call(core.loadSubTree, core.loadRoot(rootHash));
+        };
 
-    return core;
-  };
-  return MetaCore;
+        return core;
+    };
+    return MetaCore;
 });
 
-/*
- * Copyright (C) 2014 Vanderbilt University, All rights reserved.
- *
- * Author: Tamas Kecskes
+/*globals define*/
+/*jshint node: true, browser: true*/
+
+// TODO: This files needs refactoring
+
+/**
+ * @author kecso / https://github.com/kecso
  */
+
 define('common/core/corediff',['common/util/canon', 'common/core/tasync', 'common/util/assert'], function (CANON, TASYNC, ASSERT) {
-  
+    
 
+    function diffCore(_innerCore, options) {
+        ASSERT(typeof options === 'object');
+        ASSERT(typeof options.globConf === 'object');
+        ASSERT(typeof options.logger !== 'undefined');
+        var _core = {},
+            logger = options.logger.fork('corediff'),
+            _yetToCompute = {},
+            _DIFF = {},
+            _needChecking = true,
+            _rounds = 0,
+            TODELETESTRING = '*to*delete*',
+            toFrom = {}, //TODO should not be global
+            fromTo = {}, //TODO should not be global
+            _concatResult,
+            _diffMoves = {},
+            _conflictItems = [],
+            _conflictMine,
+            _conflictTheirs,
+            _concatBase,
+            _concatExtension,
+            _concatBaseRemovals,
+            _concatMoves;
 
-  function diffCore(_innerCore, options) {
-    ASSERT(typeof options === 'object');
-    ASSERT(typeof options.globConf === 'object');
-    ASSERT(typeof options.logger !== 'undefined');
-    var _core = {},
-      logger = options.logger.fork('corediff'),
-      _yetToCompute = {},
-      _DIFF = {},
-      _needChecking = true,
-      _rounds = 0,
-      TODELETESTRING = "*to*delete*",
-    /*EMPTYGUID = "00000000-0000-0000-0000-000000000000",
-     EMPTYNODE = _innerCore.createNode({base: null, parent: null, guid: EMPTYGUID}),*/
-      toFrom = {}, //TODO should not be global
-      fromTo = {}, //TODO should not be global
-      _concat_dictionary,
-      _concat_result,
-      _diff_moves = {},
-      _conflict_items = [],
-      _conflict_parents = {},
-      _conflict_mine,
-      _conflict_theirs,
-      _concat_base,
-      _concat_extension,
-      _concat_base_removals,
-      _concat_moves,
-      _resolve_moves;
-
-    logger.debug('initialized');
-    for (var i in _innerCore) {
-      _core[i] = _innerCore[i];
-    }
-
-    function normalize(obj) {
-      if (!obj) {
-        return obj;
-      }
-      var keys = Object.keys(obj),
-        i;
-      for (i = 0; i < keys.length; i++) {
-        /*if (Array.isArray(obj[keys[i]])) {
-          if (obj[keys[i]].length === 0) {
-            delete obj[keys[i]];
-          }*/
-        if(Array.isArray(obj[keys[i]])) {
-          //do nothing, leave the array as is
-        } else if(obj[keys[i]] === undefined) {
-          delete obj[keys[i]]; //there cannot be undefined in the object
-        } else if (typeof obj[keys[i]] === 'object'){
-          normalize(obj[keys[i]]);
-          if (obj[keys[i]] && Object.keys(obj[keys[i]]).length === 0) {
-            delete obj[keys[i]];
-          }
+        logger.debug('initialized');
+        for (var i in _innerCore) {
+            _core[i] = _innerCore[i];
         }
-      }
-      keys = Object.keys(obj);
-      if(keys.length === 1){
-        //it only has the GUID, so the node doesn't changed at all
-        delete obj.guid;
-      }
-    }
 
-    function attr_diff(source, target) {
-      var sNames = _core.getOwnAttributeNames(source),
-        tNames = _core.getOwnAttributeNames(target),
-        i,
-        diff = {};
-
-      for (i = 0; i < sNames.length; i++) {
-        if (tNames.indexOf(sNames[i]) === -1) {
-          diff[sNames[i]] = TODELETESTRING;
-        }
-      }
-
-      for (i = 0; i < tNames.length; i++) {
-        if (_core.getAttribute(source, tNames[i]) === undefined) {
-          diff[tNames[i]] = _core.getAttribute(target, tNames[i]);
-        } else {
-          if (CANON.stringify(_core.getAttribute(source, tNames[i])) !== CANON.stringify(_core.getAttribute(target, tNames[i]))) {
-            diff[tNames[i]] = _core.getAttribute(target, tNames[i]);
-          }
-        }
-      }
-
-      return diff;
-    }
-
-    function reg_diff(source, target) {
-      var sNames = _core.getOwnRegistryNames(source),
-        tNames = _core.getOwnRegistryNames(target),
-        i,
-        diff = {};
-
-      for (i = 0; i < sNames.length; i++) {
-        if (tNames.indexOf(sNames[i]) === -1) {
-          diff[sNames[i]] = TODELETESTRING;
-        }
-      }
-
-      for (i = 0; i < tNames.length; i++) {
-        if (_core.getRegistry(source, tNames[i]) === undefined) {
-          diff[tNames[i]] = _core.getRegistry(target, tNames[i]);
-        } else {
-          if (CANON.stringify(_core.getRegistry(source, tNames[i])) !== CANON.stringify(_core.getRegistry(target, tNames[i]))) {
-            diff[tNames[i]] = _core.getRegistry(target, tNames[i]);
-          }
-        }
-      }
-
-      return diff;
-    }
-
-    function children_diff(source, target) {
-      var sRelids = _core.getChildrenRelids(source),
-        tRelids = _core.getChildrenRelids(target),
-        tHashes = _core.getChildrenHashes(target),
-        sHashes = _core.getChildrenHashes(source),
-        i,
-        diff = {added: [], removed: []};
-
-      for (i = 0; i < sRelids.length; i++) {
-        if (tRelids.indexOf(sRelids[i]) === -1) {
-          diff.removed.push({relid: sRelids[i], hash: sHashes[sRelids[i]]});
-        }
-      }
-
-      for (i = 0; i < tRelids.length; i++) {
-        if (sRelids.indexOf(tRelids[i]) === -1) {
-          diff.added.push({relid: tRelids[i], hash: tHashes[tRelids[i]]});
-        }
-      }
-
-      return diff;
-
-    }
-
-    function pointer_diff(source, target) {
-      var getPointerData = function(node){
-        var data = {},
-        names = _core.getPointerNames(node),
-        i;
-        for(i=0;i<names.length;i++){
-          data[names[i]] = _core.getPointerPath(node,names[i]);
-        }
-        return data;
-      }, 
-      sPointer = getPointerData(source), 
-      tPointer = getPointerData(target);
-
-      if(CANON.stringify(sPointer) !== CANON.stringify(tPointer)){
-        return {source: sPointer,target:tPointer};
-      }
-      return {};
-    }
-
-    function set_diff(source,target){
-      var getSetData = function(node){
-        var data = {},
-        names,targets,keys,i,j,k;
-
-        names = _core.getSetNames(node);
-        for(i=0;i<names.length;i++){
-          data[names[i]] = {};
-          targets = _core.getMemberPaths(node,names[i]);
-          for(j=0;j<targets.length;j++){
-            data[names[i]][targets[j]] = {attr:{},reg:{}};
-            keys = _core.getMemberOwnAttributeNames(node,names[i],targets[j]);
-            for(k=0;k<keys.length;k++){
-              data[names[i]][targets[j]].attr[keys[i]] = _core.getMemberAttribute(node,names[i],targets[j],keys[i]);
+        function normalize(obj) {
+            if (!obj) {
+                return obj;
             }
-            keys = _core.getMemberRegistryNames(node,names[i],targets[j]);
-            for(k=0;k<keys.length;k++){
-              data[names[i]][targets[j]].reg[keys[k]] = _core.getMemberRegistry(node,names[i],targets[j],keys[k]);
-            }
-          }
-        }
-
-        return data;
-
-      },
-      sSet = getSetData(source),
-      tSet = getSetData(target);
-
-      if(CANON.stringify(sSet) !== CANON.stringify(tSet)){
-        return {source:sSet,target:tSet};
-      }
-      return {};
-    }
-    function ovr_diff(source,target){
-      var getOvrData = function(node){
-        var paths,names,i,j,
-        ovr = _core.getProperty(node, 'ovr') || {},
-        data = {},
-        base = _core.getPath(node);
-
-        paths = Object.keys(ovr);
-        for(i=0;i<paths.length;i++){
-          if(paths[i].indexOf('_') === -1){
-            data[paths[i]] = {};
-            names = Object.keys(ovr[paths[i]]);
-            for(j=0;j<names.length;j++){
-              if(ovr[paths[i]][names[j]] === "/_nullptr"){
-                data[paths[i]][names[j]] = null;
-              }else if(names[j].slice(-4) !== '-inv' && ovr[paths[i]][names[j]].indexOf('_') === -1){
-                data[paths[i]][names[j]] = _core.joinPaths(base,ovr[paths[i]][names[j]]);
-              }
-            }
-          }
-        }
-        return data;
-      },
-      sOvr = getOvrData(source),
-      tOvr = getOvrData(target);
-
-      if(CANON.stringify(sOvr) !== CANON.stringify(tOvr)){
-        return {source:sOvr,target:tOvr};
-      }
-      return {};
-    }
-
-    function meta_diff(source, target) {
-      var sMeta = _core.getOwnJsonMeta(source),
-      tMeta = _core.getOwnJsonMeta(target);
-      if (CANON.stringify(sMeta) !== CANON.stringify(tMeta)) {
-        return {source: sMeta, target: tMeta};
-      }
-      return {};
-    }
-
-    function combineMoveIntoMetaDiff(diff){
-      var keys = Object.keys(diff),
-      i;
-      for(i=0;i<keys.length;i++){
-        if(_diff_moves[keys[i]]){
-          diff[_diff_moves[keys[i]]] = diff[keys[i]];
-          delete diff[keys[i]];
-        } else if(typeof diff[keys[i]] === 'object'){
-          combineMoveIntoMetaDiff(diff[keys[i]]);
-        }
-      }
-    }
-    function combineMoveIntoPointerDiff(diff){
-      var keys = Object.keys(diff),
-      i;
-      for(i=0;i<keys.length;i++){
-        if(_diff_moves[diff[keys[i]]]){
-         diff[keys[i]] = _diff_moves[diff[keys[i]]];
-        }
-      }
-    }
-
-    function finalizeDiff(){
-      finalizeMetaDiff(_DIFF);
-      finalizePointerDiff(_DIFF);
-      finalizeSetDiff(_DIFF);
-      normalize(_DIFF);
-    } 
-    function finalizeMetaDiff(diff){
-      //at this point _DIFF is ready and the _diff_moves is complete...
-      var relids = getDiffChildrenRelids(diff),
-      i,sMeta,tMeta;
-      if(diff.meta){
-        sMeta = diff.meta.source || {};
-        tMeta = diff.meta.target || {};
-        combineMoveIntoMetaDiff(sMeta);
-        diff.meta = diffObjects(sMeta,tMeta);  
-      }
-      for(i=0;i<relids.length;i++){
-        finalizeMetaDiff(diff[relids[i]]);
-      }
-    }
-    function finalizePointerDiff(diff){
-      var relids = getDiffChildrenRelids(diff),
-      i,sPointer,tPointer;
-      if(diff.pointer){
-        sPointer = diff.pointer.source || {};
-        tPointer = diff.pointer.target || {};
-        /*if(diff.movedFrom && !sPointer.base && tPointer.base){
-          delete tPointer.base;
-        }*/
-        combineMoveIntoPointerDiff(sPointer);
-        diff.pointer = diffObjects(sPointer,tPointer);
-      }
-      for(i=0;i<relids.length;i++){
-        finalizePointerDiff(diff[relids[i]]);
-      } 
-    }
-    function finalizeSetDiff(diff){
-      var relids = getDiffChildrenRelids(diff),
-      i,sSet,tSet;
-      if(diff.set){
-        sSet = diff.set.source || {};
-        tSet = diff.set.target || {};
-        combineMoveIntoMetaDiff(sSet);
-        diff.set = diffObjects(sSet,tSet);
-      }
-      for(i=0;i<relids.length;i++){
-        finalizeSetDiff(diff[relids[i]]);
-      }
-    }
-
-    function isEmptyNodeDiff(diff) {
-      if (
-        Object.keys(diff.children || {}).length > 0 ||
-        Object.keys(diff.attr || {}).length > 0 ||
-        Object.keys(diff.reg || {}).length > 0 ||
-        Object.keys(diff.pointer || {}).length > 0 ||
-        Object.keys(diff.set || {}).length > 0 ||
-        diff.meta
-        ) {
-        return false;
-      }
-      return true;
-    }
-
-    function getPathOfDiff(diff, path) {
-      var pathArray = (path || "").split('/'),
-        i;
-      pathArray.shift();
-      for (i = 0; i < pathArray.length; i++) {
-        diff[pathArray[i]] = diff[pathArray[i]] || {};
-        diff = diff[pathArray[i]];
-      }
-
-      return diff;
-    }
-
-    function extendDiffWithOvr(diff,oDiff){
-      var i,paths,names, j, tDiff;
-      //first extend sources
-      paths = Object.keys(oDiff.source || {});
-      for(i=0;i<paths.length;i++){
-        tDiff = getPathOfDiff(diff, paths[i]);
-        if(!tDiff.removed === true){
-          tDiff.pointer = tDiff.pointer || {source:{},target:{}};
-          names = Object.keys(oDiff.source[paths[i]]);
-          for(j=0;j<names.length;j++){
-            tDiff.pointer.source[names[j]] = oDiff.source[paths[i]][names[j]];
-          }
-        }
-      }
-      //then targets
-      paths = Object.keys(oDiff.target || {});
-      for(i=0;i<paths.length;i++){
-        tDiff = getPathOfDiff(diff, paths[i]);
-        if(!tDiff.removed === true){
-          tDiff.pointer = tDiff.pointer || {source:{},target:{}};
-          names = Object.keys(oDiff.target[paths[i]]);
-          for(j=0;j<names.length;j++){
-            tDiff.pointer.target[names[j]] = oDiff.target[paths[i]][names[j]];
-          }
-        }
-      }
-    }
-
-    function updateDiff(sourceRoot, targetRoot) {
-      var sChildrenHashes = _core.getChildrenHashes(sourceRoot),
-        tChildrenHAshes = _core.getChildrenHashes(targetRoot),
-        sRelids = Object.keys(sChildrenHashes),
-        tRelids = Object.keys(tChildrenHAshes),
-        diff = _core.nodeDiff(sourceRoot, targetRoot) || {},
-        oDiff = ovr_diff(sourceRoot, targetRoot),
-        getChild = function (childArray, relid) {
-          for (var i = 0; i < childArray.length; i++) {
-            if (_core.getRelid(childArray[i]) === relid) {
-              return childArray[i];
-            }
-          }
-          return null;
-        };
-      return TASYNC.call(function (sChildren, tChildren) {
-        ASSERT(sChildren.length >= 0 && tChildren.length >= 0);
-
-        var i, child, done, tDiff, guid, base;
-
-        tDiff = diff.children ? diff.children.removed || [] : [];
-        for (i = 0; i < tDiff.length; i++) {
-          diff.childrenListChanged = true;
-          child = getChild(sChildren, tDiff[i].relid);
-          if(child){
-            guid = _core.getGuid(child);
-            diff[tDiff[i].relid] = {guid: guid, removed: true, hash: _core.getHash(child)};
-            _yetToCompute[guid] = _yetToCompute[guid] || {};
-            _yetToCompute[guid].from = child;
-            _yetToCompute[guid].fromExpanded = false;
-          }
-        }
-
-        tDiff = diff.children ? diff.children.added || [] : [];
-        for (i = 0; i < tDiff.length; i++) {
-          diff.childrenListChanged = true;
-          child = getChild(tChildren, tDiff[i].relid);
-          if(child){
-            guid = _core.getGuid(child);
-            base =_core.getBase(child);
-            if(base){
-              base = _core.getPath(base);
-            }
-            diff[tDiff[i].relid] = {guid: guid, removed: false, hash: _core.getHash(child), pointer:{source:{},target:{base:base}}};
-            _yetToCompute[guid] = _yetToCompute[guid] || {};
-            _yetToCompute[guid].to = child;
-            _yetToCompute[guid].toExpanded = false;
-          }
-        }
-
-        for (i = 0; i < tChildren.length; i++) {
-          child = getChild(sChildren, _core.getRelid(tChildren[i]));
-          if (child && _core.getHash(tChildren[i]) !== _core.getHash(child)) {
-            done = TASYNC.call(function (cDiff, relid, d) {
-              diff[relid] = cDiff;
-              return null;
-            }, updateDiff(child, tChildren[i]), _core.getRelid(child), done);
-          }
-        }
-        return TASYNC.call(function () {
-          delete diff.children;
-          extendDiffWithOvr(diff, oDiff);
-          normalize(diff);
-          if (Object.keys(diff).length > 0) {
-            diff.guid = _core.getGuid(targetRoot);
-            diff.hash = _core.getHash(targetRoot);
-            diff.oGuids = gatherObstructiveGuids(targetRoot);
-            return TASYNC.call(function (finalDiff) {
-              return finalDiff;
-            }, fillMissingGuid(targetRoot, '', diff));
-          } else {
-            return diff;
-          }
-
-        }, done);
-      }, _core.loadChildren(sourceRoot), _core.loadChildren(targetRoot));
-    }
-
-    function gatherObstructiveGuids(node){
-      var result = {},
-        putParents = function(n){
-          while(n){
-            result[_core.getGuid(n)] = true;
-            n = _core.getParent(n);
-          }
-        };
-      while(node){
-        putParents(node);
-        node = _core.getBase(node);
-      }
-      return result;
-    }
-    function fillMissingGuid(root, path, diff) {
-      var relids = getDiffChildrenRelids(diff),
-        i,
-        done;
-
-      for (i = 0; i < relids.length; i++) {
-        done = TASYNC.call(function (cDiff, relid) {
-          diff[relid] = cDiff;
-          return null;
-        }, fillMissingGuid(root, path + '/' + relids[i], diff[relids[i]]), relids[i]);
-      }
-      return TASYNC.call(function () {
-        if (diff.guid) {
-          return diff;
-        } else {
-          return TASYNC.call(function (child) {
-            diff.guid = _core.getGuid(child);
-            diff.hash = _core.getHash(child);
-            diff.oGuids = gatherObstructiveGuids(child);
-            return diff;
-          }, _core.loadByPath(root, path));
-        }
-      }, done);
-    }
-
-    function expandDiff(root, isDeleted) {
-      var diff = {
-        guid: _core.getGuid(root),
-        hash: _core.getHash(root),
-        removed: isDeleted === true
-      };
-      return TASYNC.call(function (children) {
-        var guid;
-        for (var i = 0; i < children.length; i++) {
-          guid = _core.getGuid(children[i]);
-          diff[_core.getRelid(children[i])] = {
-            guid: guid,
-            hash: _core.getHash(children[i]),
-            removed: isDeleted === true
-          };
-
-          if (isDeleted) {
-            _yetToCompute[guid] = _yetToCompute[guid] || {};
-            _yetToCompute[guid].from = children[i];
-            _yetToCompute[guid].fromExpanded = false;
-          } else {
-            _yetToCompute[guid] = _yetToCompute[guid] || {};
-            _yetToCompute[guid].to = children[i];
-            _yetToCompute[guid].toExpanded = false;
-          }
-        }
-        return diff;
-      }, _core.loadChildren(root));
-    }
-
-    function insertIntoDiff(path, diff) {
-      var pathArray = path.split('/'),
-        relid = pathArray.pop(),
-        sDiff = _DIFF,
-        i;
-      pathArray.shift();
-      for (i = 0; i < pathArray.length; i++) {
-        sDiff = sDiff[pathArray[i]];
-      }
-      //sDiff[relid] = diff;
-      sDiff[relid] = mergeObjects(sDiff[relid], diff);
-    }
-
-    function diffObjects(source,target) {
-      var diff = {},
-        sKeys = Object.keys(source),
-        tKeys = Object.keys(target),
-        tDiff,i;
-      for (i = 0; i < sKeys.length; i++) {
-        if(tKeys.indexOf(sKeys[i]) === -1){
-          diff[sKeys[i]] = TODELETESTRING;
-        }
-      }
-      for (i = 0; i < tKeys.length; i++) {
-        if (sKeys.indexOf(tKeys[i]) === -1) {
-          diff[tKeys[i]] = target[tKeys[i]];
-        } else {
-          if (typeof target[tKeys[i]] === typeof source[tKeys[i]] &&
-            typeof target[tKeys[i]] === 'object' &&
-            (target[tKeys[i]] !== null && source[tKeys[i]] !== null)) {
-            tDiff = diffObjects(source[tKeys[i]], target[tKeys[i]]);
-            if(Object.keys(tDiff).length > 0){
-              diff[tKeys[i]] = tDiff;
-            }
-          } else if(source[tKeys[i]] !== target[tKeys[i]]) {
-            diff[tKeys[i]] = target[tKeys[i]];
-          }
-        }
-      }
-      return diff;
-    }
-
-    function mergeObjects(source, target) {
-      var merged = {},
-        sKeys = Object.keys(source),
-        tKeys = Object.keys(target),
-        i;
-      for (i = 0; i < sKeys.length; i++) {
-        merged[sKeys[i]] = source[sKeys[i]];
-      }
-      for (i = 0; i < tKeys.length; i++) {
-        if (sKeys.indexOf(tKeys[i]) === -1) {
-          merged[tKeys[i]] = target[tKeys[i]];
-        } else {
-          if (typeof target[tKeys[i]] === typeof source[tKeys[i]] && typeof target[tKeys[i]] === 'object' && !(target instanceof Array)) {
-            merged[tKeys[i]] = mergeObjects(source[tKeys[i]], target[tKeys[i]]);
-          } else {
-            merged[tKeys[i]] = target[tKeys[i]];
-          }
-        }
-      }
-
-      return merged;
-    }
-
-    function removePathFromDiff(diff,path){
-      var relId,i;
-      if(path === ''){
-        diff = null;
-      } else {
-        path = path.split('/');
-        path.shift();
-        relId = path.pop();
-        for(i=0;i<path.length;i++){
-          diff = diff[path[i]];
-        }
-        delete diff[relId];
-      }
-    }
-    function shrinkDiff(rootDiff){
-      var _shrink = function(diff){
-        if(diff){
-          var keys = getDiffChildrenRelids(diff),
-            i;
-          if(typeof diff.movedFrom === 'string'){
-            removePathFromDiff(rootDiff,diff.movedFrom);
-          }
-
-          if(diff.removed !== false || typeof diff.movedFrom === 'string'){
-            delete diff.hash;
-          }
-
-          if(diff.removed === true){
-            for(i=0;i<keys.length;i++){
-              delete diff[keys[i]];
-            }
-          } else {
-
-            for(i=0;i<keys.length;i++){
-              _shrink(diff[keys[i]]);
-            }
-          }
-        }
-      };
-      _shrink(rootDiff,false);
-    }
-    function checkRound() {
-      var guids = Object.keys(_yetToCompute),
-        done, ytc,
-        i;
-      if (_needChecking !== true || guids.length < 1) {
-        shrinkDiff(_DIFF);
-        finalizeDiff();
-        return _DIFF;
-      }
-      _needChecking = false;
-      for (i = 0; i < guids.length; i++) {
-        ytc = _yetToCompute[guids[i]];
-        if (ytc.from && ytc.to) {
-          //move
-          _needChecking = true;
-          delete _yetToCompute[guids[i]];
-          done = TASYNC.call(function (mDiff, info) {
-            mDiff.guid = _core.getGuid(info.from);
-            mDiff.movedFrom = _core.getPath(info.from);
-            mDiff.ooGuids = gatherObstructiveGuids(info.from);
-            _diff_moves[_core.getPath(info.from)] = _core.getPath(info.to);
-            insertAtPath(_DIFF,_core.getPath(info.to),mDiff);
-            return null;
-          }, updateDiff(ytc.from, ytc.to), ytc);
-        } else {
-          if (ytc.from && ytc.fromExpanded === false) {
-            //expand from
-            ytc.fromExpanded = true;
-            _needChecking = true;
-            done = TASYNC.call(function (mDiff, info) {
-              mDiff.hash = _core.getHash(info.from);
-              mDiff.removed = true;
-              insertIntoDiff(_core.getPath(info.from), mDiff);
-              return null;
-            }, expandDiff(ytc.from, true), ytc);
-          } else if (ytc.to && ytc.toExpanded === false) {
-            //expand to
-            ytc.toExpanded = true;
-            _needChecking = true;
-            done = TASYNC.call(function (mDiff, info) {
-              if(!mDiff.hash){
-                mDiff.hash = _core.getHash(info.to);
-              }
-              mDiff.removed = false;
-              insertIntoDiff(_core.getPath(info.to), mDiff);
-              return null;
-            }, expandDiff(ytc.to, false), ytc);
-          }
-        }
-      }
-      return TASYNC.call(function () {
-        return checkRound();
-      }, done);
-    }
-
-    _core.nodeDiff = function (source, target) {
-      var diff = {
-        children: children_diff(source, target),
-        attr: attr_diff(source, target),
-        reg: reg_diff(source, target),
-        pointer: pointer_diff(source, target),
-        set: set_diff(source, target),
-        meta: meta_diff(source, target)
-      };
-
-      normalize(diff);
-      return isEmptyNodeDiff(diff) ? null : diff;
-    };
-
-    _core.generateTreeDiff = function (sRoot, tRoot) {
-      _yetToCompute = {};
-      _DIFF = {};
-      _diff_moves = {};
-      _needChecking = true;
-      _rounds = 0;
-      return TASYNC.call(function (d) {
-        _DIFF = d;
-        return checkRound();
-      }, updateDiff(sRoot, tRoot));
-    };
-
-    _core.generateLightTreeDiff = function (sRoot, tRoot) {
-      return updateDiff(sRoot, tRoot);
-    };
-
-    function getDiffChildrenRelids(diff) {
-      var keys = Object.keys(diff),
-        i,
-        filteredKeys = [],
-        forbiddenWords = {
-          guid: true,
-          hash: true,
-          attr: true,
-          reg: true,
-          pointer: true,
-          set: true,
-          meta: true,
-          removed: true,
-          movedFrom: true,
-          childrenListChanged: true,
-          oGuids: true,
-          ooGuids: true,
-          min: true,
-          max: true
-        };
-      for (i = 0; i < keys.length; i++) {
-        if (!forbiddenWords[keys[i]]) {
-          filteredKeys.push(keys[i]);
-        }
-      }
-      return filteredKeys;
-    }
-
-    function getMoveSources(diff, path, toFrom, fromTo) {
-      var relids = getDiffChildrenRelids(diff),
-        i, paths = [];
-
-      for (i = 0; i < relids.length; i++) {
-        getMoveSources(diff[relids[i]], path + '/' + relids[i], toFrom, fromTo);
-      }
-
-      if (typeof diff.movedFrom === 'string') {
-        toFrom[path] = diff.movedFrom;
-        fromTo[diff.movedFrom] = path;
-      }
-    }
-
-    function getAncestor(node,path){
-      var ownPath = _core.getPath(node),
-        ancestorPath='',
-        i;
-      path=path.split('/');
-      ownPath=ownPath.split('/');
-      ownPath.shift();
-      path.shift();
-      for(i=0;i<ownPath.length;i++){
-        if(ownPath[i] === path[i]){
-          ancestorPath= ancestorPath+'/'+ownPath[i];
-        } else {
-          break;
-        }
-      }
-      ownPath = _core.getPath(node);
-      while(ownPath !== ancestorPath){
-        node = _core.getParent(node);
-        ownPath = _core.getPath(node);
-      }
-      return node;
-    }
-    function setBaseOfNewNode(node,relid,basePath){
-      //TODO this is a kind of low level hack so maybe there should be another way to do this
-      var ancestor = getAncestor(node,basePath),
-        sourcePath = _core.getPath(node).substr(_core.getPath(ancestor).length),
-        targetPath = basePath.substr(_core.getPath(ancestor).length);
-      sourcePath = sourcePath+'/'+relid;
-      _innerCore.overlayInsert(_core.getChild(ancestor,'ovr'),sourcePath,'base',targetPath);
-    }
-    function makeInitialContainmentChanges(node,diff){
-      var relids = getDiffChildrenRelids(diff),
-        i,done,child,moved;
-
-      for(i=0;i<relids.length;i++){
-        moved = false;
-        if(diff[relids[i]].movedFrom){
-          //moved node
-          moved = true;
-          child = _core.loadByPath(_core.getRoot(node),diff[relids[i]].movedFrom);
-        } else if(diff[relids[i]].removed === false){
-          //added node
-          //first we hack the pointer, then we create the node
-          if(diff[relids[i]].pointer && diff[relids[i]].pointer.base){
-            //we can set base if the node has one, otherwise it is 'inheritance internal' node
-            setBaseOfNewNode(node,relids[i],diff[relids[i]].pointer.base);
-          }
-          if(diff[relids[i]].hash){
-            _core.setProperty(node,relids[i],diff[relids[i]].hash);
-            child = _core.loadChild(node,relids[i]);
-          } else {
-            child = _core.getChild(node,relids[i]);
-            _core.setHashed(child,true);
-          }
-        } else {
-          //simple node
-          child = _core.loadChild(node,relids[i]);
-        }
-
-        done = TASYNC.call(function(n,di,p,m,d){
-          if(m === true){
-            n = _core.moveNode(n,p);
-          }
-          return makeInitialContainmentChanges(n,di);
-        },child,diff[relids[i]],node,moved,done);
-      }
-
-      TASYNC.call(function(d){
-        return null;
-      },done);
-    }
-    function createNewNodes(node, diff) {
-      var relids = getDiffChildrenRelids(diff),
-        i,
-        done;
-
-      for (i = 0; i < relids.length; i++) {
-        if (diff[relids[i]].removed === false && !diff[relids[i]].movedFrom) {
-          //we have to create the child with the exact hash and then recursively call the function for it
-          /*if(!(node.data[relids[i]] && node.data[relids[i]] === diff[relids[i]].hash)){
-            //if it is a child of a new node we probably do not have to create it again...
-            if(diff[relids[i]].hash){
-              _core.setProperty(node,relids[i],diff[relids[i]].hash);
-            } else {
-              //create an empty child
-              var child = _core.getChild(node,relids[i]);
-              _core.setHashed(child,true);
-            }
-          }*/
-          if(diff[relids[i]].hash){
-            _core.setProperty(node,relids[i],diff[relids[i]].hash);
-          } else {
-            var child = _core.getChild(node,relids[i]);
-            _core.setHashed(child,true);
-          }
-          if(diff[relids[i]].pointer && diff[relids[i]].pointer.base){
-            //we can set base if the node has one, otherwise it is 'inheritance internal' node
-            setBaseOfNewNode(node,relids[i],diff[relids[i]].pointer.base);
-          }
-        }
-
-        done = TASYNC.call(function (a, b, c) {
-          return createNewNodes(a, b);
-        }, _core.loadChild(node, relids[i]), diff[relids[i]], done);
-
-      }
-
-      return TASYNC.call(function (d) {
-        return null;
-      },done);
-    }
-
-    function applyNodeChange(root, path, nodeDiff) {
-      //check for move
-      var node;
-      node = _core.loadByPath(root, path);
-
-      return TASYNC.call(function (n) {
-        var done,
-          relids = getDiffChildrenRelids(nodeDiff),
-          i;
-        if (nodeDiff.removed === true) {
-          _core.deleteNode(n);
-          return;
-        }
-        applyAttributeChanges(n, nodeDiff.attr || {});
-        applyRegistryChanges(n, nodeDiff.reg || {});
-        done = applyPointerChanges(n, nodeDiff.pointer || {});
-        done = TASYNC.call(applySetChanges,n, nodeDiff.set || {},done);
-        if(nodeDiff.meta){
-          delete nodeDiff.meta.empty;
-          done = TASYNC.call(applyMetaChanges,n, nodeDiff.meta,done);
-        }
-        for (i = 0; i < relids.length; i++) {
-          /*done = TASYNC.call(function () {
-            return null;
-          }, applyNodeChange(root, path + '/' + relids[i], nodeDiff[relids[i]]), done);*/
-          done = TASYNC.join(done,applyNodeChange(root, path + '/' + relids[i], nodeDiff[relids[i]]));
-        }
-        /*TASYNC.call(function (d) {
-          return done;
-        }, done);*/
-          return done;
-      }, node);
-    }
-
-    function applyAttributeChanges(node, attrDiff) {
-      var i, keys;
-      keys = Object.keys(attrDiff);
-      for (i = 0; i < keys.length; i++) {
-        if (attrDiff[keys[i]] === TODELETESTRING) {
-          _core.delAttribute(node, keys[i]);
-        } else {
-          _core.setAttribute(node, keys[i], attrDiff[keys[i]]);
-        }
-      }
-    }
-
-    function applyRegistryChanges(node, regDiff) {
-      var i, keys;
-      keys = Object.keys(regDiff);
-      for (i = 0; i < keys.length; i++) {
-        if (regDiff[keys[i]] === TODELETESTRING) {
-          _core.delRegistry(node, keys[i]);
-        } else {
-          _core.setRegistry(node, keys[i], regDiff[keys[i]]);
-        }
-      }
-    }
-
-    function setPointer(node, name, target) {
-      var targetNode;
-      if(target === null){
-        targetNode = null;
-      } else {
-        if(fromTo[target]){
-          target = fromTo[target];
-        }
-        targetNode = _core.loadByPath(_core.getRoot(node),target);
-      }
-      return TASYNC.call(function (t) {
-        //TODO watch if handling of base changes!!!
-        _core.setPointer(node, name, t);
-        return;
-      }, targetNode);
-    }
-
-    function applyPointerChanges(node, pointerDiff) {
-      var done,
-        keys = Object.keys(pointerDiff),
-        i;
-      for (i = 0; i < keys.length; i++) {
-        if (pointerDiff[keys[i]] === TODELETESTRING) {
-          _core.deletePointer(node, keys[i]);
-        } else {
-          done = setPointer(node, keys[i], pointerDiff[keys[i]]);
-        }
-      }
-
-      return TASYNC.call(function (d) {
-        return null;
-      }, done);
-
-    }
-
-    function addMember(node, name, target, data) {
-      var memberAttrSetting = function (diff) {
-          var keys = _core.getMemberOwnAttributeNames(node, name, target),
-            i;
-          for (i = 0; i < keys.length; i++) {
-            _core.delMemberAttribute(node, name, target, keys[i]);
-          }
-
-          keys = Object.keys(diff);
-          for (i = 0; i < keys.length; i++) {
-            _core.setMemberAttribute(node, name, target, keys[i], diff[keys[i]]);
-          }
-        },
-        memberRegSetting = function (diff) {
-          var keys = _core.getMemberOwnRegistryNames(node, name, target),
-            i;
-          for (i = 0; i < keys.length; i++) {
-            _core.delMemberRegistry(node, name, target, keys[i]);
-          }
-
-          keys = Object.keys(diff);
-          for (i = 0; i < keys.length; i++) {
-            _core.setMemberRegistry(node, name, target, keys[i], diff[keys[i]]);
-          }
-        };
-      return TASYNC.call(function (t) {
-        _core.addMember(node, name, t);
-        memberAttrSetting(data.attr || {});
-        memberRegSetting(data.reg || {});
-        return;
-      }, _core.loadByPath(_core.getRoot(node), target));
-    }
-
-    function applySetChanges(node, setDiff) {
-      var done,
-        setNames = Object.keys(setDiff),
-        elements, i, j;
-      for (i = 0; i < setNames.length; i++) {
-        if (setDiff[setNames[i]] === TODELETESTRING) {
-          _core.deleteSet(node, setNames[i]);
-        } else {
-          elements = Object.keys(setDiff[setNames[i]]);
-          for (j = 0; j < elements.length; j++) {
-            if (setDiff[setNames[i]][elements[j]] === TODELETESTRING) {
-              _core.delMember(node, setNames[i], elements[j]);
-            } else {
-              done = addMember(node, setNames[i], elements[j], setDiff[setNames[i]][elements[j]]);
-            }
-          }
-        }
-      }
-
-      return TASYNC.call(function (d) {
-        return null;
-      }, done);
-
-    }
-
-    function applyMetaAttributes(node,metaAttrDiff){
-      var i,keys,newValue;
-      if(metaAttrDiff === TODELETESTRING){
-        //we should delete all MetaAttributes
-        keys = _core.getValidAttributeNames(node);
-        for(i=0;i<keys.length;i++){
-          _core.delAttributeMeta(node,keys[i]);
-        }
-      } else {
-        keys = Object.keys(metaAttrDiff);
-        for(i=0;i<keys.length;i++){
-          if(metaAttrDiff[keys[i]] === TODELETESTRING){
-            _core.delAttributeMeta(node,keys[i]);
-          } else {
-            newValue = jsonConcat(_core.getAttributeMeta(node,keys[i]) || {},metaAttrDiff[keys[i]]);
-            _core.setAttributeMeta(node,keys[i],newValue);
-          }
-        }
-      }
-    }
-
-    function applyMetaConstraints(node,metaConDiff){
-      var keys,i;
-      if(metaConDiff === TODELETESTRING){
-        //remove all constraints
-        keys = _core.getConstraintNames(node);
-        for(i=0;i<keys.length;i++){
-          _core.delConstraint(node,keys[i]);
-        }
-      } else {
-        keys = Object.keys(metaConDiff);
-        for(i=0;i<keys.length;i++){
-          if(metaConDiff[keys[i]] === TODELETESTRING){
-            _core.delConstraint(node,keys[i]);
-          } else {
-            _core.setConstraint(node,keys[i],jsonConcat(_core.getConstraint(node,keys[i]) || {},metaConDiff[keys[i]]));
-          }
-        }
-      }
-    }
-
-    function applyMetaChildren(node,metaChildrenDiff){
-      var keys, i,done,
-        setChild = function(target,data,d){
-          _core.setChildMeta(node,target,data.min,data.max);
-        };
-      if(metaChildrenDiff === TODELETESTRING){
-        //remove all valid child
-        keys = _core.getValidChildrenPaths(node);
-        for(i=0;i<keys.length;i++){
-          _core.delChildMeta(node,keys[i]);
-        }
-      } else {
-        _core.setChildrenMetaLimits(node, metaChildrenDiff.min, metaChildrenDiff.max);
-        delete metaChildrenDiff.max; //TODO we do not need it anymore, but maybe there is a better way
-        delete metaChildrenDiff.min;
-        keys = Object.keys(metaChildrenDiff);
-        for(i=0;i<keys.length;i++){
-          if(metaChildrenDiff[keys[i]] === TODELETESTRING){
-            _core.delChildMeta(node,keys[i]);
-          } else {
-            done = TASYNC.call(setChild,_core.loadByPath(_core.getRoot(node),keys[i]),metaChildrenDiff[keys[i]],done);
-          }
-        }
-      }
-
-      TASYNC.call(function(d){
-        return null;
-      },done);
-    }
-
-    function applyMetaPointers(node,metaPointerDiff){
-      var names,targets, i, j,done,
-        setPointer = function(name,target,data,d){
-          _core.setPointerMetaTarget(node,name,target,data.min,data.max);
-        };
-      if(metaPointerDiff === TODELETESTRING){
-        //remove all pointers,sets and their targets
-        names = _core.getValidPointerNames(node);
-        for(i=0;i<names.length;i++){
-          _core.delPointerMeta(node,names[i]);
-        }
-
-        names = _core.getValidSetNames(node);
-        for(i=0;i<names.length;i++){
-          _core.delPointerMeta(node,names[i]);
-        }
-        return;
-      }
-
-      names = Object.keys(metaPointerDiff);
-      for(i=0;i<names.length;i++){
-        if(metaPointerDiff[names[i]] === TODELETESTRING){
-          _core.delPointerMeta(node,names[i]);
-        } else {
-          _core.setPointerMetaLimits(node,names[i],metaPointerDiff[names[i]].min,metaPointerDiff[names[i]].max);
-          delete metaPointerDiff[names[i]].max; //TODO we do not need it anymore, but maybe there is a better way
-          delete metaPointerDiff[names[i]].min;
-          targets = Object.keys(metaPointerDiff[names[i]]);
-          for(j=0;j<targets.length;j++){
-            if(metaPointerDiff[names[i]][targets[j]] === TODELETESTRING){
-              _core.delPointerMetaTarget(node,names[i],targets[j]);
-            } else {
-              done = TASYNC.call(setPointer,names[i],_core.loadByPath(_core.getRoot(node),targets[j]),metaPointerDiff[names[i]][targets[j]],done);
-            }
-          }
-        }
-      }
-
-      TASYNC.call(function(d){
-        return null;
-      },done);
-    }
-
-    function applyMetaAspects(node,metaAspectsDiff){
-      var names,targets, i, j,done,
-        setAspect = function(name,target,d){
-          _core.setAspectMetaTarget(node,name,target);
-        };
-      if(metaAspectsDiff === TODELETESTRING){
-        //remove all aspects
-        names = _core.getValidAspectNames(node);
-        for(i=0;i<names.length;i++){
-          _core.delAspectMeta(node,names[i]);
-        }
-        return;
-      }
-
-      names = Object.keys(metaAspectsDiff);
-      for(i=0;i<names.length;i++){
-        if(metaAspectsDiff[names[i]] === TODELETESTRING){
-          _core.delAspectMeta(node,names[i]);
-        } else {
-          targets = Object.keys(metaAspectsDiff[names[i]]);
-          for(j=0;j<targets.length;j++){
-            if(metaAspectsDiff[names[i]][targets[j]] === TODELETESTRING){
-              _core.delAspectMetaTarget(node,names[i],targets[j]);
-            } else {
-              done = TASYNC.call(setAspect,names[i],_core.loadByPath(_core.getRoot(node),targets[j]),done);
-            }
-          }
-        }
-      }
-
-      TASYNC.call(function(d){
-        return null;
-      },done);
-    }
-
-    function applyMetaChanges(node, metaDiff) {
-      var done;
-      applyMetaAttributes(node,metaDiff.attributes || TODELETESTRING);
-      applyMetaConstraints(node,metaDiff.constraints || TODELETESTRING);
-      done = applyMetaChildren(node,metaDiff.children || TODELETESTRING);
-      done = TASYNC.call(applyMetaPointers,node,metaDiff.pointers || TODELETESTRING,done);
-      done = TASYNC.call(applyMetaAspects,node,metaDiff.aspects || TODELETESTRING,done);
-
-      TASYNC.call(function(d){
-        return null;
-      },done);
-    }
-
-    _core.applyTreeDiff = function (root, diff) {
-      var done;
-
-      toFrom = {};
-      fromTo = {};
-      getMoveSources(diff, '', toFrom, fromTo);
-
-        return TASYNC.join(makeInitialContainmentChanges(root,diff),applyNodeChange(root,'',diff));
-    };
-
-    function getNodeByGuid(diff,guid){
-      var relids, i,temp;
-      if(diff.guid === guid){
-        return diff;
-      }
-
-      relids = getDiffChildrenRelids(diff);
-      for(i=0;i<relids.length;i++){
-        temp = getNodeByGuid(diff[relids[i]],guid);
-        if(temp){
-          return temp;
-        }
-      }
-      return null;
-    }
-    function insertAtPath(diff,path,object){
-      ASSERT(typeof path === 'string');
-      var i,base,relid,nodepath;
-      if(path === ''){
-        _concat_result = JSON.parse(JSON.stringify(object));
-        return;
-      }
-      nodepath = path.match(/\/\/.*\/\//) || [];
-      nodepath = nodepath[0] || "there is no nodepath in the path";
-      path = path.replace(nodepath,"/*nodepath*/");
-      nodepath = nodepath.replace(/\/\//g,"/");
-      nodepath = nodepath.slice(0,-1);
-      path = path.split('/');
-      path.shift();
-      if(path.indexOf("*nodepath*") !== -1){
-        path[path.indexOf("*nodepath*")] = nodepath;
-      }
-      relid = path.pop();
-      base = diff;
-      for(i=0;i<path.length;i++){
-        base[path[i]] = base[path[i]] || {};
-        base = base[path[i]];
-      }
-      base[relid] = JSON.parse(JSON.stringify(object));
-      return;
-    }
-    function changeMovedPaths(singleNode){
-      var keys,i;
-      keys = Object.keys(singleNode);
-      for(i=0;i<keys.length;i++){
-        if(_concat_moves.fromTo[keys[i]]){
-          singleNode[_concat_moves.fromTo[keys[i]]] = singleNode[keys[i]];
-          delete singleNode[keys[i]];
-          if(typeof singleNode[_concat_moves.fromTo[keys[i]]] === 'object' && singleNode[_concat_moves.fromTo[keys[i]]] !== null){
-            changeMovedPaths(singleNode[_concat_moves.fromTo[keys[i]]]);
-          }
-        } else {
-          if(typeof singleNode[keys[i]] === 'string' && keys[i] !== 'movedFrom' && _concat_moves.fromTo[singleNode[keys[i]]]){
-            singleNode[keys[i]] = _concat_moves.fromTo[keys[i]];
-          }
-
-          if(typeof singleNode[keys[i]] === 'object' && singleNode[keys[i]] !== null){
-            changeMovedPaths(singleNode[keys[i]]);
-          }
-        }
-
-      }
-      if(typeof singleNode === 'object' && singleNode !== null){
-        keys = Object.keys(singleNode);
-        for(i=0;i<keys.length;i++){
-          if(_concat_moves.fromTo[keys[i]]){
-            singleNode[_concat_moves.fromTo[keys[i]]] = singleNode[keys[i]];
-            delete singleNode[keys[i]];
-          }
-        }
-      } else if(typeof singleNode === 'string') {
-
-      }
-
-    }
-    function getSingleNode(node){
-      //removes the children from the node
-      var result = JSON.parse(JSON.stringify(node)),
-        keys = getDiffChildrenRelids(result),
-        i;
-      for(i=0;i<keys.length;i++){
-        delete result[keys[i]];
-      }
-      //changeMovedPaths(result);
-      return result;
-    }
-    function jsonConcat(base,extension){
-      var baseKeys = Object.keys(base),
-        extKeys = Object.keys(extension),
-        concat = JSON.parse(JSON.stringify(base)),
-        i;
-      for(i=0;i<extKeys.length;i++){
-        if(baseKeys.indexOf(extKeys[i]) === -1){
-          concat[extKeys[i]] = JSON.parse(JSON.stringify(extension[extKeys[i]]));
-        } else {
-          if(typeof base[extKeys[i]] === 'object' && typeof extension[extKeys[i]] === 'object'){
-            concat[extKeys[i]] = jsonConcat(base[extKeys[i]],extension[extKeys[i]]);
-          } else { //either from value to object or object from value we go with the extension
-            concat[extKeys[i]] = JSON.parse(JSON.stringify(extension[extKeys[i]]));
-          }
-        }
-      }
-      return concat;
-    }
-
-    function getConflictByGuid(conflict,guid){
-      var relids,i,result;
-      if(conflict.guid === guid){
-        return conflict;
-      }
-      relids = getDiffChildrenRelids(conflict);
-      for(i=0;i<relids.length;i++){
-        result = getConflictByGuid(conflict[relids[i]],guid);
-        if(result){
-          return result;
-        }
-      }
-      return null;
-    }
-    function getPathByGuid(conflict,guid,path){
-      var relids,i,result;
-      if(conflict.guid === guid){
-        return path;
-      }
-      relids = getDiffChildrenRelids(conflict);
-      for(i=0;i<relids.length;i++){
-        result = getPathByGuid(conflict[relids[i]],guid,path+'/'+relids[i]);
-        if(result){
-          return result;
-        }
-      }
-      return null;
-    }
-
-    function getGuidsOfDiff(diff){
-      var relids = getDiffChildrenRelids(diff),
-        i,
-        result = [diff.guid];
-      for(i=0;i<relids.length;i++){
-        result = result.concat(getGuidsOfDiff(diff[relids[i]]));
-      }
-      return result;
-    }
-
-    //now we try a different approach, which maybe more simple
-    function getCommonPathForConcat(path){
-      if(_concat_moves.getExtensionSourceFromDestination[path]){
-        path = _concat_moves.getExtensionSourceFromDestination[path];
-      }
-      if(_concat_moves.getBaseDestinationFromSource[path]){
-        path = _concat_moves.getBaseDestinationFromSource[path];
-      }
-      return path;
-    }
-    function getConcatBaseRemovals(diff){
-      var relids = getDiffChildrenRelids(diff),
-        i;
-      if(diff.removed !== true){
-        if(diff.movedFrom){
-          if(_concat_base_removals[diff.guid] !== undefined){
-            delete _concat_base_removals[diff.guid];
-          } else {
-            _concat_base_removals[diff.guid] = false;
-          }
-        }
-        for(i=0;i<relids.length;i++){
-          getConcatBaseRemovals(diff[relids[i]]);
-        }
-      } else {
-        if(_concat_base_removals[diff.guid] === false){
-          delete _concat_base_removals[diff.guid];
-        } else {
-          _concat_base_removals[diff.guid] = true;
-        }
-      }
-    }
-    function getObstructiveGuids(diffNode){
-      var result = [],
-        keys,i;
-      keys = Object.keys(diffNode.oGuids || {});
-      for(i=0;i<keys.length;i++){
-        if(_concat_base_removals[keys[i]]){
-          result.push(keys[i]);
-        }
-      }
-      keys = Object.keys(diffNode.ooGuids || {});
-      for(i=0;i<keys.length;i++){
-        if(_concat_base_removals[keys[i]]){
-          result.push(keys[i]);
-        }
-      }
-      return result;
-    }
-    function getWhomIObstructGuids(guid){
-      //this function is needed when the extension contains a deletion where the base did not delete the node
-      var guids = [],
-        checkNode = function(diffNode){
-          var relids,i;
-          if((diffNode.oGuids && diffNode.oGuids[guid]) || (diffNode.ooGuids && diffNode.ooGuids[guid])){
-            guids.push(diffNode.guid);
-          }
-
-          relids = getDiffChildrenRelids(diffNode);
-          for(i=0;i<relids.length;i++){
-            checkNode(diffNode[relids[i]]);
-          }
-        };
-      checkNode(_concat_base);
-      return guids;
-    }
-    function gatherFullNodeConflicts(diffNode,mine,path,opposingPath){
-      var conflict,
-        opposingConflict,
-        keys, i,
-        createSingleKeyValuePairConflicts = function(pathBase,data){
-        var keys, i;
-        keys = Object.keys(data);
-        for(i=0;i<keys.length;i++){
-          conflict[pathBase+'/'+keys[i]] = conflict[pathBase+'/'+keys[i]] || {value:data[keys[i]],conflictingPaths:{}};
-          conflict[pathBase+'/'+keys[i]].conflictingPaths[opposingPath] = true;
-          opposingConflict.conflictingPaths[pathBase+'/'+keys[i]] = true;
-        }
-      };
-
-      //setting the conflicts
-      if(mine === true){
-        conflict = _conflict_mine;
-        opposingConflict = _conflict_theirs[opposingPath];
-      } else {
-        conflict = _conflict_theirs;
-        opposingConflict = _conflict_mine[opposingPath];
-      }
-      ASSERT(opposingConflict);
-      //if the node was moved we should make a conflict for the whole node as well
-      if(diffNode.movedFrom){
-        conflict[path] = conflict[path] || {value:path,conflictingPaths:{}};
-        conflict[path].conflictingPaths[opposingPath] = true;
-        opposingConflict.conflictingPaths[path] = true;
-      }
-      createSingleKeyValuePairConflicts(path+'/attr',diffNode.attr || {});
-      createSingleKeyValuePairConflicts(path+'/reg',diffNode.reg || {});
-      createSingleKeyValuePairConflicts(path+'/pointer',diffNode.pointer || {});
-
-      if(diffNode.set){
-        if(diffNode.set === TODELETESTRING){
-          conflict[path+'/set'] = conflict[path+'/set'] || {value:TODELETESTRING,conflictingPaths:{}};
-          conflict[path+'/set'].conflictingPaths[opposingPath] = true;
-          opposingConflict.conflictingPaths[path+'/set'] = true;
-        } else {
-          keys = Object.keys(diffNode.set);
-          for(i=0;i<keys.length;i++){
-            if(diffNode.set[keys[i]] === TODELETESTRING){
-              conflict[path+'/set/'+keys[i]] = conflict[path+'/set/'+keys[i]] || {value:TODELETESTRING,conflictingPaths:{}};
-              conflict[path+'/set/'+keys[i]].conflictingPaths[opposingPath] = true;
-              opposingConflict.conflictingPaths[path+'/set/'+keys[i]] = true;
-            } else {
-              gatherFullSetConflicts(diffNode.set[keys[i]],mine,path+'/set/'+keys[i],opposingPath);
-            }
-          }
-        }
-      }
-
-      if(diffNode.meta){
-        gatherFullMetaConflicts(diffNode.meta,mine,path+'/meta',opposingPath);
-      }
-
-      //if the opposing item is theirs, we have to recursively go down in our changes
-      if(mine){
-        keys = getDiffChildrenRelids(diffNode);
-        for(i=0;i<keys.length;i++){
-          gatherFullNodeConflicts(diffNode[keys[i]],true,path+'/'+keys[i],opposingPath);
-        }
-      }
-
-    }
-    function gatherFullSetConflicts(diffSet,mine,path,opposingPath){
-      var relids = getDiffChildrenRelids(diffSet),
-        i,keys, j,conflict,opposingConflict;
-
-      //setting the conflicts
-      if(mine === true){
-        conflict = _conflict_mine;
-        opposingConflict = _conflict_theirs[opposingPath];
-      } else {
-        conflict = _conflict_theirs;
-        opposingConflict = _conflict_mine[opposingPath];
-      }
-      for(i=0;i<relids.length;i++){
-        if(diffSet[relids[i]] === TODELETESTRING){
-          //single conflict as the element was removed
-          conflict[path+'/'+relids[i]+'/'] = conflict[path+'/'+relids[i]+'/'] || {value:TODELETESTRING,conflictingPaths:{}};
-          conflict[path+'/'+relids[i]+'/'].conflictingPaths[opposingPath] = true;
-          opposingConflict.conflictingPaths[path+'/'+relids[i]+'/'] = true;
-        } else {
-          keys = Object.keys(diffSet[relids[i]].attr || {});
-          for(j=0;j<keys.length;j++){
-            conflict[path+'/'+relids[i]+'//attr/'+keys[j]] = conflict[path+'/'+relids[i]+'//attr/'+keys[j]] || {value:diffSet[relids[i]].attr[keys[j]],conflictingPaths:{}};
-            conflict[path+'/'+relids[i]+'//attr/'+keys[j]].conflictingPaths[opposingPath] = true;
-            opposingConflict.conflictingPaths[path+'/'+relids[i]+'//attr/'+keys[j]] = true;
-          }
-          keys = Object.keys(diffSet[relids[i]].reg || {});
-          for(j=0;j<keys.length;j++){
-            conflict[path+'/'+relids[i]+'//reg/'+keys[j]] = conflict[path+'/'+relids[i]+'//reg/'+keys[j]] || {value:diffSet[relids[i]].reg[keys[j]],conflictingPaths:{}};
-            conflict[path+'/'+relids[i]+'//reg/'+keys[j]].conflictingPaths[opposingPath] = true;
-            opposingConflict.conflictingPaths[path+'/'+relids[i]+'//reg/'+keys[j]] = true;
-          }
-        }
-      }
-    }
-    function concatSingleKeyValuePairs(path,base,extension){
-      var keys, i,temp;
-      keys = Object.keys(extension);
-      for(i=0;i<keys.length;i++){
-        temp = extension[keys[i]];
-        if(typeof temp === 'string' && temp !== TODELETESTRING){
-          temp = getCommonPathForConcat(temp);
-        }
-        if(base[keys[i]] && CANON.stringify(base[keys[i]]) !== CANON.stringify(temp)){
-          //conflict
-          _conflict_mine[path+'/'+keys[i]] = {value:base[keys[i]],conflictingPaths:{}};
-          _conflict_theirs[path+'/'+keys[i]] = {value:extension[keys[i]],conflictingPaths:{}};
-          _conflict_mine[path+'/'+keys[i]].conflictingPaths[path+'/'+keys[i]] = true;
-          _conflict_theirs[path+'/'+keys[i]].conflictingPaths[path+'/'+keys[i]] = true;
-        } else {
-          base[keys[i]] = extension[keys[i]];
-        }
-      }
-    }
-    function concatSet(path,base,extension){
-      var names = Object.keys(extension),
-        members, i, j,memberPath;
-
-      for(i=0;i<names.length;i++){
-        if(base[names[i]]){
-          if(base[names[i]] === TODELETESTRING){
-            if(extension[names[i]] !== TODELETESTRING){
-              //whole set conflict
-              _conflict_mine[path+'/'+names[i]]={value:TODELETESTRING,conflictingPaths:{}};
-              gatherFullSetConflicts(extension[names[i]],false,path+'/'+names[i],path+'/'+names[i]);
-            }
-          } else {
-            if(extension[names[i]] === TODELETESTRING){
-              //whole set conflict
-              _conflict_theirs[path+'/'+names[i]]={value:TODELETESTRING,conflictingPaths:{}};
-              gatherFullSetConflicts(base[names[i]],true,path+'/'+names[i],path+'/'+names[i]);
-            } else {
-              //now we can only have member or sub-member conflicts...
-              members = getDiffChildrenRelids(extension[names[i]]);
-              for(j=0;j<members.length;j++){
-                memberPath = getCommonPathForConcat(members[j]);
-                if(base[names[i]][memberPath]){
-                  if(base[names[i]][memberPath] === TODELETESTRING){
-                    if(extension[names[i]][members[j]] !== TODELETESTRING){
-                      //whole member conflict
-                      _conflict_mine[path+'/'+names[i]+'/'+memberPath+'//'] = {value:TODELETESTRING,conflictingPaths:{}};
-                      gatherFullNodeConflicts(extension[names[i]][members[j]],false,path+'/'+names[i]+'/'+memberPath+'//',path+'/'+names[i]+'/'+memberPath+'//');
+            var keys = Object.keys(obj),
+                i;
+            for (i = 0; i < keys.length; i++) {
+                /*if (Array.isArray(obj[keys[i]])) {
+                 if (obj[keys[i]].length === 0) {
+                 delete obj[keys[i]];
+                 }*/
+                if (Array.isArray(obj[keys[i]])) {
+                    //do nothing, leave the array as is
+                } else if (obj[keys[i]] === undefined) {
+                    delete obj[keys[i]]; //there cannot be undefined in the object
+                } else if (typeof obj[keys[i]] === 'object') {
+                    normalize(obj[keys[i]]);
+                    if (obj[keys[i]] && Object.keys(obj[keys[i]]).length === 0) {
+                        delete obj[keys[i]];
                     }
-                  } else {
-                    if(extension[names[i]][members[j]] === TODELETESTRING){
-                      //whole member conflict
-                      _conflict_theirs[path+'/'+names[i]+'/'+memberPath+'//'] = {value:TODELETESTRING,conflictingPaths:{}};
-                      gatherFullNodeConflicts(base[names[i]][memberPath],true,path+'/'+names[i]+'/'+memberPath+'//',path+'/'+names[i]+'/'+memberPath+'//');
+                }
+            }
+            keys = Object.keys(obj);
+            if (keys.length === 1) {
+                //it only has the GUID, so the node doesn't changed at all
+                delete obj.guid;
+            }
+        }
+
+        function attrDiff(source, target) {
+            var sNames = _core.getOwnAttributeNames(source),
+                tNames = _core.getOwnAttributeNames(target),
+                i,
+                diff = {};
+
+            for (i = 0; i < sNames.length; i++) {
+                if (tNames.indexOf(sNames[i]) === -1) {
+                    diff[sNames[i]] = TODELETESTRING;
+                }
+            }
+
+            for (i = 0; i < tNames.length; i++) {
+                if (_core.getAttribute(source, tNames[i]) === undefined) {
+                    diff[tNames[i]] = _core.getAttribute(target, tNames[i]);
+                } else {
+                    if (CANON.stringify(_core.getAttribute(source, tNames[i])) !==
+                        CANON.stringify(_core.getAttribute(target, tNames[i]))) {
+
+                        diff[tNames[i]] = _core.getAttribute(target, tNames[i]);
+                    }
+                }
+            }
+
+            return diff;
+        }
+
+        function regDiff(source, target) {
+            var sNames = _core.getOwnRegistryNames(source),
+                tNames = _core.getOwnRegistryNames(target),
+                i,
+                diff = {};
+
+            for (i = 0; i < sNames.length; i++) {
+                if (tNames.indexOf(sNames[i]) === -1) {
+                    diff[sNames[i]] = TODELETESTRING;
+                }
+            }
+
+            for (i = 0; i < tNames.length; i++) {
+                if (_core.getRegistry(source, tNames[i]) === undefined) {
+                    diff[tNames[i]] = _core.getRegistry(target, tNames[i]);
+                } else {
+                    if (CANON.stringify(_core.getRegistry(source, tNames[i])) !==
+                        CANON.stringify(_core.getRegistry(target, tNames[i]))) {
+
+                        diff[tNames[i]] = _core.getRegistry(target, tNames[i]);
+                    }
+                }
+            }
+
+            return diff;
+        }
+
+        function childrenDiff(source, target) {
+            var sRelids = _core.getChildrenRelids(source),
+                tRelids = _core.getChildrenRelids(target),
+                tHashes = _core.getChildrenHashes(target),
+                sHashes = _core.getChildrenHashes(source),
+                i,
+                diff = {added: [], removed: []};
+
+            for (i = 0; i < sRelids.length; i++) {
+                if (tRelids.indexOf(sRelids[i]) === -1) {
+                    diff.removed.push({relid: sRelids[i], hash: sHashes[sRelids[i]]});
+                }
+            }
+
+            for (i = 0; i < tRelids.length; i++) {
+                if (sRelids.indexOf(tRelids[i]) === -1) {
+                    diff.added.push({relid: tRelids[i], hash: tHashes[tRelids[i]]});
+                }
+            }
+
+            return diff;
+
+        }
+
+        function pointerDiff(source, target) {
+            var getPointerData = function (node) {
+                    var data = {},
+                        names = _core.getPointerNames(node),
+                        i;
+                    for (i = 0; i < names.length; i++) {
+                        data[names[i]] = _core.getPointerPath(node, names[i]);
+                    }
+                    return data;
+                },
+                sPointer = getPointerData(source),
+                tPointer = getPointerData(target);
+
+            if (CANON.stringify(sPointer) !== CANON.stringify(tPointer)) {
+                return {source: sPointer, target: tPointer};
+            }
+            return {};
+        }
+
+        function setDiff(source, target) {
+            var getSetData = function (node) {
+                    var data = {},
+                        names, targets, keys, i, j, k;
+
+                    names = _core.getSetNames(node);
+                    for (i = 0; i < names.length; i++) {
+                        data[names[i]] = {};
+                        targets = _core.getMemberPaths(node, names[i]);
+                        for (j = 0; j < targets.length; j++) {
+                            data[names[i]][targets[j]] = {attr: {}, reg: {}};
+                            keys = _core.getMemberOwnAttributeNames(node, names[i], targets[j]);
+                            for (k = 0; k < keys.length; k++) {
+                                data[names[i]][targets[j]].attr[keys[i]] = _core.getMemberAttribute(node,
+                                    names[i], targets[j], keys[i]);
+                            }
+                            keys = _core.getMemberRegistryNames(node, names[i], targets[j]);
+                            for (k = 0; k < keys.length; k++) {
+                                data[names[i]][targets[j]].reg[keys[k]] = _core.getMemberRegistry(node,
+                                    names[i], targets[j], keys[k]);
+                            }
+                        }
+                    }
+
+                    return data;
+
+                },
+                sSet = getSetData(source),
+                tSet = getSetData(target);
+
+            if (CANON.stringify(sSet) !== CANON.stringify(tSet)) {
+                return {source: sSet, target: tSet};
+            }
+            return {};
+        }
+
+        function ovrDiff(source, target) {
+            var getOvrData = function (node) {
+                    var paths, names, i, j,
+                        ovr = _core.getProperty(node, 'ovr') || {},
+                        data = {},
+                        base = _core.getPath(node);
+
+                    paths = Object.keys(ovr);
+                    for (i = 0; i < paths.length; i++) {
+                        if (paths[i].indexOf('_') === -1) {
+                            data[paths[i]] = {};
+                            names = Object.keys(ovr[paths[i]]);
+                            for (j = 0; j < names.length; j++) {
+                                if (ovr[paths[i]][names[j]] === '/_nullptr') {
+                                    data[paths[i]][names[j]] = null;
+                                } else if (names[j].slice(-4) !== '-inv' &&
+                                    ovr[paths[i]][names[j]].indexOf('_') === -1) {
+
+                                    data[paths[i]][names[j]] = _core.joinPaths(base, ovr[paths[i]][names[j]]);
+                                }
+                            }
+                        }
+                    }
+                    return data;
+                },
+                sOvr = getOvrData(source),
+                tOvr = getOvrData(target);
+
+            if (CANON.stringify(sOvr) !== CANON.stringify(tOvr)) {
+                return {source: sOvr, target: tOvr};
+            }
+            return {};
+        }
+
+        function metaDiff(source, target) {
+            var sMeta = _core.getOwnJsonMeta(source),
+                tMeta = _core.getOwnJsonMeta(target);
+            if (CANON.stringify(sMeta) !== CANON.stringify(tMeta)) {
+                return {source: sMeta, target: tMeta};
+            }
+            return {};
+        }
+
+        function combineMoveIntoMetaDiff(diff) {
+            var keys = Object.keys(diff),
+                i;
+            for (i = 0; i < keys.length; i++) {
+                if (_diffMoves[keys[i]]) {
+                    diff[_diffMoves[keys[i]]] = diff[keys[i]];
+                    delete diff[keys[i]];
+                } else if (typeof diff[keys[i]] === 'object') {
+                    combineMoveIntoMetaDiff(diff[keys[i]]);
+                }
+            }
+        }
+
+        function combineMoveIntoPointerDiff(diff) {
+            var keys = Object.keys(diff),
+                i;
+            for (i = 0; i < keys.length; i++) {
+                if (_diffMoves[diff[keys[i]]]) {
+                    diff[keys[i]] = _diffMoves[diff[keys[i]]];
+                }
+            }
+        }
+
+        function finalizeDiff() {
+            finalizeMetaDiff(_DIFF);
+            finalizePointerDiff(_DIFF);
+            finalizeSetDiff(_DIFF);
+            normalize(_DIFF);
+        }
+
+        function finalizeMetaDiff(diff) {
+            //at this point _DIFF is ready and the _diffMoves is complete...
+            var relids = getDiffChildrenRelids(diff),
+                i, sMeta, tMeta;
+            if (diff.meta) {
+                sMeta = diff.meta.source || {};
+                tMeta = diff.meta.target || {};
+                combineMoveIntoMetaDiff(sMeta);
+                diff.meta = diffObjects(sMeta, tMeta);
+            }
+            for (i = 0; i < relids.length; i++) {
+                finalizeMetaDiff(diff[relids[i]]);
+            }
+        }
+
+        function finalizePointerDiff(diff) {
+            var relids = getDiffChildrenRelids(diff),
+                i, sPointer, tPointer;
+            if (diff.pointer) {
+                sPointer = diff.pointer.source || {};
+                tPointer = diff.pointer.target || {};
+                /*if(diff.movedFrom && !sPointer.base && tPointer.base){
+                 delete tPointer.base;
+                 }*/
+                combineMoveIntoPointerDiff(sPointer);
+                diff.pointer = diffObjects(sPointer, tPointer);
+            }
+            for (i = 0; i < relids.length; i++) {
+                finalizePointerDiff(diff[relids[i]]);
+            }
+        }
+
+        function finalizeSetDiff(diff) {
+            var relids = getDiffChildrenRelids(diff),
+                i, sSet, tSet;
+            if (diff.set) {
+                sSet = diff.set.source || {};
+                tSet = diff.set.target || {};
+                combineMoveIntoMetaDiff(sSet);
+                diff.set = diffObjects(sSet, tSet);
+            }
+            for (i = 0; i < relids.length; i++) {
+                finalizeSetDiff(diff[relids[i]]);
+            }
+        }
+
+        function isEmptyNodeDiff(diff) {
+            if (
+                Object.keys(diff.children || {}).length > 0 ||
+                Object.keys(diff.attr || {}).length > 0 ||
+                Object.keys(diff.reg || {}).length > 0 ||
+                Object.keys(diff.pointer || {}).length > 0 ||
+                Object.keys(diff.set || {}).length > 0 ||
+                diff.meta
+            ) {
+                return false;
+            }
+            return true;
+        }
+
+        function getPathOfDiff(diff, path) {
+            var pathArray = (path || '').split('/'),
+                i;
+            pathArray.shift();
+            for (i = 0; i < pathArray.length; i++) {
+                diff[pathArray[i]] = diff[pathArray[i]] || {};
+                diff = diff[pathArray[i]];
+            }
+
+            return diff;
+        }
+
+        function extendDiffWithOvr(diff, oDiff) {
+            var i, paths, names, j, tDiff;
+            //first extend sources
+            paths = Object.keys(oDiff.source || {});
+            for (i = 0; i < paths.length; i++) {
+                tDiff = getPathOfDiff(diff, paths[i]);
+                if (tDiff.removed !== true) {
+                    tDiff.pointer = tDiff.pointer || {source: {}, target: {}};
+                    names = Object.keys(oDiff.source[paths[i]]);
+                    for (j = 0; j < names.length; j++) {
+                        tDiff.pointer.source[names[j]] = oDiff.source[paths[i]][names[j]];
+                    }
+                }
+            }
+            //then targets
+            paths = Object.keys(oDiff.target || {});
+            for (i = 0; i < paths.length; i++) {
+                tDiff = getPathOfDiff(diff, paths[i]);
+                if (tDiff.removed !== true) {
+                    tDiff.pointer = tDiff.pointer || {source: {}, target: {}};
+                    names = Object.keys(oDiff.target[paths[i]]);
+                    for (j = 0; j < names.length; j++) {
+                        tDiff.pointer.target[names[j]] = oDiff.target[paths[i]][names[j]];
+                    }
+                }
+            }
+        }
+
+        function updateDiff(sourceRoot, targetRoot) {
+            var diff = _core.nodeDiff(sourceRoot, targetRoot) || {},
+                oDiff = ovrDiff(sourceRoot, targetRoot),
+                getChild = function (childArray, relid) {
+                    for (var i = 0; i < childArray.length; i++) {
+                        if (_core.getRelid(childArray[i]) === relid) {
+                            return childArray[i];
+                        }
+                    }
+                    return null;
+                };
+            return TASYNC.call(function (sChildren, tChildren) {
+                ASSERT(sChildren.length >= 0 && tChildren.length >= 0);
+
+                var i, child, done, tDiff, guid, base,
+                    childComputationFinished = function (cDiff, relid/*, d*/) {
+                        diff[relid] = cDiff;
+                        return null;
+                    };
+
+                tDiff = diff.children ? diff.children.removed || [] : [];
+                for (i = 0; i < tDiff.length; i++) {
+                    diff.childrenListChanged = true;
+                    child = getChild(sChildren, tDiff[i].relid);
+                    if (child) {
+                        guid = _core.getGuid(child);
+                        diff[tDiff[i].relid] = {guid: guid, removed: true, hash: _core.getHash(child)};
+                        _yetToCompute[guid] = _yetToCompute[guid] || {};
+                        _yetToCompute[guid].from = child;
+                        _yetToCompute[guid].fromExpanded = false;
+                    }
+                }
+
+                tDiff = diff.children ? diff.children.added || [] : [];
+                for (i = 0; i < tDiff.length; i++) {
+                    diff.childrenListChanged = true;
+                    child = getChild(tChildren, tDiff[i].relid);
+                    if (child) {
+                        guid = _core.getGuid(child);
+                        base = _core.getBase(child);
+                        if (base) {
+                            base = _core.getPath(base);
+                        }
+                        diff[tDiff[i].relid] = {
+                            guid: guid,
+                            removed: false,
+                            hash: _core.getHash(child),
+                            pointer: {source: {}, target: {base: base}}
+                        };
+                        _yetToCompute[guid] = _yetToCompute[guid] || {};
+                        _yetToCompute[guid].to = child;
+                        _yetToCompute[guid].toExpanded = false;
+                    }
+                }
+
+                for (i = 0; i < tChildren.length; i++) {
+                    child = getChild(sChildren, _core.getRelid(tChildren[i]));
+                    if (child && _core.getHash(tChildren[i]) !== _core.getHash(child)) {
+                        done = TASYNC.call(childComputationFinished,
+                            updateDiff(child, tChildren[i]), _core.getRelid(child), done);
+                    }
+                }
+                return TASYNC.call(function () {
+                    delete diff.children;
+                    extendDiffWithOvr(diff, oDiff);
+                    normalize(diff);
+                    if (Object.keys(diff).length > 0) {
+                        diff.guid = _core.getGuid(targetRoot);
+                        diff.hash = _core.getHash(targetRoot);
+                        diff.oGuids = gatherObstructiveGuids(targetRoot);
+                        return TASYNC.call(function (finalDiff) {
+                            return finalDiff;
+                        }, fillMissingGuid(targetRoot, '', diff));
                     } else {
-                      if(extension[names[i]][members[j]].attr){
-                        if(base[names[i]][memberPath].attr){
-                          concatSingleKeyValuePairs(path+'/'+names[i]+'/'+memberPath+'/'+'/attr',base[names[i]][memberPath].attr,extension[names[i]][members[j]].attr);
-                        } else {
-                          base[names[i]][memberPath].attr = extension[names[i]][members[j]].attr;
-                        }
-                      }
-                      if(extension[names[i]][members[j]].reg){
-                        if(base[names[i]][memberPath].reg){
-                          concatSingleKeyValuePairs(path+'/'+names[i]+'/'+memberPath+'/'+'/reg',base[names[i]][memberPath].reg,extension[names[i]][members[j]].reg);
-                        } else {
-                          base[names[i]][memberPath].reg = extension[names[i]][members[j]].reg;
-                        }
-                      }
-
+                        return diff;
                     }
-                  }
-                } else {
-                  //concat
-                  base[names[i]][memberPath] = extension[names[i]][members[j]];
-                }
-              }
+
+                }, done);
+            }, _core.loadChildren(sourceRoot), _core.loadChildren(targetRoot));
+        }
+
+        function gatherObstructiveGuids(node) {
+            var result = {},
+                putParents = function (n) {
+                    while (n) {
+                        result[_core.getGuid(n)] = true;
+                        n = _core.getParent(n);
+                    }
+                };
+            while (node) {
+                putParents(node);
+                node = _core.getBase(node);
             }
-          }
-        } else {
-          //simple concatenation
-          //TODO the path for members should be replaced here as well...
-          base[names[i]] = extension[names[i]];
+            return result;
         }
-      }
-    }
-    function gatherFullMetaConflicts(diffMeta,mine,path,opposingPath){
-      var conflict,opposingConflict,
-        relids, i, j, keys, tPath;
 
-      if(mine){
-        conflict = _conflict_mine;
-        opposingConflict = _conflict_theirs[opposingPath];
-      } else {
-        conflict = _conflict_theirs;
-        opposingConflict = _conflict_mine[opposingPath];
-      }
+        function fillMissingGuid(root, path, diff) {
+            var relids = getDiffChildrenRelids(diff),
+                i,
+                done,
+                subComputationFinished = function (cDiff, relid) {
+                    diff[relid] = cDiff;
+                    return null;
+                };
 
-      if(diffMeta === TODELETESTRING){
-        conflict[path] = conflict[path] || {value:TODELETESTRING,conflictingPaths:{}};
-        conflict[path].conflictingPaths[opposingPath] = true;
-        opposingConflict.conflictingPaths[path] = true;
-        return; //there is no other conflict
-      }
+            for (i = 0; i < relids.length; i++) {
+                done = TASYNC.call(subComputationFinished,
+                    fillMissingGuid(root, path + '/' + relids[i], diff[relids[i]]), relids[i]);
+            }
 
-      //children
-      if(diffMeta.children){
-        if(diffMeta.children === TODELETESTRING){
-          conflict[path+'/children'] = conflict[path+'/children'] || {value:TODELETESTRING,conflictingPaths:{}};
-          conflict[path+'/children'].conflictingPaths[opposingPath] = true;
-          opposingConflict.conflictingPaths[path+'/children'] = true;
-        } else {
-          if(diffMeta.children.max){
-            conflict[path+'/children/max'] = conflict[path+'/children/max'] || {value:diffMeta.children.max,conflictingPaths:{}};
-            conflict[path+'/children/max'].conflictingPaths[opposingPath] = true;
-            opposingConflict.conflictingPaths[path+'/children/max'] = true;
-          }
-          if(diffMeta.children.min){
-            conflict[path+'/children/min'] = conflict[path+'/children/min'] || {value:diffMeta.children.min,conflictingPaths:{}};
-            conflict[path+'/children/min'].conflictingPaths[opposingPath] = true;
-            opposingConflict.conflictingPaths[path+'/children/min'] = true;
-          }
-          relids = getDiffChildrenRelids(diffMeta.children);
-          for(i=0;i<relids.length;i++){
-            conflict[path+'/children/'+relids[i]] = conflict[path+'/children/'+relids[i]] || {value:diffMeta.children[relids[i]],conflictingPaths:{}};
-            conflict[path+'/children/'+relids[i]].conflictingPaths[opposingPath] = true;
-            opposingConflict.conflictingPaths[path+'/children/'+relids[i]] = true;
-          }
+            return TASYNC.call(function () {
+                if (diff.guid) {
+                    return diff;
+                } else {
+                    return TASYNC.call(function (child) {
+                        diff.guid = _core.getGuid(child);
+                        diff.hash = _core.getHash(child);
+                        diff.oGuids = gatherObstructiveGuids(child);
+                        return diff;
+                    }, _core.loadByPath(root, path));
+                }
+            }, done);
         }
-      }
-      //attributes
-      if(diffMeta.attributes){
-        if(diffMeta.attributes === TODELETESTRING){
-          conflict[path+'/attributes'] = conflict[path+'/attributes'] || {value:TODELETESTRING,conflictingPaths:{}};
-          conflict[path+'/attributes'].conflictingPaths[opposingPath] = true;
-          opposingConflict.conflictingPaths[path+'/attributes'] = true;
-        } else {
-          keys = Object.keys(diffMeta.attributes);
-          for(i=0;i<keys.length;i++){
-            conflict[path+'/attributes/'+keys[i]] = conflict[path+'/attributes/'+keys[i]] || {value:diffMeta.attributes[keys[i]],conflictingPaths:{}};
-            conflict[path+'/attributes'].conflictingPaths[opposingPath] = true;
-            opposingConflict.conflictingPaths[path+'/attributes'] = true;
-          }
+
+        function expandDiff(root, isDeleted) {
+            var diff = {
+                guid: _core.getGuid(root),
+                hash: _core.getHash(root),
+                removed: isDeleted === true
+            };
+            return TASYNC.call(function (children) {
+                var guid;
+                for (var i = 0; i < children.length; i++) {
+                    guid = _core.getGuid(children[i]);
+                    diff[_core.getRelid(children[i])] = {
+                        guid: guid,
+                        hash: _core.getHash(children[i]),
+                        removed: isDeleted === true
+                    };
+
+                    if (isDeleted) {
+                        _yetToCompute[guid] = _yetToCompute[guid] || {};
+                        _yetToCompute[guid].from = children[i];
+                        _yetToCompute[guid].fromExpanded = false;
+                    } else {
+                        _yetToCompute[guid] = _yetToCompute[guid] || {};
+                        _yetToCompute[guid].to = children[i];
+                        _yetToCompute[guid].toExpanded = false;
+                    }
+                }
+                return diff;
+            }, _core.loadChildren(root));
         }
-      }
-      //pointers
-      if(diffMeta.pointers){
-        if(diffMeta.pointers === TODELETESTRING){
-          conflict[path+'/pointers'] = conflict[path+'/pointers'] || {value:TODELETESTRING,conflictingPaths:{}};
-          conflict[path+'/pointers'].conflictingPaths[opposingPath] = true;
-          opposingConflict.conflictingPaths[path+'/pointers'] = true;
-        } else {
-          keys = Object.keys(diffMeta.pointers);
-          for(i=0;i<keys.length;i++){
-            if(diffMeta.pointers[keys[i]] === TODELETESTRING){
-              conflict[path+'/pointers/'+keys[i]] = conflict[path+'/pointers/'+keys[i]] || {value:TODELETESTRING,conflictingPaths:{}};
-              conflict[path+'/pointers/'+keys[i]].conflictingPaths[opposingPath] = true;
-              opposingConflict.conflictingPaths[path+'/pointers/'+keys[i]] = true;
+
+        function insertIntoDiff(path, diff) {
+            var pathArray = path.split('/'),
+                relid = pathArray.pop(),
+                sDiff = _DIFF,
+                i;
+            pathArray.shift();
+            for (i = 0; i < pathArray.length; i++) {
+                sDiff = sDiff[pathArray[i]];
+            }
+            //sDiff[relid] = diff;
+            sDiff[relid] = mergeObjects(sDiff[relid], diff);
+        }
+
+        function diffObjects(source, target) {
+            var diff = {},
+                sKeys = Object.keys(source),
+                tKeys = Object.keys(target),
+                tDiff, i;
+            for (i = 0; i < sKeys.length; i++) {
+                if (tKeys.indexOf(sKeys[i]) === -1) {
+                    diff[sKeys[i]] = TODELETESTRING;
+                }
+            }
+            for (i = 0; i < tKeys.length; i++) {
+                if (sKeys.indexOf(tKeys[i]) === -1) {
+                    diff[tKeys[i]] = target[tKeys[i]];
+                } else {
+                    if (typeof target[tKeys[i]] === typeof source[tKeys[i]] &&
+                        typeof target[tKeys[i]] === 'object' &&
+                        (target[tKeys[i]] !== null && source[tKeys[i]] !== null)) {
+                        tDiff = diffObjects(source[tKeys[i]], target[tKeys[i]]);
+                        if (Object.keys(tDiff).length > 0) {
+                            diff[tKeys[i]] = tDiff;
+                        }
+                    } else if (source[tKeys[i]] !== target[tKeys[i]]) {
+                        diff[tKeys[i]] = target[tKeys[i]];
+                    }
+                }
+            }
+            return diff;
+        }
+
+        function mergeObjects(source, target) {
+            var merged = {},
+                sKeys = Object.keys(source),
+                tKeys = Object.keys(target),
+                i;
+            for (i = 0; i < sKeys.length; i++) {
+                merged[sKeys[i]] = source[sKeys[i]];
+            }
+            for (i = 0; i < tKeys.length; i++) {
+                if (sKeys.indexOf(tKeys[i]) === -1) {
+                    merged[tKeys[i]] = target[tKeys[i]];
+                } else {
+                    if (typeof target[tKeys[i]] === typeof source[tKeys[i]] &&
+                        typeof target[tKeys[i]] === 'object' && !(target instanceof Array)) {
+                        merged[tKeys[i]] = mergeObjects(source[tKeys[i]], target[tKeys[i]]);
+                    } else {
+                        merged[tKeys[i]] = target[tKeys[i]];
+                    }
+                }
+            }
+
+            return merged;
+        }
+
+        function removePathFromDiff(diff, path) {
+            var relId, i;
+            if (path === '') {
+                diff = null;
             } else {
-              if(diffMeta.pointers[keys[i]].max){
-                conflict[path+'/pointers/'+keys[i]+'/max'] = conflict[path+'/pointers/'+keys[i]+'/max'] || {value:diffMeta.pointers[keys[i]].max,conflictingPaths:{}};
-                conflict[path+'/pointers/'+keys[i]+'/max'].conflictingPaths[opposingPath] = true;
-                opposingConflict.conflictingPaths[path+'/pointers/'+keys[i]+'/max'] = true;
-              }
-              if(diffMeta.pointers[keys[i]].min){
-                conflict[path+'/pointers/'+keys[i]+'/min'] = conflict[path+'/pointers/'+keys[i]+'/min'] || {value:diffMeta.pointers[keys[i]].min,conflictingPaths:{}};
-                conflict[path+'/pointers/'+keys[i]+'/min'].conflictingPaths[opposingPath] = true;
-                opposingConflict.conflictingPaths[path+'/pointers/'+keys[i]+'/min'] = true;
-              }
-              relids = getDiffChildrenRelids(diffMeta.pointers[keys[i]]);
-              for(j=0;j<relids.length;j++){
-                tPath = getCommonPathForConcat(relids[j]);
-                conflict[path+'/pointers/'+keys[i]+'/'+tPath+'//'] = conflict[path+'/pointers/'+keys[i]+'/'+tPath+'//'] || {value:diffMeta.pointers[keys[i]][relids[j]],conflictingPaths:{}};
-                conflict[path+'/pointers/'+keys[i]+'/'+tPath+'//'].conflictingPaths[opposingPath] = true;
-                opposingConflict.conflictingPaths[path+'/pointers/'+keys[i]+'/'+tPath+'//'] = true;
-              }
+                path = path.split('/');
+                path.shift();
+                relId = path.pop();
+                for (i = 0; i < path.length; i++) {
+                    diff = diff[path[i]];
+                }
+                delete diff[relId];
             }
-          }
         }
-      }
-      //aspects
-      //TODO
-    }
-    function concatMeta(path,base,extension){
-      var keys, i,tPath, j,paths,t2Path,
-          mergeMetaItems = function(bPath,bData,eData){
-            var bKeys,tKeys, i,tPath,t2Path;
-            //delete checks
-            if(bData === TODELETESTRING || eData === TODELETESTRING){
-              if(CANON.stringify(bData) !== CANON.stringify(eData)){
-                _conflict_mine[bPath] = _conflict_mine[bPath] || {value:bData,conflictingPaths:{}};
-                _conflict_mine[bPath].conflictingPaths[bPath] = true;
-                _conflict_theirs[bPath] = _conflict_theirs[bPath] || {value:eData,conflictingPaths:{}};
-                _conflict_theirs[bPath].conflictingPaths[bPath] = true;
-              }
-            } else {
-              //max
-              if(eData.max){
-                if(bData.max && bData.max !== eData.max){
-                  tPath = bPath+'/max';
-                  _conflict_mine[tPath] = _conflict_mine[tPath] || {value:bData.max,conflictingPaths:{}};
-                  _conflict_mine[tPath].conflictingPaths[tPath] = true;
-                  _conflict_theirs[tPath] = _conflict_theirs[tPath] || {value:eData.max,conflictingPaths:{}};
-                  _conflict_theirs[tPath].conflictingPaths[tPath] = true;
-                } else {
-                  bData.max = eData.max;
+
+        function shrinkDiff(rootDiff) {
+            var _shrink = function (diff) {
+                if (diff) {
+                    var keys = getDiffChildrenRelids(diff),
+                        i;
+                    if (typeof diff.movedFrom === 'string') {
+                        removePathFromDiff(rootDiff, diff.movedFrom);
+                    }
+
+                    if (diff.removed !== false || typeof diff.movedFrom === 'string') {
+                        delete diff.hash;
+                    }
+
+                    if (diff.removed === true) {
+                        for (i = 0; i < keys.length; i++) {
+                            delete diff[keys[i]];
+                        }
+                    } else {
+
+                        for (i = 0; i < keys.length; i++) {
+                            _shrink(diff[keys[i]]);
+                        }
+                    }
                 }
-              }
-              //min
-              if(eData.min) {
-                if (bData.min && bData.min !== eData.min) {
-                  tPath = bPath + '/min';
-                  _conflict_mine[tPath] = _conflict_mine[tPath] || {value: bData.min, conflictingPaths: {}};
-                  _conflict_mine[tPath].conflictingPaths[tPath] = true;
-                  _conflict_theirs[tPath] = _conflict_theirs[tPath] || {value: eData.min, conflictingPaths: {}};
-                  _conflict_theirs[tPath].conflictingPaths[tPath] = true;
-                } else {
-                  bData.max = eData.min;
-                }
-              }
-              //targets
-              bKeys = getDiffChildrenRelids(bData);
-              tKeys = getDiffChildrenRelids(eData);
-              for(i=0;i<tKeys.length;i++){
-                tPath = getCommonPathForConcat(tKeys[i]);
-                if(bKeys.indexOf(tPath) !== -1 && CANON.stringify(bData[tPath]) !== CANON.stringify(eData[tKeys[i]])){
-                  t2Path = tPath;
-                  tPath = bPath+'/'+tPath+'//';
-                  _conflict_mine[tPath] = _conflict_mine[tPath] || {value:bData[t2Path],conflictingPaths:{}};
-                  _conflict_mine[tPath].conflictingPaths[tPath] = true;
-                  _conflict_theirs[tPath] = _conflict_theirs[tPath] || {value:eData[tKeys[i]],conflictingPaths:{}};
-                  _conflict_theirs[tPath].conflictingPaths[tPath] = true;
-                } else {
-                  bData[tPath] = eData[tKeys[i]];
-                }
-              }
+            };
+            _shrink(rootDiff, false);
+        }
+
+        function checkRound() {
+            var guids = Object.keys(_yetToCompute),
+                done, ytc,
+                i,
+                computingMove = function (mDiff, info) {
+                    mDiff.guid = _core.getGuid(info.from);
+                    mDiff.movedFrom = _core.getPath(info.from);
+                    mDiff.ooGuids = gatherObstructiveGuids(info.from);
+                    _diffMoves[_core.getPath(info.from)] = _core.getPath(info.to);
+                    insertAtPath(_DIFF, _core.getPath(info.to), mDiff);
+                    return null;
+                },
+                expandFrom = function (mDiff, info) {
+                    mDiff.hash = _core.getHash(info.from);
+                    mDiff.removed = true;
+                    insertIntoDiff(_core.getPath(info.from), mDiff);
+                    return null;
+                },
+                expandTo = function (mDiff, info) {
+                    if (!mDiff.hash) {
+                        mDiff.hash = _core.getHash(info.to);
+                    }
+                    mDiff.removed = false;
+                    insertIntoDiff(_core.getPath(info.to), mDiff);
+                    return null;
+                };
+
+            if (_needChecking !== true || guids.length < 1) {
+                shrinkDiff(_DIFF);
+                finalizeDiff();
+                return _DIFF;
             }
-          };
-      if(CANON.stringify(base) !== CANON.stringify(extension)){
-        if(base === TODELETESTRING){
-          _conflict_mine[path] = _conflict_mine[path] || {value:TODELETESTRING,conflictingPaths:{}};
-          gatherFullMetaConflicts(extension,false,path,path);
-        } else {
-          if(extension === TODELETESTRING){
-            _conflict_theirs[path] = _conflict_theirs[path] || {value:TODELETESTRING,conflictingPaths:{}};
-            gatherFullMetaConflicts(base,true,path,path);
-          } else {
-            //now check for sub-meta conflicts
+            _needChecking = false;
+            for (i = 0; i < guids.length; i++) {
+                ytc = _yetToCompute[guids[i]];
+                if (ytc.from && ytc.to) {
+                    //move
+                    _needChecking = true;
+                    delete _yetToCompute[guids[i]];
+                    done = TASYNC.call(computingMove, updateDiff(ytc.from, ytc.to), ytc);
+                } else {
+                    if (ytc.from && ytc.fromExpanded === false) {
+                        //expand from
+                        ytc.fromExpanded = true;
+                        _needChecking = true;
+                        done = TASYNC.call(expandFrom, expandDiff(ytc.from, true), ytc);
+                    } else if (ytc.to && ytc.toExpanded === false) {
+                        //expand to
+                        ytc.toExpanded = true;
+                        _needChecking = true;
+                        done = TASYNC.call(expandTo, expandDiff(ytc.to, false), ytc);
+                    }
+                }
+            }
+            return TASYNC.call(function () {
+                return checkRound();
+            }, done);
+        }
+
+        _core.nodeDiff = function (source, target) {
+            var diff = {
+                children: childrenDiff(source, target),
+                attr: attrDiff(source, target),
+                reg: regDiff(source, target),
+                pointer: pointerDiff(source, target),
+                set: setDiff(source, target),
+                meta: metaDiff(source, target)
+            };
+
+            normalize(diff);
+            return isEmptyNodeDiff(diff) ? null : diff;
+        };
+
+        _core.generateTreeDiff = function (sRoot, tRoot) {
+            _yetToCompute = {};
+            _DIFF = {};
+            _diffMoves = {};
+            _needChecking = true;
+            _rounds = 0;
+            return TASYNC.call(function (d) {
+                _DIFF = d;
+                return checkRound();
+            }, updateDiff(sRoot, tRoot));
+        };
+
+        _core.generateLightTreeDiff = function (sRoot, tRoot) {
+            return updateDiff(sRoot, tRoot);
+        };
+
+        function getDiffChildrenRelids(diff) {
+            var keys = Object.keys(diff),
+                i,
+                filteredKeys = [],
+                forbiddenWords = {
+                    guid: true,
+                    hash: true,
+                    attr: true,
+                    reg: true,
+                    pointer: true,
+                    set: true,
+                    meta: true,
+                    removed: true,
+                    movedFrom: true,
+                    childrenListChanged: true,
+                    oGuids: true,
+                    ooGuids: true,
+                    min: true,
+                    max: true
+                };
+            for (i = 0; i < keys.length; i++) {
+                if (!forbiddenWords[keys[i]]) {
+                    filteredKeys.push(keys[i]);
+                }
+            }
+            return filteredKeys;
+        }
+
+        function getMoveSources(diff, path, toFrom, fromTo) {
+            var relids = getDiffChildrenRelids(diff),
+                i;
+
+            for (i = 0; i < relids.length; i++) {
+                getMoveSources(diff[relids[i]], path + '/' + relids[i], toFrom, fromTo);
+            }
+
+            if (typeof diff.movedFrom === 'string') {
+                toFrom[path] = diff.movedFrom;
+                fromTo[diff.movedFrom] = path;
+            }
+        }
+
+        function getAncestor(node, path) {
+            var ownPath = _core.getPath(node),
+                ancestorPath = '',
+                i;
+            path = path.split('/');
+            ownPath = ownPath.split('/');
+            ownPath.shift();
+            path.shift();
+            for (i = 0; i < ownPath.length; i++) {
+                if (ownPath[i] === path[i]) {
+                    ancestorPath = ancestorPath + '/' + ownPath[i];
+                } else {
+                    break;
+                }
+            }
+            ownPath = _core.getPath(node);
+            while (ownPath !== ancestorPath) {
+                node = _core.getParent(node);
+                ownPath = _core.getPath(node);
+            }
+            return node;
+        }
+
+        function setBaseOfNewNode(node, relid, basePath) {
+            //TODO this is a kind of low level hack so maybe there should be another way to do this
+            var ancestor = getAncestor(node, basePath),
+                sourcePath = _core.getPath(node).substr(_core.getPath(ancestor).length),
+                targetPath = basePath.substr(_core.getPath(ancestor).length);
+            sourcePath = sourcePath + '/' + relid;
+            _innerCore.overlayInsert(_core.getChild(ancestor, 'ovr'), sourcePath, 'base', targetPath);
+        }
+
+        function makeInitialContainmentChanges(node, diff) {
+            var relids = getDiffChildrenRelids(diff),
+                i, done, child, moved,
+                moving = function (n, di, p, m/*, d*/) {
+                    if (m === true) {
+                        n = _core.moveNode(n, p);
+                    }
+                    return makeInitialContainmentChanges(n, di);
+                };
+
+            for (i = 0; i < relids.length; i++) {
+                moved = false;
+                if (diff[relids[i]].movedFrom) {
+                    //moved node
+                    moved = true;
+                    child = _core.loadByPath(_core.getRoot(node), diff[relids[i]].movedFrom);
+                } else if (diff[relids[i]].removed === false) {
+                    //added node
+                    //first we hack the pointer, then we create the node
+                    if (diff[relids[i]].pointer && diff[relids[i]].pointer.base) {
+                        //we can set base if the node has one, otherwise it is 'inheritance internal' node
+                        setBaseOfNewNode(node, relids[i], diff[relids[i]].pointer.base);
+                    }
+                    if (diff[relids[i]].hash) {
+                        _core.setProperty(node, relids[i], diff[relids[i]].hash);
+                        child = _core.loadChild(node, relids[i]);
+                    } else {
+                        child = _core.getChild(node, relids[i]);
+                        _core.setHashed(child, true);
+                    }
+                } else {
+                    //simple node
+                    child = _core.loadChild(node, relids[i]);
+                }
+
+                done = TASYNC.call(moving, child, diff[relids[i]], node, moved, done);
+            }
+
+            TASYNC.call(function (/*d*/) {
+                return null;
+            }, done);
+        }
+
+        function applyNodeChange(root, path, nodeDiff) {
+            //check for move
+            var node;
+            node = _core.loadByPath(root, path);
+
+            return TASYNC.call(function (n) {
+                var done,
+                    relids = getDiffChildrenRelids(nodeDiff),
+                    i;
+                if (nodeDiff.removed === true) {
+                    _core.deleteNode(n);
+                    return;
+                }
+                applyAttributeChanges(n, nodeDiff.attr || {});
+                applyRegistryChanges(n, nodeDiff.reg || {});
+                done = applyPointerChanges(n, nodeDiff.pointer || {});
+                done = TASYNC.call(applySetChanges, n, nodeDiff.set || {}, done);
+                if (nodeDiff.meta) {
+                    delete nodeDiff.meta.empty;
+                    done = TASYNC.call(applyMetaChanges, n, nodeDiff.meta, done);
+                }
+                for (i = 0; i < relids.length; i++) {
+                    /*done = TASYNC.call(function () {
+                     return null;
+                     }, applyNodeChange(root, path + '/' + relids[i], nodeDiff[relids[i]]), done);*/
+                    done = TASYNC.join(done, applyNodeChange(root, path + '/' + relids[i], nodeDiff[relids[i]]));
+                }
+                /*TASYNC.call(function (d) {
+                 return done;
+                 }, done);*/
+                return done;
+            }, node);
+        }
+
+        function applyAttributeChanges(node, attrDiff) {
+            var i, keys;
+            keys = Object.keys(attrDiff);
+            for (i = 0; i < keys.length; i++) {
+                if (attrDiff[keys[i]] === TODELETESTRING) {
+                    _core.delAttribute(node, keys[i]);
+                } else {
+                    _core.setAttribute(node, keys[i], attrDiff[keys[i]]);
+                }
+            }
+        }
+
+        function applyRegistryChanges(node, regDiff) {
+            var i, keys;
+            keys = Object.keys(regDiff);
+            for (i = 0; i < keys.length; i++) {
+                if (regDiff[keys[i]] === TODELETESTRING) {
+                    _core.delRegistry(node, keys[i]);
+                } else {
+                    _core.setRegistry(node, keys[i], regDiff[keys[i]]);
+                }
+            }
+        }
+
+        function setPointer(node, name, target) {
+            var targetNode;
+            if (target === null) {
+                targetNode = null;
+            } else {
+                if (fromTo[target]) {
+                    target = fromTo[target];
+                }
+                targetNode = _core.loadByPath(_core.getRoot(node), target);
+            }
+            return TASYNC.call(function (t) {
+                //TODO watch if handling of base changes!!!
+                _core.setPointer(node, name, t);
+                return;
+            }, targetNode);
+        }
+
+        function applyPointerChanges(node, pointerDiff) {
+            var done,
+                keys = Object.keys(pointerDiff),
+                i;
+            for (i = 0; i < keys.length; i++) {
+                if (pointerDiff[keys[i]] === TODELETESTRING) {
+                    _core.deletePointer(node, keys[i]);
+                } else {
+                    done = setPointer(node, keys[i], pointerDiff[keys[i]]);
+                }
+            }
+
+            return TASYNC.call(function (/*d*/) {
+                return null;
+            }, done);
+
+        }
+
+        function addMember(node, name, target, data) {
+            var memberAttrSetting = function (diff) {
+                    var keys = _core.getMemberOwnAttributeNames(node, name, target),
+                        i;
+                    for (i = 0; i < keys.length; i++) {
+                        _core.delMemberAttribute(node, name, target, keys[i]);
+                    }
+
+                    keys = Object.keys(diff);
+                    for (i = 0; i < keys.length; i++) {
+                        _core.setMemberAttribute(node, name, target, keys[i], diff[keys[i]]);
+                    }
+                },
+                memberRegSetting = function (diff) {
+                    var keys = _core.getMemberOwnRegistryNames(node, name, target),
+                        i;
+                    for (i = 0; i < keys.length; i++) {
+                        _core.delMemberRegistry(node, name, target, keys[i]);
+                    }
+
+                    keys = Object.keys(diff);
+                    for (i = 0; i < keys.length; i++) {
+                        _core.setMemberRegistry(node, name, target, keys[i], diff[keys[i]]);
+                    }
+                };
+            return TASYNC.call(function (t) {
+                _core.addMember(node, name, t);
+                memberAttrSetting(data.attr || {});
+                memberRegSetting(data.reg || {});
+                return;
+            }, _core.loadByPath(_core.getRoot(node), target));
+        }
+
+        function applySetChanges(node, setDiff) {
+            var done,
+                setNames = Object.keys(setDiff),
+                elements, i, j;
+            for (i = 0; i < setNames.length; i++) {
+                if (setDiff[setNames[i]] === TODELETESTRING) {
+                    _core.deleteSet(node, setNames[i]);
+                } else {
+                    elements = Object.keys(setDiff[setNames[i]]);
+                    for (j = 0; j < elements.length; j++) {
+                        if (setDiff[setNames[i]][elements[j]] === TODELETESTRING) {
+                            _core.delMember(node, setNames[i], elements[j]);
+                        } else {
+                            done = addMember(node, setNames[i], elements[j], setDiff[setNames[i]][elements[j]]);
+                        }
+                    }
+                }
+            }
+
+            return TASYNC.call(function (/*d*/) {
+                return null;
+            }, done);
+
+        }
+
+        function applyMetaAttributes(node, metaAttrDiff) {
+            var i, keys, newValue;
+            if (metaAttrDiff === TODELETESTRING) {
+                //we should delete all MetaAttributes
+                keys = _core.getValidAttributeNames(node);
+                for (i = 0; i < keys.length; i++) {
+                    _core.delAttributeMeta(node, keys[i]);
+                }
+            } else {
+                keys = Object.keys(metaAttrDiff);
+                for (i = 0; i < keys.length; i++) {
+                    if (metaAttrDiff[keys[i]] === TODELETESTRING) {
+                        _core.delAttributeMeta(node, keys[i]);
+                    } else {
+                        newValue = jsonConcat(_core.getAttributeMeta(node, keys[i]) || {}, metaAttrDiff[keys[i]]);
+                        _core.setAttributeMeta(node, keys[i], newValue);
+                    }
+                }
+            }
+        }
+
+        function applyMetaConstraints(node, metaConDiff) {
+            var keys, i;
+            if (metaConDiff === TODELETESTRING) {
+                //remove all constraints
+                keys = _core.getConstraintNames(node);
+                for (i = 0; i < keys.length; i++) {
+                    _core.delConstraint(node, keys[i]);
+                }
+            } else {
+                keys = Object.keys(metaConDiff);
+                for (i = 0; i < keys.length; i++) {
+                    if (metaConDiff[keys[i]] === TODELETESTRING) {
+                        _core.delConstraint(node, keys[i]);
+                    } else {
+                        _core.setConstraint(node, keys[i], jsonConcat(_core.getConstraint(node, keys[i]) || {},
+                            metaConDiff[keys[i]]));
+                    }
+                }
+            }
+        }
+
+        function applyMetaChildren(node, metaChildrenDiff) {
+            var keys, i, done,
+                setChild = function (target, data/*, d*/) {
+                    _core.setChildMeta(node, target, data.min, data.max);
+                };
+            if (metaChildrenDiff === TODELETESTRING) {
+                //remove all valid child
+                keys = _core.getValidChildrenPaths(node);
+                for (i = 0; i < keys.length; i++) {
+                    _core.delChildMeta(node, keys[i]);
+                }
+            } else {
+                _core.setChildrenMetaLimits(node, metaChildrenDiff.min, metaChildrenDiff.max);
+                delete metaChildrenDiff.max; //TODO we do not need it anymore, but maybe there is a better way
+                delete metaChildrenDiff.min;
+                keys = Object.keys(metaChildrenDiff);
+                for (i = 0; i < keys.length; i++) {
+                    if (metaChildrenDiff[keys[i]] === TODELETESTRING) {
+                        _core.delChildMeta(node, keys[i]);
+                    } else {
+                        done = TASYNC.call(setChild, _core.loadByPath(_core.getRoot(node), keys[i]),
+                            metaChildrenDiff[keys[i]], done);
+                    }
+                }
+            }
+
+            TASYNC.call(function (/*d*/) {
+                return null;
+            }, done);
+        }
+
+        function applyMetaPointers(node, metaPointerDiff) {
+            var names, targets, i, j, done,
+                setPointer = function (name, target, data/*, d*/) {
+                    _core.setPointerMetaTarget(node, name, target, data.min, data.max);
+                };
+            if (metaPointerDiff === TODELETESTRING) {
+                //remove all pointers,sets and their targets
+                names = _core.getValidPointerNames(node);
+                for (i = 0; i < names.length; i++) {
+                    _core.delPointerMeta(node, names[i]);
+                }
+
+                names = _core.getValidSetNames(node);
+                for (i = 0; i < names.length; i++) {
+                    _core.delPointerMeta(node, names[i]);
+                }
+                return;
+            }
+
+            names = Object.keys(metaPointerDiff);
+            for (i = 0; i < names.length; i++) {
+                if (metaPointerDiff[names[i]] === TODELETESTRING) {
+                    _core.delPointerMeta(node, names[i]);
+                } else {
+                    _core.setPointerMetaLimits(node, names[i], metaPointerDiff[names[i]].min,
+                        metaPointerDiff[names[i]].max);
+                    //TODO we do not need it anymore, but maybe there is a better way
+                    delete metaPointerDiff[names[i]].max;
+                    delete metaPointerDiff[names[i]].min;
+                    targets = Object.keys(metaPointerDiff[names[i]]);
+                    for (j = 0; j < targets.length; j++) {
+                        if (metaPointerDiff[names[i]][targets[j]] === TODELETESTRING) {
+                            _core.delPointerMetaTarget(node, names[i], targets[j]);
+                        } else {
+                            done = TASYNC.call(setPointer, names[i], _core.loadByPath(_core.getRoot(node), targets[j]),
+                                metaPointerDiff[names[i]][targets[j]], done);
+                        }
+                    }
+                }
+            }
+
+            TASYNC.call(function (/*d*/) {
+                return null;
+            }, done);
+        }
+
+        function applyMetaAspects(node, metaAspectsDiff) {
+            var names, targets, i, j, done,
+                setAspect = function (name, target/*, d*/) {
+                    _core.setAspectMetaTarget(node, name, target);
+                };
+            if (metaAspectsDiff === TODELETESTRING) {
+                //remove all aspects
+                names = _core.getValidAspectNames(node);
+                for (i = 0; i < names.length; i++) {
+                    _core.delAspectMeta(node, names[i]);
+                }
+                return;
+            }
+
+            names = Object.keys(metaAspectsDiff);
+            for (i = 0; i < names.length; i++) {
+                if (metaAspectsDiff[names[i]] === TODELETESTRING) {
+                    _core.delAspectMeta(node, names[i]);
+                } else {
+                    targets = Object.keys(metaAspectsDiff[names[i]]);
+                    for (j = 0; j < targets.length; j++) {
+                        if (metaAspectsDiff[names[i]][targets[j]] === TODELETESTRING) {
+                            _core.delAspectMetaTarget(node, names[i], targets[j]);
+                        } else {
+                            done = TASYNC.call(setAspect, names[i], _core.loadByPath(_core.getRoot(node), targets[j]),
+                                done);
+                        }
+                    }
+                }
+            }
+
+            TASYNC.call(function (/*d*/) {
+                return null;
+            }, done);
+        }
+
+        function applyMetaChanges(node, metaDiff) {
+            var done;
+            applyMetaAttributes(node, metaDiff.attributes || TODELETESTRING);
+            applyMetaConstraints(node, metaDiff.constraints || TODELETESTRING);
+            done = applyMetaChildren(node, metaDiff.children || TODELETESTRING);
+            done = TASYNC.call(applyMetaPointers, node, metaDiff.pointers || TODELETESTRING, done);
+            done = TASYNC.call(applyMetaAspects, node, metaDiff.aspects || TODELETESTRING, done);
+
+            TASYNC.call(function (/*d*/) {
+                return null;
+            }, done);
+        }
+
+        _core.applyTreeDiff = function (root, diff) {
+
+            toFrom = {};
+            fromTo = {};
+            getMoveSources(diff, '', toFrom, fromTo);
+
+            return TASYNC.join(makeInitialContainmentChanges(root, diff), applyNodeChange(root, '', diff));
+        };
+
+        function getNodeByGuid(diff, guid) {
+            var relids, i, temp;
+            if (diff.guid === guid) {
+                return diff;
+            }
+
+            relids = getDiffChildrenRelids(diff);
+            for (i = 0; i < relids.length; i++) {
+                temp = getNodeByGuid(diff[relids[i]], guid);
+                if (temp) {
+                    return temp;
+                }
+            }
+            return null;
+        }
+
+        function insertAtPath(diff, path, object) {
+            ASSERT(typeof path === 'string');
+            var i, base, relid, nodepath;
+            if (path === '') {
+                _concatResult = JSON.parse(JSON.stringify(object));
+                return;
+            }
+            nodepath = path.match(/\/\/.*\/\//) || [];
+            nodepath = nodepath[0] || 'there is no nodepath in the path';
+            path = path.replace(nodepath, '/*nodepath*/');
+            nodepath = nodepath.replace(/\/\//g, '/');
+            nodepath = nodepath.slice(0, -1);
+            path = path.split('/');
+            path.shift();
+            if (path.indexOf('*nodepath*') !== -1) {
+                path[path.indexOf('*nodepath*')] = nodepath;
+            }
+            relid = path.pop();
+            base = diff;
+            for (i = 0; i < path.length; i++) {
+                base[path[i]] = base[path[i]] || {};
+                base = base[path[i]];
+            }
+            base[relid] = JSON.parse(JSON.stringify(object));
+            return;
+        }
+
+        //FIXME check if it is really depreciated
+        //function changeMovedPaths(singleNode) {
+        //    var keys, i;
+        //    keys = Object.keys(singleNode);
+        //    for (i = 0; i < keys.length; i++) {
+        //        if (_concatMoves.fromTo[keys[i]]) {
+        //            singleNode[_concatMoves.fromTo[keys[i]]] = singleNode[keys[i]];
+        //            delete singleNode[keys[i]];
+        //            if (typeof singleNode[_concatMoves.fromTo[keys[i]]] === 'object' &&
+        //                singleNode[_concatMoves.fromTo[keys[i]]] !== null) {
+        //
+        //                changeMovedPaths(singleNode[_concatMoves.fromTo[keys[i]]]);
+        //            }
+        //        } else {
+        //            if (typeof singleNode[keys[i]] === 'string' && keys[i] !== 'movedFrom' &&
+        //                _concatMoves.fromTo[singleNode[keys[i]]]) {
+        //
+        //                singleNode[keys[i]] = _concatMoves.fromTo[keys[i]];
+        //            }
+        //
+        //            if (typeof singleNode[keys[i]] === 'object' && singleNode[keys[i]] !== null) {
+        //                changeMovedPaths(singleNode[keys[i]]);
+        //            }
+        //        }
+        //
+        //    }
+        //    if (typeof singleNode === 'object' && singleNode !== null) {
+        //        keys = Object.keys(singleNode);
+        //        for (i = 0; i < keys.length; i++) {
+        //            if (_concatMoves.fromTo[keys[i]]) {
+        //                singleNode[_concatMoves.fromTo[keys[i]]] = singleNode[keys[i]];
+        //                delete singleNode[keys[i]];
+        //            }
+        //        }
+        //    } else if (typeof singleNode === 'string') {
+        //
+        //    }
+        //
+        //}
+
+        function getSingleNode(node) {
+            //removes the children from the node
+            var result = JSON.parse(JSON.stringify(node)),
+                keys = getDiffChildrenRelids(result),
+                i;
+            for (i = 0; i < keys.length; i++) {
+                delete result[keys[i]];
+            }
+            //changeMovedPaths(result);
+            return result;
+        }
+
+        function jsonConcat(base, extension) {
+            var baseKeys = Object.keys(base),
+                extKeys = Object.keys(extension),
+                concat = JSON.parse(JSON.stringify(base)),
+                i;
+            for (i = 0; i < extKeys.length; i++) {
+                if (baseKeys.indexOf(extKeys[i]) === -1) {
+                    concat[extKeys[i]] = JSON.parse(JSON.stringify(extension[extKeys[i]]));
+                } else {
+                    if (typeof base[extKeys[i]] === 'object' && typeof extension[extKeys[i]] === 'object') {
+                        concat[extKeys[i]] = jsonConcat(base[extKeys[i]], extension[extKeys[i]]);
+                    } else { //either from value to object or object from value we go with the extension
+                        concat[extKeys[i]] = JSON.parse(JSON.stringify(extension[extKeys[i]]));
+                    }
+                }
+            }
+            return concat;
+        }
+
+        //FIXME are we going to use this function
+        //function getConflictByGuid(conflict, guid) {
+        //    var relids, i, result;
+        //    if (conflict.guid === guid) {
+        //        return conflict;
+        //    }
+        //    relids = getDiffChildrenRelids(conflict);
+        //    for (i = 0; i < relids.length; i++) {
+        //        result = getConflictByGuid(conflict[relids[i]], guid);
+        //        if (result) {
+        //            return result;
+        //        }
+        //    }
+        //    return null;
+        //}
+
+        function getPathByGuid(conflict, guid, path) {
+            var relids, i, result;
+            if (conflict.guid === guid) {
+                return path;
+            }
+            relids = getDiffChildrenRelids(conflict);
+            for (i = 0; i < relids.length; i++) {
+                result = getPathByGuid(conflict[relids[i]], guid, path + '/' + relids[i]);
+                if (result) {
+                    return result;
+                }
+            }
+            return null;
+        }
+
+        //now we try a different approach, which maybe more simple
+        function getCommonPathForConcat(path) {
+            if (_concatMoves.getExtensionSourceFromDestination[path]) {
+                path = _concatMoves.getExtensionSourceFromDestination[path];
+            }
+            if (_concatMoves.getBaseDestinationFromSource[path]) {
+                path = _concatMoves.getBaseDestinationFromSource[path];
+            }
+            return path;
+        }
+
+        function getConcatBaseRemovals(diff) {
+            var relids = getDiffChildrenRelids(diff),
+                i;
+            if (diff.removed !== true) {
+                if (diff.movedFrom) {
+                    if (_concatBaseRemovals[diff.guid] !== undefined) {
+                        delete _concatBaseRemovals[diff.guid];
+                    } else {
+                        _concatBaseRemovals[diff.guid] = false;
+                    }
+                }
+                for (i = 0; i < relids.length; i++) {
+                    getConcatBaseRemovals(diff[relids[i]]);
+                }
+            } else {
+                if (_concatBaseRemovals[diff.guid] === false) {
+                    delete _concatBaseRemovals[diff.guid];
+                } else {
+                    _concatBaseRemovals[diff.guid] = true;
+                }
+            }
+        }
+
+        function getObstructiveGuids(diffNode) {
+            var result = [],
+                keys, i;
+            keys = Object.keys(diffNode.oGuids || {});
+            for (i = 0; i < keys.length; i++) {
+                if (_concatBaseRemovals[keys[i]]) {
+                    result.push(keys[i]);
+                }
+            }
+            keys = Object.keys(diffNode.ooGuids || {});
+            for (i = 0; i < keys.length; i++) {
+                if (_concatBaseRemovals[keys[i]]) {
+                    result.push(keys[i]);
+                }
+            }
+            return result;
+        }
+
+        function getWhomIObstructGuids(guid) {
+            //this function is needed when the extension contains a deletion where the base did not delete the node
+            var guids = [],
+                checkNode = function (diffNode) {
+                    var relids, i;
+                    if ((diffNode.oGuids && diffNode.oGuids[guid]) || (diffNode.ooGuids && diffNode.ooGuids[guid])) {
+                        guids.push(diffNode.guid);
+                    }
+
+                    relids = getDiffChildrenRelids(diffNode);
+                    for (i = 0; i < relids.length; i++) {
+                        checkNode(diffNode[relids[i]]);
+                    }
+                };
+            checkNode(_concatBase);
+            return guids;
+        }
+
+        function gatherFullNodeConflicts(diffNode, mine, path, opposingPath) {
+            var conflict,
+                opposingConflict,
+                keys, i,
+                createSingleKeyValuePairConflicts = function (pathBase, data) {
+                    var keys, i;
+                    keys = Object.keys(data);
+                    for (i = 0; i < keys.length; i++) {
+                        conflict[pathBase + '/' + keys[i]] = conflict[pathBase + '/' + keys[i]] || {
+                                value: data[keys[i]],
+                                conflictingPaths: {}
+                            };
+                        conflict[pathBase + '/' + keys[i]].conflictingPaths[opposingPath] = true;
+                        opposingConflict.conflictingPaths[pathBase + '/' + keys[i]] = true;
+                    }
+                };
+
+            //setting the conflicts
+            if (mine === true) {
+                conflict = _conflictMine;
+                opposingConflict = _conflictTheirs[opposingPath];
+            } else {
+                conflict = _conflictTheirs;
+                opposingConflict = _conflictMine[opposingPath];
+            }
+            ASSERT(opposingConflict);
+            //if the node was moved we should make a conflict for the whole node as well
+            if (diffNode.movedFrom) {
+                conflict[path] = conflict[path] || {value: path, conflictingPaths: {}};
+                conflict[path].conflictingPaths[opposingPath] = true;
+                opposingConflict.conflictingPaths[path] = true;
+            }
+            createSingleKeyValuePairConflicts(path + '/attr', diffNode.attr || {});
+            createSingleKeyValuePairConflicts(path + '/reg', diffNode.reg || {});
+            createSingleKeyValuePairConflicts(path + '/pointer', diffNode.pointer || {});
+
+            if (diffNode.set) {
+                if (diffNode.set === TODELETESTRING) {
+                    conflict[path + '/set'] = conflict[path + '/set'] || {value: TODELETESTRING, conflictingPaths: {}};
+                    conflict[path + '/set'].conflictingPaths[opposingPath] = true;
+                    opposingConflict.conflictingPaths[path + '/set'] = true;
+                } else {
+                    keys = Object.keys(diffNode.set);
+                    for (i = 0; i < keys.length; i++) {
+                        if (diffNode.set[keys[i]] === TODELETESTRING) {
+                            conflict[path + '/set/' + keys[i]] = conflict[path + '/set/' + keys[i]] || {
+                                    value: TODELETESTRING,
+                                    conflictingPaths: {}
+                                };
+                            conflict[path + '/set/' + keys[i]].conflictingPaths[opposingPath] = true;
+                            opposingConflict.conflictingPaths[path + '/set/' + keys[i]] = true;
+                        } else {
+                            gatherFullSetConflicts(diffNode.set[keys[i]], mine, path + '/set/' + keys[i], opposingPath);
+                        }
+                    }
+                }
+            }
+
+            if (diffNode.meta) {
+                gatherFullMetaConflicts(diffNode.meta, mine, path + '/meta', opposingPath);
+            }
+
+            //if the opposing item is theirs, we have to recursively go down in our changes
+            if (mine) {
+                keys = getDiffChildrenRelids(diffNode);
+                for (i = 0; i < keys.length; i++) {
+                    gatherFullNodeConflicts(diffNode[keys[i]], true, path + '/' + keys[i], opposingPath);
+                }
+            }
+
+        }
+
+        function gatherFullSetConflicts(diffSet, mine, path, opposingPath) {
+            var relids = getDiffChildrenRelids(diffSet),
+                i, keys, j, conflict, opposingConflict;
+
+            //setting the conflicts
+            if (mine === true) {
+                conflict = _conflictMine;
+                opposingConflict = _conflictTheirs[opposingPath];
+            } else {
+                conflict = _conflictTheirs;
+                opposingConflict = _conflictMine[opposingPath];
+            }
+            for (i = 0; i < relids.length; i++) {
+                if (diffSet[relids[i]] === TODELETESTRING) {
+                    //single conflict as the element was removed
+                    conflict[path + '/' + relids[i] + '/'] = conflict[path + '/' + relids[i] + '/'] || {
+                            value: TODELETESTRING,
+                            conflictingPaths: {}
+                        };
+                    conflict[path + '/' + relids[i] + '/'].conflictingPaths[opposingPath] = true;
+                    opposingConflict.conflictingPaths[path + '/' + relids[i] + '/'] = true;
+                } else {
+                    keys = Object.keys(diffSet[relids[i]].attr || {});
+                    for (j = 0; j < keys.length; j++) {
+                        conflict[path + '/' + relids[i] + '//attr/' + keys[j]] =
+                            conflict[path + '/' + relids[i] + '//attr/' + keys[j]] || {
+                                value: diffSet[relids[i]].attr[keys[j]],
+                                conflictingPaths: {}
+                            };
+                        conflict[path + '/' + relids[i] + '//attr/' + keys[j]].conflictingPaths[opposingPath] = true;
+                        opposingConflict.conflictingPaths[path + '/' + relids[i] + '//attr/' + keys[j]] = true;
+                    }
+                    keys = Object.keys(diffSet[relids[i]].reg || {});
+                    for (j = 0; j < keys.length; j++) {
+                        conflict[path + '/' + relids[i] + '//reg/' + keys[j]] =
+                            conflict[path + '/' + relids[i] + '//reg/' + keys[j]] || {
+                                value: diffSet[relids[i]].reg[keys[j]],
+                                conflictingPaths: {}
+                            };
+                        conflict[path + '/' + relids[i] + '//reg/' + keys[j]].conflictingPaths[opposingPath] = true;
+                        opposingConflict.conflictingPaths[path + '/' + relids[i] + '//reg/' + keys[j]] = true;
+                    }
+                }
+            }
+        }
+
+        function concatSingleKeyValuePairs(path, base, extension) {
+            var keys, i, temp;
+            keys = Object.keys(extension);
+            for (i = 0; i < keys.length; i++) {
+                temp = extension[keys[i]];
+                if (typeof temp === 'string' && temp !== TODELETESTRING) {
+                    temp = getCommonPathForConcat(temp);
+                }
+                if (base[keys[i]] && CANON.stringify(base[keys[i]]) !== CANON.stringify(temp)) {
+                    //conflict
+                    _conflictMine[path + '/' + keys[i]] = {value: base[keys[i]], conflictingPaths: {}};
+                    _conflictTheirs[path + '/' + keys[i]] = {value: extension[keys[i]], conflictingPaths: {}};
+                    _conflictMine[path + '/' + keys[i]].conflictingPaths[path + '/' + keys[i]] = true;
+                    _conflictTheirs[path + '/' + keys[i]].conflictingPaths[path + '/' + keys[i]] = true;
+                } else {
+                    base[keys[i]] = extension[keys[i]];
+                }
+            }
+        }
+
+        function concatSet(path, base, extension) {
+            var names = Object.keys(extension),
+                members, i, j, memberPath;
+
+            for (i = 0; i < names.length; i++) {
+                if (base[names[i]]) {
+                    if (base[names[i]] === TODELETESTRING) {
+                        if (extension[names[i]] !== TODELETESTRING) {
+                            //whole set conflict
+                            _conflictMine[path + '/' + names[i]] = {value: TODELETESTRING, conflictingPaths: {}};
+                            gatherFullSetConflicts(extension[names[i]],
+                                false, path + '/' + names[i], path + '/' + names[i]);
+                        }
+                    } else {
+                        if (extension[names[i]] === TODELETESTRING) {
+                            //whole set conflict
+                            _conflictTheirs[path + '/' + names[i]] = {value: TODELETESTRING, conflictingPaths: {}};
+                            gatherFullSetConflicts(base[names[i]], true, path + '/' + names[i], path + '/' + names[i]);
+                        } else {
+                            //now we can only have member or sub-member conflicts...
+                            members = getDiffChildrenRelids(extension[names[i]]);
+                            for (j = 0; j < members.length; j++) {
+                                memberPath = getCommonPathForConcat(members[j]);
+                                if (base[names[i]][memberPath]) {
+                                    if (base[names[i]][memberPath] === TODELETESTRING) {
+                                        if (extension[names[i]][members[j]] !== TODELETESTRING) {
+                                            //whole member conflict
+                                            _conflictMine[path + '/' + names[i] + '/' + memberPath + '//'] = {
+                                                value: TODELETESTRING,
+                                                conflictingPaths: {}
+                                            };
+                                            gatherFullNodeConflicts(extension[names[i]][members[j]],
+                                                false,
+                                                path + '/' + names[i] + '/' + memberPath + '//', path +
+                                                '/' + names[i] + '/' + memberPath + '//');
+                                        }
+                                    } else {
+                                        if (extension[names[i]][members[j]] === TODELETESTRING) {
+                                            //whole member conflict
+                                            _conflictTheirs[path + '/' + names[i] + '/' + memberPath + '//'] = {
+                                                value: TODELETESTRING,
+                                                conflictingPaths: {}
+                                            };
+                                            gatherFullNodeConflicts(base[names[i]][memberPath],
+                                                true,
+                                                path + '/' + names[i] + '/' + memberPath + '//', path +
+                                                '/' + names[i] + '/' + memberPath + '//');
+                                        } else {
+                                            if (extension[names[i]][members[j]].attr) {
+                                                if (base[names[i]][memberPath].attr) {
+                                                    concatSingleKeyValuePairs(path + '/' +
+                                                        names[i] + '/' + memberPath + '/' + '/attr',
+                                                        base[names[i]][memberPath].attr,
+                                                        extension[names[i]][members[j]].attr);
+                                                } else {
+                                                    base[names[i]][memberPath].attr =
+                                                        extension[names[i]][members[j]].attr;
+                                                }
+                                            }
+                                            if (extension[names[i]][members[j]].reg) {
+                                                if (base[names[i]][memberPath].reg) {
+                                                    concatSingleKeyValuePairs(path + '/' +
+                                                        names[i] + '/' + memberPath + '/' + '/reg',
+                                                        base[names[i]][memberPath].reg,
+                                                        extension[names[i]][members[j]].reg);
+                                                } else {
+                                                    base[names[i]][memberPath].reg =
+                                                        extension[names[i]][members[j]].reg;
+                                                }
+                                            }
+
+                                        }
+                                    }
+                                } else {
+                                    //concat
+                                    base[names[i]][memberPath] = extension[names[i]][members[j]];
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    //simple concatenation
+                    //TODO the path for members should be replaced here as well...
+                    base[names[i]] = extension[names[i]];
+                }
+            }
+        }
+
+        function gatherFullMetaConflicts(diffMeta, mine, path, opposingPath) {
+            var conflict, opposingConflict,
+                relids, i, j, keys, tPath;
+
+            if (mine) {
+                conflict = _conflictMine;
+                opposingConflict = _conflictTheirs[opposingPath];
+            } else {
+                conflict = _conflictTheirs;
+                opposingConflict = _conflictMine[opposingPath];
+            }
+
+            if (diffMeta === TODELETESTRING) {
+                conflict[path] = conflict[path] || {value: TODELETESTRING, conflictingPaths: {}};
+                conflict[path].conflictingPaths[opposingPath] = true;
+                opposingConflict.conflictingPaths[path] = true;
+                return; //there is no other conflict
+            }
 
             //children
-            if(extension.children){
-              if(base.children){
-                mergeMetaItems(path+'/children',base.children,extension.children);
-              } else {
-                //we just simply merge the extension's
-                base.children = extension.children;
-              }
-            }
-            //pointers
-            if(extension.pointers){
-              if(base.pointers){
-                //complete deletion
-                if(base.pointers === TODELETESTRING || extension.pointers === TODELETESTRING){
-                  if(CANON.stringify(base.pointers) !== CANON.stringify(extension.pointers)){
-                    tPath = path+'/pointers';
-                    _conflict_mine[tPath] = _conflict_mine[tPath] || {value:base.pointers,conflictingPaths:{}};
-                    _conflict_mine[tPath].conflictingPaths[tPath] = true;
-                    _conflict_theirs[tPath] = _conflict_theirs[tPath] || {value:extension.pointers,conflictingPaths:{}};
-                    _conflict_theirs[tPath].conflictingPaths[tPath] = true;
-                  }
+            if (diffMeta.children) {
+                if (diffMeta.children === TODELETESTRING) {
+                    conflict[path + '/children'] = conflict[path + '/children'] || {
+                            value: TODELETESTRING,
+                            conflictingPaths: {}
+                        };
+                    conflict[path + '/children'].conflictingPaths[opposingPath] = true;
+                    opposingConflict.conflictingPaths[path + '/children'] = true;
                 } else {
-                  keys = Object.keys(extension.pointers);
-                  for(i=0;i<keys.length;i++){
-                    if(base.pointers[keys[i]]){
-                      mergeMetaItems(path+'/pointers/'+keys[i],base.pointers[keys[i]],extension.pointers[keys[i]]);
-                    } else {
-                      base.pointers[keys[i]] = extension.pointers[keys[i]];
+                    if (diffMeta.children.max) {
+                        conflict[path + '/children/max'] = conflict[path + '/children/max'] || {
+                                value: diffMeta.children.max,
+                                conflictingPaths: {}
+                            };
+                        conflict[path + '/children/max'].conflictingPaths[opposingPath] = true;
+                        opposingConflict.conflictingPaths[path + '/children/max'] = true;
                     }
-                  }
+                    if (diffMeta.children.min) {
+                        conflict[path + '/children/min'] = conflict[path + '/children/min'] || {
+                                value: diffMeta.children.min,
+                                conflictingPaths: {}
+                            };
+                        conflict[path + '/children/min'].conflictingPaths[opposingPath] = true;
+                        opposingConflict.conflictingPaths[path + '/children/min'] = true;
+                    }
+                    relids = getDiffChildrenRelids(diffMeta.children);
+                    for (i = 0; i < relids.length; i++) {
+                        conflict[path + '/children/' + relids[i]] = conflict[path + '/children/' + relids[i]] || {
+                                value: diffMeta.children[relids[i]],
+                                conflictingPaths: {}
+                            };
+                        conflict[path + '/children/' + relids[i]].conflictingPaths[opposingPath] = true;
+                        opposingConflict.conflictingPaths[path + '/children/' + relids[i]] = true;
+                    }
                 }
-              } else {
-                base.pointers = extension.pointers;
-              }
             }
             //attributes
-            if(extension.attributes){
-              if(base.attributes){
-                if(extension.attributes === TODELETESTRING || base.attributes == TODELETESTRING){
-                  if(CANON.stringify(base.attributes) !== CANON.stringify(extension.attributes)){
-                    tPath = path+'/attributes';
-                    _conflict_mine[tPath] = _conflict_mine[tPath] || {value:base.attributes,conflictingPaths:{}};
-                    _conflict_mine[tPath].conflictingPaths[tPath] = true;
-                    _conflict_theirs[tPath] = _conflict_theirs[tPath] || {value:extension.attributes,conflictingPaths:{}};
-                    _conflict_theirs[tPath].conflictingPaths[tPath] = true;
-                  }
+            if (diffMeta.attributes) {
+                if (diffMeta.attributes === TODELETESTRING) {
+                    conflict[path + '/attributes'] = conflict[path + '/attributes'] || {
+                            value: TODELETESTRING,
+                            conflictingPaths: {}
+                        };
+                    conflict[path + '/attributes'].conflictingPaths[opposingPath] = true;
+                    opposingConflict.conflictingPaths[path + '/attributes'] = true;
                 } else {
-                  keys = Object.keys(extension.attributes);
-                  for(i=0;i<keys.length;i++){
-                    if(base.attributes[keys[i]]){
-                      if(extension.attributes[keys[i]] === TODELETESTRING || base.attributes[keys[i]] == TODELETESTRING){
-                        if(CANON.stringify(base.attributes[keys[i]]) !== CANON.stringify(extension.attributes[keys[i]])){
-                          tPath = path+'/attributes/'+[keys[i]];
-                          _conflict_mine[tPath] = _conflict_mine[tPath] || {value:base.attributes[keys[i]],conflictingPaths:{}};
-                          _conflict_mine[tPath].conflictingPaths[tPath] = true;
-                          _conflict_theirs[tPath] = _conflict_theirs[tPath] || {value:extension.attributes[keys[i]],conflictingPaths:{}};
-                          _conflict_theirs[tPath].conflictingPaths[tPath] = true;
-                        }
-                      } else {
-                        concatSingleKeyValuePairs(path+'/attributes/'+keys[i],base.attributes[keys[i]],extension.attributes[keys[i]]);
-                      }
-                    } else {
-                      base.attributes[keys[i]] = extension.attributes[keys[i]];
+                    keys = Object.keys(diffMeta.attributes);
+                    for (i = 0; i < keys.length; i++) {
+                        conflict[path + '/attributes/' + keys[i]] = conflict[path + '/attributes/' + keys[i]] || {
+                                value: diffMeta.attributes[keys[i]],
+                                conflictingPaths: {}
+                            };
+                        conflict[path + '/attributes'].conflictingPaths[opposingPath] = true;
+                        opposingConflict.conflictingPaths[path + '/attributes'] = true;
                     }
-                  }
-
                 }
-              } else {
-                base.attributes = extension.attributes;
-              }
             }
-
-            //aspects
-            if(extension.aspects){
-              if(base.aspects){
-                if(extension.aspects === TODELETESTRING || base.aspects == TODELETESTRING){
-                  if(CANON.stringify(base.aspects) !== CANON.stringify(extension.aspects)){
-                    tPath = path+'/aspects';
-                    _conflict_mine[tPath] = _conflict_mine[tPath] || {value:base.aspects,conflictingPaths:{}};
-                    _conflict_mine[tPath].conflictingPaths[tPath] = true;
-                    _conflict_theirs[tPath] = _conflict_theirs[tPath] || {value:extension.aspects,conflictingPaths:{}};
-                    _conflict_theirs[tPath].conflictingPaths[tPath] = true;
-                  }
+            //pointers
+            if (diffMeta.pointers) {
+                if (diffMeta.pointers === TODELETESTRING) {
+                    conflict[path + '/pointers'] = conflict[path + '/pointers'] || {
+                            value: TODELETESTRING,
+                            conflictingPaths: {}
+                        };
+                    conflict[path + '/pointers'].conflictingPaths[opposingPath] = true;
+                    opposingConflict.conflictingPaths[path + '/pointers'] = true;
                 } else {
-                  keys = Object.keys(extension.aspects);
-                  for(i=0;i<keys.length;i++){
-                    if(base.aspects[keys[i]]){
-                      if(extension.aspects[keys[i]] === TODELETESTRING || base.aspects[keys[i]] == TODELETESTRING){
-                        if(CANON.stringify(base.aspects[keys[i]]) !== CANON.stringify(extension.aspects[keys[i]])){
-                          tPath = path+'/aspects/'+keys[i];
-                          _conflict_mine[tPath] = _conflict_mine[tPath] || {value:base.aspects[keys[i]],conflictingPaths:{}};
-                          _conflict_mine[tPath].conflictingPaths[tPath] = true;
-                          _conflict_theirs[tPath] = _conflict_theirs[tPath] || {value:extension.aspects[keys[i]],conflictingPaths:{}};
-                          _conflict_theirs[tPath].conflictingPaths[tPath] = true;
-                        }
-                      } else {
-                        paths = Object.keys(extension.aspects[keys[i]]);
-                        for(j=0;j<paths.length;j++){
-                          tPath = getCommonPathForConcat(paths[j]);
-                          if(base.aspects[keys[i]][tPath]){
-                            if(CANON.stringify(base.aspects[keys[i]][tPath]) !== CANON.stringify(extension.aspects[keys[i]][paths[j]])){
-                              t2Path = tPath;
-                              tPath = path+'/aspects/'+keys[i]+'/'+tPath+'//';
-                              _conflict_mine[tPath] = _conflict_mine[tPath] || {value:base.aspects[keys[i]][t2Path],conflictingPaths:{}};
-                              _conflict_mine[tPath].conflictingPaths[tPath] = true;
-                              _conflict_theirs[tPath] = _conflict_theirs[tPath] || {value:extension.aspects[keys[i]][paths[j]],conflictingPaths:{}};
-                              _conflict_theirs[tPath].conflictingPaths[tPath] = true;
+                    keys = Object.keys(diffMeta.pointers);
+                    for (i = 0; i < keys.length; i++) {
+                        if (diffMeta.pointers[keys[i]] === TODELETESTRING) {
+                            conflict[path + '/pointers/' + keys[i]] = conflict[path + '/pointers/' + keys[i]] || {
+                                    value: TODELETESTRING,
+                                    conflictingPaths: {}
+                                };
+                            conflict[path + '/pointers/' + keys[i]].conflictingPaths[opposingPath] = true;
+                            opposingConflict.conflictingPaths[path + '/pointers/' + keys[i]] = true;
+                        } else {
+                            if (diffMeta.pointers[keys[i]].max) {
+                                conflict[path + '/pointers/' + keys[i] + '/max'] =
+                                    conflict[path + '/pointers/' + keys[i] + '/max'] || {
+                                        value: diffMeta.pointers[keys[i]].max,
+                                        conflictingPaths: {}
+                                    };
+                                conflict[path + '/pointers/' + keys[i] + '/max'].conflictingPaths[opposingPath] = true;
+                                opposingConflict.conflictingPaths[path + '/pointers/' + keys[i] + '/max'] = true;
                             }
-                          } else {
-                            base.aspects[keys[i]][tPath] = extension.aspects[keys[i]][paths[j]];
-                          }
+                            if (diffMeta.pointers[keys[i]].min) {
+                                conflict[path + '/pointers/' + keys[i] + '/min'] =
+                                    conflict[path + '/pointers/' + keys[i] + '/min'] || {
+                                        value: diffMeta.pointers[keys[i]].min,
+                                        conflictingPaths: {}
+                                    };
+                                conflict[path + '/pointers/' + keys[i] + '/min'].conflictingPaths[opposingPath] = true;
+                                opposingConflict.conflictingPaths[path + '/pointers/' + keys[i] + '/min'] = true;
+                            }
+                            relids = getDiffChildrenRelids(diffMeta.pointers[keys[i]]);
+                            for (j = 0; j < relids.length; j++) {
+                                tPath = getCommonPathForConcat(relids[j]);
+                                conflict[path + '/pointers/' + keys[i] + '/' + tPath + '//'] =
+                                    conflict[path + '/pointers/' + keys[i] + '/' + tPath + '//'] || {
+                                        value: diffMeta.pointers[keys[i]][relids[j]],
+                                        conflictingPaths: {}
+                                    };
+                                conflict[path + '/pointers/' + keys[i] + '/' + tPath + '//'].
+                                    conflictingPaths[opposingPath] = true;
+                                opposingConflict.
+                                    conflictingPaths[path + '/pointers/' + keys[i] + '/' + tPath + '//'] = true;
+                            }
                         }
-                      }
-                    } else {
-                      base.aspects[keys[i]] = extension.aspects[keys[i]];
                     }
-                  }
                 }
-              } else {
-                base.aspects = extension.aspects;
-              }
             }
-          }
+            //aspects
+            //TODO
         }
-      }
-    }
 
-    function tryToConcatNodeChange(extNode,path){
-      var guid = extNode.guid,
-        oGuids =  getObstructiveGuids(extNode),
-        baseNode = getNodeByGuid(_concat_base,guid),
-        basePath = getPathByGuid(_concat_base,guid,''),
-        i,tPath,
-        relids = getDiffChildrenRelids(extNode);
+        function concatMeta(path, base, extension) {
+            var keys, i, tPath, j, paths, t2Path,
+                mergeMetaItems = function (bPath, bData, eData) {
+                    var bKeys, tKeys, i, tPath, t2Path;
+                    //delete checks
+                    if (bData === TODELETESTRING || eData === TODELETESTRING) {
+                        if (CANON.stringify(bData) !== CANON.stringify(eData)) {
+                            _conflictMine[bPath] = _conflictMine[bPath] || {value: bData, conflictingPaths: {}};
+                            _conflictMine[bPath].conflictingPaths[bPath] = true;
+                            _conflictTheirs[bPath] = _conflictTheirs[bPath] || {value: eData, conflictingPaths: {}};
+                            _conflictTheirs[bPath].conflictingPaths[bPath] = true;
+                        }
+                    } else {
+                        //max
+                        if (eData.max) {
+                            if (bData.max && bData.max !== eData.max) {
+                                tPath = bPath + '/max';
+                                _conflictMine[tPath] = _conflictMine[tPath] || {
+                                        value: bData.max,
+                                        conflictingPaths: {}
+                                    };
+                                _conflictMine[tPath].conflictingPaths[tPath] = true;
+                                _conflictTheirs[tPath] = _conflictTheirs[tPath] || {
+                                        value: eData.max,
+                                        conflictingPaths: {}
+                                    };
+                                _conflictTheirs[tPath].conflictingPaths[tPath] = true;
+                            } else {
+                                bData.max = eData.max;
+                            }
+                        }
+                        //min
+                        if (eData.min) {
+                            if (bData.min && bData.min !== eData.min) {
+                                tPath = bPath + '/min';
+                                _conflictMine[tPath] = _conflictMine[tPath] || {
+                                        value: bData.min,
+                                        conflictingPaths: {}
+                                    };
+                                _conflictMine[tPath].conflictingPaths[tPath] = true;
+                                _conflictTheirs[tPath] = _conflictTheirs[tPath] || {
+                                        value: eData.min,
+                                        conflictingPaths: {}
+                                    };
+                                _conflictTheirs[tPath].conflictingPaths[tPath] = true;
+                            } else {
+                                bData.max = eData.min;
+                            }
+                        }
+                        //targets
+                        bKeys = getDiffChildrenRelids(bData);
+                        tKeys = getDiffChildrenRelids(eData);
+                        for (i = 0; i < tKeys.length; i++) {
+                            tPath = getCommonPathForConcat(tKeys[i]);
+                            if (bKeys.indexOf(tPath) !== -1 && CANON.stringify(bData[tPath]) !==
+                                CANON.stringify(eData[tKeys[i]])) {
 
+                                t2Path = tPath;
+                                tPath = bPath + '/' + tPath + '//';
+                                _conflictMine[tPath] = _conflictMine[tPath] || {
+                                        value: bData[t2Path],
+                                        conflictingPaths: {}
+                                    };
+                                _conflictMine[tPath].conflictingPaths[tPath] = true;
+                                _conflictTheirs[tPath] = _conflictTheirs[tPath] || {
+                                        value: eData[tKeys[i]],
+                                        conflictingPaths: {}
+                                    };
+                                _conflictTheirs[tPath].conflictingPaths[tPath] = true;
+                            } else {
+                                bData[tPath] = eData[tKeys[i]];
+                            }
+                        }
+                    }
+                };
+            if (CANON.stringify(base) !== CANON.stringify(extension)) {
+                if (base === TODELETESTRING) {
+                    _conflictMine[path] = _conflictMine[path] || {value: TODELETESTRING, conflictingPaths: {}};
+                    gatherFullMetaConflicts(extension, false, path, path);
+                } else {
+                    if (extension === TODELETESTRING) {
+                        _conflictTheirs[path] = _conflictTheirs[path] || {
+                                value: TODELETESTRING,
+                                conflictingPaths: {}
+                            };
+                        gatherFullMetaConflicts(base, true, path, path);
+                    } else {
+                        //now check for sub-meta conflicts
 
-      if(extNode.removed === true){
-        if(baseNode && baseNode.removed !== true){
-          tPath = basePath+'/removed';
-          _conflict_theirs[tPath] = _conflict_theirs[tPath] || {value:true,conflictingPaths:{}};
-          oGuids = getWhomIObstructGuids(guid);
-          ASSERT(oGuids.length > 0);
-          for(i=0;i<oGuids.length;i++){
-            baseNode = getNodeByGuid(_concat_base,oGuids[i]);
-            basePath = getPathByGuid(_concat_base,oGuids[i],'');
-            gatherFullNodeConflicts(baseNode,true,basePath,tPath);
-          }
-        } else {
-          //we simply concat the deletion
-          insertAtPath(_concat_base,path,extNode);
+                        //children
+                        if (extension.children) {
+                            if (base.children) {
+                                mergeMetaItems(path + '/children', base.children, extension.children);
+                            } else {
+                                //we just simply merge the extension's
+                                base.children = extension.children;
+                            }
+                        }
+                        //pointers
+                        if (extension.pointers) {
+                            if (base.pointers) {
+                                //complete deletion
+                                if (base.pointers === TODELETESTRING || extension.pointers === TODELETESTRING) {
+                                    if (CANON.stringify(base.pointers) !== CANON.stringify(extension.pointers)) {
+                                        tPath = path + '/pointers';
+                                        _conflictMine[tPath] = _conflictMine[tPath] || {
+                                                value: base.pointers,
+                                                conflictingPaths: {}
+                                            };
+                                        _conflictMine[tPath].conflictingPaths[tPath] = true;
+                                        _conflictTheirs[tPath] = _conflictTheirs[tPath] || {
+                                                value: extension.pointers,
+                                                conflictingPaths: {}
+                                            };
+                                        _conflictTheirs[tPath].conflictingPaths[tPath] = true;
+                                    }
+                                } else {
+                                    keys = Object.keys(extension.pointers);
+                                    for (i = 0; i < keys.length; i++) {
+                                        if (base.pointers[keys[i]]) {
+                                            mergeMetaItems(path + '/pointers/' + keys[i], base.pointers[keys[i]],
+                                                extension.pointers[keys[i]]);
+                                        } else {
+                                            base.pointers[keys[i]] = extension.pointers[keys[i]];
+                                        }
+                                    }
+                                }
+                            } else {
+                                base.pointers = extension.pointers;
+                            }
+                        }
+                        //attributes
+                        if (extension.attributes) {
+                            if (base.attributes) {
+                                if (extension.attributes === TODELETESTRING || base.attributes === TODELETESTRING) {
+                                    if (CANON.stringify(base.attributes) !== CANON.stringify(extension.attributes)) {
+                                        tPath = path + '/attributes';
+                                        _conflictMine[tPath] = _conflictMine[tPath] || {
+                                                value: base.attributes,
+                                                conflictingPaths: {}
+                                            };
+                                        _conflictMine[tPath].conflictingPaths[tPath] = true;
+                                        _conflictTheirs[tPath] = _conflictTheirs[tPath] || {
+                                                value: extension.attributes,
+                                                conflictingPaths: {}
+                                            };
+                                        _conflictTheirs[tPath].conflictingPaths[tPath] = true;
+                                    }
+                                } else {
+                                    keys = Object.keys(extension.attributes);
+                                    for (i = 0; i < keys.length; i++) {
+                                        if (base.attributes[keys[i]]) {
+                                            if (extension.attributes[keys[i]] === TODELETESTRING ||
+                                                base.attributes[keys[i]] === TODELETESTRING) {
+
+                                                if (CANON.stringify(base.attributes[keys[i]]) !==
+                                                    CANON.stringify(extension.attributes[keys[i]])) {
+
+                                                    tPath = path + '/attributes/' + [keys[i]];
+                                                    _conflictMine[tPath] = _conflictMine[tPath] || {
+                                                            value: base.attributes[keys[i]],
+                                                            conflictingPaths: {}
+                                                        };
+                                                    _conflictMine[tPath].conflictingPaths[tPath] = true;
+                                                    _conflictTheirs[tPath] = _conflictTheirs[tPath] || {
+                                                            value: extension.attributes[keys[i]],
+                                                            conflictingPaths: {}
+                                                        };
+                                                    _conflictTheirs[tPath].conflictingPaths[tPath] = true;
+                                                }
+                                            } else {
+                                                concatSingleKeyValuePairs(path + '/attributes/' + keys[i],
+                                                    base.attributes[keys[i]], extension.attributes[keys[i]]);
+                                            }
+                                        } else {
+                                            base.attributes[keys[i]] = extension.attributes[keys[i]];
+                                        }
+                                    }
+
+                                }
+                            } else {
+                                base.attributes = extension.attributes;
+                            }
+                        }
+
+                        //aspects
+                        if (extension.aspects) {
+                            if (base.aspects) {
+                                if (extension.aspects === TODELETESTRING || base.aspects === TODELETESTRING) {
+                                    if (CANON.stringify(base.aspects) !== CANON.stringify(extension.aspects)) {
+                                        tPath = path + '/aspects';
+                                        _conflictMine[tPath] = _conflictMine[tPath] || {
+                                                value: base.aspects,
+                                                conflictingPaths: {}
+                                            };
+                                        _conflictMine[tPath].conflictingPaths[tPath] = true;
+                                        _conflictTheirs[tPath] = _conflictTheirs[tPath] || {
+                                                value: extension.aspects,
+                                                conflictingPaths: {}
+                                            };
+                                        _conflictTheirs[tPath].conflictingPaths[tPath] = true;
+                                    }
+                                } else {
+                                    keys = Object.keys(extension.aspects);
+                                    for (i = 0; i < keys.length; i++) {
+                                        if (base.aspects[keys[i]]) {
+                                            if (extension.aspects[keys[i]] === TODELETESTRING ||
+                                                base.aspects[keys[i]] === TODELETESTRING) {
+                                                if (CANON.stringify(base.aspects[keys[i]]) !==
+                                                    CANON.stringify(extension.aspects[keys[i]])) {
+                                                    tPath = path + '/aspects/' + keys[i];
+                                                    _conflictMine[tPath] = _conflictMine[tPath] || {
+                                                            value: base.aspects[keys[i]],
+                                                            conflictingPaths: {}
+                                                        };
+                                                    _conflictMine[tPath].conflictingPaths[tPath] = true;
+                                                    _conflictTheirs[tPath] = _conflictTheirs[tPath] || {
+                                                            value: extension.aspects[keys[i]],
+                                                            conflictingPaths: {}
+                                                        };
+                                                    _conflictTheirs[tPath].conflictingPaths[tPath] = true;
+                                                }
+                                            } else {
+                                                paths = Object.keys(extension.aspects[keys[i]]);
+                                                for (j = 0; j < paths.length; j++) {
+                                                    tPath = getCommonPathForConcat(paths[j]);
+                                                    if (base.aspects[keys[i]][tPath]) {
+                                                        if (CANON.stringify(base.aspects[keys[i]][tPath]) !==
+                                                            CANON.stringify(extension.aspects[keys[i]][paths[j]])) {
+                                                            t2Path = tPath;
+                                                            tPath = path + '/aspects/' + keys[i] + '/' + tPath + '//';
+                                                            _conflictMine[tPath] = _conflictMine[tPath] || {
+                                                                    value: base.aspects[keys[i]][t2Path],
+                                                                    conflictingPaths: {}
+                                                                };
+                                                            _conflictMine[tPath].conflictingPaths[tPath] = true;
+                                                            _conflictTheirs[tPath] = _conflictTheirs[tPath] || {
+                                                                    value: extension.aspects[keys[i]][paths[j]],
+                                                                    conflictingPaths: {}
+                                                                };
+                                                            _conflictTheirs[tPath].conflictingPaths[tPath] = true;
+                                                        }
+                                                    } else {
+                                                        base.aspects[keys[i]][tPath] =
+                                                            extension.aspects[keys[i]][paths[j]];
+                                                    }
+                                                }
+                                            }
+                                        } else {
+                                            base.aspects[keys[i]] = extension.aspects[keys[i]];
+                                        }
+                                    }
+                                }
+                            } else {
+                                base.aspects = extension.aspects;
+                            }
+                        }
+                    }
+                }
+            }
         }
-      } else {
-        if(oGuids.length > 0){
-            for(i=0;i<oGuids.length;i++){
-              baseNode = getNodeByGuid(_concat_base,oGuids[i]);
-              basePath = getPathByGuid(_concat_base,oGuids[i],'');
-              _conflict_mine[basePath+'/removed'] = _conflict_mine[basePath+'/removed'] || {value:true,conflictingPaths:{}};
-              gatherFullNodeConflicts(extNode,false,path,basePath+'/removed');
-            }
-        } else if(baseNode){
-          //here we are able to check the sub-node conflicts
-          //check double moves - we do not care if they moved under the same parent
-          if(extNode.movedFrom){
-            if(baseNode.movedFrom && path !== basePath){
-              _conflict_mine[basePath] = _conflict_mine[basePath] || {value:"move",conflictingPaths:{}};
-              _conflict_theirs[path] = _conflict_theirs[path] || {value:"move",conflictingPaths:{}};
-              _conflict_mine[basePath].conflictingPaths[path]=true;
-              _conflict_theirs[path].conflictingPaths[basePath] = true;
-              //we keep the node where it is, but synchronize the paths
-              path = basePath;
-            } else if(path !== basePath){
-              //first we move the base object to its new path
-              //we copy the moved from information right here
-              baseNode.movedFrom = extNode.movedFrom;
-              insertAtPath(_concat_base,path,baseNode);
-              removePathFromDiff(_concat_base,basePath);
-              baseNode = getNodeByGuid(_concat_base,guid);
-              basePath = getPathByGuid(_concat_base,guid,'');
-              ASSERT(path === basePath);
-            }
-          }
 
-          ASSERT(basePath === path || baseNode.movedFrom === path);
-          path = basePath; //the base was moved
+        function tryToConcatNodeChange(extNode, path) {
+            var guid = extNode.guid,
+                oGuids = getObstructiveGuids(extNode),
+                baseNode = getNodeByGuid(_concatBase, guid),
+                basePath = getPathByGuid(_concatBase, guid, ''),
+                i, tPath,
+                relids = getDiffChildrenRelids(extNode);
 
 
-          //and now the sub-node conflicts
-          if(extNode.attr){
-            if(baseNode.attr){
-              concatSingleKeyValuePairs(path+'/attr',baseNode.attr,extNode.attr);
+            if (extNode.removed === true) {
+                if (baseNode && baseNode.removed !== true) {
+                    tPath = basePath + '/removed';
+                    _conflictTheirs[tPath] = _conflictTheirs[tPath] || {value: true, conflictingPaths: {}};
+                    oGuids = getWhomIObstructGuids(guid);
+                    ASSERT(oGuids.length > 0);
+                    for (i = 0; i < oGuids.length; i++) {
+                        baseNode = getNodeByGuid(_concatBase, oGuids[i]);
+                        basePath = getPathByGuid(_concatBase, oGuids[i], '');
+                        gatherFullNodeConflicts(baseNode, true, basePath, tPath);
+                    }
+                } else {
+                    //we simply concat the deletion
+                    insertAtPath(_concatBase, path, extNode);
+                }
             } else {
-              insertAtPath(_concat_base,path+'/attr',extNode.attr);
+                if (oGuids.length > 0) {
+                    for (i = 0; i < oGuids.length; i++) {
+                        baseNode = getNodeByGuid(_concatBase, oGuids[i]);
+                        basePath = getPathByGuid(_concatBase, oGuids[i], '');
+                        _conflictMine[basePath + '/removed'] = _conflictMine[basePath + '/removed'] || {
+                                value: true,
+                                conflictingPaths: {}
+                            };
+                        gatherFullNodeConflicts(extNode, false, path, basePath + '/removed');
+                    }
+                } else if (baseNode) {
+                    //here we are able to check the sub-node conflicts
+                    //check double moves - we do not care if they moved under the same parent
+                    if (extNode.movedFrom) {
+                        if (baseNode.movedFrom && path !== basePath) {
+                            _conflictMine[basePath] = _conflictMine[basePath] || {
+                                    value: 'move',
+                                    conflictingPaths: {}
+                                };
+                            _conflictTheirs[path] = _conflictTheirs[path] || {value: 'move', conflictingPaths: {}};
+                            _conflictMine[basePath].conflictingPaths[path] = true;
+                            _conflictTheirs[path].conflictingPaths[basePath] = true;
+                            //we keep the node where it is, but synchronize the paths
+                            path = basePath;
+                        } else if (path !== basePath) {
+                            //first we move the base object to its new path
+                            //we copy the moved from information right here
+                            baseNode.movedFrom = extNode.movedFrom;
+                            insertAtPath(_concatBase, path, baseNode);
+                            removePathFromDiff(_concatBase, basePath);
+                            baseNode = getNodeByGuid(_concatBase, guid);
+                            basePath = getPathByGuid(_concatBase, guid, '');
+                            ASSERT(path === basePath);
+                        }
+                    }
+
+                    ASSERT(basePath === path || baseNode.movedFrom === path);
+                    path = basePath; //the base was moved
+
+
+                    //and now the sub-node conflicts
+                    if (extNode.attr) {
+                        if (baseNode.attr) {
+                            concatSingleKeyValuePairs(path + '/attr', baseNode.attr, extNode.attr);
+                        } else {
+                            insertAtPath(_concatBase, path + '/attr', extNode.attr);
+                        }
+                    }
+                    if (extNode.reg) {
+                        if (baseNode.reg) {
+                            concatSingleKeyValuePairs(path + '/reg', baseNode.reg, extNode.reg);
+                        } else {
+                            insertAtPath(_concatBase, path + '/reg', extNode.reg);
+                        }
+                    }
+                    if (extNode.pointer) {
+                        if (baseNode.pointer) {
+                            concatSingleKeyValuePairs(path + '/pointer', baseNode.pointer, extNode.pointer);
+                        } else {
+                            insertAtPath(_concatBase, path + '/pointer', extNode.pointer);
+                        }
+                    }
+                    if (extNode.set) {
+                        if (baseNode.set) {
+                            concatSet(path + '/set', baseNode.set, extNode.set);
+                        } else {
+                            insertAtPath(_concatBase, path + '/set', extNode.set);
+                        }
+                    }
+                    if (extNode.meta) {
+                        if (baseNode.meta) {
+                            concatMeta(path + '/meta', baseNode.meta, extNode.meta);
+                        } else {
+                            insertAtPath(_concatBase, path + '/meta', extNode.meta);
+                        }
+                    }
+                } else {
+                    //there is no basenode so we can concat the whole node
+                    insertAtPath(_concatBase, path, getSingleNode(extNode));
+                }
             }
-          }
-          if(extNode.reg){
-            if(baseNode.reg){
-              concatSingleKeyValuePairs(path+'/reg',baseNode.reg,extNode.reg);
-            } else {
-              insertAtPath(_concat_base,path+'/reg',extNode.reg);
+
+            //here comes the recursion
+            for (i = 0; i < relids.length; i++) {
+                tryToConcatNodeChange(extNode[relids[i]], path + '/' + relids[i]);
             }
-          }
-          if(extNode.pointer){
-            if(baseNode.pointer){
-              concatSingleKeyValuePairs(path+'/pointer',baseNode.pointer,extNode.pointer);
-            } else {
-              insertAtPath(_concat_base,path+'/pointer',extNode.pointer);
-            }
-          }
-          if(extNode.set){
-            if(baseNode.set){
-              concatSet(path+'/set',baseNode.set,extNode.set);
-            } else {
-              insertAtPath(_concat_base,path+'/set',extNode.set);
-            }
-          }
-          if(extNode.meta){
-            if(baseNode.meta){
-              concatMeta(path+'/meta',baseNode.meta,extNode.meta);
-            } else {
-              insertAtPath(_concat_base,path+'/meta',extNode.meta);
-            }
-          }
-        } else {
-          //there is no basenode so we can concat the whole node
-          insertAtPath(_concat_base,path,getSingleNode(extNode));
+
         }
-      }
 
-      //here comes the recursion
-      for(i=0;i<relids.length;i++){
-        tryToConcatNodeChange(extNode[relids[i]],path+'/'+relids[i]);
-      }
+        function generateConflictItems() {
+            var items = [],
+                keys, i, j, conflicts;
+            keys = Object.keys(_conflictMine);
 
-    }
-
-    function generateConflictItems(){
-      var items = [],
-        keys, i, j,conflicts;
-      keys = Object.keys(_conflict_mine);
-
-      for(i=0;i<keys.length;i++){
-        conflicts = Object.keys(_conflict_mine[keys[i]].conflictingPaths || {});
-        ASSERT(conflicts.length > 0);
-        for(j=0;j<conflicts.length;j++){
-          items.push({
-            selected:"mine",
-            mine:{
-              path: keys[i],
-              info: keys[i].replace(/\//g," / "),
-              value: _conflict_mine[keys[i]].value
-            },
-            theirs:{
-              path:conflicts[j],
-              info:conflicts[j].replace(/\//g," / "),
-              value:_conflict_theirs[conflicts[j]].value
+            for (i = 0; i < keys.length; i++) {
+                conflicts = Object.keys(_conflictMine[keys[i]].conflictingPaths || {});
+                ASSERT(conflicts.length > 0);
+                for (j = 0; j < conflicts.length; j++) {
+                    items.push({
+                        selected: 'mine',
+                        mine: {
+                            path: keys[i],
+                            info: keys[i].replace(/\//g, ' / '),
+                            value: _conflictMine[keys[i]].value
+                        },
+                        theirs: {
+                            path: conflicts[j],
+                            info: conflicts[j].replace(/\//g, ' / '),
+                            value: _conflictTheirs[conflicts[j]].value
+                        }
+                    });
+                }
             }
-          });
+            return items;
         }
-      }
-      return items;
-    }
-    function harmonizeConflictPaths(diff){
-      var relids = getDiffChildrenRelids(diff),
-        keys, i,members,j;
 
-      keys = Object.keys(diff.pointer || {});
-      for(i=0;i<keys.length;i++){
-        diff.pointer[keys[i]] = getCommonPathForConcat(diff.pointer[keys[i]]);
-      }
-      keys = Object.keys(diff.set || {});
-      for(i=0;i<keys.length;i++){
-        members = Object.keys(diff.set[keys[i]] || {});
-        for(j=0;j<members.length;j++){
-          if(members[j] !== getCommonPathForConcat(members[j])){
-            diff.set[keys[i]][getCommonPathForConcat(members[j])] = diff.set[keys[i]][members[j]];
-            delete diff.set[keys[i]][members[j]];
-          }
-        }
-      }
+        function harmonizeConflictPaths(diff) {
+            var relids = getDiffChildrenRelids(diff),
+                keys, i, members, j;
 
-      //TODO we have to do the meta as well
-      for(i=0;i<relids.length;i++){
-        harmonizeConflictPaths(diff[relids[i]]);
-      }
-    }
-
-    _core.tryToConcatChanges = function(base,extension){
-      var result = {};
-      _conflict_items = [];
-      _conflict_mine = {};
-      _conflict_theirs = {};
-      _concat_base = base;
-      _concat_extension = extension;
-      _concat_base_removals = {};
-      _concat_moves = {
-        getBaseSourceFromDestination : {},
-        getBaseDestinationFromSource : {},
-        getExtensionSourceFromDestination : {},
-        getExtensionDestinationFromSource : {}
-      };
-      getMoveSources(base,'',_concat_moves.getBaseSourceFromDestination,_concat_moves.getBaseDestinationFromSource);
-      getMoveSources(extension,'',_concat_moves.getExtensionSourceFromDestination,_concat_moves.getExtensionDestinationFromSource);
-      getConcatBaseRemovals(base);
-      tryToConcatNodeChange(_concat_extension,'');
-
-      result.items = generateConflictItems();
-      result.mine = _conflict_mine;
-      result.theirs = _conflict_theirs;
-      result.merge = _concat_base;
-      harmonizeConflictPaths(result.merge);
-      return result;
-    };
-
-    function depthOfPath(path){
-      ASSERT(typeof path === "string");
-      return path.split('/').length;
-    }
-    function resolveMoves(resolveObject){
-      var i,moves = {},filteredItems=[],path,
-        moveBaseOfPath = function(path){
-          var keys = Object.keys(moves),
-            i,maxDepth = -1,base=null;
-          for(i=0;i<keys.length;i++){
-            if(path.indexOf(keys[i]) === 1 && depthOfPath(keys[i])>maxDepth){
-              base = keys[i];
-              maxDepth = depthOfPath(keys[i]);
+            keys = Object.keys(diff.pointer || {});
+            for (i = 0; i < keys.length; i++) {
+                diff.pointer[keys[i]] = getCommonPathForConcat(diff.pointer[keys[i]]);
             }
-          }
-          return base;
+            keys = Object.keys(diff.set || {});
+            for (i = 0; i < keys.length; i++) {
+                members = Object.keys(diff.set[keys[i]] || {});
+                for (j = 0; j < members.length; j++) {
+                    if (members[j] !== getCommonPathForConcat(members[j])) {
+                        diff.set[keys[i]][getCommonPathForConcat(members[j])] = diff.set[keys[i]][members[j]];
+                        delete diff.set[keys[i]][members[j]];
+                    }
+                }
+            }
+
+            //TODO we have to do the meta as well
+            for (i = 0; i < relids.length; i++) {
+                harmonizeConflictPaths(diff[relids[i]]);
+            }
+        }
+
+        _core.tryToConcatChanges = function (base, extension) {
+            var result = {};
+            _conflictItems = [];
+            _conflictMine = {};
+            _conflictTheirs = {};
+            _concatBase = base;
+            _concatExtension = extension;
+            _concatBaseRemovals = {};
+            _concatMoves = {
+                getBaseSourceFromDestination: {},
+                getBaseDestinationFromSource: {},
+                getExtensionSourceFromDestination: {},
+                getExtensionDestinationFromSource: {}
+            };
+            getMoveSources(base,
+                '', _concatMoves.getBaseSourceFromDestination, _concatMoves.getBaseDestinationFromSource);
+            getMoveSources(extension,
+                '', _concatMoves.getExtensionSourceFromDestination, _concatMoves.getExtensionDestinationFromSource);
+            getConcatBaseRemovals(base);
+            tryToConcatNodeChange(_concatExtension, '');
+
+            result.items = generateConflictItems();
+            result.mine = _conflictMine;
+            result.theirs = _conflictTheirs;
+            result.merge = _concatBase;
+            harmonizeConflictPaths(result.merge);
+            return result;
         };
-      for(i=0;i<resolveObject.items.length;i++){
-        if(resolveObject.items[i].selected === "theirs" && resolveObject.items[i].theirs.value === "move"){
-          moves[resolveObject.items[i].mine.path] = resolveObject.items[i].theirs.path;
-          //and we also make the move
-          insertAtPath(resolveObject.merge,resolveObject.items[i].theirs.path,getPathOfDiff(resolveObject.merge,resolveObject.items[i].mine.path));
-          removePathFromDiff(resolveObject.merge,resolveObject.items[i].mine.path);
-        } else {
-          filteredItems.push(resolveObject.items[i]);
-        }
-      }
-      resolveObject.items = filteredItems;
 
-      //in a second run we modify all sub-path of the moves paths
-      for(i=0;i<resolveObject.items.length;i++){
-        if(resolveObject.items[i].selected === "theirs"){
-          path = moveBaseOfPath(resolveObject.items[i].theirs.path);
-          if(path){
-            resolveObject.items[i].theirs.path = resolveObject.items[i].theirs.path.replace(path,moves[path]);
-          }
-          path = moveBaseOfPath(resolveObject.items[i].mine.path);
-          if(path){
-            resolveObject.items[i].mine.path = resolveObject.items[i].mine.path.replace(path,moves[path]);
-          }
+        function depthOfPath(path) {
+            ASSERT(typeof path === 'string');
+            return path.split('/').length;
         }
-      }
+
+        function resolveMoves(resolveObject) {
+            var i, moves = {},
+                filteredItems = [],
+                path,
+                moveBaseOfPath = function (path) {
+                    var keys = Object.keys(moves),
+                        i, maxDepth = -1,
+                        base = null;
+                    for (i = 0; i < keys.length; i++) {
+                        if (path.indexOf(keys[i]) === 1 && depthOfPath(keys[i]) > maxDepth) {
+                            base = keys[i];
+                            maxDepth = depthOfPath(keys[i]);
+                        }
+                    }
+                    return base;
+                };
+            for (i = 0; i < resolveObject.items.length; i++) {
+                if (resolveObject.items[i].selected === 'theirs' && resolveObject.items[i].theirs.value === 'move') {
+                    moves[resolveObject.items[i].mine.path] = resolveObject.items[i].theirs.path;
+                    //and we also make the move
+                    insertAtPath(resolveObject.merge,
+                        resolveObject.items[i].theirs.path,
+                        getPathOfDiff(resolveObject.merge, resolveObject.items[i].mine.path));
+                    removePathFromDiff(resolveObject.merge, resolveObject.items[i].mine.path);
+                } else {
+                    filteredItems.push(resolveObject.items[i]);
+                }
+            }
+            resolveObject.items = filteredItems;
+
+            //in a second run we modify all sub-path of the moves paths
+            for (i = 0; i < resolveObject.items.length; i++) {
+                if (resolveObject.items[i].selected === 'theirs') {
+                    path = moveBaseOfPath(resolveObject.items[i].theirs.path);
+                    if (path) {
+                        resolveObject.items[i].theirs.path =
+                            resolveObject.items[i].theirs.path.replace(path, moves[path]);
+                    }
+                    path = moveBaseOfPath(resolveObject.items[i].mine.path);
+                    if (path) {
+                        resolveObject.items[i].mine.path = resolveObject.items[i].mine.path.replace(path, moves[path]);
+                    }
+                }
+            }
+        }
+
+        _core.applyResolution = function (conflictObject) {
+            //we apply conflict items to the merge and return it as a diff
+            var i;
+            resolveMoves(conflictObject);
+            for (i = 0; i < conflictObject.items.length; i++) {
+                if (conflictObject.items[i].selected !== 'mine') {
+                    removePathFromDiff(conflictObject.merge, conflictObject.items[i].mine.path);
+                    insertAtPath(conflictObject.merge,
+                        conflictObject.items[i].theirs.path, conflictObject.items[i].theirs.value);
+                }
+            }
+
+            return conflictObject.merge;
+        };
+
+
+        //we remove some low level functions as they should not be used on high level
+        delete _core.overlayInsert;
+
+        return _core;
     }
 
-    _core.applyResolution = function(conflictObject){
-      //we apply conflict items to the merge and return it as a diff
-      var i;
-      resolveMoves(conflictObject);
-      for(i=0;i<conflictObject.items.length;i++){
-        if(conflictObject.items[i].selected !== "mine"){
-          removePathFromDiff(conflictObject.merge,conflictObject.items[i].mine.path);
-          insertAtPath(conflictObject.merge,conflictObject.items[i].theirs.path,conflictObject.items[i].theirs.value);
-        }
-      }
-
-      return conflictObject.merge;
-    };
-
-
-    //we remove some low level functions as they should not be used on high level
-    delete _core.overlayInsert;
-
-    return _core;
-  }
-
-  return diffCore;
+    return diffCore;
 });
 
 /*globals define*/
 /*jshint node: true, browser: true*/
 
 /**
- * Copyright (C) 2012 Vanderbilt University, All rights reserved.
- *
- * Author: Tamas Kecskes
+ * @author kecso / https://github.com/kecso
  */
 
 define('common/core/core',[
-        'common/core/corerel',
-        'common/core/setcore',
-        'common/core/guidcore',
-        'common/core/nullpointercore',
-        'common/core/coreunwrap',
-        'common/core/coretype',
-        'common/core/constraintcore',
-        'common/core/coretree',
-        'common/core/metacore',
-        'common/core/coretreeloader',
-        'common/core/corediff'],
-    function (CoreRel, Set, Guid, NullPtr, UnWrap, Type, Constraint, CoreTree, MetaCore, TreeLoader, CoreDiff) {
+    'common/core/corerel',
+    'common/core/setcore',
+    'common/core/guidcore',
+    'common/core/nullpointercore',
+    'common/core/coreunwrap',
+    'common/core/coretype',
+    'common/core/constraintcore',
+    'common/core/coretree',
+    'common/core/metacore',
+    'common/core/coretreeloader',
+    'common/core/corediff'
+], function (CoreRel, Set, Guid, NullPtr, UnWrap, Type, Constraint, CoreTree, MetaCore, TreeLoader, CoreDiff) {
     
 
     function Core(storage, options) {
@@ -10475,26 +10775,27 @@ define('common/core/core',[
     return Core;
 });
 
-/*
- * Copyright (C) 2012-2013 Vanderbilt University, All rights reserved.
- *
- * Author: Tamas Kecskes
+/*globals define*/
+/*jshint node: true, browser: true*/
+
+/**
+ * @author kecso / https://github.com/kecso
  */
 
-define('common/storage/client',[ "common/util/assert", "common/util/guid" ], function (ASSERT, GUID) {
+define('common/storage/client',['common/util/assert', 'common/util/guid'], function (ASSERT, GUID) {
     
 
-    function Database (options) {
+    function Database(options) {
         ASSERT(typeof options === 'object');
         ASSERT(typeof options.logger !== 'undefined');
         ASSERT(typeof options.globConf === 'object');
         var gmeConfig = options.globConf,
             logger = options.logger.fork('client');
 
-        options.type = options.type || "browser";
+        options.type = options.type || 'browser';
 
         var _hostAddress = null;
-        if(options.type === "browser") {
+        if (options.type === 'browser') {
             if (window.__karma__) {
                 // TRICKY: karma uses web sockets too, we need to use the gme server's port
                 _hostAddress = window.location.protocol + '//localhost:' + gmeConfig.server.port;
@@ -10505,6 +10806,7 @@ define('common/storage/client',[ "common/util/assert", "common/util/guid" ], fun
             _hostAddress = options.host + ':' + gmeConfig.server.port;
         }
 
+        logger.debug('hostAddress:', _hostAddress);
 
         var socketConnected = false,
             socket = null,
@@ -10517,12 +10819,12 @@ define('common/storage/client',[ "common/util/assert", "common/util/guid" ], fun
             projects = {},
             references = {},
             ERROR_DISCONNECTED = 'The socket.io is disconnected',
-            ERROR_TIMEOUT = "no valid response arrived in time",
-            STATUS_NETWORK_DISCONNECTED = "socket.io is disconnected";
+            ERROR_TIMEOUT = 'no valid response arrived in time',
+            STATUS_NETWORK_DISCONNECTED = 'socket.io is disconnected';
 
-        function clearDbCallbacks () {
+        function clearDbCallbacks() {
             var myCallbacks = [];
-            for ( var i in getDbStatusCallbacks) {
+            for (var i in getDbStatusCallbacks) {
                 myCallbacks.push(getDbStatusCallbacks[i]);
                 clearTimeout(getDbStatusCallbacks[i].to);
             }
@@ -10532,9 +10834,9 @@ define('common/storage/client',[ "common/util/assert", "common/util/guid" ], fun
             }
         }
 
-        function clearCallbacks () {
+        function clearCallbacks() {
             var myCallbacks = [];
-            for ( var i in callbacks) {
+            for (var i in callbacks) {
                 myCallbacks.push(callbacks[i]);
                 clearTimeout(callbacks[i].to);
             }
@@ -10544,15 +10846,17 @@ define('common/storage/client',[ "common/util/assert", "common/util/guid" ], fun
             }
         }
 
-        function reSendGetBranches () {
+        function reSendGetBranches() {
             //this function should be called after reconnecting
-            for ( var i in getBranchHashCallbacks) {
-                projects[getBranchHashCallbacks[i].project].getBranchHash(i, getBranchHashCallbacks[i].oldhash, getBranchHashCallbacks[i].cb);
+            for (var i in getBranchHashCallbacks) {
+                projects[getBranchHashCallbacks[i].project].getBranchHash(i, getBranchHashCallbacks[i].oldhash,
+                    getBranchHashCallbacks[i].cb);
             }
         }
 
-        function callbackTimeout (guid) {
-            var cb = null, oldhash = "";
+        function callbackTimeout(guid) {
+            var cb = null,
+                oldhash = '';
             if (callbacks[guid]) {
                 cb = callbacks[guid].cb;
                 delete callbacks[guid];
@@ -10569,7 +10873,7 @@ define('common/storage/client',[ "common/util/assert", "common/util/guid" ], fun
             }
         }
 
-        function registerProject (id, name) {
+        function registerProject(id, name) {
             if (!references[name]) {
                 references[name] = [];
             }
@@ -10578,7 +10882,8 @@ define('common/storage/client',[ "common/util/assert", "common/util/guid" ], fun
             }
         }
 
-        function unRegisterProject (id, name) {
+        function unRegisterProject(id, name) {
+            // var result = false; TODO: use one return statement here
             if (references[name]) {
                 var index = references[name].indexOf(id);
                 if (index > -1) {
@@ -10597,8 +10902,8 @@ define('common/storage/client',[ "common/util/assert", "common/util/guid" ], fun
             }
         }
 
-        function openDatabase (callback) {
-            ASSERT(typeof callback === "function");
+        function openDatabase(callback) {
+            ASSERT(typeof callback === 'function');
 
             if (socket) {
                 if (socketConnected) {
@@ -10609,16 +10914,18 @@ define('common/storage/client',[ "common/util/assert", "common/util/guid" ], fun
                     //socket.socket.reconnect();
                 }
             } else {
-                var guid = GUID(), firstConnection = true;
+                var guid = GUID(),
+                    firstConnection = true;
                 callbacks[guid] = {
                     cb: callback,
                     to: setTimeout(callbackTimeout, gmeConfig.storage.timeout, guid)
                 };
 
-                var IOReady = function () {
+                var ioReady = function () {
                     var socketIoOpts = JSON.parse(JSON.stringify(gmeConfig.socketIO)); // Copy these values.
                     if (options.webGMESessionId) {
-                        socketIoOpts.query = 'webGMESessionId=' + options.webGMESessionId; //FIXME this will be undefined in some cases
+                        socketIoOpts.query = 'webGMESessionId=' + options.webGMESessionId;
+                        //FIXME: options.webGMESessionId will be undefined in some cases
                     }
                     socket = IO.connect(_hostAddress, socketIoOpts);
 
@@ -10673,20 +10980,20 @@ define('common/storage/client',[ "common/util/assert", "common/util/guid" ], fun
                 };
 
                 if (options.type === 'browser') {
-                    require([ _hostAddress + "/socket.io/socket.io.js" ], function (io) {
+                    require([_hostAddress + '/socket.io/socket.io.js'], function (io) {
                         IO = io || window.io;
-                        IOReady();
+                        ioReady();
                     });
                 } else {
-                    require([ 'socket.io-client' ], function (io) {
+                    require(['socket.io-client'], function (io) {
                         IO = io;
-                        IOReady();
+                        ioReady();
                     });
                 }
             }
         }
 
-        function closeDatabase (callback) {
+        function closeDatabase(callback) {
             callback = callback || function () {
             };
             if (socketConnected) {
@@ -10696,7 +11003,7 @@ define('common/storage/client',[ "common/util/assert", "common/util/guid" ], fun
                     to: setTimeout(callbackTimeout, gmeConfig.storage.timeout, guid)
                 };
                 socket.emit('closeDatabase', function (err) {
-                    if(callbacks[guid]){
+                    if (callbacks[guid]) {
                         clearTimeout(callbacks[guid].to);
                         delete callbacks[guid];
                         callback(err);
@@ -10713,7 +11020,7 @@ define('common/storage/client',[ "common/util/assert", "common/util/guid" ], fun
             }
         }
 
-        function fsyncDatabase (callback, projectName) {
+        function fsyncDatabase(callback, projectName) {
             ASSERT(typeof callback === 'function');
             if (socketConnected) {
                 var guid = GUID();
@@ -10722,7 +11029,7 @@ define('common/storage/client',[ "common/util/assert", "common/util/guid" ], fun
                     to: setTimeout(callbackTimeout, gmeConfig.storage.timeout, guid)
                 };
                 socket.emit('fsyncDatabase', projectName, function (err) {
-                    if(callbacks[guid]){
+                    if (callbacks[guid]) {
                         clearTimeout(callbacks[guid].to);
                         delete callbacks[guid];
                         callback(err);
@@ -10733,7 +11040,7 @@ define('common/storage/client',[ "common/util/assert", "common/util/guid" ], fun
             }
         }
 
-        function getDatabaseStatus (oldstatus, callback) {
+        function getDatabaseStatus(oldstatus, callback) {
             ASSERT(typeof callback === 'function');
             if (status !== oldstatus) {
                 callback(null, status);
@@ -10751,22 +11058,22 @@ define('common/storage/client',[ "common/util/assert", "common/util/guid" ], fun
                         if (callbacks[guid]) {
                             clearTimeout(getDbStatusCallbacks[guid].to);
                             delete getDbStatusCallbacks[guid];
-                            callback(err,newstatus);
+                            callback(err, newstatus);
                             //TODO why this common error check is missing and what was redo meant???
                             /*commonErrorCheck(err, function (err2, needRedo) {
-                                if (needRedo) {
-                                    getDatabaseStatus(oldstatus, callback);
-                                } else {
-                                    callback(err2, newstatus);
-                                }
-                            });*/
+                             if (needRedo) {
+                             getDatabaseStatus(oldstatus, callback);
+                             } else {
+                             callback(err2, newstatus);
+                             }
+                             });*/
                         }
                     });
                 }
             }
         }
 
-        function getProjectNames (callback) {
+        function getProjectNames(callback) {
             ASSERT(typeof callback === 'function');
             if (socketConnected) {
                 var guid = GUID();
@@ -10775,7 +11082,7 @@ define('common/storage/client',[ "common/util/assert", "common/util/guid" ], fun
                     to: setTimeout(callbackTimeout, gmeConfig.storage.timeout, guid)
                 };
                 socket.emit('getProjectNames', function (err, names) {
-                    if(callbacks[guid]){
+                    if (callbacks[guid]) {
                         clearTimeout(callbacks[guid].to);
                         delete callbacks[guid];
                         callback(err, names);
@@ -10786,7 +11093,7 @@ define('common/storage/client',[ "common/util/assert", "common/util/guid" ], fun
             }
         }
 
-        function getAllowedProjectNames (callback){
+        function getAllowedProjectNames(callback) {
             ASSERT(typeof callback === 'function');
             if (socketConnected) {
                 var guid = GUID();
@@ -10795,7 +11102,7 @@ define('common/storage/client',[ "common/util/assert", "common/util/guid" ], fun
                     to: setTimeout(callbackTimeout, gmeConfig.storage.timeout, guid)
                 };
                 socket.emit('getAllowedProjectNames', function (err, names) {
-                    if(callbacks[guid]){
+                    if (callbacks[guid]) {
                         clearTimeout(callbacks[guid].to);
                         delete callbacks[guid];
                         callback(err, names);
@@ -10805,7 +11112,8 @@ define('common/storage/client',[ "common/util/assert", "common/util/guid" ], fun
                 callback(new Error(ERROR_DISCONNECTED));
             }
         }
-        function getAuthorizationInfo (name,callback){
+
+        function getAuthorizationInfo(name, callback) {
             ASSERT(typeof callback === 'function');
             if (socketConnected) {
                 var guid = GUID();
@@ -10814,7 +11122,7 @@ define('common/storage/client',[ "common/util/assert", "common/util/guid" ], fun
                     to: setTimeout(callbackTimeout, gmeConfig.storage.timeout, guid)
                 };
                 socket.emit('getAuthorizationInfo', name, function (err, authInfo) {
-                    if(callbacks[guid]){
+                    if (callbacks[guid]) {
                         clearTimeout(callbacks[guid].to);
                         delete callbacks[guid];
                         callback(err, authInfo);
@@ -10825,7 +11133,7 @@ define('common/storage/client',[ "common/util/assert", "common/util/guid" ], fun
             }
         }
 
-        function deleteProject (project, callback) {
+        function deleteProject(project, callback) {
             ASSERT(typeof callback === 'function');
             if (socketConnected) {
                 var guid = GUID();
@@ -10834,7 +11142,7 @@ define('common/storage/client',[ "common/util/assert", "common/util/guid" ], fun
                     to: setTimeout(callbackTimeout, gmeConfig.storage.timeout, guid)
                 };
                 socket.emit('deleteProject', project, function (err) {
-                    if(callbacks[guid]){
+                    if (callbacks[guid]) {
                         clearTimeout(callbacks[guid].to);
                         delete callbacks[guid];
                         callback(err);
@@ -10845,23 +11153,24 @@ define('common/storage/client',[ "common/util/assert", "common/util/guid" ], fun
             }
         }
 
-        function getNextServerEvent(latestGuid,callback){
-            if(socketConnected){
+        function getNextServerEvent(latestGuid, callback) {
+            if (socketConnected) {
                 var guid = GUID();
                 callbacks[guid] = {
                     cb: callback,
                     to: setTimeout(callbackTimeout, gmeConfig.storage.timeout, guid)
                 };
-                socket.emit('getNextServerEvent',latestGuid,function(err,newGuid,eventParams){
-                    if(callbacks[guid]){
+                socket.emit('getNextServerEvent', latestGuid, function (err, newGuid, eventParams) {
+                    if (callbacks[guid]) {
                         clearTimeout(callbacks[guid].to);
                         delete callbacks[guid];
-                        callback(err,newGuid,eventParams);
+                        callback(err, newGuid, eventParams);
                     }
                 });
             }
         }
-        function openProject (project, callback) {
+
+        function openProject(project, callback) {
             ASSERT(typeof callback === 'function');
             var ownId = GUID();
             if (projects[project]) {
@@ -10895,8 +11204,8 @@ define('common/storage/client',[ "common/util/assert", "common/util/guid" ], fun
                                     setBranchHash: setBranchHash,
                                     getCommits: getCommits,
                                     makeCommit: makeCommit,
-                  getCommonAncestorCommit: getCommonAncestorCommit,
-                                    ID_NAME: "_id"
+                                    getCommonAncestorCommit: getCommonAncestorCommit,
+                                    ID_NAME: '_id'
                                 };
                                 callback(null, projects[project]);
                             }
@@ -10910,7 +11219,7 @@ define('common/storage/client',[ "common/util/assert", "common/util/guid" ], fun
             }
 
             //functions
-            function fsync(callback){
+            function fsync(callback) {
                 ASSERT(typeof callback === 'function');
                 if (socketConnected) {
                     var guid = GUID();
@@ -10920,7 +11229,7 @@ define('common/storage/client',[ "common/util/assert", "common/util/guid" ], fun
                     };
                     flushSaveBucket();
                     socket.emit('fsyncDatabase', project, function (err) {
-                        if(callbacks[guid]){
+                        if (callbacks[guid]) {
                             clearTimeout(callbacks[guid].to);
                             delete callbacks[guid];
                             callback(err);
@@ -10931,7 +11240,7 @@ define('common/storage/client',[ "common/util/assert", "common/util/guid" ], fun
                 }
             }
 
-            function getDatabaseStatus (oldstatus, callback) {
+            function getDatabaseStatus(oldstatus, callback) {
                 ASSERT(typeof callback === 'function');
                 if (status !== oldstatus) {
                     callback(null, status);
@@ -10956,7 +11265,7 @@ define('common/storage/client',[ "common/util/assert", "common/util/guid" ], fun
                 }
             }
 
-            function closeProject (callback) {
+            function closeProject(callback) {
                 callback = callback || function () {
                 };
                 if (unRegisterProject(ownId, project)) {
@@ -10977,24 +11286,25 @@ define('common/storage/client',[ "common/util/assert", "common/util/guid" ], fun
                 }
             }
 
-            function _loadObject(hash,callback){
-                socket.emit('loadObject',project,hash,callback);
+            function _loadObject(hash, callback) {
+                socket.emit('loadObject', project, hash, callback);
             }
-            function loadObject (hash, callback) {
+
+            function loadObject(hash, callback) {
                 ASSERT(typeof callback === 'function');
                 if (socketConnected) {
-                    if(loadBucketSize === 0){
+                    if (loadBucketSize === 0) {
                         ++loadBucketSize;
-                        loadBucket.push({hash:hash,cb:callback});
-                        loadBucketTimer = setTimeout(function(){
+                        loadBucket.push({hash: hash, cb: callback});
+                        loadBucketTimer = setTimeout(function () {
                             var myBucket = loadBucket;
                             loadBucket = [];
                             loadBucketTimer = null;
                             loadBucketSize = 0;
                             loadObjects(myBucket);
-                        },10);
-                    } else if (loadBucketSize === 99){
-                        loadBucket.push({hash:hash,cb:callback});
+                        }, 10);
+                    } else if (loadBucketSize === 99) {
+                        loadBucket.push({hash: hash, cb: callback});
                         var myBucket = loadBucket;
                         loadBucket = [];
                         clearTimeout(loadBucketTimer);
@@ -11002,7 +11312,7 @@ define('common/storage/client',[ "common/util/assert", "common/util/guid" ], fun
                         loadBucketSize = 0;
                         loadObjects(myBucket);
                     } else {
-                        loadBucket.push({hash:hash,cb:callback});
+                        loadBucket.push({hash: hash, cb: callback});
                         ++loadBucketSize;
                     }
                 } else {
@@ -11013,33 +11323,35 @@ define('common/storage/client',[ "common/util/assert", "common/util/guid" ], fun
             var loadBucket = [],
                 loadBucketSize = 0,
                 loadBucketTimer;
-            function loadObjects (hashedObjects){
-                var hashes = {},i;
-                for(i=0;i<hashedObjects.length;i++){
+
+            function loadObjects(hashedObjects) {
+                var hashes = {},
+                    i;
+                for (i = 0; i < hashedObjects.length; i++) {
                     hashes[hashedObjects[i].hash] = true;
                 }
                 hashes = Object.keys(hashes);
-                socket.emit('loadObjects',project,hashes,function(err,results){
-                    for(i=0;i<hashedObjects.length;i++){
-                        hashedObjects[i].cb(err,results[hashedObjects[i].hash]);
+                socket.emit('loadObjects', project, hashes, function (err, results) {
+                    for (i = 0; i < hashedObjects.length; i++) {
+                        hashedObjects[i].cb(err, results[hashedObjects[i].hash]);
                     }
                 });
 
             }
 
-            function insertObject (object, callback) {
+            function insertObject(object, callback) {
                 ASSERT(typeof callback === 'function');
                 if (socketConnected) {
-                    if(saveBucket.length === 0){
-                        saveBucket.push({object:object,cb:callback});
-                        saveBucketTimer = setTimeout(function(){
-                           flushSaveBucket();
-                        },10);
-                    } else if (saveBucket.length === 99){
-                        saveBucket.push({object:object,cb:callback});
+                    if (saveBucket.length === 0) {
+                        saveBucket.push({object: object, cb: callback});
+                        saveBucketTimer = setTimeout(function () {
+                            flushSaveBucket();
+                        }, 10);
+                    } else if (saveBucket.length === 99) {
+                        saveBucket.push({object: object, cb: callback});
                         flushSaveBucket();
                     } else {
-                        saveBucket.push({object:object,cb:callback});
+                        saveBucket.push({object: object, cb: callback});
                     }
                 } else {
                     callback(new Error(ERROR_DISCONNECTED));
@@ -11049,32 +11361,34 @@ define('common/storage/client',[ "common/util/assert", "common/util/guid" ], fun
             var saveBucket = [],
                 saveBucketTimer;
 
-            function flushSaveBucket(){
+            function flushSaveBucket() {
                 var myBucket = saveBucket;
                 saveBucket = [];
-                try{
+                try {
                     clearTimeout(saveBucketTimer);
-                } catch(e){
+                } catch (e) {
                     //TODO there is no task to do here
                 }
                 saveBucketTimer = null;
-                if(myBucket.length > 0){
+                if (myBucket.length > 0) {
                     insertObjects(myBucket);
                 }
             }
 
-            function insertObjects (objects) {
-                var storeObjects = [],i;
-                for(i=0;i<objects.length;i++){
+            function insertObjects(objects) {
+                var storeObjects = [],
+                    i;
+                for (i = 0; i < objects.length; i++) {
                     storeObjects.push(objects[i].object);
                 }
-                socket.emit('insertObjects',project,storeObjects,function(err){
-                    for(i=0;i<objects.length;i++){
+                socket.emit('insertObjects', project, storeObjects, function (err) {
+                    for (i = 0; i < objects.length; i++) {
                         objects[i].cb(err);
                     }
                 });
             }
-            function _insertObject (object, callback) {
+
+            function _insertObject(object, callback) {
                 ASSERT(typeof callback === 'function');
                 if (socketConnected) {
                     var guid = GUID();
@@ -11093,7 +11407,8 @@ define('common/storage/client',[ "common/util/assert", "common/util/guid" ], fun
                     callback(new Error(ERROR_DISCONNECTED));
                 }
             }
-            function getInfo(callback){
+
+            function getInfo(callback) {
                 ASSERT(typeof callback === 'function');
                 if (socketConnected) {
                     var guid = GUID();
@@ -11101,18 +11416,19 @@ define('common/storage/client',[ "common/util/assert", "common/util/guid" ], fun
                         cb: callback,
                         to: setTimeout(callbackTimeout, gmeConfig.storage.timeout, guid)
                     };
-                    socket.emit('getInfo', project, function (err,info) {
+                    socket.emit('getInfo', project, function (err, info) {
                         if (callbacks[guid]) {
                             clearTimeout(callbacks[guid].to);
                             delete callbacks[guid];
-                            callback(err,info);
+                            callback(err, info);
                         }
                     });
                 } else {
                     callback(new Error(ERROR_DISCONNECTED));
                 }
             }
-            function setInfo(info,callback){
+
+            function setInfo(info, callback) {
                 ASSERT(typeof info === 'object' && typeof callback === 'function');
                 if (socketConnected) {
                     var guid = GUID();
@@ -11132,7 +11448,7 @@ define('common/storage/client',[ "common/util/assert", "common/util/guid" ], fun
                 }
             }
 
-            function findHash (beginning, callback) {
+            function findHash(beginning, callback) {
                 ASSERT(typeof callback === 'function');
                 if (socketConnected) {
                     var guid = GUID();
@@ -11152,7 +11468,7 @@ define('common/storage/client',[ "common/util/assert", "common/util/guid" ], fun
                 }
             }
 
-            function dumpObjects (callback) {
+            function dumpObjects(callback) {
                 ASSERT(typeof callback === 'function');
                 if (socketConnected) {
                     var guid = GUID();
@@ -11172,7 +11488,7 @@ define('common/storage/client',[ "common/util/assert", "common/util/guid" ], fun
                 }
             }
 
-            function getBranchNames (callback) {
+            function getBranchNames(callback) {
                 ASSERT(typeof callback === 'function');
                 if (socketConnected) {
                     var guid = GUID();
@@ -11192,7 +11508,7 @@ define('common/storage/client',[ "common/util/assert", "common/util/guid" ], fun
                 }
             }
 
-            function getBranchHash (branch, oldhash, callback) {
+            function getBranchHash(branch, oldhash, callback) {
                 ASSERT(typeof callback === 'function');
                 var guid = GUID();
                 if (getBranchHashCallbacks[branch]) {
@@ -11221,7 +11537,7 @@ define('common/storage/client',[ "common/util/assert", "common/util/guid" ], fun
 
             }
 
-            function setBranchHash (branch, oldhash, newhash, callback) {
+            function setBranchHash(branch, oldhash, newhash, callback) {
                 ASSERT(typeof callback === 'function');
                 if (socketConnected) {
                     var guid = GUID();
@@ -11242,7 +11558,7 @@ define('common/storage/client',[ "common/util/assert", "common/util/guid" ], fun
                 }
             }
 
-            function getCommits (before, number, callback) {
+            function getCommits(before, number, callback) {
                 ASSERT(typeof callback === 'function');
                 if (socketConnected) {
                     var guid = GUID();
@@ -11262,7 +11578,7 @@ define('common/storage/client',[ "common/util/assert", "common/util/guid" ], fun
                 }
             }
 
-            function makeCommit (parents, roothash, msg, callback) {
+            function makeCommit(parents, roothash, msg, callback) {
                 ASSERT(typeof callback === 'function');
                 if (socketConnected) {
                     var guid = GUID();
@@ -11282,103 +11598,107 @@ define('common/storage/client',[ "common/util/assert", "common/util/guid" ], fun
                 }
             }
 
-      function getCommonAncestorCommit(commitA, commitB, callback) {
-        ASSERT(typeof callback === 'function');
-        if (socketConnected) {
-          var guid = GUID();
-          callbacks[guid] = {
-            cb: callback,
-            to: setTimeout(callbackTimeout, gmeConfig.storage.timeout, guid)
-          };
-          socket.emit('getCommonAncestorCommit', project, commitA, commitB, function (err, commit) {
-            if (callbacks[guid]) {
-              clearTimeout(callbacks[guid].to);
-              delete callbacks[guid];
-              callback(err, commit);
+            function getCommonAncestorCommit(commitA, commitB, callback) {
+                ASSERT(typeof callback === 'function');
+                if (socketConnected) {
+                    var guid = GUID();
+                    callbacks[guid] = {
+                        cb: callback,
+                        to: setTimeout(callbackTimeout, gmeConfig.storage.timeout, guid)
+                    };
+                    socket.emit('getCommonAncestorCommit', project, commitA, commitB, function (err, commit) {
+                        if (callbacks[guid]) {
+                            clearTimeout(callbacks[guid].to);
+                            delete callbacks[guid];
+                            callback(err, commit);
+                        }
+                    });
+                } else {
+                    callback(new Error(ERROR_DISCONNECTED));
+                }
+            }
         }
-          });
-        } else {
-          callback(new Error(ERROR_DISCONNECTED));
-        }
-      }
-    }
 
-        function simpleRequest (parameters,callback){
+        function simpleRequest(parameters, callback) {
             ASSERT(typeof callback === 'function');
-            if(socketConnected){
+            if (socketConnected) {
                 var guid = GUID();
                 callbacks[guid] = {
                     cb: callback,
-                    to: setTimeout(callbackTimeout,100*gmeConfig.storage.timeout, guid)
+                    to: setTimeout(callbackTimeout, 100 * gmeConfig.storage.timeout, guid)
                 };
-                socket.emit('simpleRequest',parameters,function(err,resId){
-                    if(callbacks[guid]){
+                socket.emit('simpleRequest', parameters, function (err, resId) {
+                    if (callbacks[guid]) {
                         clearTimeout(callbacks[guid].to);
                         delete callbacks[guid];
-                        callback(err,resId);
+                        callback(err, resId);
                     }
                 });
             } else {
                 callback(new Error(ERROR_DISCONNECTED));
             }
         }
-        function simpleResult (resultId,callback){
+
+        function simpleResult(resultId, callback) {
             ASSERT(typeof callback === 'function');
-            if(socketConnected){
+            if (socketConnected) {
                 var guid = GUID();
                 callbacks[guid] = {
                     cb: callback,
-                    to: setTimeout(callbackTimeout,100*gmeConfig.storage.timeout, guid)
+                    to: setTimeout(callbackTimeout, 100 * gmeConfig.storage.timeout, guid)
                 };
-                socket.emit('simpleResult',resultId,function(err,result){
-                    if(callbacks[guid]){
+                socket.emit('simpleResult', resultId, function (err, result) {
+                    if (callbacks[guid]) {
                         clearTimeout(callbacks[guid].to);
                         delete callbacks[guid];
-                        callback(err,result);
+                        callback(err, result);
                     }
                 });
             } else {
                 callback(new Error(ERROR_DISCONNECTED));
             }
         }
-        function simpleQuery (workerId,parameters,callback){
+
+        function simpleQuery(workerId, parameters, callback) {
             ASSERT(typeof callback === 'function');
-            if(socketConnected){
+            if (socketConnected) {
                 var guid = GUID();
                 callbacks[guid] = {
                     cb: callback,
-                    to: setTimeout(callbackTimeout,100*gmeConfig.storage.timeout, guid)
+                    to: setTimeout(callbackTimeout, 100 * gmeConfig.storage.timeout, guid)
                 };
-                socket.emit('simpleQuery',workerId,parameters,function(err,result){
-                    if(callbacks[guid]){
+                socket.emit('simpleQuery', workerId, parameters, function (err, result) {
+                    if (callbacks[guid]) {
                         clearTimeout(callbacks[guid].to);
                         delete callbacks[guid];
-                        callback(err,result);
+                        callback(err, result);
                     }
                 });
             } else {
                 callback(new Error(ERROR_DISCONNECTED));
             }
         }
-        function getToken(callback){
+
+        function getToken(callback) {
             ASSERT(typeof callback === 'function');
-            if(socketConnected){
+            if (socketConnected) {
                 var guid = GUID();
                 callbacks[guid] = {
                     cb: callback,
-                    to: setTimeout(callbackTimeout,100*gmeConfig.storage.timeout, guid)
+                    to: setTimeout(callbackTimeout, 100 * gmeConfig.storage.timeout, guid)
                 };
-                socket.emit('getToken',function(err,result){
-                    if(callbacks[guid]){
+                socket.emit('getToken', function (err, result) {
+                    if (callbacks[guid]) {
                         clearTimeout(callbacks[guid].to);
                         delete callbacks[guid];
-                        callback(err,result);
+                        callback(err, result);
                     }
                 });
             } else {
                 callback(new Error(ERROR_DISCONNECTED));
             }
         }
+
         return {
             openDatabase: openDatabase,
             closeDatabase: closeDatabase,
@@ -11396,753 +11716,756 @@ define('common/storage/client',[ "common/util/assert", "common/util/guid" ], fun
             getToken: getToken
         };
     }
+
     return Database;
 });
 
+/*globals define*/
+/*jshint node: true, browser: true*/
+
 /**
- * Created by tkecskes on 5/10/2014.
- */
-;
-/*
- * Copyright (C) 2012-2013 Vanderbilt University, All rights reserved.
- *
- * Author: Tamas Kecskes
+ * @author kecso / https://github.com/kecso
  */
 
-define('common/storage/failsafe',["common/util/assert", "common/util/guid"], function (ASSERT, GUID) {
-  
-  var BRANCH_OBJ_ID = '*branch*'; // MAGIC CONSTANT
-  var BRANCH_STATES = {  // MAGIC CONSTANT
-    SYNC: 'sync',
-    FORKED: 'forked',
-    DISCONNECTED: 'disconnected',
-    AHEAD: 'ahead'
-  };
-
-  function Database(_database, options) {
-    ASSERT(typeof _database === 'object');
-    ASSERT(typeof options === 'object');
-    ASSERT(typeof options.logger !== 'undefined');
-    ASSERT(typeof options.globConf === 'object');
-    var gmeConfig = options.globConf,
-        logger = options.logger.fork('failsafe');
-
-    var exceptionErrors = [],
-        fsId = "FS", // MAGIC CONSTANT
-        dbId = "noID", // MAGIC CONSTANT
-        SEPARATOR = "$", // MAGIC CONSTANT
-        STATUS_CONNECTED = "connected", // MAGIC CONSTANT
-        pendingStorage = {},
-        storage = null;
-
-    function loadPending() {
-      for (var i = 0; i < storage.length; i++) {
-        if (storage.key(i).indexOf(fsId) === 0) {
-          var keyArray = storage.key(i).split(SEPARATOR);
-          ASSERT(keyArray.length === 4);
-          if (keyArray[1] === dbId) {
-            var object = JSON.parse(storage.getItem(storage.key(i)));
-            pendingStorage[keyArray[2]] = object;
-          }
-        }
-      }
-      for (i in pendingStorage) {
-        if (!pendingStorage[i][BRANCH_OBJ_ID]) {
-          pendingStorage[i][BRANCH_OBJ_ID] = {};
-        }
-      }
-    }
-
-    function savePending() {
-      //TODO maybe some check would be good, but not necessarily
-      for (var i in pendingStorage) {
-        storage.setItem(fsId + SEPARATOR + dbId + SEPARATOR + i, JSON.stringify(pendingStorage[i]));
-      }
-    }
-
-    function openDatabase(callback) {
-      if (gmeConfig.storage.failSafe === "local" && localStorage) {
-        storage = localStorage;
-      } else if (gmeConfig.storage.failSafe === "session" && sessionStorage) {
-        storage = sessionStorage;
-      } else if (gmeConfig.storage.failSafe === "memory") {
-        storage = {
-          length: 0,
-          keys: [],
-          data: {},
-          getItem: function (key) {
-            ASSERT(typeof key === "string");
-            return this.data[key];
-          },
-          setItem: function (key, object) {
-            ASSERT(typeof key === "string" && typeof object === "string");
-            this.data[key] = object;
-            this.keys.push(key);
-            this.length++;
-          },
-          key: function (index) {
-            return this.keys[index];
-          }
-        };
-      }
-
-      if (storage) {
-        loadPending();
-        setInterval(savePending, gmeConfig.storage.failSafeFrequency);
-        _database.openDatabase(callback);
-      } else {
-        callback(new Error('cannot initialize fail safe storage'));
-      }
-    }
-
-    function openProject(projectName, callback) {
-      var project = null;
-      var inSync = true;
-      _database.openProject(projectName, function (err, proj) {
-        if (!err && proj) {
-          project = proj;
-          if (!pendingStorage[projectName]) {
-            pendingStorage[projectName] = {};
-            pendingStorage[projectName][BRANCH_OBJ_ID] = {};
-          }
-          callback(null, {
-            fsyncDatabase: project.fsyncDatabase,
-            getDatabaseStatus: project.getDatabaseStatus,
-            closeProject: project.closeProject,
-            loadObject: loadObject,
-            insertObject: insertObject,
-            getInfo: project.getInfo,
-            setInfo: project.setInfo,
-            findHash: project.findHash,
-            dumpObjects: project.dumpObjects,
-            getBranchNames: getBranchNames,
-            getBranchHash: getBranchHash,
-            setBranchHash: setBranchHash,
-            getCommits: project.getCommits,
-            makeCommit: project.makeCommit,
-            getCommonAncestorCommit: project.getCommonAncestorCommit,
-            ID_NAME: project.ID_NAME
-          });
-        } else {
-          callback(err, project);
-        }
-      });
-
-      function synchronise(callback) {
-        if (pendingStorage[projectName]) {
-          var objects = [];
-          var count = 0;
-          var savingObject = function (object, cb) {
-            project.insertObject(object, function (err) {
-              if (err) {
-                if (!pendingStorage[projectName]) {
-                  pendingStorage[projectName] = {};
-                }
-                pendingStorage[projectName][object._id] = object;
-              }
-              cb();
-            });
-          };
-          var objectProcessed = function () {
-            if (--count === 0) {
-              callback();
-            }
-          };
-
-          for (var i in pendingStorage[projectName]) {
-            if (i !== BRANCH_OBJ_ID) {
-              objects.push(pendingStorage[projectName][i]);
-            }
-          }
-          var branchObj = pendingStorage[projectName][BRANCH_OBJ_ID];
-          pendingStorage[projectName] = {};
-          pendingStorage[projectName][BRANCH_OBJ_ID] = branchObj;
-
-          //synchronizing the branches
-          var aheadBranches = [];
-          for (i in pendingStorage[projectName][BRANCH_OBJ_ID]) {
-            if (pendingStorage[projectName][BRANCH_OBJ_ID][i].state === BRANCH_STATES.DISCONNECTED) {
-              if (pendingStorage[projectName][BRANCH_OBJ_ID][i].local.length > 0) {
-                pendingStorage[projectName][BRANCH_OBJ_ID][i].state = BRANCH_STATES.AHEAD;
-                //we try to save our local head
-                aheadBranches.push(i);
-              } else {
-                pendingStorage[projectName][BRANCH_OBJ_ID][i].state = BRANCH_STATES.SYNC;
-              }
-            }
-          }
-
-          count = objects.length + aheadBranches.length;
-          for (i = 0; i < aheadBranches.length; i++) {
-            synchroniseBranch(aheadBranches[i], objectProcessed);
-          }
-          for (i = 0; i < objects.length; i++) {
-            savingObject(objects[i], objectProcessed);
-          }
-          if (objects.length === 0) {
-            callback();
-          }
-        } else {
-          callback();
-        }
-      }
-
-      function synchroniseBranch(branchname, callback) {
-        var branchObj = pendingStorage[projectName][BRANCH_OBJ_ID][branchname];
-        project.getBranchHash(branchname, branchObj.local[0], function (err, newhash, forked) {
-          if (!err && newhash) {
-            var index = branchObj.unackedSentHashes.indexOf(newhash);
-            if (index !== -1) {
-              // the server will catch up eventually...
-            } else if (branchObj.local.indexOf(newhash) !== -1) {
-              project.setBranchHash(branchname, newhash, branchObj.local[0], callback);
-            } else {
-              //we forked
-              branchObj.state = BRANCH_STATES.FORKED;
-              branchObj.fork = newhash;
-              callback(null);
-            }
-          } else {
-            callback(err);
-          }
-        });
-      }
-
-      function errorMode() {
-        if (inSync) {
-          inSync = false;
-          for (var i in pendingStorage[projectName][BRANCH_OBJ_ID]) {
-            if (pendingStorage[projectName][BRANCH_OBJ_ID][i].state !== BRANCH_STATES.FORKED) {
-              pendingStorage[projectName][BRANCH_OBJ_ID][i].state = BRANCH_STATES.DISCONNECTED;
-            }
-          }
-          var checkIfAvailable = function (err, newstate) {
-            if (newstate === STATUS_CONNECTED) {
-              synchronise(function () {
-                inSync = true;
-              });
-            } else {
-              project.getDatabaseStatus(newstate, checkIfAvailable);
-            }
-          };
-          project.getDatabaseStatus(null, checkIfAvailable);
-        }
-      }
-
-      function loadObject(hash, callback) {
-        project.loadObject(hash, function (err, object) {
-          if (!err && object) {
-            callback(null, object);
-          } else {
-            errorMode();
-            if (exceptionErrors.indexOf(err) !== -1) {
-              callback(err, object);
-            } else {
-              if (pendingStorage[projectName] && pendingStorage[projectName][hash]) {
-                callback(null, pendingStorage[projectName][hash]);
-              } else {
-                callback(err, object);
-              }
-            }
-          }
-        });
-      }
-
-      function insertObject(object, callback) {
-        project.insertObject(object, function (err) {
-          if (err) {
-            errorMode();
-            if (exceptionErrors.indexOf(err) !== -1) {
-              callback(err);
-            } else {
-              //TODO have to check if the id is already taken...
-              if (!pendingStorage[projectName]) {
-                pendingStorage[projectName] = {};
-              }
-              pendingStorage[projectName][object._id] = object;
-              callback(null);
-            }
-          } else {
-            callback(err);
-          }
-        });
-      }
-
-      function getBranchNames(callback) {
-        project.getBranchNames(function (err, names) {
-          //we need the locally stored names either way
-          var locals = {};
-          for (var i in pendingStorage[projectName][BRANCH_OBJ_ID]) {
-            if (pendingStorage[projectName][BRANCH_OBJ_ID][i].local.length > 0) {
-              locals[i] = pendingStorage[projectName][BRANCH_OBJ_ID][i].local[0];
-            } else if (pendingStorage[projectName][BRANCH_OBJ_ID][i].fork === null && pendingStorage[projectName][BRANCH_OBJ_ID][i].remote !== null) {
-              locals[i] = pendingStorage[projectName][BRANCH_OBJ_ID][i].remote;
-            }
-          }
-
-          if (err) {
-            errorMode();
-            if (exceptionErrors.indexOf(err) !== -1) {
-              callback(err);
-            } else {
-              callback(null, locals);
-            }
-          } else {
-            for (i in names) {
-              if (!locals[i]) {
-                locals[i] = names[i];
-              } else if (locals[i] === pendingStorage[projectName][BRANCH_OBJ_ID][i].remote) {
-                locals[i] = names[i];
-              }
-            }
-            callback(err, locals);
-          }
-        });
-      }
-
-      function getBranchHash(branch, oldhash, callback) {
-        if (!pendingStorage[projectName][BRANCH_OBJ_ID][branch]) {
-          pendingStorage[projectName][BRANCH_OBJ_ID][branch] = {
-            local: [],
-            fork: null,
-            state: BRANCH_STATES.SYNC,
-            remote: null
-          };
-        }
-        var branchObj = pendingStorage[projectName][BRANCH_OBJ_ID][branch];
-
-        if (branchObj.state === BRANCH_STATES.SYNC || branchObj.state === BRANCH_STATES.AHEAD) {
-          project.getBranchHash(branch, oldhash, function (err, newhash, forkedhash) {
-            if (!err && newhash) {
-              branchObj.remote = newhash;
-            }
-            switch (branchObj.state) {
-              case BRANCH_STATES.SYNC:
-                callback(err, newhash, forkedhash);
-                break;
-              case BRANCH_STATES.AHEAD:
-                if (err) {
-                  callback(err, newhash, forkedhash);
-                } else {
-                  var index = branchObj.unackedSentHashes.indexOf(newhash);
-                  if (newhash && index !== -1) {
-                    callback(err, newhash, forkedhash);
-                  } else {
-                    //we forked!!!
-                    branchObj.state = BRANCH_STATES.FORKED;
-                    branchObj.fork = newhash;
-                    callback(null, branchObj.local[0], branchObj.fork);
-                  }
-                }
-                break;
-              case BRANCH_STATES.DISCONNECTED:
-                callback(null, branchObj.local[0], branchObj.fork);
-                break;
-              default://forked
-                callback(null, branchObj.local[0], branchObj.fork);
-                break;
-            }
-          });
-        } else {
-          //served locally
-          ASSERT((branchObj.local[0] && branchObj.local[0] !== "") || branchObj.remote);
-          var myhash = null;
-          if (branchObj.local[0]) {
-            myhash = branchObj.local[0];
-          } else {
-            myhash = branchObj.remote;
-          }
-
-          if (myhash === oldhash) {
-            setTimeout(function () {
-              callback(null, oldhash, branchObj.fork);
-            }, gmeConfig.storage.timeout);
-          } else {
-            callback(null, myhash, branchObj.fork);
-          }
-
-        }
-      }
-
-      function setBranchHash(branch, oldhash, newhash, callback) {
-        ASSERT(typeof oldhash === 'string' && typeof newhash === 'string');
-        if (!pendingStorage[projectName][BRANCH_OBJ_ID][branch]) {
-          pendingStorage[projectName][BRANCH_OBJ_ID][branch] = {
-            local: [],
-            fork: null,
-            state: BRANCH_STATES.SYNC
-          };
-        }
-        var branchObj = pendingStorage[projectName][BRANCH_OBJ_ID][branch];
-
-        var returnFunction = function (err) {
-          if (!err) {
-            var index = branchObj.local.indexOf(newhash);
-            // setBranchHash may return out of order, so this will not hold: ASSERT(index !== -1 || branchObj.state === BRANCH_STATES.SYNC);
-            if (index !== -1) {
-              branchObj.local.splice(index, branchObj.local.length - index);
-            }
-            index = branchObj.unackedSentHashes.indexOf(newhash);
-            if (index !== -1) {
-              branchObj.unackedSentHashes.splice(index + 1, branchObj.unackedSentHashes.length);
-            }
-            if (branchObj.local.length === 0) {
-              branchObj.state = BRANCH_STATES.SYNC;
-            }
-          } else {
-            /*//we go to disconnected state
-             ASSERT(branchObj.local.length > 0);
-             if(branchObj.state !== BRANCH_STATES.DISCONNECTED){
-             branchObj.state = BRANCH_STATES.DISCONNECTED;
-             var reSyncBranch = function(err,newhash,forkedhash){
-             if(!err && newhash){
-             if(branchObj.local.indexOf(newhash) === -1){
-             //we forked
-             branchObj.fork = newhash;
-             branchObj.state = BRANCH_STATES.FORKED;
-             } else {
-             setBranchHash(branch,newhash,branchObj.local[0],function(){});
-             }
-             } else {
-             //timeout or something not correct, so we should retry
-             project.getBranchHash(branch,branchObj.local[0],reSyncBranch);
-             }
-             };
-             project.getBranchHash(branch,branchObj.local[0],reSyncBranch);
-             }*/
-            //we have ancountered an error
-            errorMode();
-          }
-        };
-
-        switch (branchObj.state) {
-          case BRANCH_STATES.SYNC:
-            ASSERT(branchObj.local.length === 0);
-            branchObj.state = BRANCH_STATES.AHEAD;
-            branchObj.local = [newhash, oldhash];
-            branchObj.unackedSentHashes = [newhash, oldhash];
-            project.setBranchHash(branch, oldhash, newhash, returnFunction);
-            callback(null);
-            return;
-          case BRANCH_STATES.AHEAD:
-            ASSERT(branchObj.local.length > 0);
-            if (oldhash === branchObj.local[0]) {
-              branchObj.local.unshift(newhash);
-              branchObj.unackedSentHashes.unshift(newhash);
-              project.setBranchHash(branch, oldhash, newhash, returnFunction);
-              callback(null);
-            } else {
-              callback(new Error("branch hash mismatch"));
-            }
-            return;
-          case BRANCH_STATES.DISCONNECTED:
-            /*ASSERT(branchObj.local.length > 0 || branchObj.remote);
-             if(oldhash === branchObj.local[0] || oldhash === branchObj.remote){
-             if(branchObj.local.length === 0){
-             branchObj.local = [newhash,oldhash];
-             } else {
-             branchObj.local.unshift(newhash);
-             }
-             callback(null);
-             } else {
-             callback(new Error("branch hash mismatch"));
-             }*/
-            if (branchObj.local.length === 0) {
-              branchObj.local = [newhash, oldhash];
-              callback(null);
-            } else {
-              if (oldhash === branchObj.local[0]) {
-                branchObj.local.unshift(newhash);
-                callback(null);
-              } else {
-                callback(new Error("branch hash mismatch"));
-              }
-            }
-            return;
-          default: //BRANCH_STATES.FORKED
-            ASSERT(branchObj.local.length > 0 && branchObj.fork);
-            if (oldhash === branchObj.local[0]) {
-              if (branchObj.fork === newhash) {
-                //clearing the forked leg
-                branchObj.fork = null;
-                branchObj.state = BRANCH_STATES.SYNC;
-                branchObj.local = [];
-              } else {
-                branchObj.local.unshift(newhash);
-              }
-              callback(null);
-            } else {
-              callback(new Error("branch hash mismatch"));
-            }
-            return;
-        }
-      }
-    }
-
-    return {
-      openDatabase: openDatabase,
-      closeDatabase: _database.closeDatabase,
-      fsyncDatabase: _database.fsyncDatabase,
-      getProjectNames: _database.getProjectNames,
-      getAllowedProjectNames: _database.getAllowedProjectNames,
-      getAuthorizationInfo: _database.getAuthorizationInfo,
-      getDatabaseStatus: _database.getDatabaseStatus,
-      openProject: openProject,
-      deleteProject: _database.deleteProject,
-      simpleRequest: _database.simpleRequest,
-      simpleResult: _database.simpleResult,
-      simpleQuery: _database.simpleQuery,
-      getNextServerEvent: _database.getNextServerEvent,
-      getToken: _database.getToken
+define('common/storage/failsafe',['common/util/assert'], function (ASSERT) {
+    
+    var BRANCH_OBJ_ID = '*branch*'; // MAGIC CONSTANT
+    var BRANCH_STATES = {  // MAGIC CONSTANT
+        SYNC: 'sync',
+        FORKED: 'forked',
+        DISCONNECTED: 'disconnected',
+        AHEAD: 'ahead'
     };
-  }
 
-  return Database;
+    function Database(_database, options) {
+        ASSERT(typeof _database === 'object');
+        ASSERT(typeof options === 'object');
+        ASSERT(typeof options.logger !== 'undefined');
+        ASSERT(typeof options.globConf === 'object');
+        var gmeConfig = options.globConf;
+        //logger = options.logger.fork('failsafe');
+
+        var exceptionErrors = [],
+            fsId = 'FS', // MAGIC CONSTANT
+            dbId = 'noID', // MAGIC CONSTANT
+            SEPARATOR = '$', // MAGIC CONSTANT
+            STATUS_CONNECTED = 'connected', // MAGIC CONSTANT
+            pendingStorage = {},
+            storage = null;
+
+        function loadPending() {
+            for (var i = 0; i < storage.length; i++) {
+                if (storage.key(i).indexOf(fsId) === 0) {
+                    var keyArray = storage.key(i).split(SEPARATOR);
+                    ASSERT(keyArray.length === 4);
+                    if (keyArray[1] === dbId) {
+                        var object = JSON.parse(storage.getItem(storage.key(i)));
+                        pendingStorage[keyArray[2]] = object;
+                    }
+                }
+            }
+            for (i in pendingStorage) {
+                if (!pendingStorage[i][BRANCH_OBJ_ID]) {
+                    pendingStorage[i][BRANCH_OBJ_ID] = {};
+                }
+            }
+        }
+
+        function savePending() {
+            //TODO maybe some check would be good, but not necessarily
+            for (var i in pendingStorage) {
+                storage.setItem(fsId + SEPARATOR + dbId + SEPARATOR + i, JSON.stringify(pendingStorage[i]));
+            }
+        }
+
+        function openDatabase(callback) {
+            if (gmeConfig.storage.failSafe === 'local' && localStorage) {
+                storage = localStorage;
+            } else if (gmeConfig.storage.failSafe === 'session' && sessionStorage) {
+                storage = sessionStorage;
+            } else if (gmeConfig.storage.failSafe === 'memory') {
+                storage = {
+                    length: 0,
+                    keys: [],
+                    data: {},
+                    getItem: function (key) {
+                        ASSERT(typeof key === 'string');
+                        return this.data[key];
+                    },
+                    setItem: function (key, object) {
+                        ASSERT(typeof key === 'string' && typeof object === 'string');
+                        this.data[key] = object;
+                        this.keys.push(key);
+                        this.length++;
+                    },
+                    key: function (index) {
+                        return this.keys[index];
+                    }
+                };
+            }
+
+            if (storage) {
+                loadPending();
+                setInterval(savePending, gmeConfig.storage.failSafeFrequency);
+                _database.openDatabase(callback);
+            } else {
+                callback(new Error('cannot initialize fail safe storage'));
+            }
+        }
+
+        function openProject(projectName, callback) {
+            var project = null;
+            var inSync = true;
+            _database.openProject(projectName, function (err, proj) {
+                if (!err && proj) {
+                    project = proj;
+                    if (!pendingStorage[projectName]) {
+                        pendingStorage[projectName] = {};
+                        pendingStorage[projectName][BRANCH_OBJ_ID] = {};
+                    }
+                    callback(null, {
+                        fsyncDatabase: project.fsyncDatabase,
+                        getDatabaseStatus: project.getDatabaseStatus,
+                        closeProject: project.closeProject,
+                        loadObject: loadObject,
+                        insertObject: insertObject,
+                        getInfo: project.getInfo,
+                        setInfo: project.setInfo,
+                        findHash: project.findHash,
+                        dumpObjects: project.dumpObjects,
+                        getBranchNames: getBranchNames,
+                        getBranchHash: getBranchHash,
+                        setBranchHash: setBranchHash,
+                        getCommits: project.getCommits,
+                        makeCommit: project.makeCommit,
+                        getCommonAncestorCommit: project.getCommonAncestorCommit,
+                        ID_NAME: project.ID_NAME
+                    });
+                } else {
+                    callback(err, project);
+                }
+            });
+
+            function synchronise(callback) {
+                if (pendingStorage[projectName]) {
+                    var objects = [];
+                    var count = 0;
+                    var savingObject = function (object, cb) {
+                        project.insertObject(object, function (err) {
+                            if (err) {
+                                if (!pendingStorage[projectName]) {
+                                    pendingStorage[projectName] = {};
+                                }
+                                pendingStorage[projectName][object._id] = object;
+                            }
+                            cb();
+                        });
+                    };
+                    var objectProcessed = function () {
+                        if (--count === 0) {
+                            callback();
+                        }
+                    };
+
+                    for (var i in pendingStorage[projectName]) {
+                        if (i !== BRANCH_OBJ_ID) {
+                            objects.push(pendingStorage[projectName][i]);
+                        }
+                    }
+                    var branchObj = pendingStorage[projectName][BRANCH_OBJ_ID];
+                    pendingStorage[projectName] = {};
+                    pendingStorage[projectName][BRANCH_OBJ_ID] = branchObj;
+
+                    //synchronizing the branches
+                    var aheadBranches = [];
+                    for (i in pendingStorage[projectName][BRANCH_OBJ_ID]) {
+                        if (pendingStorage[projectName][BRANCH_OBJ_ID][i].state === BRANCH_STATES.DISCONNECTED) {
+                            if (pendingStorage[projectName][BRANCH_OBJ_ID][i].local.length > 0) {
+                                pendingStorage[projectName][BRANCH_OBJ_ID][i].state = BRANCH_STATES.AHEAD;
+                                //we try to save our local head
+                                aheadBranches.push(i);
+                            } else {
+                                pendingStorage[projectName][BRANCH_OBJ_ID][i].state = BRANCH_STATES.SYNC;
+                            }
+                        }
+                    }
+
+                    count = objects.length + aheadBranches.length;
+                    for (i = 0; i < aheadBranches.length; i++) {
+                        synchroniseBranch(aheadBranches[i], objectProcessed);
+                    }
+                    for (i = 0; i < objects.length; i++) {
+                        savingObject(objects[i], objectProcessed);
+                    }
+                    if (objects.length === 0) {
+                        callback();
+                    }
+                } else {
+                    callback();
+                }
+            }
+
+            function synchroniseBranch(branchname, callback) {
+                var branchObj = pendingStorage[projectName][BRANCH_OBJ_ID][branchname];
+                project.getBranchHash(branchname, branchObj.local[0], function (err, newhash /*, forked*/) {
+                    if (!err && newhash) {
+                        var index = branchObj.unackedSentHashes.indexOf(newhash);
+                        if (index !== -1) {
+                            // the server will catch up eventually...
+                        } else if (branchObj.local.indexOf(newhash) !== -1) {
+                            project.setBranchHash(branchname, newhash, branchObj.local[0], callback);
+                        } else {
+                            //we forked
+                            branchObj.state = BRANCH_STATES.FORKED;
+                            branchObj.fork = newhash;
+                            callback(null);
+                        }
+                    } else {
+                        callback(err);
+                    }
+                });
+            }
+
+            function errorMode() {
+                if (inSync) {
+                    inSync = false;
+                    for (var i in pendingStorage[projectName][BRANCH_OBJ_ID]) {
+                        if (pendingStorage[projectName][BRANCH_OBJ_ID][i].state !== BRANCH_STATES.FORKED) {
+                            pendingStorage[projectName][BRANCH_OBJ_ID][i].state = BRANCH_STATES.DISCONNECTED;
+                        }
+                    }
+                    var checkIfAvailable = function (err, newstate) {
+                        if (newstate === STATUS_CONNECTED) {
+                            synchronise(function () {
+                                inSync = true;
+                            });
+                        } else {
+                            project.getDatabaseStatus(newstate, checkIfAvailable);
+                        }
+                    };
+                    project.getDatabaseStatus(null, checkIfAvailable);
+                }
+            }
+
+            function loadObject(hash, callback) {
+                project.loadObject(hash, function (err, object) {
+                    if (!err && object) {
+                        callback(null, object);
+                    } else {
+                        errorMode();
+                        if (exceptionErrors.indexOf(err) !== -1) {
+                            callback(err, object);
+                        } else {
+                            if (pendingStorage[projectName] && pendingStorage[projectName][hash]) {
+                                callback(null, pendingStorage[projectName][hash]);
+                            } else {
+                                callback(err, object);
+                            }
+                        }
+                    }
+                });
+            }
+
+            function insertObject(object, callback) {
+                project.insertObject(object, function (err) {
+                    if (err) {
+                        errorMode();
+                        if (exceptionErrors.indexOf(err) !== -1) {
+                            callback(err);
+                        } else {
+                            //TODO have to check if the id is already taken...
+                            if (!pendingStorage[projectName]) {
+                                pendingStorage[projectName] = {};
+                            }
+                            pendingStorage[projectName][object._id] = object;
+                            callback(null);
+                        }
+                    } else {
+                        callback(err);
+                    }
+                });
+            }
+
+            function getBranchNames(callback) {
+                project.getBranchNames(function (err, names) {
+                    //we need the locally stored names either way
+                    var locals = {};
+                    for (var i in pendingStorage[projectName][BRANCH_OBJ_ID]) {
+                        if (pendingStorage[projectName][BRANCH_OBJ_ID][i].local.length > 0) {
+                            locals[i] = pendingStorage[projectName][BRANCH_OBJ_ID][i].local[0];
+                        } else if (pendingStorage[projectName][BRANCH_OBJ_ID][i].fork === null &&
+                            pendingStorage[projectName][BRANCH_OBJ_ID][i].remote !== null) {
+
+                            locals[i] = pendingStorage[projectName][BRANCH_OBJ_ID][i].remote;
+                        }
+                    }
+
+                    if (err) {
+                        errorMode();
+                        if (exceptionErrors.indexOf(err) !== -1) {
+                            callback(err);
+                        } else {
+                            callback(null, locals);
+                        }
+                    } else {
+                        for (i in names) {
+                            if (!locals[i]) {
+                                locals[i] = names[i];
+                            } else if (locals[i] === pendingStorage[projectName][BRANCH_OBJ_ID][i].remote) {
+                                locals[i] = names[i];
+                            }
+                        }
+                        callback(err, locals);
+                    }
+                });
+            }
+
+            function getBranchHash(branch, oldhash, callback) {
+                if (!pendingStorage[projectName][BRANCH_OBJ_ID][branch]) {
+                    pendingStorage[projectName][BRANCH_OBJ_ID][branch] = {
+                        local: [],
+                        fork: null,
+                        state: BRANCH_STATES.SYNC,
+                        remote: null
+                    };
+                }
+                var branchObj = pendingStorage[projectName][BRANCH_OBJ_ID][branch];
+
+                if (branchObj.state === BRANCH_STATES.SYNC || branchObj.state === BRANCH_STATES.AHEAD) {
+                    project.getBranchHash(branch, oldhash, function (err, newhash, forkedhash) {
+                        if (!err && newhash) {
+                            branchObj.remote = newhash;
+                        }
+                        switch (branchObj.state) {
+                            case BRANCH_STATES.SYNC:
+                                callback(err, newhash, forkedhash);
+                                break;
+                            case BRANCH_STATES.AHEAD:
+                                if (err) {
+                                    callback(err, newhash, forkedhash);
+                                } else {
+                                    var index = branchObj.unackedSentHashes.indexOf(newhash);
+                                    if (newhash && index !== -1) {
+                                        callback(err, newhash, forkedhash);
+                                    } else {
+                                        //we forked!!!
+                                        branchObj.state = BRANCH_STATES.FORKED;
+                                        branchObj.fork = newhash;
+                                        callback(null, branchObj.local[0], branchObj.fork);
+                                    }
+                                }
+                                break;
+                            case BRANCH_STATES.DISCONNECTED:
+                                callback(null, branchObj.local[0], branchObj.fork);
+                                break;
+                            default://forked
+                                callback(null, branchObj.local[0], branchObj.fork);
+                                break;
+                        }
+                    });
+                } else {
+                    //served locally
+                    ASSERT((branchObj.local[0] && branchObj.local[0] !== '') || branchObj.remote);
+                    var myhash = null;
+                    if (branchObj.local[0]) {
+                        myhash = branchObj.local[0];
+                    } else {
+                        myhash = branchObj.remote;
+                    }
+
+                    if (myhash === oldhash) {
+                        setTimeout(function () {
+                            callback(null, oldhash, branchObj.fork);
+                        }, gmeConfig.storage.timeout);
+                    } else {
+                        callback(null, myhash, branchObj.fork);
+                    }
+
+                }
+            }
+
+            function setBranchHash(branch, oldhash, newhash, callback) {
+                ASSERT(typeof oldhash === 'string' && typeof newhash === 'string');
+                if (!pendingStorage[projectName][BRANCH_OBJ_ID][branch]) {
+                    pendingStorage[projectName][BRANCH_OBJ_ID][branch] = {
+                        local: [],
+                        fork: null,
+                        state: BRANCH_STATES.SYNC
+                    };
+                }
+                var branchObj = pendingStorage[projectName][BRANCH_OBJ_ID][branch];
+
+                var returnFunction = function (err) {
+                    if (!err) {
+                        var index = branchObj.local.indexOf(newhash);
+                        // setBranchHash may return out of order, so this will not hold:
+                        // ASSERT(index !== -1 || branchObj.state === BRANCH_STATES.SYNC);
+                        if (index !== -1) {
+                            branchObj.local.splice(index, branchObj.local.length - index);
+                        }
+                        index = branchObj.unackedSentHashes.indexOf(newhash);
+                        if (index !== -1) {
+                            branchObj.unackedSentHashes.splice(index + 1, branchObj.unackedSentHashes.length);
+                        }
+                        if (branchObj.local.length === 0) {
+                            branchObj.state = BRANCH_STATES.SYNC;
+                        }
+                    } else {
+                        /*//we go to disconnected state
+                         ASSERT(branchObj.local.length > 0);
+                         if(branchObj.state !== BRANCH_STATES.DISCONNECTED){
+                         branchObj.state = BRANCH_STATES.DISCONNECTED;
+                         var reSyncBranch = function(err,newhash,forkedhash){
+                         if(!err && newhash){
+                         if(branchObj.local.indexOf(newhash) === -1){
+                         //we forked
+                         branchObj.fork = newhash;
+                         branchObj.state = BRANCH_STATES.FORKED;
+                         } else {
+                         setBranchHash(branch,newhash,branchObj.local[0],function(){});
+                         }
+                         } else {
+                         //timeout or something not correct, so we should retry
+                         project.getBranchHash(branch,branchObj.local[0],reSyncBranch);
+                         }
+                         };
+                         project.getBranchHash(branch,branchObj.local[0],reSyncBranch);
+                         }*/
+                        //we have ancountered an error
+                        errorMode();
+                    }
+                };
+
+                switch (branchObj.state) {
+                    case BRANCH_STATES.SYNC:
+                        ASSERT(branchObj.local.length === 0);
+                        branchObj.state = BRANCH_STATES.AHEAD;
+                        branchObj.local = [newhash, oldhash];
+                        branchObj.unackedSentHashes = [newhash, oldhash];
+                        project.setBranchHash(branch, oldhash, newhash, returnFunction);
+                        callback(null);
+                        return;
+                    case BRANCH_STATES.AHEAD:
+                        ASSERT(branchObj.local.length > 0);
+                        if (oldhash === branchObj.local[0]) {
+                            branchObj.local.unshift(newhash);
+                            branchObj.unackedSentHashes.unshift(newhash);
+                            project.setBranchHash(branch, oldhash, newhash, returnFunction);
+                            callback(null);
+                        } else {
+                            callback(new Error('branch hash mismatch'));
+                        }
+                        return;
+                    case BRANCH_STATES.DISCONNECTED:
+                        /*ASSERT(branchObj.local.length > 0 || branchObj.remote);
+                         if(oldhash === branchObj.local[0] || oldhash === branchObj.remote){
+                         if(branchObj.local.length === 0){
+                         branchObj.local = [newhash,oldhash];
+                         } else {
+                         branchObj.local.unshift(newhash);
+                         }
+                         callback(null);
+                         } else {
+                         callback(new Error('branch hash mismatch'));
+                         }*/
+                        if (branchObj.local.length === 0) {
+                            branchObj.local = [newhash, oldhash];
+                            callback(null);
+                        } else {
+                            if (oldhash === branchObj.local[0]) {
+                                branchObj.local.unshift(newhash);
+                                callback(null);
+                            } else {
+                                callback(new Error('branch hash mismatch'));
+                            }
+                        }
+                        return;
+                    default: //BRANCH_STATES.FORKED
+                        ASSERT(branchObj.local.length > 0 && branchObj.fork);
+                        if (oldhash === branchObj.local[0]) {
+                            if (branchObj.fork === newhash) {
+                                //clearing the forked leg
+                                branchObj.fork = null;
+                                branchObj.state = BRANCH_STATES.SYNC;
+                                branchObj.local = [];
+                            } else {
+                                branchObj.local.unshift(newhash);
+                            }
+                            callback(null);
+                        } else {
+                            callback(new Error('branch hash mismatch'));
+                        }
+                        return;
+                }
+            }
+        }
+
+        return {
+            openDatabase: openDatabase,
+            closeDatabase: _database.closeDatabase,
+            fsyncDatabase: _database.fsyncDatabase,
+            getProjectNames: _database.getProjectNames,
+            getAllowedProjectNames: _database.getAllowedProjectNames,
+            getAuthorizationInfo: _database.getAuthorizationInfo,
+            getDatabaseStatus: _database.getDatabaseStatus,
+            openProject: openProject,
+            deleteProject: _database.deleteProject,
+            simpleRequest: _database.simpleRequest,
+            simpleResult: _database.simpleResult,
+            simpleQuery: _database.simpleQuery,
+            getNextServerEvent: _database.getNextServerEvent,
+            getToken: _database.getToken
+        };
+    }
+
+    return Database;
 });
 
-/*
- * Copyright (C) 2012-2013 Vanderbilt University, All rights reserved.
- *
- * Author: Miklos Maroti
+/*globals define*/
+/*jshint node: true, browser: true*/
+
+/**
+ * @author mmaroti / https://github.com/mmaroti
  */
 
-define('common/storage/cache',[ "common/util/assert" ], function (ASSERT) {
-	
+define('common/storage/cache',['common/util/assert'], function (ASSERT) {
+    
 
-	var Lock = function () {
-		var waiters = [];
+    var Lock = function () {
+        var waiters = [];
 
-		return {
-			lock: function (func) {
-				waiters.push(func);
-				if (waiters.length === 1) {
-					func();
-				}
-			},
+        return {
+            lock: function (func) {
+                waiters.push(func);
+                if (waiters.length === 1) {
+                    func();
+                }
+            },
 
-			unlock: function () {
+            unlock: function () {
                 waiters.shift();
-				if (waiters.length >= 1) {
-					var func = waiters[0];
-					func();
-				}
-			}
-		};
-	};
+                if (waiters.length >= 1) {
+                    var func = waiters[0];
+                    func();
+                }
+            }
+        };
+    };
 
-	var Database = function (database, options) {
+    var Database = function (database, options) {
         ASSERT(typeof options === 'object');
         ASSERT(typeof options.logger !== 'undefined');
         ASSERT(typeof options.globConf === 'object');
         var gmeConfig = options.globConf,
             logger = options.logger.fork('cache');
         logger.debug('Initializing');
-		ASSERT(typeof database === "object" && typeof gmeConfig === "object");
+        ASSERT(typeof database === 'object' && typeof gmeConfig === 'object');
 
-		var projects = {};
-		var dlock = new Lock();
+        var projects = {};
+        var dlock = new Lock();
 
-		function openProject (name, callback) {
-			ASSERT(typeof name === "string" && typeof callback === "function");
+        function openProject(name, callback) {
+            ASSERT(typeof name === 'string' && typeof callback === 'function');
 
             logger.debug('openProject', {metadata: {name: name}});
 
-			dlock.lock(function () {
-				if (typeof projects[name] !== "undefined") {
-					projects[name].reopenProject(callback);
-					dlock.unlock();
-				} else {
-					database.openProject(name, function (err, project) {
-						if (err) {
-							callback(err);
-						} else {
-							project = wrapProject(name, project);
-							projects[name] = project;
-							project.reopenProject(callback);
-						}
-						dlock.unlock();
-					});
-				}
-			});
-		}
+            dlock.lock(function () {
+                if (typeof projects[name] !== 'undefined') {
+                    projects[name].reopenProject(callback);
+                    dlock.unlock();
+                } else {
+                    database.openProject(name, function (err, project) {
+                        if (err) {
+                            callback(err);
+                        } else {
+                            project = wrapProject(name, project);
+                            projects[name] = project;
+                            project.reopenProject(callback);
+                        }
+                        dlock.unlock();
+                    });
+                }
+            });
+        }
 
-		function closeDatabase (callback) {
+        function closeDatabase(callback) {
             logger.debug('closeDatabase');
 
             dlock.lock(function () {
-				var n;
-				for (n in projects) {
-					projects[n].abortProject();
-				}
-				projects = {};
-				database.closeDatabase(callback);
-				dlock.unlock();
-			});
-		}
+                var n;
+                for (n in projects) {
+                    projects[n].abortProject();
+                }
+                projects = {};
+                database.closeDatabase(callback);
+                dlock.unlock();
+            });
+        }
 
-		function deleteProject (name, callback) {
+        function deleteProject(name, callback) {
             logger.debug('deleteProject', {metadata: {name: name}});
 
-            if (typeof projects[name] !== "undefined") {
-				projects[name].deleteProject();
-			}
+            if (typeof projects[name] !== 'undefined') {
+                projects[name].deleteProject();
+            }
 
-			database.deleteProject(name, callback);
-		}
+            database.deleteProject(name, callback);
+        }
 
-		function wrapProject (name, project) {
-			var ID_NAME = project.ID_NAME;
+        function wrapProject(name, project) {
+            var ID_NAME = project.ID_NAME;
 
-			var refcount = 0;
-			var missing = {};
-			var backup = {};
-			var cache = {};
-			var cacheSize = 0;
+            var refcount = 0;
+            var missing = {};
+            var backup = {};
+            var cache = {};
+            var cacheSize = 0;
 
             var wrapLogger = logger.fork('wrapProject:' + name);
             wrapLogger.debug('Initializing');
 
             function tryFreeze(o) {
-				try{
-					Object.freeze(o);
-				}
-				catch(e){
-					//TODO find the proper answer why this can occur
-					return;
-				}
-			}
+                try {
+                    Object.freeze(o);
+                }
+                catch (e) {
+                    //TODO find the proper answer why this can occur
+                    return;
+                }
+            }
 
-			function maybeFreeze(o) {
-				if (o !== null && typeof o === "object") {
-					deepFreeze(o);
-				}
-			}
+            function maybeFreeze(o) {
+                if (o !== null && typeof o === 'object') {
+                    deepFreeze(o);
+                }
+            }
 
-			var deepFreeze = function (obj) {
-				ASSERT(typeof obj === "object");
+            var deepFreeze = function (obj) {
+                ASSERT(typeof obj === 'object');
 
-				tryFreeze(obj);
+                tryFreeze(obj);
 
-				var key;
-				for (key in obj) {
-					maybeFreeze(obj[key]);
-				}
-			};
-			if (gmeConfig.debug === false) {
-				deepFreeze = function () { };
-			}
+                var key;
+                for (key in obj) {
+                    maybeFreeze(obj[key]);
+                }
+            };
+            if (gmeConfig.debug === false) {
+                deepFreeze = function () {
+                };
+            }
 
-			function cacheInsert (key, obj) {
-				ASSERT(typeof cache[key] === "undefined" && obj[ID_NAME] === key);
+            function cacheInsert(key, obj) {
+                ASSERT(typeof cache[key] === 'undefined' && obj[ID_NAME] === key);
                 wrapLogger.debug('cacheInsert', {metadata: key});
 
-				deepFreeze(obj);
-				cache[key] = obj;
+                deepFreeze(obj);
+                cache[key] = obj;
 
-				if (++cacheSize >= gmeConfig.storage.cache) {
-					backup = cache;
-					cache = {};
-					cacheSize = 0;
-				}
-			}
+                if (++cacheSize >= gmeConfig.storage.cache) {
+                    backup = cache;
+                    cache = {};
+                    cacheSize = 0;
+                }
+            }
 
-			function loadObject (key, callback) {
-				ASSERT(typeof key === "string" && typeof callback === "function");
-				ASSERT(project !== null);
+            function loadObject(key, callback) {
+                ASSERT(typeof key === 'string' && typeof callback === 'function');
+                ASSERT(project !== null);
                 wrapLogger.debug('loadObject', {metadata: key});
 
-				var obj = cache[key];
-				if (typeof obj === "undefined") {
-					obj = backup[key];
-					if (typeof obj === "undefined") {
-						obj = missing[key];
-						if (typeof obj === "undefined") {
-							obj = [ callback ];
-							missing[key] = obj;
-							project.loadObject(key, function (err, obj2) {
-								ASSERT(typeof obj2 === "object" || typeof obj2 === "undefined");
+                var obj = cache[key];
+                if (typeof obj === 'undefined') {
+                    obj = backup[key];
+                    if (typeof obj === 'undefined') {
+                        obj = missing[key];
+                        if (typeof obj === 'undefined') {
+                            obj = [callback];
+                            missing[key] = obj;
+                            project.loadObject(key, function (err, obj2) {
+                                ASSERT(typeof obj2 === 'object' || typeof obj2 === 'undefined');
 
-								if (obj.length !== 0) {
-									ASSERT(missing[key] === obj);
+                                if (obj.length !== 0) {
+                                    ASSERT(missing[key] === obj);
 
-									delete missing[key];
-									if (!err && obj2) {
-										cacheInsert(key, obj2);
-									}
+                                    delete missing[key];
+                                    if (!err && obj2) {
+                                        cacheInsert(key, obj2);
+                                    }
 
-									var cb;
-									while ((cb = obj.pop())) {
-										cb(err, obj2);
-									}
-								}
-							});
-						} else {
-							obj.push(callback);
-						}
-						return;
-					} else {
-						cacheInsert(key, obj);
-					}
-				}
+                                    var cb;
+                                    while ((cb = obj.pop())) {
+                                        cb(err, obj2);
+                                    }
+                                }
+                            });
+                        } else {
+                            obj.push(callback);
+                        }
+                        return;
+                    } else {
+                        cacheInsert(key, obj);
+                    }
+                }
 
-				ASSERT(typeof obj === "object" && obj !== null && obj[ID_NAME] === key);
-				callback(null, obj);
-			}
+                ASSERT(typeof obj === 'object' && obj !== null && obj[ID_NAME] === key);
+                callback(null, obj);
+            }
 
-			function insertObject (obj, callback) {
-				ASSERT(typeof obj === "object" && obj !== null && typeof callback === "function");
+            function insertObject(obj, callback) {
+                ASSERT(typeof obj === 'object' && obj !== null && typeof callback === 'function');
                 wrapLogger.debug('insertObject');
 
-				var key = obj[ID_NAME];
-				ASSERT(typeof key === "string");
+                var key = obj[ID_NAME];
+                ASSERT(typeof key === 'string');
 
-				if (typeof cache[key] !== "undefined") {
-					callback(null);
-					return;
-				} else {
-					var item = backup[key];
-					cacheInsert(key, obj);
+                if (typeof cache[key] !== 'undefined') {
+                    callback(null);
+                    return;
+                } else {
+                    var item = backup[key];
+                    cacheInsert(key, obj);
 
-					if (typeof item !== "undefined") {
-						callback(null);
-						return;
-					} else {
-						item = missing[key];
-						if (typeof item !== "undefined") {
-							delete missing[key];
+                    if (typeof item !== 'undefined') {
+                        callback(null);
+                        return;
+                    } else {
+                        item = missing[key];
+                        if (typeof item !== 'undefined') {
+                            delete missing[key];
 
-							var cb;
-							while ((cb = item.pop())) {
-								cb(null, obj);
-							}
-						}
-					}
-				}
+                            var cb;
+                            while ((cb = item.pop())) {
+                                cb(null, obj);
+                            }
+                        }
+                    }
+                }
 
-				project.insertObject(obj, callback);
-			}
+                project.insertObject(obj, callback);
+            }
 
-			function abortProject (callback) {
+            function abortProject(callback) {
                 wrapLogger.debug('abortProject');
 
                 if (project !== null) {
-					var p = project;
-					project = null;
-					delete projects[name];
-					deleteProject();
-					p.closeProject(callback);
-				} else if (typeof callback === "function ") {
-					callback(null);
-				}
-			}
+                    var p = project;
+                    project = null;
+                    delete projects[name];
+                    deleteProject();
+                    p.closeProject(callback);
+                } else if (typeof callback === 'function') {
+                    callback(null);
+                }
+            }
 
-			function closeProject (callback) {
+            function closeProject(callback) {
                 wrapLogger.debug('closeProject', {metadata: {refcount: refcount}});
 
                 if (refcount >= 1) {
                     if (--refcount === 0) {
                         abortProject(callback);
-                    } else if (typeof callback === "function") {
+                    } else if (typeof callback === 'function') {
                         callback(null);
                     }
                 } else {
@@ -12150,27 +12473,27 @@ define('common/storage/cache',[ "common/util/assert" ], function (ASSERT) {
                     // nothing to close
                     callback(null);
                 }
-			}
+            }
 
-			function deleteProject () {
-				var key, callbacks, cb, err = new Error("cache closed");
+            function deleteProject() {
+                var key, callbacks, cb, err = new Error('cache closed');
                 wrapLogger.debug('deleteProject');
 
                 for (key in missing) {
-					callbacks = missing[key];
-					while ((cb = callbacks.pop())) {
-						cb(err);
-					}
-				}
+                    callbacks = missing[key];
+                    while ((cb = callbacks.pop())) {
+                        cb(err);
+                    }
+                }
 
-				missing = {};
-				backup = {};
-				cache = {};
-				cacheSize = 0;
-			}
+                missing = {};
+                backup = {};
+                cache = {};
+                cacheSize = 0;
+            }
 
-			function reopenProject (callback) {
-				ASSERT(project !== null && refcount >= 0 && typeof callback === "function");
+            function reopenProject(callback) {
+                ASSERT(project !== null && refcount >= 0 && typeof callback === 'function');
                 wrapLogger.debug('reopenProject');
 
                 var cacheProject = {};
@@ -12187,46 +12510,49 @@ define('common/storage/cache',[ "common/util/assert" ], function (ASSERT) {
 
                 ++refcount;
                 callback(null, cacheProject);
-			}
+            }
 
-			return {
-				reopenProject: reopenProject,
-				abortProject: abortProject,
-				deleteProject: deleteProject
-			};
-		}
+            return {
+                reopenProject: reopenProject,
+                abortProject: abortProject,
+                deleteProject: deleteProject
+            };
+        }
 
         logger.debug('Ready');
-		return {
-			openDatabase: database.openDatabase,
-			closeDatabase: closeDatabase,
-			fsyncDatabase: database.fsyncDatabase,
-			getDatabaseStatus: database.getDatabaseStatus,
-			getProjectNames: database.getProjectNames,
+        return {
+            openDatabase: database.openDatabase,
+            closeDatabase: closeDatabase,
+            fsyncDatabase: database.fsyncDatabase,
+            getDatabaseStatus: database.getDatabaseStatus,
+            getProjectNames: database.getProjectNames,
             getAllowedProjectNames: database.getAllowedProjectNames,
             getAuthorizationInfo: database.getAuthorizationInfo,
-			openProject: openProject,
-			deleteProject: deleteProject,
+            openProject: openProject,
+            deleteProject: deleteProject,
             simpleRequest: database.simpleRequest,
             simpleResult: database.simpleResult,
             simpleQuery: database.simpleQuery,
             getNextServerEvent: database.getNextServerEvent,
             getToken: database.getToken
-		};
-	};
+        };
+    };
 
-	return Database;
+    return Database;
 });
 
 /*globals define*/
+/*jshint node: true, browser: true*/
 
 /**
  * @author kecso / https://github.com/kecso
  */
 
-define('common/storage/commit',['common/util/assert',
+define('common/storage/commit',[
+    'common/util/assert',
     'common/util/key',
-    'common/regexp'], function (ASSERT, GENKEY, REGEXP) {
+    'common/regexp'
+], function (ASSERT, GENKEY, REGEXP) {
     
 
     function Database(_database, _options) {
@@ -12337,224 +12663,26 @@ define('common/storage/commit',['common/util/assert',
     return Database;
 });
 
-/*
- * Copyright (C) 2012-2013 Vanderbilt University, All rights reserved.
- *
- * Author: Tamas Kecskes
+/*globals define*/
+/*jshint node: true, browser: true*/
+
+/**
+ * @author kecso / https://github.com/kecso
  */
 
-define('common/storage/log',[ "common/util/assert" ], function (ASSERT) {
-	
+define('common/storage/clientstorage',[
+    'common/storage/client',
+    'common/storage/failsafe',
+    'common/storage/cache',
+    'common/storage/commit'
+], function (Client, Failsafe, Cache, Commit) {
 
-	function Database (_database, options) {
-		ASSERT(typeof options === "object" && typeof _database === "object");
-        ASSERT(typeof options.logger !== 'undefined');
-		var logger = options.logger.fork('log');
-
-		function openDatabase (callback) {
-			logger.debug('openDatabase()');
-			_database.openDatabase(callback);
-		}
-
-		function closeDatabase (callback) {
-			logger.debug('closeDatabase()');
-			_database.closeDatabase(callback);
-		}
-
-		function fsyncDatabase (callback) {
-			logger.debug('fsyncDatabase()');
-			_database.fsyncDatabase(callback);
-		}
-
-		function getProjectNames (callback) {
-			logger.debug('getProjectNames()');
-			_database.getProjectNames(callback);
-		}
-
-        function getAllowedProjectNames (callback) {
-            logger.debug('getAllowedProjectNames()');
-            _database.getAllowedProjectNames(callback);
-        }
-
-        function getAuthorizationInfo (name,callback) {
-            logger.debug('getAuthorizationInfo('+name+')');
-            _database.getAuthorizationInfo(name,callback);
-        }
-
-		function deleteProject (project, callback) {
-			logger.debug('deleteProject(' + project + ")");
-			_database.deleteProject(project, callback);
-		}
-
-		function getDatabaseStatus (oldstatus, callback) {
-			logger.debug('getDatabaseStatus(' + oldstatus + ")");
-			_database.getDatabaseStatus(oldstatus, callback);
-		}
-
-		function openProject (projectName, callback) {
-			logger.debug('openProject(' + projectName + ")");
-			var project = null;
-			_database.openProject(projectName, function (err, proj) {
-				if (!err && proj) {
-					project = proj;
-					callback(null, {
-						fsyncDatabase: fsyncDatabase,
-						closeProject: closeProject,
-						loadObject: loadObject,
-						getInfo: getInfo,
-						setInfo: setInfo,
-						insertObject: insertObject,
-						findHash: findHash,
-						dumpObjects: dumpObjects,
-						getBranchNames: getBranchNames,
-						getBranchHash: getBranchHash,
-						setBranchHash: setBranchHash,
-						getCommits: getCommits,
-            getCommonAncestorCommit: getCommonAncestorCommit,
-						makeCommit: makeCommit,
-                        setUser: project.setUser,
-						ID_NAME: project.ID_NAME
-					});
-				} else {
-					callback(err, proj);
-				}
-			});
-
-			function fsyncDatabase (callback) {
-				logger.debug(projectName + '.fsyncDatabase()');
-				project.fsyncDatabase(callback);
-			}
-
-			function closeProject (callback) {
-				logger.debug(projectName + '.closeProject()');
-				project.closeProject(callback);
-			}
-
-			function insertObject (object, callback) {
-				logger.debug(projectName + '.insertObject(' + object[project.ID_NAME] + ")");
-				project.insertObject(object, callback);
-			}
-
-			function loadObject (hash, callback) {
-				logger.debug(projectName + '.loadObject(' + hash + ")");
-				project.loadObject(hash, callback);
-			}
-
-			function getInfo (callback){
-				logger.debug(projectName + '.getInfo()');
-				project.getInfo(callback);
-			}
-
-			function setInfo (info,callback){
-				logger.debug(projectName + '.setInfo('+JSON.stringify(info)+')');
-				project.setInfo(info,callback);
-			}
-
-			function findHash (beginning, callback) {
-				logger.debug(projectName + ".findHash(" + beginning + ")");
-				project.findHash(beginning, callback);
-			}
-
-			function dumpObjects (callback) {
-				logger.debug(projectName + "dumpObjects()");
-				project.dumpObjects(callback);
-			}
-
-			function getBranchNames (callback) {
-				logger.debug(projectName + '.getBranchNames()');
-				project.getBranchNames(callback);
-			}
-
-			function getBranchHash (branch, oldhash, callback) {
-				logger.debug(projectName + '.getBranchHash(' + branch + ',' + oldhash + ')');
-				project.getBranchHash(branch, oldhash, function (err, newhash, forked) {
-					logger.debug(projectName + '.getBranchHash(' + branch + ',' + oldhash + ')->(' + JSON.stringify(err) + ',' + newhash + ',' + forked + ')');
-					callback(err, newhash, forked);
-				});
-			}
-
-			function setBranchHash (branch, oldhash, newhash, callback) {
-				logger.debug(projectName + '.setBranchHash(' + branch + ',' + oldhash + ',' + newhash + ')');
-				project.setBranchHash(branch, oldhash, newhash, function (err) {
-					logger.debug(projectName + '.setBranchHash(' + branch + ',' + oldhash + ',' + newhash + ') ->(' + JSON.stringify(err) + ')');
-					callback(err);
-				});
-			}
-
-			function getCommits (before, number, callback) {
-				logger.debug(projectName + '.getCommits(' + before + ',' + number + ')');
-				project.getCommits(before, number, callback);
-			}
-
-			function makeCommit (parents, roothash, msg, callback) {
-				logger.debug(projectName + '.makeCommit(' + parents + ',' + roothash + ',' + msg + ')');
-				return project.makeCommit(parents, roothash, msg, callback);
-			}
-
-      function getCommonAncestorCommit(commitA, commitB, callback) {
-        logger.debug(projectName + '.getCommonAncestorCommit(' + commitA + ',' + commitB + ')');
-        project.getCommonAncestorCommit(commitA, commitB, function (err, commit) {
-          logger.debug(projectName + '.getCommonAncestorCommit(' + commitA + ',' + commitB + ') ->(' + JSON.stringify(err) + ',' + commit + ')');
-          callback(err, commit);
-        });
-		}
-		}
-
-        function simpleRequest (parameters,callback){
-            logger.debug('simpleRequest()');
-            _database.simpleRequest(parameters,callback);
-        }
-        function simpleResult(resultId,callback){
-            logger.debug('simpleResult('+resultId+')');
-            _database.simpleResult(resultId,callback);
-        }
-        function simpleQuery(workerId,parameters,callback){
-            logger.debug('simpleQuery('+workerId+','+parameters+')');
-            _database.simpleResult(resultId,callback);
-        }
-        function getToken(callback){
-            logger.debug('getToken()');
-            _database.getToken(callback);
-        }
-        function getNextServerEvent(latestGuid,callback){
-            logger.debug('getNextServerEvent('+latestGuid+")");
-            _database.getNextServerEvent(latestGuid,callback);
-        }
-		return {
-			openDatabase: openDatabase,
-			closeDatabase: closeDatabase,
-			fsyncDatabase: fsyncDatabase,
-			getProjectNames: getProjectNames,
-            getAllowedProjectNames: getAllowedProjectNames,
-            getAuthorizationInfo: getAuthorizationInfo,
-			getDatabaseStatus: getDatabaseStatus,
-			openProject: openProject,
-			deleteProject: deleteProject,
-            simpleRequest: simpleRequest,
-            simpleResult: simpleResult,
-            simpleQuery: simpleQuery,
-            getNextServerEvent: getNextServerEvent,
-            getToken: getToken
-		};
-	}
-
-	return Database;
-});
-
-/*
- * Copyright (C) 2012 Vanderbilt University, All rights reserved.
- *
- * Author: Tamas Kecskes
- */
-
-define('common/storage/clientstorage',['common/storage/client', 'common/storage/failsafe', 'common/storage/cache', 'common/storage/commit', 'common/storage/log'], function (Client,Failsafe,Cache,Commit,Log) {
     
-    function client(options){
+
+    function client(options) {
         //return  new Log(new Commit(new Cache(new Failsafe(new Client(options),options),options),options),options);
-        return  new Commit(new Cache(new Failsafe(new Client(options),options),options),options);
+        return new Commit(new Cache(new Failsafe(new Client(options), options), options), options);
     }
-
-
 
     return client;
 });
@@ -13066,7 +13194,7 @@ function plural(ms, n, name) {
 
 define("debug", function(){});
 
-/*globals define*/
+/*globals define, debug*/
 /*jshint node:true*/
 /**
  * @author pmeijer / https://github.com/pmeijer
@@ -13079,7 +13207,7 @@ define('js/logger',['debug'], function (_debug) {
     //      ex: localStorage.debug = '*,-socket\.io*,-engine\.io*'
     //      will log all but socket.io and engine.io
     function createLogger(name, options) {
-        var log = typeof debug !== 'undefined' ? debug(name) : _debug(name),
+        var log = typeof debug === 'undefined' ? _debug(name) : debug(name),
             level,
             levels = {
                 silly: 0,
@@ -13156,249 +13284,287 @@ define('js/logger',['debug'], function (_debug) {
         createWithGmeConfig: createWithGmeConfig
     };
 });
-define('common/util/url',[],function(){
-    function decodeUrl(url){
+/*globals define*/
+/*jshint browser: true, node:true*/
+
+/**
+ * @author kecso / https://github.com/kecso
+ */
+
+define('common/util/url',[],function () {
+    
+
+    function decodeUrl(url) {
         var start = url.indexOf('%');
-        while(start>-1){
-            var char = String.fromCharCode(parseInt(url.substr(start+1, 2), 16));
-            url=url.replace(url.substr(start, 3),char);
+        while (start > -1) {
+            var char = String.fromCharCode(parseInt(url.substr(start + 1, 2), 16));
+            url = url.replace(url.substr(start, 3), char);
             start = url.indexOf('%');
         }
         return url;
     }
-    function parseCookie(cookie){
+
+    function parseCookie(cookie) {
         cookie = decodeUrl(cookie);
         var parsed = {};
         var elements = cookie.split(/[;,] */);
-        for(var i=0;i<elements.length;i++){
+        for (var i = 0; i < elements.length; i++) {
             var pair = elements[i].split('=');
             parsed[pair[0]] = pair[1];
         }
         return parsed;
     }
-    function removeSpecialChars(text){
-        text = text.replace(/%23/g,'#');
-        text = text.replace(/%26/g,'&');
-        text = text.replace(/%2f/g,'/');text = text.replace(/%2F/g,'/');
+
+    function removeSpecialChars(text) {
+        text = text.replace(/%23/g, '#');
+        text = text.replace(/%26/g, '&');
+        text = text.replace(/%2f/g, '/');
+        text = text.replace(/%2F/g, '/');
         return text;
     }
-    function addSpecialChars(text){
-        if(text === undefined){
+
+    function addSpecialChars(text) {
+        if (text === undefined) {
             return text;
         }
-        text = text.replace(/#/g,'%23');
-        text = text.replace(/&/g,'%26');
-        text = text.replace(/\//g,'%2F');
+        text = text.replace(/#/g, '%23');
+        text = text.replace(/&/g, '%26');
+        text = text.replace(/\//g, '%2F');
         return text;
     }
-    function urlToRefObject(url){
+
+    function urlToRefObject(url) {
         return {
-            '$ref':url
+            $ref: url
         };
     }
+
     return {
-        decodeUrl : decodeUrl,
-        parseCookie : parseCookie,
-        removeSpecialChars : removeSpecialChars,
-        addSpecialChars : addSpecialChars,
-        urlToRefObject : urlToRefObject
+        decodeUrl: decodeUrl,
+        parseCookie: parseCookie,
+        removeSpecialChars: removeSpecialChars,
+        addSpecialChars: addSpecialChars,
+        urlToRefObject: urlToRefObject
     };
 });
 
-/*
- * Copyright (C) 2013 Vanderbilt University, All rights reserved.
- *
- * Author: Tamas Kecskes
+/*globals define*/
+/*jshint node: true, browser: true*/
+
+/**
+ * @author kecso / https://github.com/kecso
  */
+
 define('common/core/users/meta',[], function () {
     
 
-    function metaStorage () {
+    function metaStorage() {
         var _core = null,
             _nodes = null,
-            _save = function(){},
+            _save = function () {
+            },
             _initialized = false;
 
-        function initialize(core,nodes,save){
+        function initialize(core, nodes, save) {
             _core = core;
             _nodes = nodes;
             _save = save;
             _initialized = true;
         }
 
-        function isValidMeta(meta){
+        function isValidMeta(/*meta*/) {
             /*if( typeof meta === 'object'){
-                if(
-                    //children
-                    typeof meta.children === 'object' &&
-                    (meta.children.types === null || typeof meta.children.types === 'array') &&
-                    (typeof meta.children.min === 'undefined' || typeof meta.children.min === 'number') &&
-                    (typeof meta.children.max === 'undefined' || typeof meta.children.max === 'number')){
+             if(
+             //children
+             typeof meta.children === 'object' &&
+             (meta.children.types === null || typeof meta.children.types === 'array') &&
+             (typeof meta.children.min === 'undefined' || typeof meta.children.min === 'number') &&
+             (typeof meta.children.max === 'undefined' || typeof meta.children.max === 'number')){
 
-                    //attributes
-                }
-            }
+             //attributes
+             }
+             }
 
-            return false;*/
+             return false;*/
             //TODO implement it :)
             return true;
         }
 
-        function isValidAttributeSchema(atrSchema){
-            //TODO implement :)
-            return true;
-        }
+        //function isValidAttributeSchema(atrSchema) {
+        //    //TODO implement :)
+        //    return true;
+        //}
 
         //TODO this may change
-        function pathToRefObject(path){
+        function pathToRefObject(path) {
             var ref = {};
-            ref['$ref'] = path;
+            ref.$ref = path;
             return ref;
         }
 
         //TODO this may change
-        function refObjectToPath(ref){
-            if(typeof ref['$ref'] === 'string'){
-                return ref['$ref']/*.substring(1)*/;
+        function refObjectToPath(ref) {
+            if (typeof ref.$ref === 'string') {
+                return ref.$ref/*.substring(1)*/;
             } else {
                 return null;
             }
         }
 
         //getter setter functions
-        function getMeta(path){
-            var meta = {children:{},attributes:{},pointers:{},aspects:{}};
-            if(_nodes === null || _nodes === undefined){
+        function getMeta(path) {
+            var i, j,
+                meta = {children: {}, attributes: {}, pointers: {}, aspects: {}};
+
+            if (_nodes === null || _nodes === undefined) {
                 return meta;
             }
             var node = _nodes[path] || null;
-            if(node){
-                var metaNode = _core.getChild(node,"_meta");
-                var childrenNode = _core.getChild(metaNode,"children");
-                //children
-                meta.children = {};
-                meta.children.minItems = [];
-                meta.children.maxItems = [];
-                meta.children.items = _core.getMemberPaths(childrenNode,"items");
-                for(var i=0;i<meta.children.items.length;i++){
-                    meta.children.minItems.push(_core.getMemberAttribute(childrenNode,"items",meta.children.items[i],"min") || -1);
-                    meta.children.maxItems.push(_core.getMemberAttribute(childrenNode,"items",meta.children.items[i],"max") || -1);
-                    meta.children.items[i] = pathToRefObject(meta.children.items[i]);
-                }
-                meta.children.min = _core.getAttribute(childrenNode,"min");
-                meta.children.max = _core.getAttribute(childrenNode,"max");
-
-                //attributes - they are simple json objects from our point of view
-                var atrNames = _core.getAttributeNames(metaNode);
-                for(var i=0;i<atrNames.length;i++){
-                    meta.attributes[atrNames[i]] = JSON.parse(JSON.stringify(_core.getAttribute(metaNode,atrNames[i])));
-                }
-
-                //pointers and pointer lists
-                var pointerNames = _core.getPointerNames(metaNode) || [];
-                for(var i=0;i<pointerNames.length;i++){
-                    var pointerNode = _core.getChild(metaNode,"_p_"+pointerNames[i]);
-                    var pointer = {};
-                    pointer.items = _core.getMemberPaths(pointerNode,"items");
-                    pointer.min = _core.getAttribute(pointerNode,"min");
-                    pointer.max = _core.getAttribute(pointerNode,"max");
-                    pointer.minItems = [];
-                    pointer.maxItems = [];
-
-                    for(var j=0;j<pointer.items.length;j++){
-                        pointer.minItems.push(_core.getMemberAttribute(pointerNode,"items",pointer.items[j],"min") || -1);
-                        pointer.maxItems.push(_core.getMemberAttribute(pointerNode,"items",pointer.items[j],"max") || -1);
-                        pointer.items[j] = pathToRefObject(pointer.items[j]);
-
-                    }
-
-                    meta.pointers[pointerNames[i]] = pointer;
-                }
-
-                //aspects
-                var aspectsNode = _core.getChild(metaNode,"aspects");
-                var aspectNames = _core.getPointerNames(aspectsNode);
-                if (aspectNames.length > 0){
-                    meta.aspects = {};
-                    for(var i=0;i<aspectNames.length;i++){
-                        var aspectNode = _core.getChild(aspectsNode,"_a_"+aspectNames[i]);
-                        meta.aspects[aspectNames[i]] = {items:[]};
-                        var items = _core.getMemberPaths(aspectNode,"items");
-                        for(var j=0;j<items.length;j++){
-                            meta.aspects[aspectNames[i]].items.push(pathToRefObject(items[j]));
-                        }
-                    }
-                }
-
-                return meta;
-            } else {
+            if (!node) {
                 return null;
             }
+
+            var metaNode = _core.getChild(node, '_meta');
+            var childrenNode = _core.getChild(metaNode, 'children');
+            //children
+            meta.children = {};
+            meta.children.minItems = [];
+            meta.children.maxItems = [];
+            meta.children.items = _core.getMemberPaths(childrenNode, 'items');
+            for (i = 0; i < meta.children.items.length; i++) {
+                meta.children.minItems.push(
+                    _core.getMemberAttribute(childrenNode, 'items', meta.children.items[i], 'min') || -1);
+
+                meta.children.maxItems.push(
+                    _core.getMemberAttribute(childrenNode, 'items', meta.children.items[i], 'max') || -1);
+
+                meta.children.items[i] = pathToRefObject(meta.children.items[i]);
+            }
+            meta.children.min = _core.getAttribute(childrenNode, 'min');
+            meta.children.max = _core.getAttribute(childrenNode, 'max');
+
+            //attributes - they are simple json objects from our point of view
+            var atrNames = _core.getAttributeNames(metaNode);
+            for (i = 0; i < atrNames.length; i++) {
+                meta.attributes[atrNames[i]] = JSON.parse(JSON.stringify(
+                    _core.getAttribute(metaNode, atrNames[i])));
+            }
+
+            //pointers and pointer lists
+            var pointerNames = _core.getPointerNames(metaNode) || [];
+            for (i = 0; i < pointerNames.length; i++) {
+                var pointerNode = _core.getChild(metaNode, '_p_' + pointerNames[i]);
+                var pointer = {};
+                pointer.items = _core.getMemberPaths(pointerNode, 'items');
+                pointer.min = _core.getAttribute(pointerNode, 'min');
+                pointer.max = _core.getAttribute(pointerNode, 'max');
+                pointer.minItems = [];
+                pointer.maxItems = [];
+
+                for (j = 0; j < pointer.items.length; j++) {
+                    pointer.minItems.push(
+                        _core.getMemberAttribute(pointerNode, 'items', pointer.items[j], 'min') || -1);
+
+                    pointer.maxItems.push(
+                        _core.getMemberAttribute(pointerNode, 'items', pointer.items[j], 'max') || -1);
+
+                    pointer.items[j] = pathToRefObject(pointer.items[j]);
+
+                }
+
+                meta.pointers[pointerNames[i]] = pointer;
+            }
+
+            //aspects
+            var aspectsNode = _core.getChild(metaNode, 'aspects');
+            var aspectNames = _core.getPointerNames(aspectsNode);
+            if (aspectNames.length > 0) {
+                meta.aspects = {};
+                for (i = 0; i < aspectNames.length; i++) {
+                    var aspectNode = _core.getChild(aspectsNode, '_a_' + aspectNames[i]);
+                    meta.aspects[aspectNames[i]] = {items: []};
+                    var items = _core.getMemberPaths(aspectNode, 'items');
+                    for (j = 0; j < items.length; j++) {
+                        meta.aspects[aspectNames[i]].items.push(pathToRefObject(items[j]));
+                    }
+                }
+            }
+
+            return meta;
         }
-        function setMeta(path,meta){
-            if(!isValidMeta){
+
+        function setMeta(path, meta) {
+            var i,
+                j,
+                aspectNode,
+                targetPath;
+            if (!isValidMeta) {
                 return;
             }
             var node = _nodes[path] || null;
-            if(node){
-                var metaNode = _core.getChild(node,"_meta");
-                _core.deleteNode(metaNode,true);
-                metaNode = _core.getChild(node,"_meta");
-                if(meta.children){
-                    var childrenNode = _core.getChild(metaNode,"children");
-                    if(meta.children.items && meta.children.items.length){
-                        if(meta.children.min){
-                            _core.setAttribute(childrenNode,"min",meta.children.min);
+            if (node) {
+                var metaNode = _core.getChild(node, '_meta');
+                _core.deleteNode(metaNode, true);
+                metaNode = _core.getChild(node, '_meta');
+                if (meta.children) {
+                    var childrenNode = _core.getChild(metaNode, 'children');
+                    if (meta.children.items && meta.children.items.length) {
+                        if (meta.children.min) {
+                            _core.setAttribute(childrenNode, 'min', meta.children.min);
                         }
-                        if(meta.children.max){
-                            _core.setAttribute(childrenNode,"max",meta.children.max);
+                        if (meta.children.max) {
+                            _core.setAttribute(childrenNode, 'max', meta.children.max);
                         }
 
-                        for(var i=0;i<meta.children.items.length;i++){
-                            var targetPath = refObjectToPath(meta.children.items[i]);
-                            if(typeof targetPath ==='string' && _nodes[targetPath]){
-                                _core.addMember(childrenNode,"items",_nodes[targetPath]);
-                                if(meta.children.minItems[i] !== -1){
-                                    _core.setMemberAttribute(childrenNode,"items",targetPath,"min",meta.children.minItems[i]);
+                        for (i = 0; i < meta.children.items.length; i++) {
+                            targetPath = refObjectToPath(meta.children.items[i]);
+                            if (typeof targetPath === 'string' && _nodes[targetPath]) {
+                                _core.addMember(childrenNode, 'items', _nodes[targetPath]);
+                                if (meta.children.minItems[i] !== -1) {
+                                    _core.setMemberAttribute(childrenNode, 'items', targetPath, 'min',
+                                        meta.children.minItems[i]);
                                 }
-                                if(meta.children.maxItems[i] !== -1){
-                                    _core.setMemberAttribute(childrenNode,"items",targetPath,"max",meta.children.maxItems[i]);
+                                if (meta.children.maxItems[i] !== -1) {
+                                    _core.setMemberAttribute(childrenNode, 'items', targetPath, 'max',
+                                        meta.children.maxItems[i]);
                                 }
                             }
                         }
 
                     } else {
-                        _core.deleteNode(childrenNode,true);
+                        _core.deleteNode(childrenNode, true);
                     }
                 }
 
-                if(meta.attributes){
-                    for(var i in meta.attributes){
-                        _core.setAttribute(metaNode,i,meta.attributes[i]);
+                if (meta.attributes) {
+                    for (i in meta.attributes) {
+                        _core.setAttribute(metaNode, i, meta.attributes[i]);
                     }
                 }
 
-                if(meta.pointers){
-                    for(var i in meta.pointers){
-                        _core.setPointer(metaNode,i,null);
-                        var pointerNode = _core.getChild(metaNode,"_p_"+i);
-                        if(meta.pointers[i].items && meta.pointers[i].items.length){
-                            if(meta.pointers[i].min){
-                                _core.setAttribute(pointerNode,"min",meta.pointers[i].min);
+                if (meta.pointers) {
+                    for (i in meta.pointers) {
+                        _core.setPointer(metaNode, i, null);
+                        var pointerNode = _core.getChild(metaNode, '_p_' + i);
+                        if (meta.pointers[i].items && meta.pointers[i].items.length) {
+                            if (meta.pointers[i].min) {
+                                _core.setAttribute(pointerNode, 'min', meta.pointers[i].min);
                             }
-                            if(meta.pointers[i].max){
-                                _core.setAttribute(pointerNode,"max",meta.pointers[i].max);
+                            if (meta.pointers[i].max) {
+                                _core.setAttribute(pointerNode, 'max', meta.pointers[i].max);
                             }
 
-                            for(var j=0;j<meta.pointers[i].items.length;j++){
-                                var targetPath = refObjectToPath(meta.pointers[i].items[j]);
-                                if(typeof targetPath === 'string' && _nodes[targetPath]){
-                                    _core.addMember(pointerNode,"items",_nodes[targetPath]);
-                                    if(meta.pointers[i].minItems[j] !== -1){
-                                        _core.setMemberAttribute(pointerNode,"items",targetPath,"min",meta.pointers[i].minItems[j]);
+                            for (j = 0; j < meta.pointers[i].items.length; j++) {
+                                targetPath = refObjectToPath(meta.pointers[i].items[j]);
+                                if (typeof targetPath === 'string' && _nodes[targetPath]) {
+                                    _core.addMember(pointerNode, 'items', _nodes[targetPath]);
+                                    if (meta.pointers[i].minItems[j] !== -1) {
+                                        _core.setMemberAttribute(pointerNode, 'items', targetPath, 'min',
+                                            meta.pointers[i].minItems[j]);
                                     }
-                                    if(meta.pointers[i].maxItems[j] !== -1){
-                                        _core.setMemberAttribute(pointerNode,"items",targetPath,"max",meta.pointers[i].maxItems[j]);
+                                    if (meta.pointers[i].maxItems[j] !== -1) {
+                                        _core.setMemberAttribute(pointerNode, 'items', targetPath, 'max',
+                                            meta.pointers[i].maxItems[j]);
                                     }
                                 }
                             }
@@ -13407,121 +13573,124 @@ define('common/core/users/meta',[], function () {
                     }
                 }
 
-                if(meta.aspects){
-                    var aspectsNode = _core.getChild(metaNode,"aspects"),
+                if (meta.aspects) {
+                    var aspectsNode = _core.getChild(metaNode, 'aspects'),
                         aspectNames = [];
-                    for(var i in meta.aspects){
-                        _core.setPointer(aspectsNode,i,null);
-                        var aspectNode = _core.getChild(aspectsNode,"_a_"+i);
-                        if(meta.aspects[i].items){
-                            for(j=0;j<meta.aspects[i].items.length;j++){
+                    for (i in meta.aspects) {
+                        _core.setPointer(aspectsNode, i, null);
+                        aspectNode = _core.getChild(aspectsNode, '_a_' + i);
+                        if (meta.aspects[i].items) {
+                            for (j = 0; j < meta.aspects[i].items.length; j++) {
                                 var member = _nodes[refObjectToPath(meta.aspects[i].items[j])];
-                                if(member){
-                                    _core.addMember(aspectNode,"items",member);
+                                if (member) {
+                                    _core.addMember(aspectNode, 'items', member);
                                 }
                             }
                         }
                         aspectNames.push(i);
                     }
-                    if (aspectNames.length > 0){
+                    if (aspectNames.length > 0) {
                         meta.aspects = {};
-                        for(var i=0;i<aspectNames.length;i++){
-                            var aspectNode = _core.getChild(aspectsNode,"_a_"+aspectNames[i]);
-                            meta.aspects[aspectNames[i]] = {items:[]};
-                            var items = _core.getMemberPaths(aspectNode,"items");
-                            for(var j=0;j<items.length;j++){
+                        for (i = 0; i < aspectNames.length; i++) {
+                            aspectNode = _core.getChild(aspectsNode, '_a_' + aspectNames[i]);
+                            meta.aspects[aspectNames[i]] = {items: []};
+                            var items = _core.getMemberPaths(aspectNode, 'items');
+                            for (j = 0; j < items.length; j++) {
                                 meta.aspects[aspectNames[i]].items.push(pathToRefObject(items[j]));
                             }
                         }
                     }
                 }
 
-                var meta_event = _core.getRegistry(node,"_meta_event_") || 0;
-                    _core.setRegistry(node,"_meta_event_",meta_event+1);
-                _save("setMeta("+path+")");
+                var metaEvent = _core.getRegistry(node, '_meta_event_') || 0;
+                _core.setRegistry(node, '_meta_event_', metaEvent + 1);
+                _save('setMeta(' + path + ')');
             }
         }
 
 
         //validation functions
-        function getBaseChain(path){
+        function getBaseChain(path) {
             var chain = [];
             var node = _nodes[path];
-            if(node){
-                while(node !== null){
+            if (node) {
+                while (node !== null) {
                     chain.push(_core.getPath(node));
                     node = _core.getBase(node);
                 }
             }
             return chain;
         }
-        function isTypeOf(path,typePath){
+
+        function isTypeOf(path, typePath) {
             var node = _nodes[path];
-            if(node){
+            if (node) {
                 var chain = getBaseChain(path);
-                if(chain.indexOf(typePath) !== -1){
+                if (chain.indexOf(typePath) !== -1) {
                     return true;
                 }
             }
             return false;
         }
-        function isValidTypeOfArray(path,typePathArray){
-            var i=0, isGood=false;
-            while(i<typePathArray.length && !isGood){
-                isGood = isTypeOf(path,typePathArray[i]);
+
+        function isValidTypeOfArray(path, typePathArray) {
+            var i = 0,
+                isGood = false;
+            while (i < typePathArray.length && isGood === false) {
+                isGood = isTypeOf(path, typePathArray[i]);
                 i++;
             }
             return isGood;
         }
 
-        function isValidChild(path,childPath){
+        function isValidChild(path, childPath) {
             var node = _nodes[path];
             var child = _nodes[childPath];
-            if(node && child){
-                var metaNode = _core.getChild(node,"_meta");
-                var childrenNode = _core.getChild(metaNode,"children");
-                var items = _core.getMemberPaths(childrenNode,"items");
-                return isValidTypeOfArray(childPath,items);
+            if (node && child) {
+                var metaNode = _core.getChild(node, '_meta');
+                var childrenNode = _core.getChild(metaNode, 'children');
+                var items = _core.getMemberPaths(childrenNode, 'items');
+                return isValidTypeOfArray(childPath, items);
             }
             return false;
         }
 
-        function isValidTarget(path,name,targetPath){
+        function isValidTarget(path, name, targetPath) {
             var node = _nodes[path];
             var target = _nodes[targetPath];
-            if(node && target){
-                var meta = _core.getChild(node,"_meta");
-                var pointer = _core.getChild(meta,"_p_"+name);
-                var items = _core.getMemberPaths(pointer,"items");
-                return isValidTypeOfArray(targetPath,items);
+            if (node && target) {
+                var meta = _core.getChild(node, '_meta');
+                var pointer = _core.getChild(meta, '_p_' + name);
+                var items = _core.getMemberPaths(pointer, 'items');
+                return isValidTypeOfArray(targetPath, items);
             }
             return false;
         }
 
-        function isValidAttribute(path,name,attribute){
+        function isValidAttribute(/*path, name, attribute*/) {
             //TODO we should check against schema
             return true;
         }
 
-        function getValidChildrenTypes(path){
+        function getValidChildrenTypes(path) {
             var node = _nodes[path];
-            if(node){
-                return _core.getMemberPaths(_core.getChild(_core.getChild(node,"_meta"),"children"),"items");
+            if (node) {
+                return _core.getMemberPaths(_core.getChild(_core.getChild(node, '_meta'), 'children'), 'items');
             }
             return [];
         }
 
-        function getValidTargetTypes(path,name){
+        function getValidTargetTypes(path, name) {
             var node = _nodes[path];
-            if(node){
-                return _core.getMemberPaths(_core.getChild(_core.getChild(node,"_meta"),"_p_"+name),"items");
+            if (node) {
+                return _core.getMemberPaths(_core.getChild(_core.getChild(node, '_meta'), '_p_' + name), 'items');
             }
             return [];
         }
 
-        function hasOwnMetaRules(path){
+        function hasOwnMetaRules(path) {
             var node = _nodes[path];
-            if(node){
+            if (node) {
                 var own = getMeta(path);
                 var base = getMeta(_core.getPath(_core.getBase(node)));
                 return own === base;
@@ -13529,24 +13698,24 @@ define('common/core/users/meta',[], function () {
             return false;
         }
 
-        function filterValidTarget(path,name,paths){
+        function filterValidTarget(path, name, paths) {
             var targets = [];
-            for(var i=0;i<paths.length;i++){
-                if(isValidTarget(path,name,paths[i])){
+            for (var i = 0; i < paths.length; i++) {
+                if (isValidTarget(path, name, paths[i])) {
                     targets.push(paths[i]);
                 }
             }
             return targets;
         }
 
-        function getOwnValidChildrenTypes(path){
+        function getOwnValidChildrenTypes(path) {
             var node = _nodes[path];
             var items = [];
-            if(node){
+            if (node) {
                 var own = getValidChildrenTypes(path);
                 var base = getValidChildrenTypes(_core.getPath(_core.getBase(node)));
-                for(var i= 0;i<own.length;i++){
-                    if(base.indexOf(own[i]) === -1){
+                for (var i = 0; i < own.length; i++) {
+                    if (base.indexOf(own[i]) === -1) {
                         items.push(own[i]);
                     }
                 }
@@ -13554,14 +13723,14 @@ define('common/core/users/meta',[], function () {
             return items;
         }
 
-        function getOwnValidTargetTypes(path,name){
+        function getOwnValidTargetTypes(path, name) {
             var node = _nodes[path];
             var items = [];
-            if(node){
-                var own = getValidTargetTypes(path,name);
-                var base = getValidTargetTypes(_core.getPath(_core.getBase(node)),name);
-                for(var i= 0;i<own.length;i++){
-                    if(base.indexOf(own[i]) === -1){
+            if (node) {
+                var own = getValidTargetTypes(path, name);
+                var base = getValidTargetTypes(_core.getPath(_core.getBase(node)), name);
+                for (var i = 0; i < own.length; i++) {
+                    if (base.indexOf(own[i]) === -1) {
                         items.push(own[i]);
                     }
                 }
@@ -13569,26 +13738,26 @@ define('common/core/users/meta',[], function () {
             return items;
         }
 
-        function getValidAttributeNames(path){
+        function getValidAttributeNames(path) {
             var rawMeta = getMeta(path),
                 names = [];
-            if( rawMeta ){
-                for(var i in rawMeta.attributes){
+            if (rawMeta) {
+                for (var i in rawMeta.attributes) {
                     names.push(i);
                 }
             }
             return names;
         }
 
-        function getOwnValidAttributeNames(path){
+        function getOwnValidAttributeNames(path) {
             var names = [],
                 node = _nodes[path];
 
-            if(node){
+            if (node) {
                 var own = getValidAttributeNames(path);
                 var base = getValidAttributeNames(_core.getPath(_core.getBase(node)));
-                for(var i=0;i<own.length;i++){
-                    if(base.indexOf(own[i]) === -1){
+                for (var i = 0; i < own.length; i++) {
+                    if (base.indexOf(own[i]) === -1) {
                         names.push(own[i]);
                     }
                 }
@@ -13596,32 +13765,33 @@ define('common/core/users/meta',[], function () {
             return names;
         }
 
-        function indexOfPathInRefObjArray(array,path){
+        function indexOfPathInRefObjArray(array, path) {
             var index = 0;
-            while(index < array.length){
-                if(path === refObjectToPath(array[index])){
+            while (index < array.length) {
+                if (path === refObjectToPath(array[index])) {
                     return index;
                 }
                 index++;
             }
             return -1;
         }
-        function getChildrenMeta(path){
-            //the returned object structure is : {"min":0,"max":0,"items":[{"id":path,"min":0,"max":0},...]}
+
+        function getChildrenMeta(path) {
+            //the returned object structure is : {'min':0,'max':0,'items':[{'id':path,'min':0,'max':0},...]}
             var rawMeta = getMeta(path);
-            if(rawMeta){
+            if (rawMeta) {
                 var childrenMeta = {};
                 childrenMeta.min = rawMeta.children.min;
                 childrenMeta.max = rawMeta.children.max;
                 childrenMeta.items = rawMeta.children.items;
-                if(childrenMeta.items !== null){
-                    for(var i=0;i<childrenMeta.items.length;i++){
+                if (childrenMeta.items !== null) {
+                    for (var i = 0; i < childrenMeta.items.length; i++) {
                         var child = {};
                         child.id = refObjectToPath(childrenMeta.items[i]);
-                        if(rawMeta.children.minItems){
+                        if (rawMeta.children.minItems) {
                             child.min = rawMeta.children.minItems[i] === -1 ? undefined : rawMeta.children.minItems[i];
                         }
-                        if(rawMeta.children.maxItems){
+                        if (rawMeta.children.maxItems) {
                             child.max = rawMeta.children.maxItems[i] === -1 ? undefined : rawMeta.children.maxItems[i];
                         }
 
@@ -13634,122 +13804,132 @@ define('common/core/users/meta',[], function () {
             return null;
         }
 
-        function getChildrenMetaAttribute(path,attrName){
+        function getChildrenMetaAttribute(path/*, attrName*/) {
             var childrenMeta = getChildrenMeta(path);
-            if(childrenMeta){
+            if (childrenMeta) {
                 return childrenMeta.attrName;
             }
             return null;
         }
-        function setChildrenMetaAttribute(path,attrName,value){
-            if(attrName !== "items"){
+
+        function setChildrenMetaAttribute(path, attrName, value) {
+            if (attrName !== 'items') {
                 var rawMeta = getMeta(path);
                 rawMeta.children[attrName] = value;
-                setMeta(path,rawMeta);
+                setMeta(path, rawMeta);
             }
         }
 
-        function getValidChildrenItems(path){
+        function getValidChildrenItems(path) {
             var childrenMeta = getChildrenMeta(path);
-            if(childrenMeta){
+            if (childrenMeta) {
                 return childrenMeta.items;
             }
             return null;
         }
 
-        function updateValidChildrenItem(path,newTypeObj){
-            if(newTypeObj && newTypeObj.id){
-                var rawMeta = getMeta(path);
-                if(rawMeta){
-                    if(rawMeta.children.minItems === null || rawMeta.children.minItems == undefined){
+        function updateValidChildrenItem(path, newTypeObj) {
+            var i,
+                rawMeta;
+            if (newTypeObj && newTypeObj.id) {
+                rawMeta = getMeta(path);
+                if (rawMeta) {
+                    if (rawMeta.children.minItems === null || rawMeta.children.minItems === undefined) { //TODO: use ! ?
                         rawMeta.children.minItems = [];
-                        for(var i=0;i<rawMeta.children.items.length;i++){
+                        for (i = 0; i < rawMeta.children.items.length; i++) {
                             rawMeta.children.minItems.push(-1);
                         }
                     }
-                    if(rawMeta.children.maxItems === null || rawMeta.children.maxItems == undefined){
+                    if (rawMeta.children.maxItems === null || rawMeta.children.maxItems === undefined) { //TODO: use ! ?
                         rawMeta.children.maxItems = [];
-                        for(var i=0;i<rawMeta.children.items.length;i++){
+                        for (i = 0; i < rawMeta.children.items.length; i++) {
                             rawMeta.children.maxItems.push(-1);
                         }
                     }
                     var refObj = pathToRefObject(newTypeObj.id);
-                    var index = indexOfPathInRefObjArray(rawMeta.children.items,newTypeObj.id);
-                    if(index === -1){
+                    var index = indexOfPathInRefObjArray(rawMeta.children.items, newTypeObj.id);
+                    if (index === -1) {
                         index = rawMeta.children.items.length;
                         rawMeta.children.items.push(refObj);
                         rawMeta.children.minItems.push(-1);
                         rawMeta.children.maxItems.push(-1);
                     }
-                    (newTypeObj.min === null || newTypeObj.min === undefined) ? rawMeta.children.minItems[index] = -1 : rawMeta.children.minItems[index] = newTypeObj.min;
-                    (newTypeObj.max === null || newTypeObj.max === undefined) ? rawMeta.children.maxItems[index] = -1 : rawMeta.children.maxItems[index] = newTypeObj.max;
+                    // jshint expr:true
+                    (newTypeObj.min === null || newTypeObj.min === undefined) ?
+                        rawMeta.children.minItems[index] = -1 : rawMeta.children.minItems[index] = newTypeObj.min;
 
-                    setMeta(path,rawMeta);
-                }
-            }
-        }
-        function removeValidChildrenItem(path,typeId){
-            var rawMeta = getMeta(path);
-            if(rawMeta){
-                var refObj = pathToRefObject(typeId);
-                var index = indexOfPathInRefObjArray(rawMeta.children.items,typeId);
-                if(index !== -1){
-                    rawMeta.children.items.splice(index,1);
-                    if(rawMeta.children.minItems){
-                        rawMeta.children.minItems.splice(index,1);
-                    }
-                    if(rawMeta.children.maxItems){
-                        rawMeta.children.maxItems.splice(index,1);
-                    }
-                    setMeta(path,rawMeta);
+                    (newTypeObj.max === null || newTypeObj.max === undefined) ?
+                        rawMeta.children.maxItems[index] = -1 : rawMeta.children.maxItems[index] = newTypeObj.max;
+                    // jshint expr:false
+                    setMeta(path, rawMeta);
                 }
             }
         }
 
-        function getAttributeSchema(path,name){
+        function removeValidChildrenItem(path, typeId) {
             var rawMeta = getMeta(path);
-            if(rawMeta){
-                if(rawMeta.attributes[name]){
+            if (rawMeta) {
+                //var refObj = pathToRefObject(typeId);
+                var index = indexOfPathInRefObjArray(rawMeta.children.items, typeId);
+                if (index !== -1) {
+                    rawMeta.children.items.splice(index, 1);
+                    if (rawMeta.children.minItems) {
+                        rawMeta.children.minItems.splice(index, 1);
+                    }
+                    if (rawMeta.children.maxItems) {
+                        rawMeta.children.maxItems.splice(index, 1);
+                    }
+                    setMeta(path, rawMeta);
+                }
+            }
+        }
+
+        function getAttributeSchema(path, name) {
+            var rawMeta = getMeta(path);
+            if (rawMeta) {
+                if (rawMeta.attributes[name]) {
                     return rawMeta.attributes[name];
                 }
             }
             return null;
         }
 
-        function setAttributeSchema(path,name,schema){
+        function setAttributeSchema(path, name, schema) {
             var rawMeta = getMeta(path);
-            if(rawMeta){
+            if (rawMeta) {
                 //TODO check schema validity - but it is also viable to check it only during setMeta
                 rawMeta.attributes[name] = schema;
-                setMeta(path,rawMeta);
+                setMeta(path, rawMeta);
             }
         }
 
-        function removeAttributeSchema(path,name){
+        function removeAttributeSchema(path, name) {
             var rawMeta = getMeta(path);
-            if(rawMeta){
+            if (rawMeta) {
                 delete rawMeta.attributes[name];
-                setMeta(path,rawMeta);
+                setMeta(path, rawMeta);
             }
         }
 
-        function getPointerMeta(path,name){
-            //the returned object structure is : {"min":0,"max":0,"items":[{"id":path,"min":0,"max":0},...]}
+        function getPointerMeta(path, name) {
+            //the returned object structure is : {'min':0,'max':0,'items':[{'id':path,'min':0,'max':0},...]}
             var rawMeta = getMeta(path);
-            if(rawMeta && rawMeta.pointers[name]){
+            if (rawMeta && rawMeta.pointers[name]) {
                 var pointerMeta = {};
                 pointerMeta.min = rawMeta.pointers[name].min;
                 pointerMeta.max = rawMeta.pointers[name].max;
                 pointerMeta.items = rawMeta.pointers[name].items;
-                if(pointerMeta.items !== null){
-                    for(var i=0;i<pointerMeta.items.length;i++){
+                if (pointerMeta.items !== null) {
+                    for (var i = 0; i < pointerMeta.items.length; i++) {
                         var child = {};
                         child.id = refObjectToPath(pointerMeta.items[i]);
-                        if(rawMeta.pointers[name].minItems){
-                            child.min = rawMeta.pointers[name].minItems[i] === -1 ? undefined : rawMeta.pointers[name].minItems[i];
+                        if (rawMeta.pointers[name].minItems) {
+                            child.min = rawMeta.pointers[name].minItems[i] === -1 ?
+                                undefined : rawMeta.pointers[name].minItems[i]; //FIXME: avoid assigning undefined
                         }
-                        if(rawMeta.pointers[name].maxItems){
-                            child.max = rawMeta.pointers[name].maxItems[i] === -1 ? undefined : rawMeta.pointers[name].maxItems[i];
+                        if (rawMeta.pointers[name].maxItems) {
+                            child.max = rawMeta.pointers[name].maxItems[i] === -1 ?
+                                undefined : rawMeta.pointers[name].maxItems[i]; //FIXME: avoid assigning undefined
                         }
                         pointerMeta.items[i] = child;
                     }
@@ -13759,125 +13939,128 @@ define('common/core/users/meta',[], function () {
             return null;
         }
 
-        function getValidTargetItems(path,name){
-            var pointerMeta = getPointerMeta(path,name);
-            if(pointerMeta){
+        function getValidTargetItems(path, name) {
+            var pointerMeta = getPointerMeta(path, name);
+            if (pointerMeta) {
                 return pointerMeta.items;
             }
             return null;
         }
 
-        function updateValidTargetItem(path,name,targetObj){
+        function updateValidTargetItem(path, name, targetObj) {
             var rawMeta = getMeta(path);
-            if(rawMeta && targetObj && targetObj.id){
+            if (rawMeta && targetObj && targetObj.id) {
                 var pointer = rawMeta.pointers[name] || null;
-                if(pointer === null){
-                    rawMeta.pointers[name] = {"items":[],"minItems":[],"maxItems":[]};
+                if (pointer === null) {
+                    rawMeta.pointers[name] = {items: [], minItems: [], maxItems: []};
                     pointer = rawMeta.pointers[name];
                 }
                 var refObj = pathToRefObject(targetObj.id);
-                var index = indexOfPathInRefObjArray(pointer.items,targetObj.id);
-                if(index === -1){
+                var index = indexOfPathInRefObjArray(pointer.items, targetObj.id);
+                if (index === -1) {
                     index = pointer.items.length;
                     pointer.items.push(refObj);
                     pointer.minItems.push(-1);
                     pointer.maxItems.push(-1);
                 }
+                // jshint expr:true
+                (targetObj.min === null || targetObj.min === undefined) ?
+                    pointer.minItems[index] = -1 : pointer.minItems[index] = targetObj.min;
 
-                (targetObj.min === null || targetObj.min === undefined) ? pointer.minItems[index] = -1 : pointer.minItems[index] = targetObj.min;
-                (targetObj.max === null || targetObj.max === undefined) ? pointer.maxItems[index] = -1 : pointer.maxItems[index] = targetObj.max;
-
-                setMeta(path,rawMeta);
+                (targetObj.max === null || targetObj.max === undefined) ?
+                    pointer.maxItems[index] = -1 : pointer.maxItems[index] = targetObj.max;
+                // jshint expr:false
+                setMeta(path, rawMeta);
             }
         }
 
-        function removeValidTargetItem(path,name,targetId){
+        function removeValidTargetItem(path, name, targetId) {
             var rawMeta = getMeta(path);
-            if(rawMeta){
+            if (rawMeta) {
                 var pointer = rawMeta.pointers[name] || null;
-                if(pointer !== null){
-                    var refObj = pathToRefObject(targetId);
-                    var index = indexOfPathInRefObjArray(pointer.items,targetId);
-                    if(index !== -1){
-                        pointer.items.splice(index,1);
-                        if(pointer.minItems){
-                            pointer.minItems.splice(index,1);
+                if (pointer !== null) {
+                    //var refObj = pathToRefObject(targetId);
+                    var index = indexOfPathInRefObjArray(pointer.items, targetId);
+                    if (index !== -1) {
+                        pointer.items.splice(index, 1);
+                        if (pointer.minItems) {
+                            pointer.minItems.splice(index, 1);
                         }
-                        if(pointer.maxItems){
-                            pointer.maxItems.splice(index,1);
+                        if (pointer.maxItems) {
+                            pointer.maxItems.splice(index, 1);
                         }
-                        setMeta(path,rawMeta);
+                        setMeta(path, rawMeta);
                     }
                 }
             }
         }
 
-        function deleteMetaPointer(path,name){
+        function deleteMetaPointer(path, name) {
             var rawMeta = getMeta(path);
-            if(rawMeta){
+            if (rawMeta) {
                 delete rawMeta.pointers[name];
-                setMeta(path,rawMeta);
+                setMeta(path, rawMeta);
             }
         }
 
-        function setPointerMeta(path,name,meta){
+        function setPointerMeta(path, name, meta) {
             var rawMeta = getMeta(path);
-            if(rawMeta){
+            if (rawMeta) {
                 var pointer = rawMeta.pointers[name] || null;
-                if(pointer === null){
-                    rawMeta.pointers[name] = {"items":[],"minItems":[],"maxItems":[]};
+                if (pointer === null) {
+                    rawMeta.pointers[name] = {items: [], minItems: [], maxItems: []};
                     pointer = rawMeta.pointers[name];
                 }
                 pointer.min = meta.min;
                 pointer.max = meta.max;
-                if(meta.items && meta.items.length){
-                    for(var i=0;i<meta.items.length;i++){
+                if (meta.items && meta.items.length) {
+                    for (var i = 0; i < meta.items.length; i++) {
                         pointer.items.push(pathToRefObject(meta.items[i].id));
                         pointer.minItems.push(meta.items[i].min || -1);
                         pointer.maxItems.push(meta.items[i].max || -1);
                     }
                 }
-                setMeta(path,rawMeta);
+                setMeta(path, rawMeta);
             }
         }
 
-        function setChildrenMeta(path,name,meta){
+        function setChildrenMeta(path, name, meta) {
             var rawMeta = getMeta(path);
-            if(rawMeta){
+            if (rawMeta) {
                 var children = rawMeta.children;
 
                 children.min = meta.min;
                 children.max = meta.max;
-                if(meta.items && meta.items.length){
-                    for(var i=0;i<meta.items.length;i++){
+                if (meta.items && meta.items.length) {
+                    for (var i = 0; i < meta.items.length; i++) {
                         children.items.push(pathToRefObject(meta.items[i].id));
                         children.minItems.push(meta.items[i].min || -1);
                         children.maxItems.push(meta.items[i].max || -1);
                     }
                 }
-                setMeta(path,rawMeta);
+                setMeta(path, rawMeta);
             }
         }
 
-        function getMetaAspectNames(path){
+        function getMetaAspectNames(path) {
             var rawMeta = getMeta(path),
                 names = [];
 
-            if(rawMeta && rawMeta.aspects){
-                for(var i in rawMeta.aspects){
+            if (rawMeta && rawMeta.aspects) {
+                for (var i in rawMeta.aspects) {
                     names.push(i);
                 }
             }
             return names;
         }
 
-        function getOwnMetaAspectNames(path){
+        function getOwnMetaAspectNames(path) {
             var names = getMetaAspectNames(path),
                 ownNames = [];
-            if(_nodes[path]){
+            if (_nodes[path]) {
                 var baseNames = getMetaAspectNames(_core.getPath(_core.getBase(_nodes[path])));
-                for(var i=0;i<names.length;i++){
-                    if(baseNames.indexOf(names[i]) === -1){
+                for (var i = 0; i < names.length; i++) {
+                    if (baseNames.indexOf(names[i]) === -1) {
                         ownNames.push(names[i]);
                     }
                 }
@@ -13885,15 +14068,15 @@ define('common/core/users/meta',[], function () {
             return ownNames;
         }
 
-        function getMetaAspect(path,name){
+        function getMetaAspect(path, name) {
             var rawMeta = getMeta(path);
-            if (rawMeta){
-                if(rawMeta.aspects[name]){
-                    var aspect = {items:[]};
-                    for(var i=0;i<rawMeta.aspects[name].items.length;i++){
+            if (rawMeta) {
+                if (rawMeta.aspects[name]) {
+                    var aspect = {items: []};
+                    for (var i = 0; i < rawMeta.aspects[name].items.length; i++) {
                         aspect.items.push(refObjectToPath(rawMeta.aspects[name].items[i]));
                     }
-                    if (aspect.items.length === 0){
+                    if (aspect.items.length === 0) {
                         delete aspect.items;
                     }
                     return aspect;
@@ -13903,91 +14086,88 @@ define('common/core/users/meta',[], function () {
             return null;
         }
 
-        function setMetaAspect(path,name,aspect){
+        function setMetaAspect(path, name, aspect) {
             var rawMeta = getMeta(path);
-            if(rawMeta){
+            if (rawMeta) {
 
                 rawMeta.aspects = rawMeta.aspects || {};
-                rawMeta.aspects[name] = {'items': []};
-                for(var i=0;i<aspect.items.length;i++){
+                rawMeta.aspects[name] = {items: []};
+                for (var i = 0; i < aspect.items.length; i++) {
                     rawMeta.aspects[name].items.push(pathToRefObject(aspect.items[i]));
                 }
-                setMeta(path,rawMeta);
+                setMeta(path, rawMeta);
             }
         }
 
-        function getAspectTerritoryPattern(path,name){
-            var aspect = getMetaAspect(path,name);
-            if( aspect !== null){
+        function getAspectTerritoryPattern(path, name) {
+            var aspect = getMetaAspect(path, name);
+            if (aspect !== null) {
                 aspect.children = 1; //TODO now it is fixed, maybe we can change that in the future
                 return aspect;
             }
             return null;
         }
 
-        function deleteMetaAspect(path,name){
+        function deleteMetaAspect(path, name) {
             var rawMeta = getMeta(path);
-            if(rawMeta){
-                if(rawMeta.aspects && rawMeta.aspects[name]){
+            if (rawMeta) {
+                if (rawMeta.aspects && rawMeta.aspects[name]) {
                     delete rawMeta.aspects[name];
-                    setMeta(path,rawMeta);
+                    setMeta(path, rawMeta);
                 }
             }
         }
 
         return {
-            refObjectToPath : refObjectToPath,
-            pathToRefObject : pathToRefObject,
+            refObjectToPath: refObjectToPath,
+            pathToRefObject: pathToRefObject,
 
 
-
-
-
-            initialize      : initialize,
-            getMeta         : getMeta,
-            setMeta         : setMeta,
-            isTypeOf        : isTypeOf,
-            hasOwnMetaRules : hasOwnMetaRules,
+            initialize: initialize,
+            getMeta: getMeta,
+            setMeta: setMeta,
+            isTypeOf: isTypeOf,
+            hasOwnMetaRules: hasOwnMetaRules,
 
             //containment
-            isValidChild             : isValidChild,
-            getChildrenMeta          : getChildrenMeta,
-            setChildrenMeta          : setChildrenMeta,
-            getChildrenMetaAttribute : getChildrenMetaAttribute,
-            setChildrenMetaAttribute : setChildrenMetaAttribute,
-            getValidChildrenTypes    : getValidChildrenTypes,
-            getOwnValidChildrenTypes : getOwnValidChildrenTypes,
-            getValidChildrenItems    : getValidChildrenItems,
-            updateValidChildrenItem  : updateValidChildrenItem,
-            removeValidChildrenItem  : removeValidChildrenItem,
+            isValidChild: isValidChild,
+            getChildrenMeta: getChildrenMeta,
+            setChildrenMeta: setChildrenMeta,
+            getChildrenMetaAttribute: getChildrenMetaAttribute,
+            setChildrenMetaAttribute: setChildrenMetaAttribute,
+            getValidChildrenTypes: getValidChildrenTypes,
+            getOwnValidChildrenTypes: getOwnValidChildrenTypes,
+            getValidChildrenItems: getValidChildrenItems,
+            updateValidChildrenItem: updateValidChildrenItem,
+            removeValidChildrenItem: removeValidChildrenItem,
 
             //attribute
-            isValidAttribute          : isValidAttribute,
-            getAttributeSchema        : getAttributeSchema,
-            setAttributeSchema        : setAttributeSchema,
-            removeAttributeSchema     : removeAttributeSchema,
-            getValidAttributeNames    : getValidAttributeNames,
-            getOwnValidAttributeNames : getOwnValidAttributeNames,
+            isValidAttribute: isValidAttribute,
+            getAttributeSchema: getAttributeSchema,
+            setAttributeSchema: setAttributeSchema,
+            removeAttributeSchema: removeAttributeSchema,
+            getValidAttributeNames: getValidAttributeNames,
+            getOwnValidAttributeNames: getOwnValidAttributeNames,
 
             //pointer
-            isValidTarget          : isValidTarget,
-            getPointerMeta         : getPointerMeta,
-            setPointerMeta         : setPointerMeta,
-            getValidTargetItems    : getValidTargetItems,
-            getValidTargetTypes    : getValidTargetTypes,
-            getOwnValidTargetTypes : getOwnValidTargetTypes,
-            filterValidTarget      : filterValidTarget,
-            updateValidTargetItem  : updateValidTargetItem,
-            removeValidTargetItem  : removeValidTargetItem,
-            deleteMetaPointer      : deleteMetaPointer,
+            isValidTarget: isValidTarget,
+            getPointerMeta: getPointerMeta,
+            setPointerMeta: setPointerMeta,
+            getValidTargetItems: getValidTargetItems,
+            getValidTargetTypes: getValidTargetTypes,
+            getOwnValidTargetTypes: getOwnValidTargetTypes,
+            filterValidTarget: filterValidTarget,
+            updateValidTargetItem: updateValidTargetItem,
+            removeValidTargetItem: removeValidTargetItem,
+            deleteMetaPointer: deleteMetaPointer,
 
             //aspect
-            getMetaAspectNames        : getMetaAspectNames,
-            getOwnMetaAspectNames     : getOwnMetaAspectNames,
-            getMetaAspect             : getMetaAspect,
-            setMetaAspect             : setMetaAspect,
-            getAspectTerritoryPattern : getAspectTerritoryPattern,
-            deleteMetaAspect          : deleteMetaAspect
+            getMetaAspectNames: getMetaAspectNames,
+            getOwnMetaAspectNames: getOwnMetaAspectNames,
+            getMetaAspect: getMetaAspect,
+            setMetaAspect: setMetaAspect,
+            getAspectTerritoryPattern: getAspectTerritoryPattern,
+            deleteMetaAspect: deleteMetaAspect
 
         };
     }
@@ -13995,47 +14175,53 @@ define('common/core/users/meta',[], function () {
     return metaStorage;
 });
 
-define('common/core/users/tojson',[
-    'common/core/users/meta',
-    'common/util/url'
-],function(
-    BaseMeta,
-    URL
-    ){
+/*globals define*/
+/*jshint node: true, browser: true*/
 
-    var _refTypes = {
-        'url':'url',
-        'path':'path',
-        'guid':'guid'
-    };
-    var META = new BaseMeta();
+/**
+ * @author kecso / https://github.com/kecso
+ */
 
-    var changeRefObjects = function(refType,urlPrefix,object,core,root,callback){
-        if(typeof object === 'object'){
+define('common/core/users/tojson',['common/core/users/meta', 'common/util/url'], function (BaseMeta, URL) {
+    
+
+    var META = new BaseMeta(),
+        _refTypes = {
+            url: 'url',
+            path: 'path',
+            guid: 'guid'
+        };
+
+    var changeRefObjects = function (refType, urlPrefix, object, core, root, callback) {
+        var i;
+        if (typeof object === 'object') {
             var needed = 0,
                 neededNames = [],
                 error = null;
-            for(var i in object){
-                if(object[i] !== null && typeof object[i] === 'object'){
+            for (i in object) { // TODO: use key here instead
+                if (object[i] !== null && typeof object[i] === 'object') {
                     needed++;
                     neededNames.push(i);
                 }
             }
-            if(needed > 0){
-                for(var i=0;i<neededNames.length;i++){
-                    if(object[neededNames[i]]['$ref']){
-                        //refrence object
-                        pathToRefObjAsync(refType,urlPrefix,object[neededNames[i]]['$ref']/*.substring(1)*/,core,root,function(err,refObj){
-                            error = error || err;
-                            object[neededNames[i]] = refObj;
-                            if(--needed === 0){
-                                callback(error);
+            if (needed > 0) {
+                for (i = 0; i < neededNames.length; i++) {
+                    if (object[neededNames[i]].$ref) {
+                        //reference object
+                        pathToRefObjAsync(refType, urlPrefix, object[neededNames[i]].$ref/*.substring(1)*/,
+                            core, root,
+                            function (err, refObj) {
+                                error = error || err;
+                                object[neededNames[i]] = refObj;
+                                if (--needed === 0) {
+                                    callback(error);
+                                }
                             }
-                        });
+                        );
                     } else {
-                        changeRefObjects(refType,urlPrefix,object[neededNames[i]],core,root,function(err){
+                        changeRefObjects(refType, urlPrefix, object[neededNames[i]], core, root, function (err) {
                             error = error || err;
-                            if(--needed === 0){
+                            if (--needed === 0) {
                                 callback(error);
                             }
                         });
@@ -14048,208 +14234,237 @@ define('common/core/users/tojson',[
             callback(null);
         }
     };
-    var pathToRefObj = function(refType,urlPrefix,path){
-        switch (refType){
+
+    var pathToRefObj = function (refType, urlPrefix, path) {
+        var result;
+        switch (refType) {
             case _refTypes.url:
-                if(path === null){
-                    return URL.urlToRefObject(null);
+                if (path === null) {
+                    result = URL.urlToRefObject(null);
+                } else {
+                    result = URL.urlToRefObject(urlPrefix + '&path=' + URL.addSpecialChars(path));
                 }
-                return URL.urlToRefObject(urlPrefix+'&path='+URL.addSpecialChars(path));
                 break;
             case _refTypes.path:
-                return URL.urlToRefObject(path);
+                result = URL.urlToRefObject(path);
                 break;
             default:
-                return URL.urlToRefObject(null);
+                result = URL.urlToRefObject(null);
+                break;
         }
+
+        return result;
     };
-    var getParentRefObject = function(refType,urlPrefix,core,node){
+
+    var getParentRefObject = function (refType, urlPrefix, core, node) {
         var parent = core.getParent(node),
-            path = null;
-        if(parent){
+            path = null,
+            result;
+
+        if (parent) {
             path = core.getPath(parent);
         }
-        switch (refType){
+        switch (refType) {
             case _refTypes.url:
-                if(path === null){
-                    return URL.urlToRefObject(null);
+                if (path === null) {
+                    result = URL.urlToRefObject(null);
+                } else {
+                    result = URL.urlToRefObject(urlPrefix + '&path=' + URL.addSpecialChars(path));
                 }
-                return URL.urlToRefObject(urlPrefix+'&path='+URL.addSpecialChars(path));
                 break;
             case _refTypes.path:
-                return URL.urlToRefObject(path);
+                result = URL.urlToRefObject(path);
+                break;
             case _refTypes.guid:
-                if(path === null){
-                    return URL.urlToRefObject(null);
+                if (path === null) {
+                    result = URL.urlToRefObject(null);
                 } else {
                     var refObj = URL.urlToRefObject(path);
                     refObj.GUID = core.getGuid(parent);
-                    return refObj;
+                    result = refObj;
                 }
+                break;
         }
+
+        return result;
     };
-    var pathToRefObjAsync = function(refType,urlPrefix,path,core,root,callback){
-        switch (refType){
+
+    var pathToRefObjAsync = function (refType, urlPrefix, path, core, root, callback) {
+        switch (refType) {
             case _refTypes.url:
-                if(path === null){
-                    callback(null,URL.urlToRefObject(null));
+                if (path === null) {
+                    callback(null, URL.urlToRefObject(null));
                 }
-                callback(null,URL.urlToRefObject(urlPrefix+'&path='+URL.addSpecialChars(path)));
+                callback(null, URL.urlToRefObject(urlPrefix + '&path=' + URL.addSpecialChars(path)));
                 break;
             case _refTypes.path:
-                callback(null,URL.urlToRefObject(path));
+                callback(null, URL.urlToRefObject(path));
                 break;
             case _refTypes.guid:
-                core.loadByPath(root,path,function(err,node){
-                    if(err){
-                        callback(err,null);
+                core.loadByPath(root, path, function (err, node) {
+                    if (err) {
+                        callback(err, null);
                     } else {
                         var refObj = URL.urlToRefObject(path);
                         refObj.GUID = core.getGuid(node);
-                        callback(null,refObj);
+                        callback(null, refObj);
                     }
                 });
                 break;
             default:
-                callback(null,URL.urlToRefObject(null));
+                callback(null, URL.urlToRefObject(null));
         }
     };
-    var getChildrenGuids = function(core,node,callback){
+
+    var getChildrenGuids = function (core, node, callback) {
         var GUIDHash = {};
-        core.loadChildren(node,function(err,children){
-            if(err){
-                callback(err,null);
+        core.loadChildren(node, function (err, children) {
+            if (err) {
+                callback(err, null);
             } else {
-                for(var i=0;i<children.length;i++){
+                for (var i = 0; i < children.length; i++) {
                     GUIDHash[core.getPath(children[i])] = core.getGuid(children[i]);
                 }
-                callback(null,GUIDHash);
+                callback(null, GUIDHash);
             }
         });
     };
-    var getMetaOfNode = function(core,node,urlPrefix,refType,callback){
+
+    var getMetaOfNode = function (core, node, urlPrefix, refType, callback) {
         var meta = META.getMeta(core.getPath(node));
-        changeRefObjects(refType,urlPrefix,meta,core,core.getRoot(node),function(err){
-            callback(err,meta);
+        changeRefObjects(refType, urlPrefix, meta, core, core.getRoot(node), function (err) {
+            callback(err, meta);
         });
     };
-    var getChildrenOfNode = function(core,node,urlPrefix,refType,callback){
-        if(refType === _refTypes.guid){
-            getChildrenGuids(core,node,function(err,gHash){
-                if(err){
+
+    var getChildrenOfNode = function (core, node, urlPrefix, refType, callback) {
+        if (refType === _refTypes.guid) {
+            getChildrenGuids(core, node, function (err, gHash) {
+                if (err) {
                     callback(err);
                 } else {
                     //TODO possibly it needs some ordering
                     var children = [];
-                    for(var i in gHash){
+                    for (var i in gHash) {
                         var refObj = URL.urlToRefObject(i);
                         refObj.GUID = gHash[i];
                         children.push(refObj);
                     }
-                    callback(null,children);
+                    callback(null, children);
                 }
             });
         } else {
             var paths = core.getChildrenPaths(node);
             var children = [];
-            for(var i=0;i<paths.length;i++){
-                children.push(pathToRefObj(refType,urlPrefix,paths[i]));
+            for (var i = 0; i < paths.length; i++) {
+                children.push(pathToRefObj(refType, urlPrefix, paths[i]));
             }
-            callback(null,children);
+            callback(null, children);
         }
     };
-    var getSetAttributesAndRegistry = function(core,node,setName,setOwnerPath,callback){
-        var path = core.getPath(node);
-        core.loadByPath(core.getRoot(node),setOwnerPath,function(err,owner){
-            if(err){
+
+    var getSetAttributesAndRegistry = function (core, node, setName, setOwnerPath, callback) {
+        var path = core.getPath(node),
+            i;
+        core.loadByPath(core.getRoot(node), setOwnerPath, function (err, owner) {
+            if (err) {
                 callback(err);
             } else {
-                if(owner){
-                    var atrAndReg = {attributes:{},registry:{}};
-                    var names = core.getMemberAttributeNames(owner,setName,path);
-                    for(var i=0;i<names.length;i++){
-                        atrAndReg.attributes[names[i]] = core.getMemberAttribute(owner,setName,path,names[i]);
+                if (owner) {
+                    var atrAndReg = {attributes: {}, registry: {}};
+                    var names = core.getMemberAttributeNames(owner, setName, path);
+                    for (i = 0; i < names.length; i++) {
+                        atrAndReg.attributes[names[i]] = core.getMemberAttribute(owner, setName, path, names[i]);
                     }
-                    names = core.getMemberRegistryNames(owner,setName,path);
-                    for(var i=0;i<names.length;i++){
-                        atrAndReg.registry[names[i]] = core.getMemberRegistry(owner,setName,path,names[i]);
+                    names = core.getMemberRegistryNames(owner, setName, path);
+                    for (i = 0; i < names.length; i++) {
+                        atrAndReg.registry[names[i]] = core.getMemberRegistry(owner, setName, path, names[i]);
                     }
-                    callback(null,atrAndReg);
+                    callback(null, atrAndReg);
                 } else {
-                    callback('internal error',null);
+                    callback('internal error', null);
                 }
             }
         });
     };
-    var getMemberAttributesAndRegistry = function(core,node,setName,memberPath){
-        var retObj = {attributes:{},registry:{}};
-        var names,i;
-        names = core.getMemberAttributeNames(node,setName,memberPath);
-        for(i=0;i<names.length;i++){
-            retObj.attributes[names[i]] = core.getMemberAttribute(node,setName,memberPath,names[i]);
+
+    var getMemberAttributesAndRegistry = function (core, node, setName, memberPath) {
+        var retObj = {attributes: {}, registry: {}},
+            names,
+            i;
+        names = core.getMemberAttributeNames(node, setName, memberPath);
+        for (i = 0; i < names.length; i++) {
+            retObj.attributes[names[i]] = core.getMemberAttribute(node, setName, memberPath, names[i]);
         }
-        names = core.getMemberRegistryNames(node,setName,memberPath);
-        for(i=0;i<names.length;i++){
-            retObj.registry[names[i]] = core.getMemberRegistry(node,setName,memberPath,names[i]);
+        names = core.getMemberRegistryNames(node, setName, memberPath);
+        for (i = 0; i < names.length; i++) {
+            retObj.registry[names[i]] = core.getMemberRegistry(node, setName, memberPath, names[i]);
         }
         return retObj;
     };
-    var getSetsOfNode = function(core,node,urlPrefix,refType,callback){
+
+    var getSetsOfNode = function (core, node, urlPrefix, refType, callback) {
         var setsInfo = {};
-        var createOneSetInfo = function(setName,callback){
+        var createOneSetInfo = function (setName, callback) {
             var needed,
-                members = (core.getMemberPaths(node,setName)).sort(), //TODO we should remove the sort part at some point
-                info = {from:[],to:[],set:true},
+                members = (core.getMemberPaths(node, setName)).sort(), //TODO Remove the sort part at some point
+                info = {from: [], to: [], set: true},
                 i,
                 error = null,
                 containers = [],
-                collectSetInfo = function(nodePath,container,callback){
-                    if(container === true){
-                        pathToRefObjAsync(refType,urlPrefix,nodePath,core,core.getRoot(node),function(err,refObj){
-                            if(!err && refObj !== undefined && refObj !== null){
-                                getSetAttributesAndRegistry(core,node,setName,nodePath,function(err,atrAndReg){
-                                    if(atrAndReg){
-                                        for(var j in atrAndReg){
-                                            refObj[j] = atrAndReg[j];
+                collectSetInfo = function (nodePath, container, callback) {
+                    if (container === true) {
+                        pathToRefObjAsync(refType, urlPrefix, nodePath, core, core.getRoot(node),
+                            function (err, refObj) {
+                                if (!err && refObj !== undefined && refObj !== null) {
+                                    getSetAttributesAndRegistry(core, node, setName, nodePath,
+                                        function (err, atrAndReg) {
+                                            if (atrAndReg) {
+                                                for (var j in atrAndReg) {
+                                                    refObj[j] = atrAndReg[j];
+                                                }
+                                            }
+                                            callback(err, refObj);
                                         }
-                                    }
-                                    callback(err,refObj);
-                                });
-                            } else {
-                                callback(err,null);
+                                    );
+                                } else {
+                                    callback(err, null);
+                                }
                             }
-                        });
+                        );
                     } else {
                         //member
-                        pathToRefObjAsync(refType,urlPrefix,nodePath,core,core.getRoot(node),function(err,refObj){
-                            if(refObj !== undefined && refObj !== null){
-                                var atrAndReg = getMemberAttributesAndRegistry(core,node,setName,nodePath);
-                                for(var j in atrAndReg){
-                                    refObj[j] = atrAndReg[j];
+                        pathToRefObjAsync(refType, urlPrefix, nodePath, core, core.getRoot(node),
+                            function (err, refObj) {
+                                if (refObj !== undefined && refObj !== null) {
+                                    var atrAndReg = getMemberAttributesAndRegistry(core, node, setName, nodePath);
+                                    for (var j in atrAndReg) {
+                                        refObj[j] = atrAndReg[j];
+                                    }
+                                    callback(err, refObj);
                                 }
-                                callback(err,refObj);
                             }
-                        });
+                        );
                     }
                 };
 
-            for(i in memberOfInfo){
-                if(memberOfInfo[i].indexOf(setName) !== -1){
+            for (i in memberOfInfo) {
+                if (memberOfInfo[i].indexOf(setName) !== -1) {
                     containers.push(i);
                 }
             }
 
             needed = members.length + containers.length;
-            if(needed > 0){
-                for(i=0;i<members.length;i++){
-                    collectSetInfo(members[i],false,function(err,refObj){
+            if (needed > 0) {
+                for (i = 0; i < members.length; i++) {
+                    collectSetInfo(members[i], false, function (err, refObj) {
                         error = error || err;
-                        if(refObj !== undefined && refObj !== null){
+                        if (refObj !== undefined && refObj !== null) {
                             info.to.push(refObj);
                         }
 
-                        if(--needed === 0){
-                            if(error === null){
+                        if (--needed === 0) {
+                            if (error === null) {
                                 setsInfo[setName] = info;
                             }
                             callback(error);
@@ -14257,15 +14472,15 @@ define('common/core/users/tojson',[
                     });
                 }
 
-                for(i=0;i<containers.length;i++){
-                    collectSetInfo(containers[i],true,function(err,refObj){
+                for (i = 0; i < containers.length; i++) {
+                    collectSetInfo(containers[i], true, function (err, refObj) {
                         error = error || err;
-                        if(refObj !== undefined && refObj !== null){
+                        if (refObj !== undefined && refObj !== null) {
                             info.from.push(refObj);
                         }
 
-                        if(--needed === 0){
-                            if(error === null){
+                        if (--needed === 0) {
+                            if (error === null) {
                                 setsInfo[setName] = info;
                             }
                             callback(error);
@@ -14280,110 +14495,114 @@ define('common/core/users/tojson',[
         var tArray = core.getSetNames(node),
             memberOfInfo = core.isMemberOf(node),
             i, j, needed, error = null;
-        for(j in memberOfInfo){
-            for(i=0;i<memberOfInfo[j].length;i++){
-                if(tArray.indexOf(memberOfInfo[j][i]) === -1){
+        for (j in memberOfInfo) {
+            for (i = 0; i < memberOfInfo[j].length; i++) {
+                if (tArray.indexOf(memberOfInfo[j][i]) === -1) {
                     tArray.push(memberOfInfo[j][i]);
                 }
             }
         }
         needed = tArray.length;
-        if(needed>0){
-            for(i=0;i<tArray.length;i++){
-                createOneSetInfo(tArray[i],function(err){
+        if (needed > 0) {
+            for (i = 0; i < tArray.length; i++) {
+                createOneSetInfo(tArray[i], function (err) {
                     error = error || err;
-                    if(--needed === 0){
-                        callback(error,setsInfo);
+                    if (--needed === 0) {
+                        callback(error, setsInfo);
                     }
-                })
+                });
             }
         } else {
-            callback(null,setsInfo);
+            callback(null, setsInfo);
         }
     };
-    var getPointersGUIDs = function(core,node,callback){
+
+    var getPointersGUIDs = function (core, node, callback) {
         var gHash = {},
             pointerNames = core.getPointerNames(node),
             collectionNames = core.getCollectionNames(node),
-            needed = pointerNames.length+collectionNames.length,
-            error = null;
-        if(needed > 0){
+            needed = pointerNames.length + collectionNames.length,
+            error = null,
+            i;
+        if (needed > 0) {
             //pointers
-            for(var i=0;i<pointerNames.length;i++){
-                core.loadPointer(node,pointerNames[i],function(err,pointer){
+            for (i = 0; i < pointerNames.length; i++) {
+                core.loadPointer(node, pointerNames[i], function (err, pointer) {
                     error = error || err;
-                    if(pointer){
-                        if(gHash[core.getPath(pointer)] === undefined){
+                    if (pointer) {
+                        if (gHash[core.getPath(pointer)] === undefined) {
                             gHash[core.getPath(pointer)] = core.getGuid(pointer);
                         }
                     }
 
-                    if(--needed === 0){
-                        callback(error,gHash);
+                    if (--needed === 0) {
+                        callback(error, gHash);
                     }
                 });
             }
             //collections
-            for(var i=0;i<collectionNames.length;i++){
-                core.loadCollection(node,collectionNames[i],function(err,collection){
+            for (i = 0; i < collectionNames.length; i++) {
+                core.loadCollection(node, collectionNames[i], function (err, collection) {
                     error = error || err;
-                    if(collection){
-                        for(var j=0;j<collection.length;j++){
-                            if(gHash[core.getPath(collection[j])] === undefined){
+                    if (collection) {
+                        for (var j = 0; j < collection.length; j++) {
+                            if (gHash[core.getPath(collection[j])] === undefined) {
                                 gHash[core.getPath(collection[j])] = core.getGuid(collection[j]);
                             }
                         }
                     }
 
-                    if(--needed === 0){
-                        callback(error,gHash);
+                    if (--needed === 0) {
+                        callback(error, gHash);
                     }
                 });
             }
         } else {
-            callback(error,gHash);
+            callback(error, gHash);
         }
     };
-    var getPointersOfNode = function(core,node,urlPrefix,refType,callback){
+
+    var getPointersOfNode = function (core, node, urlPrefix, refType, callback) {
         var GUIDHash = {};
-        var getRefObj = function(path){
-            if(refType === _refTypes.guid){
+        var getRefObj = function (path) {
+            if (refType === _refTypes.guid) {
                 var refObj = URL.urlToRefObject(path);
                 refObj.GUID = GUIDHash[path];
                 return refObj;
             } else {
-                return pathToRefObj(refType,urlPrefix,path);
+                return pathToRefObj(refType, urlPrefix, path);
             }
         };
-        var initialized = function(){
+        var initialized = function () {
             var pointers = {},
                 tArray = core.getPointerNames(node),
-                t2Array = core.getCollectionNames(node);
-            for(var i=0;i<t2Array.length;i++){
-                if(tArray.indexOf(t2Array[i]) === -1){
+                t2Array = core.getCollectionNames(node),
+                i, j;
+            for (i = 0; i < t2Array.length; i++) {
+                if (tArray.indexOf(t2Array[i]) === -1) {
                     tArray.push(t2Array[i]);
                 }
             }
-            for(var i=0;i<tArray.length;i++){
-                var coll = core.getCollectionPaths(node,tArray[i]);
-                var pointer = {to:[],from:[],set:false},
-                    pPath = core.getPointerPath(node,tArray[i]);
-                if(pPath !== undefined){
+            for (i = 0; i < tArray.length; i++) {
+                var coll = core.getCollectionPaths(node, tArray[i]);
+                var pointer = {to: [], from: [], set: false},
+                    pPath = core.getPointerPath(node, tArray[i]);
+                if (pPath !== undefined) {
                     pointer.to.push(getRefObj(pPath));
                 }
-                for(var j=0;j<coll.length;j++){
+                for (j = 0; j < coll.length; j++) {
                     pointer.from.push(getRefObj(coll[j]));
                 }
                 pointers[tArray[i]] = pointer;
             }
-            callback(null,pointers);
+            callback(null, pointers);
         };
 
         //start
-        if(refType === _refTypes.guid){
-            getPointersGUIDs(core,node,function(err,gHash){
-                if(err){
-                    callback(err,null);
+        if (refType === _refTypes.guid) {
+            getPointersGUIDs(core, node, function (err, gHash) {
+                if (err) {
+                    callback(err, null);
                 } else {
                     GUIDHash = gHash;
                     initialized();
@@ -14393,204 +14612,212 @@ define('common/core/users/tojson',[
             initialized();
         }
     };
-    var getOwnPartOfNode = function(core,node){
-        var own = {attributes:[],registry:[],pointers:[]};
+
+    var getOwnPartOfNode = function (core, node) {
+        var own = {attributes: [], registry: [], pointers: []};
         own.attributes = core.getOwnAttributeNames(node);
         own.registry = core.getOwnRegistryNames(node);
         own.pointers = core.getOwnPointerNames(node);
         return own;
-    } ;
-    var getJsonNode = function(core,node,urlPrefix,refType,callback){
+    };
+
+    var getJsonNode = function (core, node, urlPrefix, refType, callback) {
         var nodes = {},
             tArray,
             i,
             jNode;
 
-        if(refType === _refTypes.guid && typeof core.getGuid !== 'function'){
-            callback(new Error('cannot provide GUIDs'),null);
+        if (refType === _refTypes.guid && typeof core.getGuid !== 'function') {
+            callback(new Error('cannot provide GUIDs'), null);
         }
 
         nodes[core.getPath(node)] = node;
-        META.initialize(core,nodes,function(){});
-        jNode = {'meta':{},'registry':{},'children':[],'attributes':{},'pointers':{}, 'registry':{}};
+        META.initialize(core, nodes, function () {
+            //TODO: is this asynchronous?
+        });
+
+        jNode = {
+            meta: {},
+            children: [],
+            attributes: {},
+            pointers: {},
+            registry: {}
+        };
 
 
         //basic parts of the node
         //GUID
-        if(typeof core.getGuid === 'function'){
+        if (typeof core.getGuid === 'function') {
             jNode.GUID = core.getGuid(node);
         }
         //RELID
         jNode.RELID = core.getRelid(node);
         //registry entries
         tArray = core.getRegistryNames(node);
-        for(i=0;i<tArray.length;i++){
-            jNode['registry'][tArray[i]] = core.getRegistry(node,tArray[i]);
+        for (i = 0; i < tArray.length; i++) {
+            jNode.registry[tArray[i]] = core.getRegistry(node, tArray[i]);
         }
         //attribute entries
         tArray = core.getAttributeNames(node);
-        for(i=0;i<tArray.length;i++){
-            jNode['attributes'][tArray[i]] = core.getAttribute(node,tArray[i]);
+        for (i = 0; i < tArray.length; i++) {
+            jNode.attributes[tArray[i]] = core.getAttribute(node, tArray[i]);
         }
 
         //own part of the node
-        jNode.OWN = getOwnPartOfNode(core,node);
+        jNode.OWN = getOwnPartOfNode(core, node);
 
         //reference to parent
-        jNode.parent = getParentRefObject(refType,urlPrefix,core,node);
+        jNode.parent = getParentRefObject(refType, urlPrefix, core, node);
 
 
         //now calling the relational parts
         var needed = 4,
             error = null;
-        getChildrenOfNode(core,node,urlPrefix,refType,function(err,children){
+        getChildrenOfNode(core, node, urlPrefix, refType, function (err, children) {
             error = error || err;
             jNode.children = children;
-            if(--needed === 0){
-                callback(error,jNode);
+            if (--needed === 0) {
+                callback(error, jNode);
             }
         });
-        getMetaOfNode(core,node,urlPrefix,refType,function(err,meta){
+        getMetaOfNode(core, node, urlPrefix, refType, function (err, meta) {
             error = error || err;
             jNode.meta = meta;
-            if(--needed === 0){
-                callback(error,jNode);
+            if (--needed === 0) {
+                callback(error, jNode);
             }
         });
-        getPointersOfNode(core,node,urlPrefix,refType,function(err,pointers){
+        getPointersOfNode(core, node, urlPrefix, refType, function (err, pointers) {
             error = error || err;
-            for(var i in pointers){
+            for (var i in pointers) {
                 jNode.pointers[i] = pointers[i];
             }
-            if(--needed === 0){
-                callback(error,jNode);
+            if (--needed === 0) {
+                callback(error, jNode);
             }
         });
-        getSetsOfNode(core,node,urlPrefix,refType,function(err,sets){
+        getSetsOfNode(core, node, urlPrefix, refType, function (err, sets) {
             error = error || err;
-            for(var i in sets){
+            for (var i in sets) {
                 jNode.pointers[i] = sets[i];
             }
-            if(--needed === 0){
-                callback(error,jNode);
+            if (--needed === 0) {
+                callback(error, jNode);
             }
         });
     };
+
     return getJsonNode;
 });
 
-define('common/core/users/dump',[
-    'common/core/users/meta',
-    'common/core/users/tojson',
-    'common/util/url'
-],function(
-    BaseMeta,
-    ToJson,
-    URL
-    ){
+/*globals define*/
+/*jshint node: true, browser: true*/
+
+/**
+ * @author kecso / https://github.com/kecso
+ */
+
+define('common/core/users/dump',['common/core/users/tojson', 'common/util/url'], function (toJson, URL) {
+    
+
     var _refTypes = {
-        'url':'url',
-        'path':'path',
-        'guid':'guid'
+            url: 'url',
+            path: 'path',
+            guid: 'guid'
         },
         _cache = {},
-        _rootPath = "",
+        _rootPath = '',
         _refType = 'url',
-        _core = null,
-        META = new BaseMeta();
+        _core = null;
 
-    var isRefObject = function(obj){
-        if(obj && typeof obj['$ref'] === 'string'){
+    var isRefObject = function (obj) {
+        if (obj && typeof obj.$ref === 'string') {
             return true;
         }
         return false;
     };
-    var getRefObjectPath = function(obj){
-        if(isRefObject(obj) === true){
-            var refValue = obj['$ref'];
-            switch(_refType){
+
+    var getRefObjectPath = function (obj) {
+        var result = null;
+        if (isRefObject(obj) === true) {
+            var refValue = obj.$ref;
+            switch (_refType) {
                 case _refTypes.url:
-                    if(refValue === null){
-                        return null;
+                    if (refValue === null) {
+                        result = null;
+                    } else {
+                        refValue = refValue.split('/');
+                        result = URL.removeSpecialChars(refValue[refValue.length - 1]);
                     }
-                    refValue = refValue.split('/');
-                    return URL.removeSpecialChars(refValue[refValue.length-1]);
                     break;
                 case _refTypes.path:
                 case _refTypes.guid:
-                    return refValue;
+                    result = refValue;
                     break;
                 default:
-                    return null;
+                    result = null;
+                    break;
             }
+        }
 
+        return result;
+    };
+
+    var refToRelRefObj = function (path, refObj) {
+        if (_cache[path]) {
+            refObj.$ref = _cache[path];
         } else {
-            return null;
+            refObj = {$ref: null};
         }
     };
 
-    var pathToRelRefObject = function(path){
-        if(_cache[path]){
-            return {'$ref': _cache[path]};
-        }
-        return {'$ref': null};
-    };
-
-    var refToRelRefObj = function(path,refObj){
-        if(_cache[path]){
-            refObj['$ref'] = _cache[path];
-        } else {
-            refObj = {'$ref': null};
-        }
-    };
-
-    var isSubordinate = function(path){
-        if(path.indexOf(_rootPath) === 0){
+    var isSubordinate = function (path) {
+        if (path.indexOf(_rootPath) === 0) {
             return true;
         }
         return false;
     };
 
-    var dumpChildren = function(node,dumpObject,urlPrefix,relPath,callback){
+    var dumpChildren = function (node, dumpObject, urlPrefix, relPath, callback) {
         var needed = dumpObject.children.length;
-        if(needed > 0){
-            _core.loadChildren(node,function(err,children){
-                if(err){
+        if (needed > 0) {
+            _core.loadChildren(node, function (err, children) {
+                if (err) {
                     callback(err);
                 } else {
-                    if(children === null || children === undefined || ! children.length > 0){
+                    if (children === null || children === undefined || !children.length > 0) { //FIXME: Indeed jshint
                         callback(new Error('invalid children info found'));
                     } else {
-                        var setChildJson = function(child,cb){
-                            ToJson(_core,child,urlPrefix,_refType,function(err,jChild){
-                                if(err){
+                        var setChildJson = function (child, cb) {
+                            toJson(_core, child, urlPrefix, _refType, function (err, jChild) {
+                                if (err) {
                                     cb(err);
                                 } else {
-                                    if(jChild){
+                                    if (jChild) {
                                         var childRelPath,
                                             childPath = _core.getPath(child);
-                                        for(var j=0;j<dumpObject.children.length;j++){
-                                            if(childPath === getRefObjectPath(dumpObject.children[j])){
-                                                childRelPath = relPath+'/children['+j+']';
+                                        for (var j = 0; j < dumpObject.children.length; j++) {
+                                            if (childPath === getRefObjectPath(dumpObject.children[j])) {
+                                                childRelPath = relPath + '/children[' + j + ']';
                                                 _cache[childPath] = childRelPath;
                                                 dumpObject.children[j] = jChild;
                                                 break;
                                             }
                                         }
-                                        dumpChildren(child,dumpObject.children[j],urlPrefix,childRelPath,cb);
+                                        dumpChildren(child, dumpObject.children[j], urlPrefix, childRelPath, cb);
                                     }
                                 }
-                            })
+                            });
                         };
                         var error = null;
 
-                        for(var i=0;i<children.length;i++){
-                            setChildJson(children[i],function(err){
+                        for (var i = 0; i < children.length; i++) {
+                            setChildJson(children[i], function (err) {
                                 error = error || err;
-                                if(--needed === 0){
+                                if (--needed === 0) {
                                     callback(error);
                                 }
-                            })
+                            }); //FIXME
                         }
                     }
                 }
@@ -14599,14 +14826,14 @@ define('common/core/users/dump',[
             callback(null);
         }
     };
-    var checkForInternalReferences = function(dumpObject){
-        if(typeof dumpObject === 'object'){
-            for(var i in dumpObject){
-                if(typeof dumpObject[i] === 'object'){
-                    if(isRefObject(dumpObject[i])){
+    var checkForInternalReferences = function (dumpObject) {
+        if (typeof dumpObject === 'object') {
+            for (var i in dumpObject) {
+                if (typeof dumpObject[i] === 'object') {
+                    if (isRefObject(dumpObject[i])) {
                         var path = getRefObjectPath(dumpObject[i]);
-                        if(isSubordinate(path)){
-                            refToRelRefObj(path,dumpObject[i]);
+                        if (isSubordinate(path)) {
+                            refToRelRefObj(path, dumpObject[i]);
                         }
                     } else {
                         checkForInternalReferences(dumpObject[i]);
@@ -14615,26 +14842,27 @@ define('common/core/users/dump',[
             }
         }
     };
-    var dumpJsonNode = function(core,node,urlPrefix,refType,callback){
+
+    var dumpJsonNode = function (core, node, urlPrefix, refType, callback) {
         _cache = {};
         _core = core;
         _rootPath = core.getPath(node);
         _refType = refType;
 
         //TODO this needs to be done in another way
-        ToJson(core,node,urlPrefix,_refType,function(err,jDump){
-            if(err){
-                callback(err,null);
+        toJson(core, node, urlPrefix, _refType, function (err, jDump) {
+            if (err) {
+                callback(err, null);
             } else {
-                if(jDump){
-                    _cache[_rootPath] = "#";
+                if (jDump) {
+                    _cache[_rootPath] = '#';
                 }
-                dumpChildren(node,jDump,urlPrefix,_cache[_rootPath],function(err){
-                    if(err){
+                dumpChildren(node, jDump, urlPrefix, _cache[_rootPath], function (err) {
+                    if (err) {
                         callback(err);
                     } else {
                         checkForInternalReferences(jDump);
-                        callback(null,jDump);
+                        callback(null, jDump);
                     }
                 });
             }
@@ -14645,346 +14873,113 @@ define('common/core/users/dump',[
 });
 
 
-define('common/core/users/dumpmore',[
-    'common/core/users/meta',
-    'common/core/users/tojson',
-    'common/util/url'
-],function(
-    BaseMeta,
-    ToJson,
-    URL
-    ){
-    var _refTypes = {
-            'url':'url',
-            'path':'path',
-            'guid':'guid'
-        },
-        _cache = {},
-        _rootPath = "",
-        _refType = 'url',
-        _core = null,
-        _urlPrefix = "",
-        META = new BaseMeta();
+/*globals define*/
+/*jshint node: true, browser: true*/
 
-    var isRefObject = function(obj){
-        if(obj && obj['$ref']){
-            return true;
-        }
-        return false;
-    };
-    var getRefObjectPath = function(obj){
-        if(isRefObject(obj) === true){
-            var refValue = obj['$ref'];
-            switch(_refType){
-                case _refTypes.url:
-                    if(refValue === null){
-                        return null;
-                    }
-                    refValue = refValue.split('/');
-                    return URL.removeSpecialChars(refValue[refValue.length-1]);
-                    break;
-                case _refTypes.path:
-                case _refTypes.guid:
-                    return refValue;
-                    break;
-                default:
-                    return null;
-            }
+/**
+ * this type of import is for merge purposes
+ * it tries to import not only the outgoing relations but the incoming ones as well
+ * it also tries to keep both the GUID and the relid's
+ * if it finds the same guid in the same place then it overwrites the node with the imported one!!!
+ * it not searches for GUID!!! so be careful when to use this method
+ *
+ * @author kecso / https://github.com/kecso
+ */
 
-        } else {
-            return null;
-        }
-    };
-
-    var pathToRelRefObject = function(path){
-        if(_cache[path]){
-            return {'$ref': _cache[path]};
-        }
-        return {'$ref': null};
-    };
-
-    var refToRelRefObj = function(path,refObj){
-        if(_cache[path]){
-            refObj['$ref'] = _cache[path];
-        }
-    };
-
-    var isSubordinate = function(path){
-        if(path.indexOf(_rootPath) === 0){
-            return true;
-        }
-        return false;
-    };
-
-    var dumpChildren = function(node,dumpObject,urlPrefix,relPath,callback){
-        var needed = dumpObject.children.length;
-        if(needed > 0){
-            _core.loadChildren(node,function(err,children){
-                if(err){
-                    callback(err);
-                } else {
-                    if(children === null || children === undefined || ! children.length > 0){
-                        callback(new Error('invalid children info found'));
-                    } else {
-                        var setChildJson = function(child,cb){
-                            ToJson(_core,child,urlPrefix,_refType,function(err,jChild){
-                                if(err){
-                                    cb(err);
-                                } else {
-                                    if(jChild){
-                                        var childRelPath,
-                                            childPath = _core.getPath(child);
-                                        for(var j=0;j<dumpObject.children.length;j++){
-                                            if(childPath === getRefObjectPath(dumpObject.children[j])){
-                                                childRelPath = relPath+'/children['+j+']';
-                                                _cache[childPath] = childRelPath;
-                                                dumpObject.children[j] = jChild;
-                                                break;
-                                            }
-                                        }
-                                        dumpChildren(child,dumpObject.children[j],urlPrefix,childRelPath,cb);
-                                    }
-                                }
-                            })
-                        };
-                        var error = null;
-
-                        for(var i=0;i<children.length;i++){
-                            setChildJson(children[i],function(err){
-                                error = error || err;
-                                if(--needed === 0){
-                                    callback(error);
-                                }
-                            })
-                        }
-                    }
-                }
-            });
-        } else {
-            callback(null);
-        }
-    };
-    var checkForInternalReferences = function(dumpObject){
-        if(typeof dumpObject === 'object'){
-            for(var i in dumpObject){
-                if(typeof dumpObject[i] === 'object'){
-                    if(isRefObject(dumpObject[i])){
-                        var path = getRefObjectPath(dumpObject[i]);
-                        refToRelRefObj(path,dumpObject[i]);
-                    } else {
-                        checkForInternalReferences(dumpObject[i]);
-                    }
-                }
-            }
-        }
-    };
-    var dumpJsonNode = function(core,node,urlPrefix,refType,callback){
-        _cache = {};
-        _core = core;
-        _rootPath = core.getPath(node);
-        _refType = refType;
-
-        //TODO this needs to be done in another way
-        ToJson(core,node,urlPrefix,_refType,function(err,jDump){
-            if(err){
-                callback(err,null);
-            } else {
-                if(jDump){
-                    _cache[_rootPath] = "#";
-                }
-                dumpChildren(node,jDump,urlPrefix,_cache[_rootPath],function(err){
-                    if(err){
-                        callback(err);
-                    } else {
-                        checkForInternalReferences(jDump);
-                        callback(null,jDump);
-                    }
-                });
-            }
-        });
-    };
-
-    var dumpNode = function(node,relPath,containerDump,index,callback){
-        //first we should check if the node is already dumped or not
-        var path = _core.getPath(node);
-        if(_cache[path]){
-            containerDump[index] = {
-                'GUID':_core.getGuid(node),
-                '$ref':relPath
-            };
-            callback(null);
-        } else {
-            //we try to dump this path for the first time
-            ToJson(_core,node,_urlPrefix,_refType,function(err,jNode){
-                if(err){
-                    callback(err);
-                } else {
-                    containerDump[index] = jNode;
-                    _cache[path] = relPath;
-
-                    //now we should recursively call ourselves if the node has children
-                    if(containerDump[index].children.length > 0){
-                        var needed = containerDump[index].children.length,
-                            error = null;
-                        _core.loadChildren(node,function(err,children){
-                            if(err){
-                                callback(err);
-                            } else {
-                                for(var i=0;i<children.length;i++){
-                                    dumpNode(children[i],relPath+'/children['+i+']',containerDump[index].children,i,function(err){
-                                        error = error || err;
-                                        if(--needed === 0){
-                                            callback(error);
-                                        }
-                                    });
-                                }
-                            }
-                        });
-                    } else {
-                        callback(null);
-                    }
-                }
-            });
-        }
-    };
-    var dumpMoreNodes = function(core,nodes,urlPrefix,refType,callback){
-        _cache = {};
-        _core = core;
-        _refType = refType;
-        _urlPrefix = urlPrefix;
-
-        var dumpNodes = [],
-            needed = nodes.length,
-            error = null,
-            postProcessing = function(err){
-                if(err){
-                    callback(err);
-                } else {
-                    checkForInternalReferences(dumpNodes);
-                    callback(null,dumpNodes);
-                }
-            };
-        if(needed > 0){
-            for(var i=0;i<nodes.length;i++){
-                dumpNodes.push({});
-                dumpNode(nodes[i],'#['+i+']',dumpNodes,i,function(err){
-                    error = error || err;
-                    if(--needed === 0){
-                        postProcessing(error);
-                    }
-                });
-            }
-        } else {
-            callback('no node to dump!!!',null);
-        }
-    };
-
-    return dumpMoreNodes;
-});
-
-
-
-/*
-this type of import is for merge purposes
-it tries to import not only the outgoing relations but the incoming ones as well
-it also tries to keep both the GUID and the relid's
-if it finds the same guid in the same place then it overwrites the node with the imported one!!!
-it not searches for GUID!!! so be careful when to use this method
-*/
-
-define('common/core/users/import',[
-    'common/core/users/meta'
-],function(
-    BaseMeta
-    ){
+define('common/core/users/import',['common/core/users/meta'], function (BaseMeta) {
+    
     var _core = null,
         _root = null,
-        _rootPath = "",
         _cache = {},
         _underImport = {},
         _internalRefHash = {},
         META = new BaseMeta();
 
-    function internalRefCreated(intPath,node){
+    function internalRefCreated(intPath, node) {
         _cache[_core.getPath(node)] = node;
         _internalRefHash[intPath] = _core.getPath(node);
         var callbacks = _underImport[intPath] || [];
         delete _underImport[intPath];
-        for(var i=0;i<callbacks.length;i++){
-            callbacks[i](null,node);
+        for (var i = 0; i < callbacks.length; i++) {
+            callbacks[i](null, node);
         }
     }
-    function objectLoaded(error,node){
-        if(error === null){
+
+    function objectLoaded(error, node) {
+        if (error === null) {
             _cache[_core.getPath(node)] = node;
         }
 
         var callbacks = _underImport[_core.getPath(node)] || [];
         delete _underImport[_core.getPath(node)];
-        for(var i=0;i<callbacks.length;i++){
-            callbacks[i](error,node);
+        for (var i = 0; i < callbacks.length; i++) {
+            callbacks[i](error, node);
         }
     }
-    function isInternalReference(refObj){
-        if(refObj && typeof refObj['$ref'] === 'string'){
-            if(refObj['$ref'].indexOf('#') === 0){
+
+    function isInternalReference(refObj) {
+        if (refObj && typeof refObj.$ref === 'string') {
+            if (refObj.$ref.indexOf('#') === 0) {
                 return true;
             }
         }
         return false;
     }
-    function getReferenceNode(refObj,callback){
+
+    function getReferenceNode(refObj, callback) {
         //we allow the internal references and the
-        if(refObj && typeof refObj['$ref'] === 'string'){
-            if(refObj['$ref'].indexOf('#') === 0){
+        if (refObj && typeof refObj.$ref === 'string') {
+            if (refObj.$ref.indexOf('#') === 0) {
                 //we assume that it is an internal reference
-                if(_internalRefHash[refObj['$ref']] !== undefined){
-                    callback(null,_cache[_internalRefHash[refObj['$ref']]]);
-                } else if(_underImport[refObj['$ref']] !== undefined){
-                    _underImport[refObj['$ref']].push(callback);
+                if (_internalRefHash[refObj.$ref] !== undefined) {
+                    callback(null, _cache[_internalRefHash[refObj.$ref]]);
+                } else if (_underImport[refObj.$ref] !== undefined) {
+                    _underImport[refObj.$ref].push(callback);
                 } else {
-                    _underImport[refObj['$ref']] = [callback]; //TODO we should check if the loading order is really finite this way
+                    //TODO we should check if the loading order is really finite this way
+                    _underImport[refObj.$ref] = [callback];
                 }
-            } else if(refObj['$ref'] === null){
-                callback(null,null);
+            } else if (refObj.$ref === null) {
+                callback(null, null);
             } else {
-                if(_cache[refObj['$ref']]){
-                    callback(null,_cache[refObj['$ref']]);
-                } else if(_underImport[refObj['$ref']]){
-                    _underImport[refObj['$ref']].push(callback);
+                if (_cache[refObj.$ref]) {
+                    callback(null, _cache[refObj.$ref]);
+                } else if (_underImport[refObj.$ref]) {
+                    _underImport[refObj.$ref].push(callback);
                 } else {
-                    _underImport[refObj['$ref']] = [callback];
-                    _core.loadByPath(_root,refObj['$ref'],function(err,node){
-                        if(err){
+                    _underImport[refObj.$ref] = [callback];
+                    _core.loadByPath(_root, refObj.$ref, function (err, node) {
+                        if (err) {
                             objectLoaded(err, null);
                         } else {
-                            if(refObj['GUID']){
-                                if(refObj['GUID'] === _core.getGuid(node)){
-                                    objectLoaded(err,node);
+                            if (refObj.GUID) {
+                                if (refObj.GUID === _core.getGuid(node)) {
+                                    objectLoaded(err, node);
                                 } else {
-                                    objectLoaded('GUID mismatch',node);
+                                    objectLoaded('GUID mismatch', node);
                                 }
                             } else {
-                                objectLoaded(err,node);
+                                objectLoaded(err, node);
                             }
                         }
                     });
                 }
             }
         } else {
-            callback(null,null);
+            callback(null, null);
         }
     }
-    function importChildren(node,jNode,pIntPath,callback){
-        if(jNode && jNode.children && jNode.children.length){
+
+    function importChildren(node, jNode, pIntPath, callback) {
+        if (jNode && jNode.children && jNode.children.length) {
             var needed = jNode.children.length;
 
-            if(needed > 0){
+            if (needed > 0) {
                 var error = null;
-                for(var i=0;i<jNode.children.length;i++){
-                    importNode(jNode.children[i],node,pIntPath+'/children['+i+']',true,function(err){
+                for (var i = 0; i < jNode.children.length; i++) {
+                    importNode(jNode.children[i], node, pIntPath + '/children[' + i + ']', true, function (err) {
                         error = error || err;
-                        if(--needed === 0){
+                        if (--needed === 0) {
                             callback(error);
                         }
                     });
@@ -14997,78 +14992,81 @@ define('common/core/users/import',[
             callback(null); //TODO maybe we should be more strict
         }
     }
-    function importAttributes(node,jNode){
-        if(typeof jNode.attributes === 'object'){
+
+    function importAttributes(node, jNode) {
+        if (typeof jNode.attributes === 'object') {
             var names = Object.keys(jNode.attributes);
-            if(jNode.OWN){
+            if (jNode.OWN) {
                 names = jNode.OWN.attributes;
             }
 
-            for(var i=0;i<names.length;i++){
+            for (var i = 0; i < names.length; i++) {
                 var value = jNode.attributes[names[i]];
-                if(value !== undefined){
-                    _core.setAttribute(node,names[i],value);
+                if (value !== undefined) {
+                    _core.setAttribute(node, names[i], value);
                 }
             }
         }
     }
-    function importRegistry(node,jNode){
-        if(typeof jNode.registry === 'object'){
+
+    function importRegistry(node, jNode) {
+        if (typeof jNode.registry === 'object') {
             var names = Object.keys(jNode.registry);
-            if(jNode.OWN){
+            if (jNode.OWN) {
                 names = jNode.OWN.registry;
             }
 
-            for(var i=0;i<names.length;i++){
+            for (var i = 0; i < names.length; i++) {
                 var value = jNode.registry[names[i]];
-                if(value !== undefined){
-                    _core.setRegistry(node,names[i],value);
+                if (value !== undefined) {
+                    _core.setRegistry(node, names[i], value);
                 }
             }
         }
     }
-    function importPointer(node,jNode,pName,callback){
-        if(jNode.pointers[pName].to && jNode.pointers[pName].from){
+
+    function importPointer(node, jNode, pName, callback) {
+        if (jNode.pointers[pName].to && jNode.pointers[pName].from) {
             var needed = jNode.pointers[pName].to.length + jNode.pointers[pName].from.length,
                 i,
                 error = null;
             var ownPointer = true;
-            if(jNode.OWN){
-                if(jNode.OWN.pointers.indexOf(pName) === -1){
+            if (jNode.OWN) {
+                if (jNode.OWN.pointers.indexOf(pName) === -1) {
                     ownPointer = false;
                     needed -= jNode.pointers[pName].to.length;
                 }
             }
-            if(needed === 0){
+            if (needed === 0) {
                 callback(null);
             } else {
-                if(ownPointer){
-                    for(i=0;i<jNode.pointers[pName].to.length;i++){
-                        getReferenceNode(jNode.pointers[pName].to[i],function(err,target){
+                if (ownPointer) {
+                    for (i = 0; i < jNode.pointers[pName].to.length; i++) {
+                        getReferenceNode(jNode.pointers[pName].to[i], function (err, target) {
                             error = error || err;
-                            _core.setPointer(node,pName,target);
+                            _core.setPointer(node, pName, target);
 
-                            if(--needed === 0){
+                            if (--needed === 0) {
                                 callback(error);
                             }
                         });
                     }
                 }
 
-                for(i=0;i<jNode.pointers[pName].from.length;i++){
-                    if(!isInternalReference(jNode.pointers[pName].from[i])){
-                        getReferenceNode(jNode.pointers[pName].from[i],function(err,source){
+                for (i = 0; i < jNode.pointers[pName].from.length; i++) {
+                    if (!isInternalReference(jNode.pointers[pName].from[i])) {
+                        getReferenceNode(jNode.pointers[pName].from[i], function (err, source) {
                             error = error || err;
-                            if(source){
-                                _core.setPointer(source,pName,node);
+                            if (source) {
+                                _core.setPointer(source, pName, node);
                             }
 
-                            if(--needed === 0){
+                            if (--needed === 0) {
                                 callback(error);
                             }
                         });
                     } else {
-                        if(--needed === 0){
+                        if (--needed === 0) {
                             callback(error);
                         }
                     }
@@ -15078,31 +15076,33 @@ define('common/core/users/import',[
             callback(null);
         }
     }
-    function importSet(node,jNode,sName, callback){
-        if(jNode.pointers[sName].to && jNode.pointers[sName].from){
+
+    function importSet(node, jNode, sName, callback) {
+        if (jNode.pointers[sName].to && jNode.pointers[sName].from) {
             var needed = 0,
-                importSetRegAndAtr = function(sOwner,sMember,atrAndReg){
-                    _core.addMember(sOwner,sName,sMember);
+                i,
+                importSetRegAndAtr = function (sOwner, sMember, atrAndReg) {
+                    _core.addMember(sOwner, sName, sMember);
                     var mPath = _core.getPath(sMember);
                     atrAndReg.attributes = atrAndReg.attributes || {};
-                    for(var i in atrAndReg.attributes){
-                        _core.setMemberAttribute(sOwner,sName,mPath,i,atrAndReg.attributes[i]);
+                    for (i in atrAndReg.attributes) {
+                        _core.setMemberAttribute(sOwner, sName, mPath, i, atrAndReg.attributes[i]);
                     }
                     atrAndReg.registry = atrAndReg.registry || {};
-                    for(var i in atrAndReg.registry){
-                        _core.setMemberRegistry(sOwner,sName,mPath,i,atrAndReg.registry[i]);
+                    for (i in atrAndReg.registry) {
+                        _core.setMemberRegistry(sOwner, sName, mPath, i, atrAndReg.registry[i]);
                     }
                 },
-                importSetReference = function(isTo,index,cb){
+                importSetReference = function (isTo, index, cb) {
                     var jObj = isTo === true ? jNode.pointers[sName].to[index] : jNode.pointers[sName].from[index];
-                    getReferenceNode(jObj,function(err,sNode){
-                        if(err){
+                    getReferenceNode(jObj, function (err, sNode) {
+                        if (err) {
                             cb(err);
                         } else {
-                            if(sNode){
+                            if (sNode) {
                                 var sOwner = isTo === true ? node : sNode,
                                     sMember = isTo === true ? sNode : node;
-                                importSetRegAndAtr(sOwner,sMember,jObj);
+                                importSetRegAndAtr(sOwner, sMember, jObj);
                             }
                             cb(null);
                         }
@@ -15110,27 +15110,27 @@ define('common/core/users/import',[
                 },
                 error = null;
 
-            if(jNode.pointers[sName].to.length > 0){
+            if (jNode.pointers[sName].to.length > 0) {
                 needed += jNode.pointers[sName].to.length;
-                _core.createSet(node,sName);
+                _core.createSet(node, sName);
             }
-            if(jNode.pointers[sName].from.length > 0){
+            if (jNode.pointers[sName].from.length > 0) {
                 needed += jNode.pointers[sName].from.length;
             }
 
-            if(needed > 0){
-                for(var i=0;i<jNode.pointers[sName].to.length;i++){
-                    importSetReference(true,i,function(err){
+            if (needed > 0) {
+                for (i = 0; i < jNode.pointers[sName].to.length; i++) {
+                    importSetReference(true, i, function (err) {
                         error = error || err;
-                        if(--needed === 0){
+                        if (--needed === 0) {
                             callback(error);
                         }
                     });
                 }
-                for(var i=0;i<jNode.pointers[sName].from.length;i++){
-                    importSetReference(false,i,function(err){
+                for (i = 0; i < jNode.pointers[sName].from.length; i++) {
+                    importSetReference(false, i, function (err) {
                         error = error || err;
-                        if(--needed === 0){
+                        if (--needed === 0) {
                             callback(error);
                         }
                     });
@@ -15142,18 +15142,19 @@ define('common/core/users/import',[
             callback(null); //TODO now we just simply try to ignore faulty data import
         }
     }
-    function importRelations(node,jNode,callback){
+
+    function importRelations(node, jNode, callback) {
         //TODO now se use the pointer's 'set' attribute to decide if it is a set or a pointer really
         var pointers = [],
             sets = [],
             needed = 0,
             error = null,
             i;
-        if(! typeof jNode.pointers === 'object'){
+        if (typeof jNode.pointers !== 'object') {
             callback(null); //TODO should we drop an error???
         } else {
-            for(i in jNode.pointers){
-                if(jNode.pointers[i].set === true){
+            for (i in jNode.pointers) {
+                if (jNode.pointers[i].set === true) {
                     sets.push(i);
                 } else {
                     pointers.push(i);
@@ -15162,19 +15163,19 @@ define('common/core/users/import',[
 
             needed = sets.length + pointers.length;
 
-            if(needed > 0){
-                for(i=0;i<pointers.length;i++){
-                    importPointer(node,jNode,pointers[i],function(err){
+            if (needed > 0) {
+                for (i = 0; i < pointers.length; i++) {
+                    importPointer(node, jNode, pointers[i], function (err) {
                         error = error || err;
-                        if(--needed === 0){
+                        if (--needed === 0) {
                             callback(error);
                         }
                     });
                 }
-                for(i=0;i<sets.length;i++){
-                    importSet(node,jNode,sets[i],function(err){
+                for (i = 0; i < sets.length; i++) {
+                    importSet(node, jNode, sets[i], function (err) {
                         error = error || err;
-                        if(--needed === 0){
+                        if (--needed === 0) {
                             callback(error);
                         }
                     });
@@ -15184,43 +15185,45 @@ define('common/core/users/import',[
             }
         }
     }
-    function importMeta(node,jNode,callback){
+
+    function importMeta(node, jNode, callback) {
         //TODO now this function searches the whole meta data for reference objects and load them, then call setMeta
-        var loadReference = function(refObj,cb){
-                getReferenceNode(refObj,function(err,rNode){
-                    if(err){
+        var loadReference = function (refObj, cb) {
+                getReferenceNode(refObj, function (err, rNode) {
+                    if (err) {
                         cb(err);
                     } else {
-                        if(rNode){
-                            refObj['$ref'] = _core.getPath(rNode);
+                        if (rNode) {
+                            refObj.$ref = _core.getPath(rNode);
                         }
                         cb(null);
                     }
                 });
             },
-            loadMetaReferences = function(jObject,cb){
+            loadMetaReferences = function (jObject, cb) {
                 var needed = 0,
+                    i,
                     error = null;
-                for(var i in jObject){
-                    if(jObject[i] !== null && typeof jObject[i] === 'object'){
+                for (i in jObject) {
+                    if (jObject[i] !== null && typeof jObject[i] === 'object') {
                         needed++;
                     }
                 }
 
-                if(needed>0){
-                    for(var i in jObject){
-                        if(jObject[i] !== null && typeof jObject[i] === 'object'){
-                            if(jObject[i]['$ref']){
-                                loadReference(jObject[i],function(err){
+                if (needed > 0) {
+                    for (i in jObject) {
+                        if (jObject[i] !== null && typeof jObject[i] === 'object') {
+                            if (jObject[i].$ref) {
+                                loadReference(jObject[i], function (err) {
                                     error = error || err;
-                                    if(--needed === 0){
+                                    if (--needed === 0) {
                                         cb(error);
                                     }
                                 });
                             } else {
-                                loadMetaReferences(jObject[i],function(err){
+                                loadMetaReferences(jObject[i], function (err) {
                                     error = error || err;
-                                    if(--needed === 0){
+                                    if (--needed === 0) {
                                         cb(error);
                                     }
                                 });
@@ -15232,77 +15235,80 @@ define('common/core/users/import',[
                 }
             };
 
-        loadMetaReferences(jNode.meta || {}, function(err){
-            if(err){
+        loadMetaReferences(jNode.meta || {}, function (err) {
+            if (err) {
                 callback(err);
             } else {
-                META.setMeta(_core.getPath(node),jNode.meta || {});
+                META.setMeta(_core.getPath(node), jNode.meta || {});
                 callback(null);
             }
         });
-    };
-    function importRoot(jNode,callback){
+    }
+
+    function importRoot(jNode, callback) {
         //first we create the root node itself, then the other parts of the function is pretty much like the importNode
-        _root = _core.createNode({guid:jNode.GUID});
-        internalRefCreated('#',_root);
-        importAttributes(_root,jNode);
-        importRegistry(_root,jNode);
-        importChildren(_root,jNode,'#',function(err){
-            if(err){
+        _root = _core.createNode({guid: jNode.GUID});
+        internalRefCreated('#', _root);
+        importAttributes(_root, jNode);
+        importRegistry(_root, jNode);
+        importChildren(_root, jNode, '#', function (err) {
+            if (err) {
                 callback(err);
             } else {
-                importRelations(_root,jNode,function(err){
-                    if(err){
+                importRelations(_root, jNode, function (err) {
+                    if (err) {
                         callback(err);
                     } else {
-                        importMeta(_root,jNode,function(err){
-                            callback(err,_root);
+                        importMeta(_root, jNode, function (err) {
+                            callback(err, _root);
                         });
                     }
                 });
             }
         });
     }
-    function clearOldNode(relid,guid,parentNode,callback){
-        var relids = _core.getChildrenRelids(parentNode);
-        if(relids.indexOf(relid) !== -1){
-            _core.loadChild(parentNode,relid,function(err,oldChild){
-                if(err){
-                    callback(err);
-                } else {
-                    if(_core.getGuid(oldChild) === guid){
-                        var root = _core.getRoot(oldChild);
-                        _core.deleteNode(oldChild);
-                        _core.persist(root,function(){
-                            callback(null)
-                        });
-                    } else {
-                        callback(null);
-                    }
-                }
-            });
-        } else {
-            callback(null);
-        }
-    }
-    function getEmptyNode(jNode,parentNode,baseNode,noClear,callback){
+
+    //function clearOldNode(relid, guid, parentNode, callback) {
+    //    var relids = _core.getChildrenRelids(parentNode);
+    //    if (relids.indexOf(relid) !== -1) {
+    //        _core.loadChild(parentNode, relid, function (err, oldChild) {
+    //            if (err) {
+    //                callback(err);
+    //            } else {
+    //                if (_core.getGuid(oldChild) === guid) {
+    //                    var root = _core.getRoot(oldChild);
+    //                    _core.deleteNode(oldChild);
+    //                    _core.persist(root, function () {
+    //                        callback(null);
+    //                    });
+    //                } else {
+    //                    callback(null);
+    //                }
+    //            }
+    //        });
+    //    } else {
+    //        callback(null);
+    //    }
+    //}
+
+    function getEmptyNode(jNode, parentNode, baseNode, noClear, callback) {
         var relids = _core.getChildrenRelids(parentNode),
-            returnNewNode = function(){
-                var node = _core.createNode({base:baseNode,parent:parentNode,relid:jNode.RELID,guid:jNode.GUID});
-                callback(null,node);
+            returnNewNode = function () {
+                var node = _core.createNode({base: baseNode, parent: parentNode, relid: jNode.RELID, guid: jNode.GUID});
+                callback(null, node);
             };
-        if(relids.indexOf(jNode.RELID) != -1){
-            _core.loadChild(parentNode,jNode.RELID,function(err,oldChild){
-                if(err){
-                    callback(err,null);
+        if (relids.indexOf(jNode.RELID) !== -1) {
+            _core.loadChild(parentNode, jNode.RELID, function (err, oldChild) {
+                if (err) {
+                    callback(err, null);
                 } else {
-                    if(_core.getGuid(oldChild) === jNode.GUID){
-                        if(noClear === true){
-                            callback(null,oldChild);
+                    if (_core.getGuid(oldChild) === jNode.GUID) {
+                        if (noClear === true) {
+                            callback(null, oldChild);
                         } else {
                             var root = _core.getRoot(oldChild);
                             _core.deleteNode(oldChild);
-                            _core.persist(root,function(){
+                            _core.persist(root, function () {
                                 returnNewNode();
                             });
                         }
@@ -15315,29 +15321,30 @@ define('common/core/users/import',[
             returnNewNode();
         }
     }
-    function importNode(jNode,parentNode,intPath,noClear,callback){
+
+    function importNode(jNode, parentNode, intPath, noClear, callback) {
         //first we have to get the base of the node
-        if(jNode.pointers && jNode.pointers.base && jNode.pointers.base.to){
-            getReferenceNode(jNode.pointers.base.to[0],function(err,base){
-                if(err){
+        if (jNode.pointers && jNode.pointers.base && jNode.pointers.base.to) {
+            getReferenceNode(jNode.pointers.base.to[0], function (err, base) {
+                if (err) {
                     callback(err);
                 } else {
-                   getEmptyNode(jNode,parentNode,base,noClear,function(err,node){
-                        if(err){
+                    getEmptyNode(jNode, parentNode, base, noClear, function (err, node) {
+                        if (err) {
                             callback(err);
                         } else {
-                            internalRefCreated(intPath,node);
-                            importAttributes(node,jNode);
-                            importRegistry(node,jNode);
-                            importChildren(node,jNode,intPath,function(err){
-                                if(err){
+                            internalRefCreated(intPath, node);
+                            importAttributes(node, jNode);
+                            importRegistry(node, jNode);
+                            importChildren(node, jNode, intPath, function (err) {
+                                if (err) {
                                     callback(err);
                                 } else {
-                                    importRelations(node,jNode,function(err){
-                                        if(err){
+                                    importRelations(node, jNode, function (err) {
+                                        if (err) {
                                             callback(err);
                                         } else {
-                                            importMeta(node,jNode,function(err){
+                                            importMeta(node, jNode, function (err) {
                                                 callback(err);
                                             });
                                         }
@@ -15353,24 +15360,25 @@ define('common/core/users/import',[
         }
     }
 
-    function importing(core,parent,jNode,callback){
+    function importing(core, parent, jNode, callback) {
         _core = core;
         _cache = {};
         _underImport = {};
         _internalRefHash = {};
-        META.initialize(_core,_cache,function(){});
+        META.initialize(_core, _cache, function () {
+        });
 
-        if(jNode.length){
+        if (jNode.length) {
             //multiple objects
-            if(parent){
+            if (parent) {
                 var needed = jNode.length,
                     error = null;
                 _cache[core.getPath(parent)] = parent;
                 _root = core.getRoot(parent);
-                for(var i=0;i<jNode.length;i++){
-                    importNode(jNode[i],parent,'#['+i+']',false,function(err){
+                for (var i = 0; i < jNode.length; i++) {
+                    importNode(jNode[i], parent, '#[' + i + ']', false, function (err) {
                         error = error || err;
-                        if(--needed === 0){
+                        if (--needed === 0) {
                             callback(error);
                         }
                     });
@@ -15380,12 +15388,12 @@ define('common/core/users/import',[
             }
         } else {
             //single object
-            if(parent){
+            if (parent) {
                 _cache[core.getPath(parent)] = parent;
                 _root = core.getRoot(parent);
-                importNode(jNode,parent,'#',false,callback);
+                importNode(jNode, parent, '#', false, callback);
             } else {
-                importRoot(jNode,callback);
+                importRoot(jNode, callback);
             }
         }
     }
@@ -15394,15 +15402,19 @@ define('common/core/users/import',[
 });
 
 
-// This import will only enter the outgoing relations and the internal ones.
-// This import will try to import an array of objects as well as a single object.
-// Although this import also asume that there is no loop in the references so it can simply wait for
+/*globals define*/
+/*jshint node: true, browser: true*/
 
-define('common/core/users/copyimport',[
-    'common/core/users/meta'
-],function(
-    BaseMeta
-    ){
+/**
+ * This import will only enter the outgoing relations and the internal ones.
+ * This import will try to import an array of objects as well as a single object.
+ * Although this import also assumes that there is no loop in the references so it can simply wait for
+ *
+ * @author kecso / https://github.com/kecso
+ */
+
+define('common/core/users/copyimport',['common/core/users/meta'], function (BaseMeta) {
+    
     var _core = null,
         _root = null,
         _cache = {},
@@ -15410,89 +15422,94 @@ define('common/core/users/copyimport',[
         _internalRefHash = {},
         META = new BaseMeta();
 
-    function internalRefCreated(intPath,node){
+    function internalRefCreated(intPath, node) {
         _cache[_core.getPath(node)] = node;
         _internalRefHash[intPath] = _core.getPath(node);
         var callbacks = _underImport[intPath] || [];
         delete _underImport[intPath];
-        for(var i=0;i<callbacks.length;i++){
-            callbacks[i](null,node);
+        for (var i = 0; i < callbacks.length; i++) {
+            callbacks[i](null, node);
         }
     }
-    function objectLoaded(error,node){
-        if(error === null){
+
+    function objectLoaded(error, node) {
+        if (error === null) {
             _cache[_core.getPath(node)] = node;
         }
 
         var callbacks = _underImport[_core.getPath(node)] || [];
         delete _underImport[_core.getPath(node)];
-        for(var i=0;i<callbacks.length;i++){
-            callbacks[i](error,node);
+        for (var i = 0; i < callbacks.length; i++) {
+            callbacks[i](error, node);
         }
     }
-    function isInternalReference(refObj){
-        if(refObj && typeof refObj['$ref'] === 'string'){
-            if(refObj['$ref'].indexOf('#') === 0){
-                return true;
-            }
-        }
-        return false;
-    }
-    function getReferenceNode(refObj,callback){
+
+    //function isInternalReference(refObj) {
+    //    if (refObj && typeof refObj.$ref === 'string') {
+    //        if (refObj.$ref.indexOf('#') === 0) {
+    //            return true;
+    //        }
+    //    }
+    //    return false;
+    //}
+
+    function getReferenceNode(refObj, callback) {
         //we allow the internal references and the
-        if(refObj && typeof refObj['$ref'] === 'string'){
-            if(refObj['$ref'].indexOf('#') === 0){
+        if (refObj && typeof refObj.$ref === 'string') {
+            if (refObj.$ref.indexOf('#') === 0) {
                 //we assume that it is an internal reference
-                if(_internalRefHash[refObj['$ref']] !== undefined){
-                    callback(null,_cache[_internalRefHash[refObj['$ref']]]);
-                } else if(_underImport[refObj['$ref']] !== undefined){
-                    _underImport[refObj['$ref']].push(callback);
+                if (_internalRefHash[refObj.$ref] !== undefined) {
+                    callback(null, _cache[_internalRefHash[refObj.$ref]]);
+                } else if (_underImport[refObj.$ref] !== undefined) {
+                    _underImport[refObj.$ref].push(callback);
                 } else {
-                    _underImport[refObj['$ref']] = [callback]; //TODO we should check if the loading order is really finite this way
+                    //TODO we should check if the loading order is really finite this way
+                    _underImport[refObj.$ref] = [callback];
                 }
-            } else if(refObj['$ref'] === null){
-                callback(null,null);
+            } else if (refObj.$ref === null) {
+                callback(null, null);
             } else {
-                if(_cache[refObj['$ref']]){
-                    callback(null,_cache[refObj['$ref']]);
-                } else if(_underImport[refObj['$ref']]){
-                    _underImport[refObj['$ref']].push(callback);
+                if (_cache[refObj.$ref]) {
+                    callback(null, _cache[refObj.$ref]);
+                } else if (_underImport[refObj.$ref]) {
+                    _underImport[refObj.$ref].push(callback);
                 } else {
-                    _underImport[refObj['$ref']] = [callback];
-                    _core.loadByPath(_root,refObj['$ref'],function(err,node){
-                        if(err){
+                    _underImport[refObj.$ref] = [callback];
+                    _core.loadByPath(_root, refObj.$ref, function (err, node) {
+                        if (err) {
                             objectLoaded(err, null);
                         } else {
-                            if(refObj['GUID']){
-                                if(refObj['GUID'] === _core.getGuid(node)){
-                                    objectLoaded(err,node);
+                            if (refObj.GUID) {
+                                if (refObj.GUID === _core.getGuid(node)) {
+                                    objectLoaded(err, node);
                                 } else {
-                                    objectLoaded('GUID mismatch',node);
+                                    objectLoaded('GUID mismatch', node);
                                 }
                             } else {
-                                objectLoaded(err,node);
+                                objectLoaded(err, node);
                             }
                         }
                     });
                 }
             }
         } else {
-            callback(null,null);
+            callback(null, null);
         }
     }
-    function importChildren(node,jNode,pIntPath,callback){
-        if(jNode && jNode.children && jNode.children.length){
+
+    function importChildren(node, jNode, pIntPath, callback) {
+        if (jNode && jNode.children && jNode.children.length) {
             var needed = jNode.children.length;
 
-            if(needed > 0){
+            if (needed > 0) {
                 var error = null;
-                for(var i=0;i<jNode.children.length;i++){
-                    importNode(jNode.children[i],node,pIntPath+'/children['+i+']',function(err){
+                for (var i = 0; i < jNode.children.length; i++) {
+                    importNode(jNode.children[i], node, pIntPath + '/children[' + i + ']', function (err) {
                         error = error || err;
-                        if(--needed === 0){
+                        if (--needed === 0) {
                             callback(error);
                         }
-                    });
+                    }); //FIXME
                 }
             } else {
                 callback(null);
@@ -15502,68 +15519,74 @@ define('common/core/users/copyimport',[
             callback(null); //TODO maybe we should be more strict
         }
     }
-    function importAttributes(node,jNode){
-        if(typeof jNode.attributes === 'object'){
-            for(var i in jNode.attributes){
-                _core.setAttribute(node,i,jNode.attributes[i]);
+
+    function importAttributes(node, jNode) {
+        if (typeof jNode.attributes === 'object') {
+            for (var i in jNode.attributes) {
+                _core.setAttribute(node, i, jNode.attributes[i]);
             }
         }
     }
-    function importRegistry(node,jNode){
-        if(typeof jNode.registry === 'object'){
-            for(var i in jNode.registry){
-                _core.setRegistry(node,i,jNode.registry[i]);
+
+    function importRegistry(node, jNode) {
+        if (typeof jNode.registry === 'object') {
+            for (var i in jNode.registry) {
+                _core.setRegistry(node, i, jNode.registry[i]);
             }
         }
     }
-    function importPointer(node,jNode,pName,callback){
-        if(jNode.pointers[pName].to && jNode.pointers[pName].to.length > 0){
+
+    function importPointer(node, jNode, pName, callback) {
+        if (jNode.pointers[pName].to && jNode.pointers[pName].to.length > 0) {
             var needed = jNode.pointers[pName].to.length,
                 i,
                 error = null;
 
-            for(i=0;i<jNode.pointers[pName].to.length;i++){
-                getReferenceNode(jNode.pointers[pName].to[i],function(err,target){
+            for (i = 0; i < jNode.pointers[pName].to.length; i++) {
+                getReferenceNode(jNode.pointers[pName].to[i], function (err, target) {
                     error = error || err;
-                    if(target !== undefined){
-                        _core.setPointer(node,pName,target);
+                    if (target !== undefined) {
+                        _core.setPointer(node, pName, target);
                     }
 
-                    if(--needed === 0){
+                    if (--needed === 0) {
                         callback(error);
                     }
-                });
+                }); //FIXME
             }
 
         } else {
             callback(null);
         }
     }
-    function importSet(node,jNode,sName, callback){
-        if(jNode.pointers[sName].to && jNode.pointers[sName].to.length > 0){
+
+    function importSet(node, jNode, sName, callback) {
+        if (jNode.pointers[sName].to && jNode.pointers[sName].to.length > 0) {
             var needed = 0,
-                importSetRegAndAtr = function(sOwner,sMember,atrAndReg){
-                    _core.addMember(sOwner,sName,sMember);
+                i,
+                key,
+                importSetRegAndAtr = function (sOwner, sMember, atrAndReg) {
+                    _core.addMember(sOwner, sName, sMember);
                     var mPath = _core.getPath(sMember);
                     atrAndReg.attributes = atrAndReg.attributes || {};
-                    for(var i in atrAndReg.attributes){
-                        _core.setMemberAttribute(sOwner,sName,mPath,i,atrAndReg.attributes[i]);
+                    for (key in atrAndReg.attributes) {
+                        _core.setMemberAttribute(sOwner, sName, mPath, key, atrAndReg.attributes[key]);
                     }
                     atrAndReg.registry = atrAndReg.registry || {};
-                    for(var i in atrAndReg.registry){
-                        _core.setMemberRegistry(sOwner,sName,mPath,i,atrAndReg.registry[i]);
+                    for (key in atrAndReg.registry) {
+                        _core.setMemberRegistry(sOwner, sName, mPath, key, atrAndReg.registry[key]);
                     }
                 },
-                importSetReference = function(isTo,index,cb){
+                importSetReference = function (isTo, index, cb) {
                     var jObj = isTo === true ? jNode.pointers[sName].to[index] : jNode.pointers[sName].from[index];
-                    getReferenceNode(jObj,function(err,sNode){
-                        if(err){
+                    getReferenceNode(jObj, function (err, sNode) {
+                        if (err) {
                             cb(err);
                         } else {
-                            if(sNode){
+                            if (sNode) {
                                 var sOwner = isTo === true ? node : sNode,
                                     sMember = isTo === true ? sNode : node;
-                                importSetRegAndAtr(sOwner,sMember,jObj);
+                                importSetRegAndAtr(sOwner, sMember, jObj);
                             }
                             cb(null);
                         }
@@ -15571,85 +15594,87 @@ define('common/core/users/copyimport',[
                 },
                 error = null;
 
-            _core.createSet(node,sName);
+            _core.createSet(node, sName);
             needed = jNode.pointers[sName].to.length;
-            for(var i=0;i<jNode.pointers[sName].to.length;i++){
-                importSetReference(true,i,function(err){
+            for (i = 0; i < jNode.pointers[sName].to.length; i++) {
+                importSetReference(true, i, function (err) {
                     error = error || err;
-                    if(--needed === 0){
+                    if (--needed === 0) {
                         callback(error);
                     }
-                });
+                }); //FIXME
             }
         } else {
             callback(null); //TODO now we just simply try to ignore faulty data import
         }
     }
-    function _importSet(node,jNode,sName, callback){
-        if(jNode.pointers[sName].to){
-            var needed = 0,
-                importSetRegAndAtr = function(sOwner,sMember,atrAndReg){
-                    _core.addMember(sOwner,sName,sMember);
-                    var mPath = _core.getPath(sMember);
-                    atrAndReg.attributes = atrAndReg.attributes || {};
-                    for(var i in atrAndReg.attributes){
-                        _core.setMemberAttribute(sOwner,sName,mPath,i,atrAndReg.attributes[i]);
-                    }
-                    atrAndReg.registry = atrAndReg.registry || {};
-                    for(var i in atrAndReg.registry){
-                        _core.setMemberRegistry(sOwner,sName,mPath,i,atrAndReg.registry[i]);
-                    }
-                },
-                importSetReference = function(isTo,index,cb){
-                    var jObj = isTo === true ? jNode.pointers[sName].to[index] : jNode.pointers[sName].from[index];
-                    getReferenceNode(jObj,function(err,sNode){
-                        if(err){
-                            cb(err);
-                        } else {
-                            if(sNode){
-                                var sOwner = isTo === true ? node : sNode,
-                                    sMember = isTo === true ? sNode : node;
-                                importSetRegAndAtr(sOwner,sMember,jObj);
-                            }
-                            cb(null);
-                        }
-                    });
-                },
-                error = null;
 
-            if(jNode.pointers[sName].to.length > 0){
-                needed += jNode.pointers[sName].to.length;
-                _core.createSet(node,sName);
-            }
+    //function _importSet(node, jNode, sName, callback) {
+    //    if (jNode.pointers[sName].to) {
+    //        var needed = 0,
+    //            importSetRegAndAtr = function (sOwner, sMember, atrAndReg) {
+    //                _core.addMember(sOwner, sName, sMember);
+    //                var mPath = _core.getPath(sMember);
+    //                atrAndReg.attributes = atrAndReg.attributes || {};
+    //                for (var i in atrAndReg.attributes) {
+    //                    _core.setMemberAttribute(sOwner, sName, mPath, i, atrAndReg.attributes[i]);
+    //                }
+    //                atrAndReg.registry = atrAndReg.registry || {};
+    //                for (var i in atrAndReg.registry) {
+    //                    _core.setMemberRegistry(sOwner, sName, mPath, i, atrAndReg.registry[i]);
+    //                }
+    //            },
+    //            importSetReference = function (isTo, index, cb) {
+    //                var jObj = isTo === true ? jNode.pointers[sName].to[index] : jNode.pointers[sName].from[index];
+    //                getReferenceNode(jObj, function (err, sNode) {
+    //                    if (err) {
+    //                        cb(err);
+    //                    } else {
+    //                        if (sNode) {
+    //                            var sOwner = isTo === true ? node : sNode,
+    //                                sMember = isTo === true ? sNode : node;
+    //                            importSetRegAndAtr(sOwner, sMember, jObj);
+    //                        }
+    //                        cb(null);
+    //                    }
+    //                });
+    //            },
+    //            error = null;
+    //
+    //        if (jNode.pointers[sName].to.length > 0) {
+    //            needed += jNode.pointers[sName].to.length;
+    //            _core.createSet(node, sName);
+    //        }
+    //
+    //        if (needed > 0) {
+    //            for (var i = 0; i < jNode.pointers[sName].to.length; i++) {
+    //                importSetReference(true, i, function (err) {
+    //                    error = error || err;
+    //                    if (--needed === 0) {
+    //                        callback(error);
+    //                    }
+    //                });
+    //            }
+    //        } else {
+    //            callback(null);
+    //        }
+    //    } else {
+    //        callback(null); //TODO now we just simply try to ignore faulty data import
+    //    }
+    //}
 
-            if(needed > 0){
-                for(var i=0;i<jNode.pointers[sName].to.length;i++){
-                    importSetReference(true,i,function(err){
-                        error = error || err;
-                        if(--needed === 0){
-                            callback(error);
-                        }
-                    });
-                }
-            } else {
-                callback(null);
-            }
-        } else {
-            callback(null); //TODO now we just simply try to ignore faulty data import
-        }
-    }
-    function importRelations(node,jNode,callback){
+    function importRelations(node, jNode, callback) {
         //TODO now se use the pointer's 'set' attribute to decide if it is a set or a pointer really
         var pointers = [],
             sets = [],
             needed = 0,
             error = null,
             i;
-        if(! typeof jNode.pointers === 'object'){
+        if (typeof jNode.pointers !== 'object') {
             callback(null); //TODO should we drop an error???
         } else {
-            for(i in jNode.pointers){
-                if(jNode.pointers[i].set === true){
+            for (i in jNode.pointers) {
+                if (jNode.pointers[i].set === true) {
                     sets.push(i);
                 } else {
                     pointers.push(i);
@@ -15658,19 +15683,19 @@ define('common/core/users/copyimport',[
 
             needed = sets.length + pointers.length;
 
-            if(needed > 0){
-                for(i=0;i<pointers.length;i++){
-                    importPointer(node,jNode,pointers[i],function(err){
+            if (needed > 0) {
+                for (i = 0; i < pointers.length; i++) {
+                    importPointer(node, jNode, pointers[i], function (err) {
                         error = error || err;
-                        if(--needed === 0){
+                        if (--needed === 0) {
                             callback(error);
                         }
                     });
                 }
-                for(i=0;i<sets.length;i++){
-                    importSet(node,jNode,sets[i],function(err){
+                for (i = 0; i < sets.length; i++) {
+                    importSet(node, jNode, sets[i], function (err) {
                         error = error || err;
-                        if(--needed === 0){
+                        if (--needed === 0) {
                             callback(error);
                         }
                     });
@@ -15680,47 +15705,49 @@ define('common/core/users/copyimport',[
             }
         }
     }
-    function importMeta(node,jNode,callback){
+
+    function importMeta(node, jNode, callback) {
 
         //TODO now this function searches the whole meta data for reference objects and load them, then call setMeta
-        var loadReference = function(refObj,cb){
-                getReferenceNode(refObj,function(err,rNode){
-                    if(err){
+        var loadReference = function (refObj, cb) {
+                getReferenceNode(refObj, function (err, rNode) {
+                    if (err) {
                         cb(err);
                     } else {
-                        if(rNode){
-                            refObj['$ref'] = _core.getPath(rNode);
+                        if (rNode) {
+                            refObj.$ref = _core.getPath(rNode);
                         }
                         cb(null);
                     }
                 });
             },
-            loadMetaReferences = function(jObject,cb){
+            loadMetaReferences = function (jObject, cb) {
                 var needed = 0,
+                    i,
                     error = null;
-                for(var i in jObject){
-                    if(jObject[i] !== null && typeof jObject[i] === 'object'){
+                for (i in jObject) {
+                    if (jObject[i] !== null && typeof jObject[i] === 'object') {
                         needed++;
                     }
                 }
 
-                if(needed>0){
-                    for(var i in jObject){
-                        if(jObject[i] !== null && typeof jObject[i] === 'object'){
-                            if(jObject[i]['$ref']){
-                                loadReference(jObject[i],function(err){
+                if (needed > 0) {
+                    for (i in jObject) {
+                        if (jObject[i] !== null && typeof jObject[i] === 'object') {
+                            if (jObject[i].$ref) {
+                                loadReference(jObject[i], function (err) {
                                     error = error || err;
-                                    if(--needed === 0){
+                                    if (--needed === 0) {
                                         cb(error);
                                     }
                                 });
                             } else {
-                                loadMetaReferences(jObject[i],function(err){
+                                loadMetaReferences(jObject[i], function (err) {
                                     error = error || err;
-                                    if(--needed === 0){
+                                    if (--needed === 0) {
                                         cb(error);
                                     }
-                                })
+                                });
                             }
                         }
                     }
@@ -15729,60 +15756,62 @@ define('common/core/users/copyimport',[
                 }
             };
 
-        loadMetaReferences(jNode.meta || {}, function(err){
-            if(err){
+        loadMetaReferences(jNode.meta || {}, function (err) {
+            if (err) {
                 callback(err);
             } else {
-                META.setMeta(_core.getPath(node),jNode.meta || {});
+                META.setMeta(_core.getPath(node), jNode.meta || {});
                 callback(null);
             }
         });
-    };
-    function importRoot(jNode,callback){
+    }
+
+    function importRoot(jNode, callback) {
         //first we create the root node itself, then the other parts of the function is pretty much like the importNode
 
         _root = _core.createNode();
-        internalRefCreated('#',_root);
-        importAttributes(_root,jNode);
-        importRegistry(_root,jNode);
-        importChildren(_root,jNode,'#',function(err){
-            if(err){
+        internalRefCreated('#', _root);
+        importAttributes(_root, jNode);
+        importRegistry(_root, jNode);
+        importChildren(_root, jNode, '#', function (err) {
+            if (err) {
                 callback(err);
             } else {
-                importRelations(_root,jNode,function(err){
-                    if(err){
+                importRelations(_root, jNode, function (err) {
+                    if (err) {
                         callback(err);
                     } else {
-                        importMeta(_root,jNode,function(err){
-                            callback(err,_root);
+                        importMeta(_root, jNode, function (err) {
+                            callback(err, _root);
                         });
                     }
                 });
             }
         });
     }
-    function importNode(jNode,parentNode,intPath,callback){
+
+    function importNode(jNode, parentNode, intPath, callback) {
         //return callback('not implemented');
         //first we have to get the base of the node
-        if(jNode.pointers && jNode.pointers.base && jNode.pointers.base.to){
-            getReferenceNode(jNode.pointers.base.to[0],function(err,base){
-                if(err){
+        if (jNode.pointers && jNode.pointers.base && jNode.pointers.base.to) {
+            getReferenceNode(jNode.pointers.base.to[0], function (err, base) {
+                if (err) {
                     callback(err);
                 } else {
                     //now we are ready to create the node itself
-                    var node = _core.createNode({base:base,parent:parentNode});
-                    internalRefCreated(intPath,node);
-                    importAttributes(node,jNode);
-                    importRegistry(node,jNode);
-                    importChildren(node,jNode,intPath,function(err){
-                        if(err){
+                    var node = _core.createNode({base: base, parent: parentNode});
+                    internalRefCreated(intPath, node);
+                    importAttributes(node, jNode);
+                    importRegistry(node, jNode);
+                    importChildren(node, jNode, intPath, function (err) {
+                        if (err) {
                             callback(err);
                         } else {
-                            importRelations(node,jNode,function(err){
-                                if(err){
+                            importRelations(node, jNode, function (err) {
+                                if (err) {
                                     callback(err);
                                 } else {
-                                    importMeta(node,jNode,callback);
+                                    importMeta(node, jNode, callback);
                                 }
                             });
                         }
@@ -15793,24 +15822,26 @@ define('common/core/users/copyimport',[
             callback('wrong import format: base info is wrong');
         }
     }
-    function importing(core,parent,jNode,callback){
+
+    function importing(core, parent, jNode, callback) {
         _core = core;
         _cache = {};
         _underImport = {};
         _internalRefHash = {};
-        META.initialize(_core,_cache,function(){});
+        META.initialize(_core, _cache, function () {
+        });
 
-        if(jNode.length){
+        if (jNode.length) {
             //multiple objects
-            if(parent){
+            if (parent) {
                 var needed = jNode.length,
                     error = null;
                 _cache[core.getPath(parent)] = parent;
                 _root = core.getRoot(parent);
-                for(var i=0;i<jNode.length;i++){
-                    importNode(jNode[i],parent,'#['+i+']',function(err){
+                for (var i = 0; i < jNode.length; i++) {
+                    importNode(jNode[i], parent, '#[' + i + ']', function (err) {
                         error = error || err;
-                        if(--needed === 0){
+                        if (--needed === 0) {
                             callback(error);
                         }
                     });
@@ -15820,18 +15851,26 @@ define('common/core/users/copyimport',[
             }
         } else {
             //single object
-            if(parent){
+            if (parent) {
                 _cache[core.getPath(parent)] = parent;
                 _root = core.getRoot(parent);
-                importNode(jNode,parent,'#',callback);
+                importNode(jNode, parent, '#', callback);
             } else {
-                importRoot(jNode,callback);
+                importRoot(jNode, callback);
             }
         }
     }
+
     return importing;
 });
-define('common/core/users/serialization',['common/util/assert'],function(ASSERT){
+/*globals define*/
+/*jshint node: true, browser: true*/
+
+/**
+ * @author kecso / https://github.com/kecso
+ */
+
+define('common/core/users/serialization',['common/util/assert'], function (ASSERT) {
 
     
     var _nodes = {},
@@ -15844,16 +15883,17 @@ define('common/core/users/serialization',['common/util/assert'],function(ASSERT)
         _newNodeGuids = [],
         _removedNodeGuids = [],
         _updatedNodeGuids = [],
-        _log = "";
+        _log = '';
 
-    function log(txt){
-        if(_log){
-            _log+="\n"+txt;
+    function log(txt) {
+        if (_log) {
+            _log += '\n' + txt;
         } else {
-            _log = ""+txt;
+            _log = '' + txt;
         }
     }
-    function exportLibrary(core,libraryRoot,callback){
+
+    function exportLibrary(core, libraryRoot, callback) {
         //initialization
         _core = core;
         _nodes = {};
@@ -15863,8 +15903,8 @@ define('common/core/users/serialization',['common/util/assert'],function(ASSERT)
         _export = {};
 
         //loading all library element
-        gatherNodesSlowly(libraryRoot,function(err){
-            if(err){
+        gatherNodesSlowly(libraryRoot, function (err) {
+            if (err) {
                 return callback(err);
             }
 
@@ -15874,118 +15914,133 @@ define('common/core/users/serialization',['common/util/assert'],function(ASSERT)
             var keys = Object.keys(_extraBasePaths),
                 i;
             _export.bases = {};
-            for(i=0;i<keys.length;i++){
+            for (i = 0; i < keys.length; i++) {
                 _export.bases[_extraBasePaths[keys[i]]] = keys[i];
             }
-            //_export.bases = _extraBasePaths; //we save this info alongside with the library export, to be on the safe side
+
+            //_export.bases = _extraBasePaths;
+            // we save this info alongside with the library export, to be on the safe side
 
             _export.root = getLibraryRootInfo(libraryRoot);
             _export.relids = getRelIdInfo();
-            _export.containment = {}; fillContainmentTree(libraryRoot,_export.containment);
+            _export.containment = {};
+            fillContainmentTree(libraryRoot, _export.containment);
             _export.nodes = getNodesData();
-            _export.metaSheets = core.getParent(libraryRoot) ? getMetaSheetInfo(_core.getRoot(libraryRoot)) : {}; //we export MetaSheet info only if not the whole project is exported!!!
 
-            callback(null,_export);
+            //we export MetaSheet info only if not the whole project is exported!!!
+            _export.metaSheets = core.getParent(libraryRoot) ? getMetaSheetInfo(_core.getRoot(libraryRoot)) : {};
+
+            callback(null, _export);
 
         });
     }
-    function getMetaSheetInfo(root){
-        var getMemberRegistry = function(setname,memberpath){
-                var names = _core.getMemberRegistryNames(root,setname,memberpath),
+
+    function getMetaSheetInfo(root) {
+        var getMemberRegistry = function (setname, memberpath) {
+                var names = _core.getMemberRegistryNames(root, setname, memberpath),
                     i,
                     registry = {};
-                for(i=0;i<names.length;i++){
-                    registry[names[i]] = _core.getMemberRegistry(root,setname,memberpath,names[i]);
+                for (i = 0; i < names.length; i++) {
+                    registry[names[i]] = _core.getMemberRegistry(root, setname, memberpath, names[i]);
                 }
                 return registry;
             },
-            getMemberAttributes = function(setname,memberpath){
-                var names = _core.getMemberAttributeNames(root,setname,memberpath),
+            getMemberAttributes = function (setname, memberpath) {
+                var names = _core.getMemberAttributeNames(root, setname, memberpath),
                     i,
                     attributes = {};
-                for(i=0;i<names.length;i++){
-                    attributes[names[i]] = _core.getMemberAttribute(root,setname,memberpath,names[i]);
+                for (i = 0; i < names.length; i++) {
+                    attributes[names[i]] = _core.getMemberAttribute(root, setname, memberpath, names[i]);
                 }
                 return attributes;
             },
-            getRegistryEntry = function(setname){
+            getRegistryEntry = function (setname) {
                 var index = registry.length;
 
-                while(--index >= 0){
-                    if(registry[index].SetID === setname){
+                while (--index >= 0) {
+                    if (registry[index].SetID === setname) {
                         return registry[index];
                     }
                 }
                 return {};
             },
             sheets = {},
-            registry = _core.getRegistry(root,"MetaSheets"),
+            registry = _core.getRegistry(root, 'MetaSheets'),
             keys = _core.getSetNames(root),
-            elements,guid,
-            i,j;
-        for(i=0;i<keys.length;i++){
-            if(keys[i].indexOf("MetaAspectSet") === 0){
-                elements = _core.getMemberPaths(root,keys[i]);
-                for(j=0;j<elements.length;j++){
+            elements, guid,
+            i,
+            j;
+
+        for (i = 0; i < keys.length; i++) {
+            if (keys[i].indexOf('MetaAspectSet') === 0) {
+                elements = _core.getMemberPaths(root, keys[i]);
+                for (j = 0; j < elements.length; j++) {
                     guid = _pathToGuidMap[elements[j]] || _extraBasePaths[elements[j]];
-                    if(guid){
+                    if (guid) {
                         sheets[keys[i]] = sheets[keys[i]] || {};
-                        sheets[keys[i]][guid] = {registry:getMemberRegistry(keys[i],elements[j]),attributes:getMemberAttributes(keys[i],elements[j])};
+                        sheets[keys[i]][guid] = {
+                            registry: getMemberRegistry(keys[i], elements[j]),
+                            attributes: getMemberAttributes(keys[i], elements[j])
+                        };
                     }
                 }
 
-                if(sheets[keys[i]] && keys[i] !== "MetaAspectSet"){
+                if (sheets[keys[i]] && keys[i] !== 'MetaAspectSet') {
                     //we add the global registry values as well
                     sheets[keys[i]].global = getRegistryEntry(keys[i]);
                 }
             }
         }
-        console.log('sheets',sheets);
+        console.log('sheets', sheets);
         return sheets;
     }
-    function importMetaSheetInfo(root){
-        var setMemberAttributesAndRegistry = function(setname,memberguid){
+
+    function importMetaSheetInfo(root) {
+        var setMemberAttributesAndRegistry = function (setname, memberguid) {
                 var attributes = oldSheets[setname][memberguid].attributes || {},
                     registry = oldSheets[setname][memberguid].registry || {},
-                    keys,i;
-                keys = Object.keys(attributes);
-                for(i=0;i<keys.length;i++) {
-                    _core.setMemberAttribute(root,setname,_core.getPath(_nodes[memberguid]),keys[i],attributes[keys[i]]);
+                    keys = Object.keys(attributes),
+                    i;
+
+                for (i = 0; i < keys.length; i++) {
+                    _core.setMemberAttribute(root, setname, _core.getPath(_nodes[memberguid]), keys[i],
+                        attributes[keys[i]]);
                 }
                 keys = Object.keys(registry);
-                for(i=0;i<keys.length;i++) {
-                    _core.setMemberRegistry(root,setname,_core.getPath(_nodes[memberguid]),keys[i],registry[keys[i]]);
+                for (i = 0; i < keys.length; i++) {
+                    _core.setMemberRegistry(root, setname, _core.getPath(_nodes[memberguid]), keys[i],
+                        registry[keys[i]]);
                 }
             },
-            updateSheet = function(name){
+            updateSheet = function (name) {
                 //the removed object should be already removed...
                 //if some element is extra in the place of import, then it stays untouched
                 var oldMemberGuids = Object.keys(oldSheets[name]),
                     i;
-                oldMemberGuids.splice(oldMemberGuids.indexOf("global"),1);
-                for(i=0;i<oldMemberGuids.length;i++) {
-                    _core.addMember(root,name,_nodes[oldMemberGuids[i]]);
-                    setMemberAttributesAndRegistry(name,oldMemberGuids[i]);
+                oldMemberGuids.splice(oldMemberGuids.indexOf('global'), 1);
+                for (i = 0; i < oldMemberGuids.length; i++) {
+                    _core.addMember(root, name, _nodes[oldMemberGuids[i]]);
+                    setMemberAttributesAndRegistry(name, oldMemberGuids[i]);
                 }
             },
-            addSheet = function(name) {
-                var registry = JSON.parse(JSON.stringify(_core.getRegistry(root,"MetaSheets")) || {}),
+            addSheet = function (name) {
+                var registry = JSON.parse(JSON.stringify(_core.getRegistry(root, 'MetaSheets')) || {}),
                     i,
                     memberpath,
                     memberguids = Object.keys(oldSheets[name]);
 
-                memberguids.splice(memberguids.indexOf('global'),1);
+                memberguids.splice(memberguids.indexOf('global'), 1);
 
-                if(name !== 'MetaAspectSet'){
-                  registry.push(oldSheets[name].global);
-                  _core.setRegistry(root,"MetaSheets",registry);
+                if (name !== 'MetaAspectSet') {
+                    registry.push(oldSheets[name].global);
+                    _core.setRegistry(root, 'MetaSheets', registry);
                 }
 
-                _core.createSet(root,name);
-                for(i=0;i<memberguids.length;i++) {
+                _core.createSet(root, name);
+                for (i = 0; i < memberguids.length; i++) {
                     memberpath = _core.getPath(_nodes[memberguids[i]]);
-                    _core.addMember(root,name,_nodes[memberguids[i]]);
-                    setMemberAttributesAndRegistry(name,memberguids[i]);
+                    _core.addMember(root, name, _nodes[memberguids[i]]);
+                    setMemberAttributesAndRegistry(name, memberguids[i]);
                 }
             },
             oldSheets = _import.metaSheets || {},
@@ -15994,25 +16049,27 @@ define('common/core/users/serialization',['common/util/assert'],function(ASSERT)
             newSheetNames = Object.keys(newSheets),
             i;
 
-        for(i=0;i<oldSheetNames.length;i++) {
-            if(newSheetNames.indexOf(oldSheetNames[i]) !== -1){
+        for (i = 0; i < oldSheetNames.length; i++) {
+            if (newSheetNames.indexOf(oldSheetNames[i]) !== -1) {
                 updateSheet(oldSheetNames[i]);
             } else {
                 addSheet(oldSheetNames[i]);
             }
         }
     }
-    function getLibraryRootInfo(node){
+
+    function getLibraryRootInfo(node) {
         return {
             path: _core.getPath(node),
             guid: _core.getGuid(node)
         };
     }
-    function gatherNodesSlowly(node,callback){
-        _core.loadSubTree(node,function(err,nodes){
-            var guid,i;
-            if(!err && nodes){
-                for(i=0;i<nodes.length;i++){
+
+    function gatherNodesSlowly(node, callback) {
+        _core.loadSubTree(node, function (err, nodes) {
+            var guid, i;
+            if (!err && nodes) {
+                for (i = 0; i < nodes.length; i++) {
                     guid = _core.getGuid(nodes[i]);
                     _nodes[guid] = nodes[i];
                     _guidKeys.push(guid);
@@ -16024,95 +16081,94 @@ define('common/core/users/serialization',['common/util/assert'],function(ASSERT)
             }
         });
     }
-    function gatherAncestors(){
+
+    function gatherAncestors() {
         //this function inserts the needed base classes which were not included in the library
-        var i,base,guid;
-        for(i=0;i<_guidKeys.length;i++){
+        var i, base, guid;
+        for (i = 0; i < _guidKeys.length; i++) {
             base = _nodes[_guidKeys[i]];
-            while(base!== null){
+            while (base !== null) {
                 guid = _core.getGuid(base);
-                if(!_nodes[guid]) {
+                if (!_nodes[guid]) {
                     _nodes[guid] = base;
                     _extraBasePaths[_core.getPath(base)] = guid;
-                } else if(_guidKeys.indexOf(guid) === -1){
+                } else if (_guidKeys.indexOf(guid) === -1) {
                     _extraBasePaths[_core.getPath(base)] = guid;
                 }
                 base = _core.getBase(base);
             }
         }
     }
-    function pathsToSortedGuidList(pathsList){ //it will also filter out not wanted elements
-        var i,guids = [];
-        for(i=0;i<pathsList.length;i++){
-            if(_pathToGuidMap[pathsList[i]]){
+
+    function pathsToSortedGuidList(pathsList) { //it will also filter out not wanted elements
+        var i, guids = [];
+        for (i = 0; i < pathsList.length; i++) {
+            if (_pathToGuidMap[pathsList[i]]) {
                 guids.push(_pathToGuidMap[pathsList[i]]);
             }
         }
         return guids.sort();
     }
-    function fillContainmentTree(node,myTreeObject){
+
+    function fillContainmentTree(node, myTreeObject) {
         var childrenGuids = pathsToSortedGuidList(_core.getChildrenPaths(node)),
             i;
-        for(i=0;i<childrenGuids.length;i++){
+        for (i = 0; i < childrenGuids.length; i++) {
             myTreeObject[childrenGuids[i]] = {};
-            fillContainmentTree(_nodes[childrenGuids[i]],myTreeObject[childrenGuids[i]]);
+            fillContainmentTree(_nodes[childrenGuids[i]], myTreeObject[childrenGuids[i]]);
         }
     }
-    function fillInheritanceTree(node,myTreeObject){
+
+    function getRelIdInfo() {
         var i,
-            descendantGuids = pathsToSortedGuidList(_core.getCollectionPaths(node,'base'));
-        for(i=0;i<descendantGuids.length;i++){
-            myTreeObject[descendantGuids[i]] = {};
-            fillInheritanceTree(_nodes[descendantGuids[i]],myTreeObject[descendantGuids[i]]);
-        }
-    }
-    function getRelIdInfo(){
-        var i,
-            relIdInfo={};
-        for(i=0;i<_guidKeys.length;i++){
+            relIdInfo = {};
+        for (i = 0; i < _guidKeys.length; i++) {
             relIdInfo[_guidKeys[i]] = _core.getRelid(_nodes[_guidKeys[i]]);
         }
         return relIdInfo;
     }
-    function getNodesData(){
+
+    function getNodesData() {
         var data = {},
             i;
-        for(i=0;i<_guidKeys.length;i++){
+        for (i = 0; i < _guidKeys.length; i++) {
             data[_guidKeys[i]] = getNodeData(_nodes[_guidKeys[i]]);
         }
         return data;
     }
-    function getNodeData(node){
+
+    function getNodeData(node) {
         /*{
-            //only the ones defined on this level
-            attributes:{name:value},
-            base:GUID,
-            registry:{name:value},
-            parent:GUID,
-            pointers:{name:targetGuid},
-            sets:{name:[{guid:GUID,attributes:{name:value},registy:{name:value}}]}
-            meta:{}
-        }*/
+         //only the ones defined on this level
+         attributes:{name:value},
+         base:GUID,
+         registry:{name:value},
+         parent:GUID,
+         pointers:{name:targetGuid},
+         sets:{name:[{guid:GUID,attributes:{name:value},registy:{name:value}}]}
+         meta:{}
+         }*/
         return {
-            attributes:getAttributesOfNode(node),
+            attributes: getAttributesOfNode(node),
             base: _core.getBase(node) ? _core.getGuid(_core.getBase(node)) : null,
-            meta:pathsToGuids(JSON.parse(JSON.stringify(_core.getOwnJsonMeta(node)) || {})),
-            parent:_core.getParent(node) ? _core.getGuid(_core.getParent(node)) : null,
-            pointers:getPointersOfNode(node),
-            registry:getRegistryOfNode(node),
-            sets:getSetsOfNode(node),
+            meta: pathsToGuids(JSON.parse(JSON.stringify(_core.getOwnJsonMeta(node)) || {})),
+            parent: _core.getParent(node) ? _core.getGuid(_core.getParent(node)) : null,
+            pointers: getPointersOfNode(node),
+            registry: getRegistryOfNode(node),
+            sets: getSetsOfNode(node),
             constraints: getConstraintsOfNode(node)
         };
     }
-    function baseGuid(path){
-       /*var keys = Object.keys(_extraBasePaths),
-            i;
-        for(i=0;i<keys.length;i++){
-            if(_extraBasePaths[keys[i]] === path){
-                return keys[i];
-            }
-        }
-        return null;*/
+
+    function baseGuid(path) {
+        /*var keys = Object.keys(_extraBasePaths),
+         i;
+         for(i=0;i<keys.length;i++){
+         if(_extraBasePaths[keys[i]] === path){
+         return keys[i];
+         }
+         }
+         return null;*/
         return _extraBasePaths[path];
     }
 
@@ -16120,7 +16176,7 @@ define('common/core/users/serialization',['common/util/assert'],function(ASSERT)
         var index = getSortedIndex(arguments[0]);
         for (var j = 0; j < arguments.length; j++) {
             var _arr = arguments[j].slice();
-            for(var i = 0; i < _arr.length; i++) {
+            for (var i = 0; i < _arr.length; i++) {
                 arguments[j][i] = _arr[index[i]];
             }
         }
@@ -16131,20 +16187,21 @@ define('common/core/users/serialization',['common/util/assert'],function(ASSERT)
         for (var i = 0; i < arr.length; i++) {
             index.push(i);
         }
-        index = index.sort((function(arr){
-            return function (a, b) {return ((arr[a] > arr[b]) ? 1 : ((arr[a] < arr[b]) ? -1 : 0));
+        index = index.sort((function (arr) {
+            return function (a, b) {
+                return ((arr[a] > arr[b]) ? 1 : ((arr[a] < arr[b]) ? -1 : 0));
             };
         })(arr));
         return index;
     };
 
-    function pathsToGuids(jsonObject){
-        if(jsonObject && typeof jsonObject === 'object'){
+    function pathsToGuids(jsonObject) {
+        if (jsonObject && typeof jsonObject === 'object') {
             var keys = Object.keys(jsonObject),
-                i, j, k,toDelete,tArray;
+                i, j, k, toDelete, tArray;
 
-            for(i=0;i<keys.length;i++){
-                if(keys[i] === 'items') {
+            for (i = 0; i < keys.length; i++) {
+                if (keys[i] === 'items') {
                     //here comes the transformation itself
                     toDelete = [];
                     for (j = 0; j < jsonObject.items.length; j++) {
@@ -16167,13 +16224,13 @@ define('common/core/users/serialization',['common/util/assert'],function(ASSERT)
                         }
                     }
                     sortMultipleArrays(jsonObject.items, jsonObject.minItems, jsonObject.maxItems);
-                } else if(keys[i] === 'aspects'){
+                } else if (keys[i] === 'aspects') {
                     //aspects are a bunch of named path list, so we have to handle them separately
                     tArray = Object.keys(jsonObject[keys[i]]);
-                    for(j=0;j<tArray.length;j++){
+                    for (j = 0; j < tArray.length; j++) {
                         //here comes the transformation itself
                         toDelete = [];
-                        for(k=0;k<jsonObject.aspects[tArray[j]].length;k++) {
+                        for (k = 0; k < jsonObject.aspects[tArray[j]].length; k++) {
                             if (_pathToGuidMap[jsonObject.aspects[tArray[j]][k]]) {
                                 jsonObject.aspects[tArray[j]][k] = _pathToGuidMap[jsonObject.aspects[tArray[j]][k]];
                             } else if (baseGuid(jsonObject.aspects[tArray[j]][k])) {
@@ -16195,7 +16252,7 @@ define('common/core/users/serialization',['common/util/assert'],function(ASSERT)
 
                     }
                 } else {
-                    if(typeof jsonObject[keys[i]] === 'object'){
+                    if (typeof jsonObject[keys[i]] === 'object') {
                         jsonObject[keys[i]] = pathsToGuids(jsonObject[keys[i]]);
                     }
                 }
@@ -16204,60 +16261,66 @@ define('common/core/users/serialization',['common/util/assert'],function(ASSERT)
         }
         return jsonObject;
     }
-    function getAttributesOfNode(node){
+
+    function getAttributesOfNode(node) {
         var names = _core.getOwnAttributeNames(node).sort(),
             i,
             result = {};
-        for(i=0;i<names.length;i++){
-            result[names[i]] = _core.getAttribute(node,names[i]);
+        for (i = 0; i < names.length; i++) {
+            result[names[i]] = _core.getAttribute(node, names[i]);
         }
         return result;
     }
-    function getRegistryOfNode(node){
+
+    function getRegistryOfNode(node) {
         var names = _core.getOwnRegistryNames(node).sort(),
             i,
             result = {};
-        for(i=0;i<names.length;i++){
-            result[names[i]] = _core.getRegistry(node,names[i]);
+        for (i = 0; i < names.length; i++) {
+            result[names[i]] = _core.getRegistry(node, names[i]);
         }
         return result;
     }
-    function getConstraintsOfNode(node){
+
+    function getConstraintsOfNode(node) {
         var names = _core.getOwnConstraintNames(node).sort(),
             i,
             result = {};
-        for(i=0;i<names.length;i++){
-            result[names[i]] = _core.getConstraint(node,names[i]);
+        for (i = 0; i < names.length; i++) {
+            result[names[i]] = _core.getConstraint(node, names[i]);
         }
         return result;
     }
-    function getPointersOfNode(node){
+
+    function getPointersOfNode(node) {
         var names = _core.getOwnPointerNames(node).sort(),
             i,
             result = {},
             target;
-        for(i=0;i<names.length;i++){
-            target = _core.getPointerPath(node,names[i]);
-            if(_pathToGuidMap[target] || baseGuid(target) || target === null){
+        for (i = 0; i < names.length; i++) {
+            target = _core.getPointerPath(node, names[i]);
+            if (_pathToGuidMap[target] || baseGuid(target) || target === null) {
                 result[names[i]] = _pathToGuidMap[target] || baseGuid(target) || null;
             }
         }
         return result;
     }
-    function getOwnMemberPaths(node,setName){
+
+    function getOwnMemberPaths(node, setName) {
         var base = _core.getBase(node),
-            baseMembers = base === null ? [] : _core.getMemberPaths(base,setName),
-            members = _core.getMemberPaths(node,setName),
-            ownMembers=[],
+            baseMembers = base === null ? [] : _core.getMemberPaths(base, setName),
+            members = _core.getMemberPaths(node, setName),
+            ownMembers = [],
             i;
-        for(i=0;i<members.length;i++){
-            if(baseMembers.indexOf(members[i]) === -1){
+        for (i = 0; i < members.length; i++) {
+            if (baseMembers.indexOf(members[i]) === -1) {
                 ownMembers.push(members[i]);
             }
         }
         return ownMembers;
     }
-    function getSetsOfNode(node){
+
+    function getSetsOfNode(node) {
         var names = _core.getSetNames(node).sort(),
             i, j, k,
             result = {},
@@ -16266,27 +16329,29 @@ define('common/core/users/serialization',['common/util/assert'],function(ASSERT)
             registryNames,
             memberInfo,
             path;
-        for(i=0;i<names.length;i++){
-            targetGuids = pathsToSortedGuidList(getOwnMemberPaths(node,names[i]));
+        for (i = 0; i < names.length; i++) {
+            targetGuids = pathsToSortedGuidList(getOwnMemberPaths(node, names[i]));
             result[names[i]] = [];
-            for(j=0;j<targetGuids.length;j++){
+            for (j = 0; j < targetGuids.length; j++) {
                 path = _core.getPath(_nodes[targetGuids[j]]);
                 memberInfo = {
-                    attributes:{},
-                    guid:targetGuids[j],
-                    registry:{}
+                    attributes: {},
+                    guid: targetGuids[j],
+                    registry: {}
                 };
 
                 //attributes
-                attributeNames = _core.getMemberAttributeNames(node,names[i],path).sort();
-                for(k=0;k<attributeNames.length;k++){
-                    memberInfo.attributes[attributeNames[k]] = _core.getMemberAttribute(node,names[i],path,attributeNames[k]);
+                attributeNames = _core.getMemberAttributeNames(node, names[i], path).sort();
+                for (k = 0; k < attributeNames.length; k++) {
+                    memberInfo.attributes[attributeNames[k]] =
+                        _core.getMemberAttribute(node, names[i], path, attributeNames[k]);
                 }
 
                 //registry
-                registryNames = _core.getMemberRegistryNames(node,names[i],path).sort();
-                for(k=0;k<registryNames.length;k++){
-                    memberInfo.registry[registryNames[k]] = _core.getMemberRegistry(node,names[i],path,registryNames[k]);
+                registryNames = _core.getMemberRegistryNames(node, names[i], path).sort();
+                for (k = 0; k < registryNames.length; k++) {
+                    memberInfo.registry[registryNames[k]] =
+                        _core.getMemberRegistry(node, names[i], path, registryNames[k]);
                 }
 
                 result[names[i]].push(memberInfo);
@@ -16295,27 +16360,28 @@ define('common/core/users/serialization',['common/util/assert'],function(ASSERT)
         return result;
     }
 
-    function logId(nodes,id){
-        var txtId = id+"";
-        if(nodes[id] && nodes[id].attributes && nodes[id].attributes.name){
-            txtId = nodes[id].attributes.name+"("+id+")";
+    function logId(nodes, id) {
+        var txtId = id + '';
+        if (nodes[id] && nodes[id].attributes && nodes[id].attributes.name) {
+            txtId = nodes[id].attributes.name + '(' + id + ')';
         }
 
         return txtId;
     }
-    function loadImportBases(guids,root,callback){
+
+    function loadImportBases(guids, root, callback) {
         var needed = [],
             error = null,
             stillToGo = 0,
             i,
             guidList = Object.keys(guids),
-            loadBase = function(guid,path,cb){
-                _core.loadByPath(root,path,function(err,node){
-                    if(err){
+            loadBase = function (guid, path, cb) {
+                _core.loadByPath(root, path, function (err, node) {
+                    if (err) {
                         return cb(err);
                     }
-                    if(_core.getGuid(node) !== guid){
-                        return cb("GUID mismatch");
+                    if (_core.getGuid(node) !== guid) {
+                        return cb('GUID mismatch');
                     }
 
                     _nodes[guid] = node;
@@ -16323,18 +16389,18 @@ define('common/core/users/serialization',['common/util/assert'],function(ASSERT)
                 });
             };
 
-        for(i=0;i<guidList.length;i++){
-            if(_nodes[guidList[i]] === undefined){
+        for (i = 0; i < guidList.length; i++) {
+            if (_nodes[guidList[i]] === undefined) {
                 needed.push(guidList[i]);
             }
         }
 
-        if(needed.length > 0){
+        if (needed.length > 0) {
             stillToGo = needed.length;
-            for(i=0;i<needed.length;i++){
-                loadBase(needed[i],guids[needed[i]],function(err){
+            for (i = 0; i < needed.length; i++) {
+                loadBase(needed[i], guids[needed[i]], function (err) {
                     error = error || err;
-                    if(--stillToGo === 0){
+                    if (--stillToGo === 0) {
                         callback(error);
                     }
                 });
@@ -16343,26 +16409,26 @@ define('common/core/users/serialization',['common/util/assert'],function(ASSERT)
             return callback(null);
         }
 
-
     }
-    function importLibrary(core,originLibraryRoot,updatedLibraryJson,callback){
+
+    function importLibrary(core, originLibraryRoot, updatedLibraryJson, callback) {
         _core = core;
         _import = updatedLibraryJson;
         _newNodeGuids = [];
         _updatedNodeGuids = [];
         _removedNodeGuids = [];
-        _log = "";
+        _log = '';
 
-        synchronizeRoots(originLibraryRoot,_import.root.guid);
-        exportLibrary(core,originLibraryRoot,function(err){
+        synchronizeRoots(originLibraryRoot, _import.root.guid);
+        exportLibrary(core, originLibraryRoot, function (err) {
             //we do not need the returned json object as that is stored in our global _export variable
-            if(err){
+            if (err) {
                 return callback(err);
             }
 
             //now we will search for the bases of the import and load them
-            loadImportBases(_import.bases,_core.getRoot(originLibraryRoot),function(err){
-                if(err){
+            loadImportBases(_import.bases, _core.getRoot(originLibraryRoot), function (err) {
+                if (err) {
                     return callback(err);
                 }
 
@@ -16372,23 +16438,25 @@ define('common/core/users/serialization',['common/util/assert'],function(ASSERT)
                     i;
 
                 //TODO now we make three rounds although one would be sufficient on ordered lists
-                for(i=0;i<oldkeys.length;i++){
-                    if(newkeys.indexOf(oldkeys[i]) === -1){
-                        log("node "+logId(_export.nodes,oldkeys[i])+", all of its sub-types and its children will be removed");
+                for (i = 0; i < oldkeys.length; i++) {
+                    if (newkeys.indexOf(oldkeys[i]) === -1) {
+                        log('node ' + logId(_export.nodes, oldkeys[i]) +
+                        ', all of its sub-types and its children will be removed');
+
                         _removedNodeGuids.push(oldkeys[i]);
                     }
                 }
 
-                for(i=0;i<oldkeys.length;i++){
-                    if(newkeys.indexOf(oldkeys[i]) !== -1){
-                        log("node "+logId(_export.nodes,oldkeys[i])+" will be updated")
+                for (i = 0; i < oldkeys.length; i++) {
+                    if (newkeys.indexOf(oldkeys[i]) !== -1) {
+                        log('node ' + logId(_export.nodes, oldkeys[i]) + ' will be updated');
                         _updatedNodeGuids.push(oldkeys[i]);
                     }
                 }
 
-                for(i=0;i<newkeys.length;i++){
-                    if(oldkeys.indexOf(newkeys[i]) === -1){
-                        log("node "+logId(_import.nodes,newkeys[i])+" will be added")
+                for (i = 0; i < newkeys.length; i++) {
+                    if (oldkeys.indexOf(newkeys[i]) === -1) {
+                        log('node ' + logId(_import.nodes, newkeys[i]) + ' will be added');
                         _newNodeGuids.push(newkeys[i]);
                     }
                 }
@@ -16396,20 +16464,20 @@ define('common/core/users/serialization',['common/util/assert'],function(ASSERT)
                 //Now we normalize the removedGUIDs by containment and remove them
                 var toDelete = [],
                     parent;
-                for(i=0;i<_removedNodeGuids.length;i++){
+                for (i = 0; i < _removedNodeGuids.length; i++) {
                     parent = _core.getParent(_nodes[_removedNodeGuids[i]]);
-                    if(parent && _removedNodeGuids.indexOf(_core.getGuid(parent)) === -1){
+                    if (parent && _removedNodeGuids.indexOf(_core.getGuid(parent)) === -1) {
                         toDelete.push(_removedNodeGuids[i]);
                     }
                 }
                 //and as a final step we remove all that is needed
-                for(i=0;i<toDelete.length;i++){
+                for (i = 0; i < toDelete.length; i++) {
                     _core.deleteNode(_nodes[toDelete[i]]);
                 }
 
                 //as a second step we should deal with the updated nodes
                 //we should go among containment hierarchy
-                updateNodes(_import.root.guid,null,_import.containment);
+                updateNodes(_import.root.guid, null, _import.containment);
 
                 //now update inheritance chain
                 //we assume that our inheritance chain comes from the FCO and that it is identical everywhere
@@ -16419,23 +16487,24 @@ define('common/core/users/serialization',['common/util/assert'],function(ASSERT)
                 updateRelations();
 
                 //finally we need to update the meta rules of each node - again along the containment hierarchy
-                updateMetaRules(_import.root.guid,_import.containment);
+                updateMetaRules(_import.root.guid, _import.containment);
 
                 //after everything is done we try to synchronize the metaSheet info
                 importMetaSheetInfo(_core.getRoot(originLibraryRoot));
 
-                callback(null,_log);
+                callback(null, _log);
             });
         });
     }
 
-    function synchronizeRoots(oldRoot,newGuid){
-        _core.setGuid(oldRoot,newGuid);
+    function synchronizeRoots(oldRoot, newGuid) {
+        _core.setGuid(oldRoot, newGuid);
     }
+
     //it will update the modified nodes and create the new ones regarding their place in the hierarchy chain
-    function updateNodes(guid,parent,containmentTreeObject){
-        if(_updatedNodeGuids.indexOf(guid) !== -1){
-            updateNode(guid,parent);
+    function updateNodes(guid, parent, containmentTreeObject) {
+        if (_updatedNodeGuids.indexOf(guid) !== -1) {
+            updateNode(guid, parent);
         }
 
         var keys = Object.keys(containmentTreeObject),
@@ -16443,70 +16512,73 @@ define('common/core/users/serialization',['common/util/assert'],function(ASSERT)
             node = _nodes[guid],
             relid;
 
-        for(i=0;i<keys.length;i++){
-            if(_updatedNodeGuids.indexOf(keys[i]) === -1){
+        for (i = 0; i < keys.length; i++) {
+            if (_updatedNodeGuids.indexOf(keys[i]) === -1) {
                 relid = _import.relids[keys[i]];
-                if(_core.getChildrenRelids(node).indexOf(relid) !== -1){
+                if (_core.getChildrenRelids(node).indexOf(relid) !== -1) {
                     relid = undefined;
                 }
                 //this child is a new one so we should create
-                _nodes[keys[i]] = _core.createNode({parent:node,guid:keys[i],relid:relid});
+                _nodes[keys[i]] = _core.createNode({parent: node, guid: keys[i], relid: relid});
                 addNode(keys[i]);
             }
-            updateNodes(keys[i],node,containmentTreeObject[keys[i]]);
+            updateNodes(keys[i], node, containmentTreeObject[keys[i]]);
         }
     }
 
-    function updateRegistry(guid){
+    function updateRegistry(guid) {
         var keys, i,
             node = _nodes[guid],
             jsonNode = _import.nodes[guid];
 
         keys = _core.getOwnRegistryNames(node);
-        for(i=0;i<keys.length;i++){
-            _core.delRegistry(node,keys[i]);
+        for (i = 0; i < keys.length; i++) {
+            _core.delRegistry(node, keys[i]);
         }
         keys = Object.keys(jsonNode.registry);
-        for(i=0;i<keys.length;i++){
-            _core.setRegistry(node,keys[i],jsonNode.registry[keys[i]]);
+        for (i = 0; i < keys.length; i++) {
+            _core.setRegistry(node, keys[i], jsonNode.registry[keys[i]]);
         }
     }
-    function updateAttributes(guid){
+
+    function updateAttributes(guid) {
         var keys, i,
             node = _nodes[guid],
             jsonNode = _import.nodes[guid];
 
         keys = _core.getOwnAttributeNames(node);
-        for(i=0;i<keys.length;i++){
-            _core.delAttribute(node,keys[i]);
+        for (i = 0; i < keys.length; i++) {
+            _core.delAttribute(node, keys[i]);
         }
         keys = Object.keys(jsonNode.attributes);
-        for(i=0;i<keys.length;i++){
-            _core.setAttribute(node,keys[i],jsonNode.attributes[keys[i]]);
+        for (i = 0; i < keys.length; i++) {
+            _core.setAttribute(node, keys[i], jsonNode.attributes[keys[i]]);
         }
     }
-    function updateConstraints(guid){
+
+    function updateConstraints(guid) {
         var keys, i,
             node = _nodes[guid],
             jsonNode = _import.nodes[guid];
         keys = _core.getOwnConstraintNames(node);
-        for(i=0;i<keys.length;i++){
-            _core.delConstraint(node,keys[i]);
+        for (i = 0; i < keys.length; i++) {
+            _core.delConstraint(node, keys[i]);
         }
 
         keys = Object.keys(jsonNode.constraints || {});
-        for(i=0;i<keys.length;i++){
-            _core.setConstraint(node,keys[i],jsonNode.constraints[keys[i]]);
+        for (i = 0; i < keys.length; i++) {
+            _core.setConstraint(node, keys[i], jsonNode.constraints[keys[i]]);
         }
     }
+
     //this function does not cover relations - it means only attributes and registry have been updated here
-    function updateNode(guid,parent){
+    function updateNode(guid, parent) {
         //first we check if the node have to be moved
         var node = _nodes[guid];
 
-        if(parent && _core.getParent(node) && _core.getGuid(parent) !== _core.getGuid(_core.getParent(node))){
+        if (parent && _core.getParent(node) && _core.getGuid(parent) !== _core.getGuid(_core.getParent(node))) {
             //parent changed so it has to be moved...
-            _nodes[guid] = _core.moveNode(node,parent);
+            _nodes[guid] = _core.moveNode(node, parent);
         }
 
         updateAttributes(guid);
@@ -16515,22 +16587,26 @@ define('common/core/users/serialization',['common/util/assert'],function(ASSERT)
     }
 
     //this function doesn't not cover relations - so only attributes and registry have been taken care of here
-    function addNode(guid){
+    function addNode(guid) {
         //at this point we assume that an empty vessel has been already created and part of the _nodes
         updateAttributes(guid);
         updateRegistry(guid);
         updateConstraints(guid);
     }
 
-    function getInheritanceBasedGuidOrder(){
-        var inheritanceOrdered = Object.keys(_import.nodes).sort(),i= 0,baseGuid,baseIndex;
-        while(i<inheritanceOrdered.length){
+    function getInheritanceBasedGuidOrder() {
+        var inheritanceOrdered = Object.keys(_import.nodes).sort(),
+            i = 0,
+            baseGuid,
+            baseIndex;
+
+        while (i < inheritanceOrdered.length) {
             baseGuid = _import.nodes[inheritanceOrdered[i]].base;
-            if(baseGuid){
+            if (baseGuid) {
                 baseIndex = inheritanceOrdered.indexOf(baseGuid);
-                if(baseIndex > i){
-                    inheritanceOrdered.splice(baseIndex,1);
-                    inheritanceOrdered.splice(i,0,baseGuid);
+                if (baseIndex > i) {
+                    inheritanceOrdered.splice(baseIndex, 1);
+                    inheritanceOrdered.splice(i, 0, baseGuid);
                 } else {
                     ++i;
                 }
@@ -16540,82 +16616,92 @@ define('common/core/users/serialization',['common/util/assert'],function(ASSERT)
         }
         return inheritanceOrdered;
     }
-    function updateRelations(){
-        var guids = getInheritanceBasedGuidOrder(),i;
-        for(i=0;i<guids.length;i++){
+
+    function updateRelations() {
+        var guids = getInheritanceBasedGuidOrder(),
+            i;
+        for (i = 0; i < guids.length; i++) {
             updateNodeRelations(guids[i]);
         }
     }
 
-    function updateNodeRelations(guid){
-        //although it is possible that we set the base pointer at this point we should go through inheritance just to be sure
+    function updateNodeRelations(guid) {
+        // Although it is possible that we set the base pointer at this point
+        // we should go through inheritance just to be sure.
         var node = _nodes[guid],
             jsonNode = _import.nodes[guid],
-            keys, i, j, k,target,memberGuid;
+            keys, i, j, k, target, memberGuid;
 
         //pointers
         keys = _core.getOwnPointerNames(node);
-        for(i=0;i<keys.length;i++){
-            _core.deletePointer(node,keys[i]);
+        for (i = 0; i < keys.length; i++) {
+            _core.deletePointer(node, keys[i]);
         }
         keys = Object.keys(jsonNode.pointers);
-        for(i=0;i<keys.length;i++){
+        for (i = 0; i < keys.length; i++) {
             target = jsonNode.pointers[keys[i]];
-            if(target === null){
-                _core.setPointer(node,keys[i],null);
-            } else if(_nodes[target] && _removedNodeGuids.indexOf(target) === -1){
-                _core.setPointer(node,keys[i],_nodes[target]);
+            if (target === null) {
+                _core.setPointer(node, keys[i], null);
+            } else if (_nodes[target] && _removedNodeGuids.indexOf(target) === -1) {
+                _core.setPointer(node, keys[i], _nodes[target]);
             } else {
-                console.log("error handling needed???!!!???");
+                console.log('error handling needed???!!!???');
             }
         }
 
         //sets
         keys = _core.getSetNames(node);
-        for(i=0;i<keys.length;i++){
-            _core.deleteSet(node,keys[i]);
+        for (i = 0; i < keys.length; i++) {
+            _core.deleteSet(node, keys[i]);
         }
         keys = Object.keys(jsonNode.sets);
-        for(i=0;i<keys.length;i++){
+        for (i = 0; i < keys.length; i++) {
             //for every set we create it, go through its members...
-            _core.createSet(node,keys[i]);
-            for(j=0;j<jsonNode.sets[keys[i]].length;j++){
+            _core.createSet(node, keys[i]);
+            for (j = 0; j < jsonNode.sets[keys[i]].length; j++) {
                 memberGuid = jsonNode.sets[keys[i]][j].guid;
-                if(_nodes[memberGuid]){
-                    _core.addMember(node,keys[i],_nodes[memberGuid]);
-                    for(k in jsonNode.sets[keys[i]][j].attributes){
-                        _core.setMemberAttribute(node,keys[i],_core.getPath(_nodes[memberGuid]),k,jsonNode.sets[keys[i]][j].attributes[k]);
+                if (_nodes[memberGuid]) {
+                    _core.addMember(node, keys[i], _nodes[memberGuid]);
+                    for (k in jsonNode.sets[keys[i]][j].attributes) {
+                        _core.setMemberAttribute(node, keys[i], _core.getPath(_nodes[memberGuid]), k,
+                            jsonNode.sets[keys[i]][j].attributes[k]);
                     }
-                    for(k in jsonNode.sets[keys[i]][j].registry){
-                        _core.setMemberRegistry(node,keys[i],_core.getPath(_nodes[memberGuid]),k,jsonNode.sets[keys[i]][j].registry[k]);
+                    for (k in jsonNode.sets[keys[i]][j].registry) {
+                        _core.setMemberRegistry(node, keys[i], _core.getPath(_nodes[memberGuid]), k,
+                            jsonNode.sets[keys[i]][j].registry[k]);
                     }
                 }
             }
         }
     }
 
-    function updateInheritance(){
-        var i,guidList = Object.keys(_import.nodes),base;
-        for(i=0;i<guidList.length;i++){
+    function updateInheritance() {
+        var i,
+            guidList = Object.keys(_import.nodes),
+            base;
+        for (i = 0; i < guidList.length; i++) {
             base = _core.getBase(_nodes[guidList[i]]);
-            if((base && _core.getGuid(base) !== _import.nodes[guidList[i]].base) || (base === null && _import.nodes[guidList[i]].base !== null)){
+            if ((base && _core.getGuid(base) !== _import.nodes[guidList[i]].base) ||
+                (base === null && _import.nodes[guidList[i]].base !== null)) {
+
                 updateNodeInheritance(guidList[i]);
             }
         }
     }
-    function updateNodeInheritance(guid){
-        _core.setBase(_nodes[guid],_nodes[_import.nodes[guid].base]);
+
+    function updateNodeInheritance(guid) {
+        _core.setBase(_nodes[guid], _nodes[_import.nodes[guid].base]);
     }
 
-    function updateMetaRules(guid,containmentTreeObject){
+    function updateMetaRules(guid, containmentTreeObject) {
 
-        var keys,i;
+        var keys, i;
 
         updateMeta(guid);
 
         keys = Object.keys(containmentTreeObject);
-        for(i=0;i<keys.length;i++){
-            updateMetaRules(keys[i],containmentTreeObject[keys[i]]);
+        for (i = 0; i < keys.length; i++) {
+            updateMetaRules(keys[i], containmentTreeObject[keys[i]]);
         }
     }
 
@@ -16629,63 +16715,71 @@ define('common/core/users/serialization',['common/util/assert'],function(ASSERT)
         updateConstraintMeta(guid);
     }
 
-    function updateAttributeMeta(guid){
+    function updateAttributeMeta(guid) {
         var jsonMeta = _import.nodes[guid].meta.attributes || {},
             node = _nodes[guid],
-            keys,i;
+            keys, i;
 
         keys = Object.keys(jsonMeta);
-        for(i=0;i<keys.length;i++){
-            _core.setAttributeMeta(node,keys[i],jsonMeta[keys[i]]);
+        for (i = 0; i < keys.length; i++) {
+            _core.setAttributeMeta(node, keys[i], jsonMeta[keys[i]]);
         }
     }
-    function updateChildrenMeta(guid){
-        var jsonMeta = _import.nodes[guid].meta.children || {items:[],minItems:[],maxItems:[]},
-            i;
-        ASSERT(jsonMeta.items.length === jsonMeta.minItems.length && jsonMeta.minItems.length === jsonMeta.maxItems.length);
 
-        _core.setChildrenMetaLimits(_nodes[guid],jsonMeta.min,jsonMeta.max);
-        for(i=0;i<jsonMeta.items.length;i++){
-            _core.setChildMeta(_nodes[guid],_nodes[jsonMeta.items[i]],jsonMeta.minItems[i],jsonMeta.maxItems[i]);
+    function updateChildrenMeta(guid) {
+        var jsonMeta = _import.nodes[guid].meta.children || {items: [], minItems: [], maxItems: []},
+            i;
+        ASSERT(jsonMeta.items.length === jsonMeta.minItems.length &&
+        jsonMeta.minItems.length === jsonMeta.maxItems.length);
+
+        _core.setChildrenMetaLimits(_nodes[guid], jsonMeta.min, jsonMeta.max);
+        for (i = 0; i < jsonMeta.items.length; i++) {
+            _core.setChildMeta(_nodes[guid], _nodes[jsonMeta.items[i]], jsonMeta.minItems[i], jsonMeta.maxItems[i]);
         }
     }
-    function updatePointerMeta(guid){
+
+    function updatePointerMeta(guid) {
         var jsonMeta = _import.nodes[guid].meta.pointers || {},
             keys = Object.keys(jsonMeta),
             i, j;
 
-        for(i=0;i<keys.length;i++){
-            ASSERT(jsonMeta[keys[i]].items.length === jsonMeta[keys[i]].minItems.length && jsonMeta[keys[i]].maxItems.length === jsonMeta[keys[i]].minItems.length);
-            for(j=0;j<jsonMeta[keys[i]].items.length;j++){
-                _core.setPointerMetaTarget(_nodes[guid],keys[i],_nodes[jsonMeta[keys[i]].items[j]],jsonMeta[keys[i]].minItems[j],jsonMeta[keys[i]].maxItems[j]);
+        for (i = 0; i < keys.length; i++) {
+            ASSERT(jsonMeta[keys[i]].items.length === jsonMeta[keys[i]].minItems.length &&
+            jsonMeta[keys[i]].maxItems.length === jsonMeta[keys[i]].minItems.length);
+
+            for (j = 0; j < jsonMeta[keys[i]].items.length; j++) {
+                _core.setPointerMetaTarget(_nodes[guid], keys[i], _nodes[jsonMeta[keys[i]].items[j]],
+                    jsonMeta[keys[i]].minItems[j], jsonMeta[keys[i]].maxItems[j]);
             }
-            _core.setPointerMetaLimits(_nodes[guid],keys[i],jsonMeta[keys[i]].min,jsonMeta[keys[i]].max);
+            _core.setPointerMetaLimits(_nodes[guid], keys[i], jsonMeta[keys[i]].min, jsonMeta[keys[i]].max);
         }
     }
-    function updateAspectMeta(guid){
+
+    function updateAspectMeta(guid) {
         var jsonMeta = _import.nodes[guid].meta.aspects || {},
             keys = Object.keys(jsonMeta),
-            i,j;
+            i, j;
 
-        for(i=0;i<keys.length;i++){
-            for(j=0;j<jsonMeta[keys[i]].length;j++){
-                _core.setAspectMetaTarget(_nodes[guid],keys[i],_nodes[jsonMeta[keys[i]][j]]);
+        for (i = 0; i < keys.length; i++) {
+            for (j = 0; j < jsonMeta[keys[i]].length; j++) {
+                _core.setAspectMetaTarget(_nodes[guid], keys[i], _nodes[jsonMeta[keys[i]][j]]);
             }
         }
     }
-    function updateConstraintMeta(guid){
+
+    function updateConstraintMeta(guid) {
         var jsonMeta = _import.nodes[guid].meta.constraints || {},
             keys = Object.keys(jsonMeta),
             i;
 
-        for(i=0;i<keys.length;i++){
-            _core.setConstraint(_nodes[guid],keys[i],jsonMeta[keys[i]]);
+        for (i = 0; i < keys.length; i++) {
+            _core.setConstraint(_nodes[guid], keys[i], jsonMeta[keys[i]]);
         }
     }
 
     return {
-        export : exportLibrary,
-        import : importLibrary
+        export: exportLibrary,
+        import: importLibrary
     };
 });
 
@@ -17995,7 +18089,12 @@ module.exports = function(arr, fn, initial){
 };
 },{}]},{},[1])(1)
 });
-/*globals define, _, requirejs, GME*/
+/*globals define*/
+/*jshint browser: true*/
+
+/**
+ * @author kecso / https://github.com/kecso
+ */
 
 define('client/js/client',[
     'common/util/assert',
@@ -18008,15 +18107,12 @@ define('client/js/client',[
     'common/core/users/meta',
     'common/core/users/tojson',
     'common/core/users/dump',
-    'common/core/users/dumpmore',
     'common/core/users/import',
     'common/core/users/copyimport',
     'common/core/users/serialization',
     'common/core/tasync',
     'superagent'
-  ],
-  function (
-    ASSERT,
+], function (ASSERT,
     EventDispatcher,
     GUID,
     Core,
@@ -18024,11 +18120,10 @@ define('client/js/client',[
     Logger,
     URL,
     BaseMeta,
-    ToJson,
-    Dump,
-    DumpMore,
-    MergeImport,
-    Import,
+             toJson,
+             dump,
+             mergeImport,
+             importing,
     Serialization,
     TASYNC,
     superagent) {
@@ -18049,7 +18144,7 @@ define('client/js/client',[
       //return new NullPointerCore(new DescriptorCore(new SetCore(new GuidCore(new Core(project)))));
         // FIXME: why usertype is nodejs when it is running from the browser?
       var options = {usertype: 'nodejs', globConf: gmeConfig, logger: logger.fork('core')};
-      return Core(project, options);
+        return new Core(project, options);
     }
 
     function UndoRedo(_client) {
@@ -18103,8 +18198,10 @@ define('client/js/client',[
         },
         checkStatus = function(){
           return {
-            undo: currentModification ? currentModification.previous !== null && currentModification.previous !== undefined : false,
-            redo: currentModification ? currentModification.next !== null && currentModification.next !== undefined : false
+                    undo: currentModification ? currentModification.previous !== null &&
+                    currentModification.previous !== undefined : false,
+                    redo: currentModification ? currentModification.next !== null &&
+                    currentModification.next !== undefined : false
           };
         },
         isCurrentTarget = function(commitHash){
@@ -18147,7 +18244,7 @@ define('client/js/client',[
         _users = {},
         _patterns = {},
         _networkStatus = '',
-        _msg = "",
+            _msg = '',
         _recentCommits = [],
         _viewer = false,
         _readOnlyProject = false,
@@ -18160,8 +18257,7 @@ define('client/js/client',[
         META = new BaseMeta(),
         _rootHash = null,
         _previousRootHash = null,
-        _changeTree = null,
-        _inheritanceHash = {},
+            //_changeTree = null,
         _root = null,
         _gHash = 0,
         _addOns = {},
@@ -18169,8 +18265,10 @@ define('client/js/client',[
         _redoer = null,
         _selfCommits = {},
         _configuration = {},
-        req,
-        AllPlugins, AllDecorators;
+            AllPlugins,
+            AllDecorators,
+            eventDispatcher,
+            i;
 
         if (window) {
             _configuration.host = window.location.protocol + '//' + window.location.host;
@@ -18181,39 +18279,23 @@ define('client/js/client',[
         // FIXME: These are asynchronous
         superagent.get('/listAllPlugins')
           .end(function (err, res) {
-             if (res.status !== 200) {
-               logger.error('/listAllPlugins failed', err);
-             } else {
+                if (res.status === 200) {
                AllPlugins = res.body.allPlugins;
                logger.debug('/listAllPlugins', AllPlugins);
+                } else {
+                    logger.error('/listAllPlugins failed', err);
              }
           });
+
         superagent.get('/listAllDecorators')
           .end(function (err, res) {
-            if (res.status !== 200) {
-              logger.error('/listAllDecorators failed', err);
-            } else {
+                if (res.status === 200) {
                AllDecorators = res.body.allDecorators;
                logger.debug('/listAllDecorators', AllDecorators);
+                } else {
+                    logger.error('/listAllDecorators failed', err);
             }
           });
-        //TODO remove it
-      //function print_nodes(pretext) {
-      //  if (pretext) {
-      //    console.log(pretext);
-      //  }
-      //  var nodes = "loaded: ";
-      //  for (var k in _loadNodes) {
-      //    nodes += "(" + k + "," + _loadNodes[k].hash + ")";
-      //  }
-      //  console.log(nodes);
-      //  nodes = "stored: ";
-      //  for (var k in _nodes) {
-      //    nodes += "(" + k + "," + _nodes[k].hash + ")";
-      //  }
-      //  console.log(nodes);
-      //  return;
-      //}
 
       //default configuration
         //FIXME: Are these gme options or not??
@@ -18224,34 +18306,37 @@ define('client/js/client',[
 
       //TODO remove the usage of jquery
       //$.extend(_self, new EventDispatcher());
-      var eDisp = new EventDispatcher();
-      for (var i in eDisp) {
-        _self[i] = eDisp[i];
+        eventDispatcher = new EventDispatcher();
+        for (i in eventDispatcher) {
+            _self[i] = eventDispatcher[i];
       }
+
       _self.events = {
-        "NETWORKSTATUS_CHANGED": "NETWORKSTATUS_CHANGED",
-        "BRANCHSTATUS_CHANGED": "BRANCHSTATUS_CHANGED",
-        "BRANCH_CHANGED": "BRANCH_CHANGED",
-        "PROJECT_CLOSED": "PROJECT_CLOSED",
-        "PROJECT_OPENED": "PROJECT_OPENED",
+            NETWORKSTATUS_CHANGED: 'NETWORKSTATUS_CHANGED',
+            BRANCHSTATUS_CHANGED: 'BRANCHSTATUS_CHANGED',
+            BRANCH_CHANGED: 'BRANCH_CHANGED',
+            PROJECT_CLOSED: 'PROJECT_CLOSED',
+            PROJECT_OPENED: 'PROJECT_OPENED',
 
-        "SERVER_PROJECT_CREATED": "SERVER_PROJECT_CREATED",
-        "SERVER_PROJECT_DELETED": "SERVER_PROJECT_DELETED",
-        "SERVER_BRANCH_CREATED": "SERVER_BRANCH_CREATED",
-        "SERVER_BRANCH_UPDATED": "SERVER_BRANCH_UPDATED",
-        "SERVER_BRANCH_DELETED": "SERVER_BRANCH_DELETED",
+            SERVER_PROJECT_CREATED: 'SERVER_PROJECT_CREATED',
+            SERVER_PROJECT_DELETED: 'SERVER_PROJECT_DELETED',
+            SERVER_BRANCH_CREATED: 'SERVER_BRANCH_CREATED',
+            SERVER_BRANCH_UPDATED: 'SERVER_BRANCH_UPDATED',
+            SERVER_BRANCH_DELETED: 'SERVER_BRANCH_DELETED',
 
-        "UNDO_AVAILABLE": "UNDO_AVAILABLE",
-        "REDO_AVAILABLE": "REDO_AVAILABLE"
+            UNDO_AVAILABLE: 'UNDO_AVAILABLE',
+            REDO_AVAILABLE: 'REDO_AVAILABLE'
       };
+
       _self.networkStates = {
-        'CONNECTED': "connected",
-        'DISCONNECTED': "socket.io is disconnected"
+            CONNECTED: 'connected',
+            DISCONNECTED: 'socket.io is disconnected'
       };
+
       _self.branchStates = {
-        'SYNC': 'inSync',
-        'FORKED': 'forked',
-        'OFFLINE': 'offline'
+            SYNC: 'inSync',
+            FORKED: 'forked',
+            OFFLINE: 'offline'
       };
 
       function getUserId() {
@@ -18265,19 +18350,24 @@ define('client/js/client',[
 
         //FIXME remove TESTING
       function newDatabase() {
-        var storageOptions ={logger: Logger.create('gme:client:storage', gmeConfig.client.log), host: _configuration.host},
+            var storageOptions = {
+                    logger: Logger.create('gme:client:storage', gmeConfig.client.log),
+                    host: _configuration.host
+                },
             protocolStr;
-        if(typeof TESTING !== 'undefined'){
+
+            if (typeof TESTING === 'undefined') {
+                storageOptions.user = getUserId();
+            } else {
           protocolStr = gmeConfig.server.https.enable ? 'https' : 'http';
 
           storageOptions.type = 'node';
           storageOptions.host = protocolStr + '://127.0.0.1';
           storageOptions.user = 'TEST';
-        } else {
-          storageOptions.user = getUserId();
         }
+
         storageOptions.globConf = gmeConfig;
-        return Storage(storageOptions);
+            return new Storage(storageOptions);
       }
 
       function changeBranchState(newstate) {
@@ -18291,7 +18381,7 @@ define('client/js/client',[
         //this is when the user force to go online on network level
         //TODO implement :) - but how, there is no such function on the storage's API
         if (_database) {
-          _database.openDatabase(function (err) {
+                _database.openDatabase(function (/*err*/) {
           });
         }
       }
@@ -18326,20 +18416,34 @@ define('client/js/client',[
             lastGuid = guid || lastGuid;
             if (!err && parameters) {
               switch (parameters.type) {
-                case "PROJECT_CREATED":
+                            case 'PROJECT_CREATED':
                   _self.dispatchEvent(_self.events.SERVER_PROJECT_CREATED, parameters.project);
                   break;
-                case "PROJECT_DELETED":
+                            case 'PROJECT_DELETED':
                   _self.dispatchEvent(_self.events.SERVER_PROJECT_DELETED, parameters.project);
                   break;
-                case "BRANCH_CREATED":
-                  _self.dispatchEvent(_self.events.SERVER_BRANCH_CREATED, {project: parameters.project, branch: parameters.branch, commit: parameters.commit});
+                            case 'BRANCH_CREATED':
+                                _self.dispatchEvent(_self.events.SERVER_BRANCH_CREATED,
+                                    {
+                                        project: parameters.project,
+                                        branch: parameters.branch,
+                                        commit: parameters.commit
+                                    });
                   break;
-                case "BRANCH_DELETED":
-                  _self.dispatchEvent(_self.events.SERVER_BRANCH_DELETED, {project: parameters.project, branch: parameters.branch});
+                            case 'BRANCH_DELETED':
+                                _self.dispatchEvent(_self.events.SERVER_BRANCH_DELETED,
+                                    {
+                                        project: parameters.project,
+                                        branch: parameters.branch
+                                    });
                   break;
-                case "BRANCH_UPDATED":
-                  _self.dispatchEvent(_self.events.SERVER_BRANCH_UPDATED, {project: parameters.project, branch: parameters.branch, commit: parameters.commit});
+                            case 'BRANCH_UPDATED':
+                                _self.dispatchEvent(_self.events.SERVER_BRANCH_UPDATED,
+                                    {
+                                        project: parameters.project,
+                                        branch: parameters.branch,
+                                        commit: parameters.commit
+                                    });
                   break;
               }
               return _database.getNextServerEvent(lastGuid, nextServerEvent);
@@ -18353,25 +18457,16 @@ define('client/js/client',[
       }
 
       //addOn functions
-      function startAddOnAsync(name, projectName, branchName, callback) {
-        if (_addOns[name] === undefined) {
-          _addOns[name] = "loading";
-          _database.simpleRequest({command: 'connectedWorkerStart', workerName: name, project: projectName, branch: branchName}, function (err, id) {
-            if (err) {
-              delete _addOns[name];
-              return callback(err);
-            }
-
-            _addOns[name] = id;
-            callback(null);
-          });
-        }
-      }
-
       function startAddOn(name) {
         if (_addOns[name] === undefined) {
-          _addOns[name] = "loading";
-          _database.simpleRequest({command: 'connectedWorkerStart', workerName: name, project: _projectName, branch: _branch}, function (err, id) {
+                _addOns[name] = 'loading';
+                _database.simpleRequest({
+                        command: 'connectedWorkerStart',
+                        workerName: name,
+                        project: _projectName,
+                        branch: _branch
+                    },
+                    function (err, id) {
             if (err) {
               logger.error('starting addon failed ' + err);
               delete _addOns[name];
@@ -18386,51 +18481,60 @@ define('client/js/client',[
       }
 
       function queryAddOn(name, query, callback) {
-        if (!_addOns[name] || _addOns[name] === "loading") {
+            if (!_addOns[name] || _addOns[name] === 'loading') {
           return callback(new Error('no such addOn is ready for queries'));
         }
         _database.simpleQuery(_addOns[name], query, callback);
       }
 
       function stopAddOn(name, callback) {
-        if (_addOns[name] && _addOns[name] !== "loading") {
+            if (_addOns[name] && _addOns[name] !== 'loading') {
           _database.simpleResult(_addOns[name], callback);
           delete _addOns[name];
         } else {
-          callback(_addOns[name] ? new Error("addon loading") : null);
+                callback(_addOns[name] ? new Error('addon loading') : null);
         }
       }
 
       //generic project related addOn handling
       function updateRunningAddOns(root) {
+            var i,
+                neededAddOns,
+                runningAddOns,
+                callback = function (err) {
+                    logger.error(err);
+                };
+
           if(gmeConfig.addOn.enable === true) {
-        var neededAddOns = _core.getRegistry(root, "usedAddOns"),
-          i,
+                neededAddOns = _core.getRegistry(root, 'usedAddOns');
           runningAddOns = getRunningAddOnNames();
-        neededAddOns = neededAddOns ? neededAddOns.split(" ") : [];
-        for (i = 0; i < neededAddOns.length; i++) {
+                neededAddOns = neededAddOns ? neededAddOns.split(' ') : [];
+                for (i = 0; i < neededAddOns.length; i += 1) {
           if (!_addOns[neededAddOns[i]]) {
             startAddOn(neededAddOns[i]);
           }
         }
-        for (i = 0; i < runningAddOns.length; i++) {
+                for (i = 0; i < runningAddOns.length; i += 1) {
           if (neededAddOns.indexOf(runningAddOns[i]) === -1) {
-            stopAddOn(runningAddOns[i], function (err) {
-            });
+                        stopAddOn(runningAddOns[i], callback);
           }
         }
       }
       }
 
       function stopRunningAddOns() {
-          if(gmeConfig.addOn.enable === true){
         var i,
-          keys = Object.keys(_addOns),
+                keys,
+                callback;
+
+            if (gmeConfig.addOn.enable === true) {
+                keys = Object.keys(_addOns);
           callback = function (err) {
             if (err) {
-                logger.error("stopAddOn" + err);
+                        logger.error('stopAddOn' + err);
             }
           };
+
         for (i = 0; i < keys.length; i++) {
           stopAddOn(keys[i], callback);
         }
@@ -18450,37 +18554,9 @@ define('client/js/client',[
       }
 
       //core addOns
-      function startCoreAddOnsAsync(project, branch, callback) {
-        var needed = 2,
-          error = null,
-          icb = function (err) {
-            error = error || err;
-            if (--needed === 0) {
-              callback(error);
-            }
-          };
-
-        startHistoryAsync(project, branch, icb);
-        startConstraintAsync(project, branch, icb);
-      }
-
       //history
-      function startHistoryAsync(project, branch, callback) {
-        if (_addOns['HistoryAddOn'] && _addOns['HistoryAddOn'] !== 'loading') {
-          stopAddOn('HistoryAddOn', function (err) {
-            if (err) {
-              callback(err);
-            } else {
-              startAddOnAsync('HistoryAddOn', project, branch, callback);
-            }
-          });
-        } else {
-          startAddOnAsync('HistoryAddOn', project, branch, callback);
-        }
-      }
-
       function getDetailedHistoryAsync(callback) {
-        if (_addOns['HistoryAddOn'] && _addOns['HistoryAddOn'] !== 'loading') {
+            if (_addOns.hasOwnProperty('HistoryAddOn') && _addOns.HistoryAddOn !== 'loading') {
           queryAddOn('HistoryAddOn', {}, callback);
         } else {
           callback(new Error('history information is not available'));
@@ -18488,45 +18564,31 @@ define('client/js/client',[
       }
 
       //constraint
-      function startConstraintAsync(project, branch, callback) {
-        if (_addOns['ConstraintAddOn'] && _addOns['ConstraintAddOn'] !== 'loading') {
-          stopAddOn('ConstraintAddOn', function (err) {
-            if (err) {
-              callback(err);
-            } else {
-              startAddOnAsync('ConstraintAddOn', project, branch, callback);
-            }
-          });
-        } else {
-          startAddOnAsync('ConstraintAddOn', project, branch, callback);
-        }
-      }
-
       function validateProjectAsync(callback) {
-        callback = callback || _constraintCallback || function (err, result) {
+            callback = callback || _constraintCallback || function (/*err, result*/) {
         };
-        if (_addOns['ConstraintAddOn'] && _addOns['ConstraintAddOn'] !== 'loading') {
-          queryAddOn("ConstraintAddOn", {querytype: 'checkProject'}, callback);
+            if (_addOns.hasOwnProperty('ConstraintAddOn') && _addOns.ConstraintAddOn !== 'loading') {
+                queryAddOn('ConstraintAddOn', {querytype: 'checkProject'}, callback);
         } else {
           callback(new Error('constraint checking is not available'));
         }
       }
 
       function validateModelAsync(path, callback) {
-        callback = callback || _constraintCallback || function (err, result) {
+            callback = callback || _constraintCallback || function (/* err, result */) {
         };
-        if (_addOns['ConstraintAddOn'] && _addOns['ConstraintAddOn'] !== 'loading') {
-          queryAddOn("ConstraintAddOn", {querytype: 'checkModel', path: path}, callback);
+            if (_addOns.hasOwnProperty('ConstraintAddOn') && _addOns.ConstraintAddOn !== 'loading') {
+                queryAddOn('ConstraintAddOn', {querytype: 'checkModel', path: path}, callback);
         } else {
           callback(new Error('constraint checking is not available'));
         }
       }
 
       function validateNodeAsync(path, callback) {
-        callback = callback || _constraintCallback || function (err, result) {
+            callback = callback || _constraintCallback || function (/* err, result */) {
         };
-        if (_addOns['ConstraintAddOn'] && _addOns['ConstraintAddOn'] !== 'loading') {
-          queryAddOn("ConstraintAddOn", {querytype: 'checkNode', path: path}, callback);
+            if (_addOns.hasOwnProperty('ConstraintAddOn') && _addOns.ConstraintAddOn !== 'loading') {
+                queryAddOn('ConstraintAddOn', {querytype: 'checkNode', path: path}, callback);
         } else {
           callback(new Error('constraint checking is not available'));
         }
@@ -18545,7 +18607,7 @@ define('client/js/client',[
           refreshToken = function () {
             _database.getToken(function (err, t) {
               if (!err) {
-                token = t || "_";
+                            token = t || '_';
               }
             });
           },
@@ -18556,11 +18618,6 @@ define('client/js/client',[
         setInterval(refreshToken, 10000); //maybe it could be configurable
         refreshToken();
 
-        //TODO check if this is okay to set it here
-        //ANS: It is not and now it is removed - p
-        //if(typeof WebGMEGlobal !== 'undefined') {
-        //   WebGMEGlobal.getToken = getToken;
-        //}
         return {
           getToken: getToken
         };
@@ -18595,7 +18652,8 @@ define('client/js/client',[
         callback = callback || function () {
         };
         var myCallback = function(err){
-          myCallback = function(){};
+                myCallback = function () {
+                };
           callback(err);
         };
         var redoerNeedsClean = true;
@@ -18610,7 +18668,9 @@ define('client/js/client',[
                 var latestCommit = _recentCommits[0];
                 viewerCommit(latestCommit, function (err) {
                   if (err) {
-                    logger.error('Current branch ' + branch + ' have been deleted, and unable to open the latest commit ' + latestCommit + '! [' + JSON.stringify(err) + ']');
+                                    logger.error('Current branch ' + branch +
+                                    ' have been deleted, and unable to open the latest commit ' +
+                                    latestCommit + '! [' + JSON.stringify(err) + ']');
                   }
                 });
               } else {
@@ -18620,7 +18680,7 @@ define('client/js/client',[
                 } else if(!_selfCommits[newhash] || redoerNeedsClean){
                   redoerNeedsClean = false;
                   _redoer.clean();
-                  _redoer.addModification(newhash,"branch initial");
+                                _redoer.addModification(newhash, 'branch initial');
                   _selfCommits={};
                   _selfCommits[newhash] = true;
                   doUpdate = true;
@@ -18661,7 +18721,7 @@ define('client/js/client',[
                                               lock.unlock();
                                           });
                                       } else {
-                                          console.log("BUG: second try to load commit failed", err, err2);
+                                                    logger.error('second load try failed on commit!!!', err);
                                           lock.unlock();
                                       }
                                   });
@@ -18683,72 +18743,11 @@ define('client/js/client',[
                   }
                 }
 
-                  //FIXME should kill the branch watcher gracefully as it is possible now to get a callback, but the branch is already closed here - actually the whole project is closed
-                return (branch === _branch && _database && _project) ? _project.getBranchHash(branch, _recentCommits[0], branchHashUpdated) : null;
-
-                /*if(redoerNeedsClean || !_selfCommits[newhash]){
-                  redoerNeedsClean = false;
-                  _redoer.clean();
-                  _redoer.addModification(newhash,"branch initial");
-                  _selfCommits={};_selfCommits[newhash] = true;
-                };
-                var redoInfo = _redoer.checkStatus(),
-                  canUndo = false,
-                  canRedo = false;
-
-                if(_selfCommits[newhash]){
-                  if(redoInfo.undo) {
-                    canUndo = true;
-                  }
-                  if(redoInfo.redo) {
-                    canRedo = true;
-                  }
-                }
-                _self.dispatchEvent(_self.events.UNDO_AVAILABLE, canUndo);
-                _self.dispatchEvent(_self.events.REDO_AVAILABLE, canRedo);
-
-
-                if (/*_recentCommits.indexOf(newhash) === -1/_recentCommits.indexOf(newhash) !== 0) {
-
-                  addCommit(newhash);
-
-                  //TODO here we have to start with a syncronous root object load...
-                  _project.loadObject(newhash, function (err, commitObj) {
-                    if (!err && commitObj) {
-                      loading(commitObj.root);
-                    } else {
-                      setTimeout(function () {
-                        _project.loadObject(newhash, function (err, commitObj) {
-                          if (!err && commitObj) {
-                            loading(commitObj.root);
-                          } else {
-                            console.log("second load try failed on commit!!!", err);
-                          }
-                        });
-                      }, 1000);
-                    }
-                  });
-                }
-
-                if (callback) {
-                  myCallback = callback;
-                  callback = null;
-                  myCallback();
-                }
-
-                //branch status update
-                if (_offline) {
-                  changeBranchState(_self.branchStates.OFFLINE);
-                } else {
-                  if (forked) {
-                    changeBranchState(_self.branchStates.FORKED);
-                  }
-                  /* else {
-                   changeBranchState(_self.branchStates.SYNC);
-                   }/
-                }
-
-                return _project.getBranchHash(branch, _recentCommits[0], branchHashUpdated);*/
+                            //FIXME should kill the branch watcher gracefully as it is possible now to get a callback,
+                            // but the branch is already closed here - actually the whole project is closed
+                            return (branch === _branch && _database && _project) ? _project.getBranchHash(branch,
+                                _recentCommits[0],
+                                branchHashUpdated) : null;
               }
             } else {
               myCallback(null);
@@ -18759,28 +18758,28 @@ define('client/js/client',[
           }
         };
 
-        if (_branch !== branch) {
-          _branch = branch;
+            if (_branch === branch) {
+                if (_offline) {
           _viewer = false;
           _offline = false;
-          _recentCommits = [""];
-          _self.dispatchEvent(_self.events.BRANCH_CHANGED, _branch);
           changeBranchState(_self.branchStates.SYNC);
           _project.getBranchHash(branch, _recentCommits[0], branchHashUpdated);
         } else {
-          if (_offline) {
+                    callback(null);
+                }
+            } else {
+                _branch = branch;
             _viewer = false;
             _offline = false;
+                _recentCommits = [''];
+                _self.dispatchEvent(_self.events.BRANCH_CHANGED, _branch);
             changeBranchState(_self.branchStates.SYNC);
             _project.getBranchHash(branch, _recentCommits[0], branchHashUpdated);
-          } else {
-            callback(null);
-          }
         }
       }
 
       function networkWatcher() {
-        _networkStatus = "";
+            _networkStatus = '';
         //FIXME: Are these gme options or not??
 
         var frequency = 10,
@@ -18820,7 +18819,8 @@ define('client/js/client',[
                     if (_networkStatus !== newStatus) {
                       _networkStatus = newStatus;
                       _self.dispatchEvent(_self.events.NETWORKSTATUS_CHANGED, _networkStatus);
-                      if (_networkStatus === _self.networkStates.DISCONNECTED && _configuration.autoreconnect) {
+                                    if (_networkStatus === _self.networkStates.DISCONNECTED &&
+                                        _configuration.autoreconnect) {
                         reconnecting(function (err) {
                           checking = false;
                           if (err) {
@@ -18856,25 +18856,29 @@ define('client/js/client',[
         }
 
         function addCommit(commitObject) {
-          if (_cache[commitObject._id]) {
-            //already in the cache we do not have to do anything
-            return;
-          } else {
+                var index;
+
+                if (!_cache[commitObject._id]) {
             _cache[commitObject._id] = commitObject;
-            var index = 0;
+                    index = 0;
             while (index < _timeOrder.length && _cache[_timeOrder[index]].time > commitObject.time) {
               index++;
             }
             _timeOrder.splice(index, 0, commitObject._id);
           }
-          return;
         }
 
         function getNCommitsFrom(commitHash, number, callback) {
-          var fillCache = function (time, number, cb) {
+                var fillCache,
+                    returnNCommitsFromHash,
+                    cacheFilled,
+                    index;
+
+                fillCache = function (time, number, cb) {
             _project.getCommits(time, number, function (err, commits) {
+                        var i;
               if (!err && commits) {
-                for (var i = 0; i < commits.length; i++) {
+                            for (i = 0; i < commits.length; i++) {
                   addCommit(commits[i]);
                 }
                 cb(null);
@@ -18885,7 +18889,7 @@ define('client/js/client',[
               }
             });
           };
-          var returnNCommitsFromHash = function (hash, num, cb) {
+                returnNCommitsFromHash = function (hash, num, cb) {
             //now we should have all the commits in place
             var index = _timeOrder.indexOf(hash),
               commits = [];
@@ -18905,7 +18909,7 @@ define('client/js/client',[
               cb('cannot found starting commit');
             }
           };
-          var cacheFilled = function (err) {
+                cacheFilled = function (err) {
             if (err) {
               callback(err);
             } else {
@@ -18917,13 +18921,15 @@ define('client/js/client',[
           if (commitHash) {
             if (_cache[commitHash]) {
               //we can be lucky :)
-              var index = _timeOrder.indexOf(commitHash);
+                        index = _timeOrder.indexOf(commitHash);
               if (_timeOrder.length > index + number) {
                 //we are lucky
                 cacheFilled(null);
               } else {
                 //not that lucky
-                fillCache(_cache[_timeOrder[_timeOrder.length - 1]].time, number - (_timeOrder.length - (index + 1)), cacheFilled);
+                            fillCache(_cache[_timeOrder[_timeOrder.length - 1]].time,
+                                number - (_timeOrder.length - (index + 1)),
+                                cacheFilled);
               }
             } else {
               //we are not lucky enough so we have to download the commit
@@ -18945,15 +18951,15 @@ define('client/js/client',[
         function newCommit(commitHash) {
           if (_cache[commitHash]) {
             return;
-          } else {
+                }
+
             _project.loadObject(commitHash, function (err, commitObj) {
               if (!err && commitObj) {
                 addCommit(commitObj);
               }
-              return;
+
             });
           }
-        }
 
         return {
           getNCommitsFrom: getNCommitsFrom,
@@ -18965,7 +18971,7 @@ define('client/js/client',[
       function viewLatestCommit(callback) {
         _commitCache.getNCommitsFrom(null, 1, function (err, commits) {
           if (!err && commits && commits.length > 0) {
-            viewerCommit(commits[0][_project.ID_NAME], callback)
+                    viewerCommit(commits[0][_project.ID_NAME], callback);
           } else {
             logger.error('Cannot get latest commit! [' + JSON.stringify(err) + ']');
             callback(err);
@@ -18981,7 +18987,8 @@ define('client/js/client',[
             error = error || err;
             if (--waiting === 0) {
               if (error) {
-                logger.error('The branch ' + firstName + ' of project ' + name + ' cannot be selected! [' + JSON.stringify(error) + ']');
+                            logger.error('The branch ' + firstName + ' of project ' + name +
+                            ' cannot be selected! [' + JSON.stringify(error) + ']');
               }
               callback(error);
             }
@@ -19015,7 +19022,7 @@ define('client/js/client',[
                   _project.getBranchNames(function (err, names) {
                     if (!err && names) {
 
-                      if (names['master']) {
+                                        if (names.master) {
                         firstName = 'master';
                       } else {
                         firstName = Object.keys(names)[0] || null;
@@ -19024,7 +19031,6 @@ define('client/js/client',[
                       if (firstName) {
                         stopRunningAddOns();
                         branchWatcher(firstName, innerCallback);
-                        //startCoreAddOnsAsync(_projectName,firstName,innerCallback);
                       } else {
                         //we should try the latest commit
                         viewLatestCommit(callback);
@@ -19036,7 +19042,8 @@ define('client/js/client',[
                   });
                 });
               } else {
-                logger.error('The project ' + name + ' cannot be opened! [' + JSON.stringify(err) + ']');
+                            logger.error('The project ' + name + ' cannot be opened! [' + JSON.stringify(err) +
+                            ']');
                 callback(err);
               }
             });
@@ -19051,7 +19058,10 @@ define('client/js/client',[
       function cleanUsersTerritories() {
             //look out as the user can remove itself at any time!!!
             var userIds = Object.keys(_users),
-                i, j, events;
+                i,
+                j,
+                events;
+
             for (i = 0; i < userIds.length; i++) {
                 if (_users[userIds[i]]) {
                     events = [{eid: null, etype: 'complete'}];
@@ -19068,17 +19078,23 @@ define('client/js/client',[
       }
 
       function reLaunchUsers() {
-        for (var i in _users) {
+            var i;
+            for (i in _users) {
+                if (_users.hasOwnProperty(i)) {
           if (_users[i].UI.reLaunch) {
             _users[i].UI.reLaunch();
           }
         }
       }
+        }
 
       function closeOpenedProject(callback) {
+            var returning,
+                project;
+
         callback = callback || function () {
         };
-        var returning = function (e) {
+            returning = function (e) {
           var oldProjName = _projectName;
           _projectName = null;
           _inTransaction = false;
@@ -19087,7 +19103,7 @@ define('client/js/client',[
           _metaNodes = {};
           //_commitObject = null;
           _patterns = {};
-          _msg = "";
+                _msg = '';
           _recentCommits = [];
           _previousRootHash = null;
           _rootHash = null;
@@ -19110,7 +19126,7 @@ define('client/js/client',[
         }
         _branch = null;
         if (_project) {
-          var project = _project;
+                project = _project;
           _project = null;
           project.closeProject(function (err) {
             //TODO what if for some reason we are in transaction???
@@ -19126,10 +19142,10 @@ define('client/js/client',[
           root = core.createNode(),
           rootHash = '',
           commitHash = '';
-        core.persist(root,function(err){
+            core.persist(root, function (/* err */) {
           rootHash = core.getHash(root);
-          commitHash = project.makeCommit([],rootHash,'project creation commit',function(err){
-            project.setBranchHash('master',"",commitHash, function (err) {
+                commitHash = project.makeCommit([], rootHash, 'project creation commit', function (/* err */) {
+                    project.setBranchHash('master', '', commitHash, function (err) {
                     callback(err, commitHash);
                 });
           });
@@ -19138,7 +19154,7 @@ define('client/js/client',[
       }
 
       //loading functions
-      function getStringHash(node) {
+        function getStringHash(node) {
         //TODO there is a memory issue with the huge strings so we have to replace it with something
         if (node.parent && node.parent.data && node.parent.data[node.relid]) {
             return node.parent.data[node.relid];
@@ -19146,104 +19162,81 @@ define('client/js/client',[
         return _gHash++;
       }
 
-        function getInheritanceChain(node){
-            var ancestors = [];
-            node = _core.getBase(node);
-            while(node){
-                ancestors.push(_core.getPath(node));
-                node = _core.getBase(node);
-            }
-            return ancestors;
-        }
+        //TODO this function will be used when diff based event generation will be reintroduced
+        //function getInheritanceChain(node) {
+        //    var ancestors = [];
+        //    node = _core.getBase(node);
+        //    while (node) {
+        //        ancestors.push(_core.getPath(node));
+        //        node = _core.getBase(node);
+        //    }
+        //    return ancestors;
+        //}
 
-        //TODO should be removed as it is outdated
-      //function _getModifiedNodes(newerNodes){
-      //      var modifiedNodes = [];
-      //      for(var i in _nodes){
-      //          if(newerNodes[i]){
-      //              if(newerNodes[i].hash !== _nodes[i].hash && _nodes[i].hash !== ""){
-      //                  modifiedNodes.push(i);
+        //TODO this function will be used when diff based event generation will be reintroduced
+        //function isInChangeTree(path) {
+        //    var pathArray = path.split('/'),
+        //        diffObj = _changeTree,
+        //        index = 0,
+        //        found = false;
+        //
+        //    pathArray.shift();
+        //    if (pathArray.length === 0) {
+        //        found = true;
       //              }
+        //
+        //    if (!diffObj) {
+        //        return false;
       //          }
+        //
+        //    while (index < pathArray.length && !found) {
+        //        if (diffObj[pathArray[index]]) {
+        //            diffObj = diffObj[pathArray[index]];
+        //            index += 1;
+        //            if (index === pathArray.length) {
+        //                found = true;
       //      }
-      //      return modifiedNodes;
+        //        } else {
+        //            index = pathArray.length;
+        //        }
+        //    }
+        //
+        //    if (found && diffObj) {
+        //        if (diffObj.removed !== undefined) {
+        //            return false;
+        //        }
+        //        if (diffObj.reg || diffObj.attr || diffObj.pointer || diffObj.set || diffObj.meta ||
+        //            diffObj.childrenListChanged) {
+        //            return true;
+        //        }
+        //    }
+        //
+        //    return false;
       //}
 
-        function isInChangeTree(path){
-            var pathArray = path.split("/"),
-                diffObj = _changeTree,
-                index = 0,
-                found = false;
-
-            pathArray.shift();
-            if(pathArray.length === 0){
-                found = true;
-            }
-
-            if(!diffObj){
-                return false;
-            }
-
-            while(index<pathArray.length && !found){
-                if(diffObj[pathArray[index]]){
-                    diffObj = diffObj[pathArray[index]];
-                    if(++index === pathArray.length){
-                        found = true;
-                    }
-                } else {
-                    index = pathArray.length;
-                }
-            }
-
-            
-                if(found && diffObj){
-                  if(diffObj.removed !== undefined){
-                    return false;
-                  }
-                  if(diffObj.reg || diffObj.attr || diffObj.pointer || diffObj.set || diffObj.meta || diffObj.childrenListChanged){
-                      return true;
-                  }
-                }
-            
-
-            return false;
-        }
-        /*function getModifiedNodes(newerNodes){
+        function getModifiedNodes(newerNodes) {
             var modifiedNodes = [],
-                keys = Object.keys(newerNodes),
-                i,found,
-                inheritanceArray;
-            for(i=0;i<keys.length;i++){
-                found = false;
-                inheritanceArray = getInheritanceChain(newerNodes[keys[i]].node);
-                inheritanceArray.unshift(keys[i]);
-                while(inheritanceArray.length > 0 && !found){
-                    if(isInChangeTree(inheritanceArray.shift())){
-                        found = true;
-                        modifiedNodes.push(keys[i]);
-                    }
-                }
-            }
+                i;
 
-            return modifiedNodes;
-        }*/
-      function getModifiedNodes(newerNodes) {
-        var modifiedNodes = [];
-        for (var i in _nodes) {
+            for (i in _nodes) {
+                if (_nodes.hasOwnProperty(i)) {
           if (newerNodes[i]) {
-            if (newerNodes[i].hash !== _nodes[i].hash && _nodes[i].hash !== "") {
+                        if (newerNodes[i].hash !== _nodes[i].hash && _nodes[i].hash !== '') {
               modifiedNodes.push(i);
             }
           }
         }
+            }
         return modifiedNodes;
       }
 
 
       //this is just a first brute implementation it needs serious optimization!!!
       function fitsInPatternTypes(path, pattern) {
+            var i;
+
         if (pattern.items && pattern.items.length > 0) {
-          for (var i = 0; i < pattern.items.length; i++) {
+                for (i = 0; i < pattern.items.length; i += 1) {
             if (META.isTypeOf(path, pattern.items[i])) {
               return true;
             }
@@ -19255,13 +19248,17 @@ define('client/js/client',[
       }
 
       function patternToPaths(patternId, pattern, pathsSoFar) {
+            var children,
+                subPattern,
+                i;
+
         if (_nodes[patternId]) {
           pathsSoFar[patternId] = true;
           if (pattern.children && pattern.children > 0) {
-            var children = _core.getChildrenPaths(_nodes[patternId].node);
-            var subPattern = COPY(pattern);
-            subPattern.children--;
-            for (var i = 0; i < children.length; i++) {
+                    children = _core.getChildrenPaths(_nodes[patternId].node);
+                    subPattern = COPY(pattern);
+                    subPattern.children -= 1;
+                    for (i = 0; i < children.length; i += 1) {
               if (fitsInPatternTypes(children[i], pattern)) {
                 patternToPaths(children[i], subPattern, pathsSoFar);
               }
@@ -19274,18 +19271,22 @@ define('client/js/client',[
       }
 
       function userEvents(userId, modifiedNodes) {
-        var newPaths = {};
-        var startErrorLevel = _loadError;
-        for (var i in _users[userId].PATTERNS) {
+            var newPaths = {},
+                startErrorLevel = _loadError,
+                i,
+                events = [];
+
+            for (i in _users[userId].PATTERNS) {
+                if (_users[userId].PATTERNS.hasOwnProperty(i)) {
           if (_nodes[i]) { //TODO we only check pattern if its root is there...
             patternToPaths(i, _users[userId].PATTERNS[i], newPaths);
           }
         }
+            }
 
         if (startErrorLevel !== _loadError) {
           return; //we send events only when everything is there correctly
         }
-        var events = [];
 
         //deleted items
         for (i in _users[userId].PATHS) {
@@ -19293,7 +19294,6 @@ define('client/js/client',[
             events.push({etype: 'unload', eid: i});
           }
         }
-
 
         //added items
         for (i in newPaths) {
@@ -19311,7 +19311,6 @@ define('client/js/client',[
 
         _users[userId].PATHS = newPaths;
 
-
         //this is how the events should go
         if (events.length > 0) {
           if (_loadError > startErrorLevel) {
@@ -19325,54 +19324,23 @@ define('client/js/client',[
         _users[userId].FN(events);
       }
 
-      function storeNode(node, basic) {
+        function storeNode(node /*, basic */) {
+            var path;
         //basic = basic || true;
         if (node) {
-          var path = _core.getPath(node);
+                path = _core.getPath(node);
           _metaNodes[path] = node;
           if (_nodes[path]) {
             //TODO we try to avoid this
           } else {
-            _nodes[path] = {node: node, hash: ""/*,incomplete:true,basic:basic*/};
-            //_inheritanceHash[path] = getInheritanceChain(node); TODO this only needed when real eventing will be reintroduce
+                    _nodes[path] = {node: node, hash: ''/*,incomplete:true,basic:basic*/};
+                    //TODO this only needed when real eventing will be reintroduced
+                    //_inheritanceHash[path] = getInheritanceChain(node);
           }
           return path;
         }
         return null;
       }
-
-        //TODO should be removec as a new version is used currently
-      //function _loadChildrenPattern(core, nodesSoFar, node, level, callback) {
-      //  var path = core.getPath(node);
-      //  _metaNodes[path] = node;
-      //  if (!nodesSoFar[path]) {
-      //    nodesSoFar[path] = {node: node, incomplete: true, basic: true, hash: getStringHash(node)};
-      //  }
-      //  if (level > 0) {
-      //    if (core.getChildrenRelids(nodesSoFar[path].node).length > 0) {
-      //      core.loadChildren(nodesSoFar[path].node, function (err, children) {
-      //        if (!err && children) {
-      //          var missing = children.length;
-      //          var error = null;
-      //          for (var i = 0; i < children.length; i++) {
-      //            loadChildrenPattern(core, nodesSoFar, children[i], level - 1, function (err) {
-      //              error = error || err;
-      //              if (--missing === 0) {
-      //                callback(error);
-      //              }
-      //            });
-      //          }
-      //        } else {
-      //          callback(err);
-      //        }
-      //      });
-      //    } else {
-      //      callback(null);
-      //    }
-      //  } else {
-      //    callback(null);
-      //  }
-      //}
 
       //partially optimized
       function loadChildrenPattern(core, nodesSoFar, node, level, callback) {
@@ -19381,37 +19349,39 @@ define('client/js/client',[
           childrenRelids = core.getChildrenRelids(node),
           missing = childrenPaths.length,
           error = null,
-          i;
-        _metaNodes[path] = node;
-        if (!nodesSoFar[path]) {
-          nodesSoFar[path] = {node: node, incomplete: true, basic: true, hash: getStringHash(node)};
-        }
-        if (level > 0) {
-          if (missing > 0) {
-            for (i = 0; i < childrenPaths.length; i++) {
-              if (nodesSoFar[childrenPaths[i]]) {
-                loadChildrenPattern(core, nodesSoFar, nodesSoFar[childrenPaths[i]].node, level - 1, function (err) {
-                  error = error || err;
-                  if (--missing === 0) {
-                    callback(error);
-                  }
-                });
-              } else {
-                core.loadChild(node, childrenRelids[i], function (err, child) {
+                i,
+                childLoaded = function (err, child) {
                   if (err || child === null) {
                     error = error || err;
-                    if (--missing === 0) {
+                        missing -= 1;
+                        if (missing === 0) {
                       callback(error);
                     }
                   } else {
-                    loadChildrenPattern(core, nodesSoFar, child, level - 1, function (err) {
+                        loadChildrenPattern(core, nodesSoFar, child, level - 1, childrenPatternLoaded);
+                    }
+                },
+                childrenPatternLoaded = function (err) {
                       error = error || err;
-                      if (--missing === 0) {
+                    missing -= 1;
+                    if (missing === 0) {
                         callback(error);
                       }
-                    });
+                };
+            _metaNodes[path] = node;
+            if (!nodesSoFar[path]) {
+                nodesSoFar[path] = {node: node, incomplete: true, basic: true, hash: getStringHash(node)};
                   }
-                });
+            if (level > 0) {
+                if (missing > 0) {
+                    for (i = 0; i < childrenPaths.length; i++) {
+                        if (nodesSoFar[childrenPaths[i]]) {
+                            loadChildrenPattern(core,
+                                nodesSoFar,
+                                nodesSoFar[childrenPaths[i]].node,
+                                level - 1, childrenPatternLoaded);
+                        } else {
+                            core.loadChild(node, childrenRelids[i], childLoaded);
               }
             }
           } else {
@@ -19423,8 +19393,8 @@ define('client/js/client',[
       }
 
       function loadPattern(core, id, pattern, nodesSoFar, callback) {
-        var base = null;
-        var baseLoaded = function () {
+            var base = null,
+                baseLoaded = function () {
           if (pattern.children && pattern.children > 0) {
             var level = pattern.children;
             loadChildrenPattern(core, nodesSoFar, base, level, callback);
@@ -19444,11 +19414,17 @@ define('client/js/client',[
             base = _nodes[ROOT_PATH].node;
           }
           core.loadByPath(base, id, function (err, node) {
+                    var path;
             if (!err && node && !core.isEmpty(node)) {
-              var path = core.getPath(node);
+                        path = core.getPath(node);
               _metaNodes[path] = node;
               if (!nodesSoFar[path]) {
-                nodesSoFar[path] = {node: node, incomplete: false, basic: true, hash: getStringHash(node)};
+                            nodesSoFar[path] = {
+                                node: node,
+                                incomplete: false,
+                                basic: true,
+                                hash: getStringHash(node)
+                            };
               }
               base = node;
               baseLoaded();
@@ -19481,57 +19457,51 @@ define('client/js/client',[
         }
         return ordered;
       }
-      function getEventTree(oldRootHash,newRootHash,callback){
-                var error = null,
-                    sRoot = null,
-                    tRoot = null,
-                    start = new Date().getTime(),
-                    loadRoot = function(hash,root){
-                        _core.loadRoot(hash,function(err,r){
-                            error = error || err;
-                            if(sRoot === null && hash === oldRootHash){
-                                sRoot = r;
-                            } else {
-                                tRoot = r;
-                            }
-                            if(--needed === 0){
-                                rootsLoaded();
-                            }
-                        });
 
-                    },
-                    rootsLoaded = function(){
-                        if(error){
-                            return callback(error);
-                        }
-                        _core.generateLightTreeDiff(sRoot,tRoot,function(err,diff){
-              //console.log('genDiffTree',new Date().getTime()-start);
-              //console.log('diffTree',JSON.stringify(diff,null,2));
-                            callback(err,diff);
-                        });
-                    },
-                    needed = 2;
-                loadRoot(oldRootHash,sRoot);
-                loadRoot(newRootHash,tRoot);
-        }
+        //TODO will be used when diff based event generation is reintroduced
+        //function getEventTree(oldRootHash, newRootHash, callback) {
+        //    var error = null,
+        //        sRoot = null,
+        //        tRoot = null,
+        //        loadRoot = function (hash /*, root */) {
+        //            _core.loadRoot(hash, function (err, r) {
+        //                error = error || err;
+        //                if (sRoot === null && hash === oldRootHash) {
+        //                    sRoot = r;
+        //                } else {
+        //                    tRoot = r;
+        //                }
+        //                needed -= 1;
+        //                if (needed === 0) {
+        //                    rootsLoaded();
+        //                }
+        //            });
+        //
+        //        },
+        //        rootsLoaded = function () {
+        //            if (error) {
+        //                return callback(error);
+        //            }
+        //            _core.generateLightTreeDiff(sRoot, tRoot, function (err, diff) {
+        //                callback(err, diff);
+        //            });
+        //        },
+        //        needed = 2;
+        //    loadRoot(oldRootHash, sRoot);
+        //    loadRoot(newRootHash, tRoot);
+        //}
 
       function loadRoot(newRootHash, callback) {
-            //with the newer approach we try to optimize a bit the mechanizm of the loading and try to get rid of the paralellism behind it
+            //with the newer approach we try to optimize a bit the mechanism of the loading and
+            // try to get rid of the parallelism behind it
         var patterns = {},
           orderedPatternIds = [],
           error = null,
-                i, j,keysi,keysj;
-                //TODO check and remove as it is not used
-                //loadNextPattern = function(index){
-                //    if(index<orderedPatternIds.length){
-                //        loadPattern(_core,orderedPatternIds[index],patterns[orderedPatternIds[index]],_loadNodes,function(err){
-                //            error = error || err;
-                //            loadNextPattern(index+1);
-                //        });
-                //    } else {
-                //        callback(error);
-                //    }
-                //};
+                i,
+                j,
+                keysi,
+                keysj;
+
         _loadNodes = {};
         _loadError = 0;
 
@@ -19557,25 +19527,37 @@ define('client/js/client',[
 
         //and now the one-by-one loading
         _core.loadRoot(newRootHash, function (err, root) {
+                var fut,
+                    _loadPattern;
+
           ASSERT(err || root);
+
           _root = root;
           error = error || err;
           if (!err) {
-            //TODO here is the point where we can start / stop our addOns - but we will not wait for them to start
             updateRunningAddOns(root);
-            _loadNodes[_core.getPath(root)] = {node: root, incomplete: true, basic: true, hash: getStringHash(root)};
+                    _loadNodes[_core.getPath(root)] = {
+                        node: root,
+                        incomplete: true,
+                        basic: true,
+                        hash: getStringHash(root)
+                    };
             _metaNodes[_core.getPath(root)] = root;
             if (orderedPatternIds.length === 0 && Object.keys(_users) > 0) {
               //we have user, but they do not interested in any object -> let's relaunch them :D
               callback(null);
               reLaunchUsers();
             } else {
-                var _loadPattern = TASYNC.throttle(TASYNC.wrap(loadPattern), 1);
-                var fut = TASYNC.lift(
-                    orderedPatternIds.map(function (pattern, index) {
-                        return TASYNC.apply(_loadPattern, [_core, pattern, patterns[pattern], _loadNodes], this);
+                        _loadPattern = TASYNC.throttle(TASYNC.wrap(loadPattern), 1);
+                        fut = TASYNC.lift(
+                            orderedPatternIds.map(function (pattern /*, index */) {
+                                return TASYNC.apply(_loadPattern,
+                                    [_core, pattern, patterns[pattern], _loadNodes],
+                                    this);
                     }));
-                TASYNC.unwrap(function() { return fut; })(callback);
+                        TASYNC.unwrap(function () {
+                            return fut;
+                        })(callback);
             }
           } else {
             callback(err);
@@ -19586,46 +19568,25 @@ define('client/js/client',[
       //this is just a first brute implementation it needs serious optimization!!!
       function loading(newRootHash, callback) {
         var finalEvents = function () {
-          var modifiedPaths;
+                var modifiedPaths,
+                    i;
+
             modifiedPaths = getModifiedNodes(_loadNodes);
             _nodes = _loadNodes;
             _loadNodes = {};
-            for (var i in _users) {
+                for (i in _users) {
+                    if (_users.hasOwnProperty(i)) {
               userEvents(i, modifiedPaths);
             }
+                }
           callback(null);
         };
-        callback = callback || function(err){};
+
+            callback = callback || function (/*err*/) {
+            };
+
         _previousRootHash = _rootHash;
         _rootHash = newRootHash;
-        /*if(_previousRootHash){
-          getEventTree(_previousRootHash,_rootHash,function(err,diffTree){
-            if(err){
-              _rootHash = null;
-              callback(err);
-            } else {
-              _changeTree = diffTree;
-        loadRoot(newRootHash, function (err) {
-          if (err) {
-            _rootHash = null;
-            callback(err);
-          } else {
-              finalEvents();
-            }
-        });
-          }
-          });
-
-        } else {
-          loadRoot(newRootHash,function(err){
-            if(err){
-              _rootHash = null;
-              callback(err);
-            } else {
-            finalEvents();
-          }
-          });
-        }*/
           loadRoot(newRootHash,function(err){
               if(err){
                   _rootHash = null;
@@ -19637,26 +19598,29 @@ define('client/js/client',[
       }
 
       function saveRoot(msg, callback) {
+            var newRootHash,
+                newCommitHash;
+
         callback = callback || function () {
         };
         if (!_viewer && !_readOnlyProject) {
           if (_msg) {
-            _msg += "\n" + msg;
+                    _msg += '\n' + msg;
           } else {
             _msg += msg;
           }
           if (!_inTransaction) {
             ASSERT(_project && _core && _branch);
-            _core.persist(_nodes[ROOT_PATH].node, function (err) {
+                    _core.persist(_nodes[ROOT_PATH].node, function (/*err*/) {
             });
-            var newRootHash = _core.getHash(_nodes[ROOT_PATH].node);
-            var newCommitHash = _project.makeCommit([_recentCommits[0]], newRootHash, _msg, function (err) {
+                    newRootHash = _core.getHash(_nodes[ROOT_PATH].node);
+                    newCommitHash = _project.makeCommit([_recentCommits[0]], newRootHash, _msg, function (/*err*/) {
               //TODO now what??? - could we end up here?
             });
-            _msg = "";
+                    _msg = '';
             addCommit(newCommitHash);
             _selfCommits[newCommitHash] = true;
-            _redoer.addModification(newCommitHash,"");
+                    _redoer.addModification(newCommitHash, '');
             _project.setBranchHash(_branch, _recentCommits[1], _recentCommits[0], function (err) {
                 //TODO now what??? - could we screw up
                 lock.lock(function () {
@@ -19667,8 +19631,8 @@ define('client/js/client',[
             //loading(newRootHash);
           }
         } else {
-            //FIXME missing callback?!
-          _msg = "";
+                _msg = '';
+                callback(null);
         }
       }
 
@@ -19702,11 +19666,21 @@ define('client/js/client',[
 
       function getFullProjectListAsync(callback) {
         _database.getProjectNames(function (err, names) {
+                var wait,
+                    fullList = {},
+                    getProjectAuthInfo,
+                    i,
+                    projectAuthInfoResponse = function (/*err*/) {
+                        wait -= 1;
+                        if (wait === 0) {
+                            callback(null, fullList);
+                        }
+                    };
+
           if (!err && names) {
-            var wait = names.length || 0;
-            var fullList = {};
+                    wait = names.length || 0;
             if (wait > 0) {
-              var getProjectAuthInfo = function (name, cb) {
+                        getProjectAuthInfo = function (name, cb) {
                 _database.getAuthorizationInfo(name, function (err, authObj) {
                   if (!err && authObj) {
                     fullList[name] = authObj;
@@ -19715,12 +19689,8 @@ define('client/js/client',[
                 });
               };
 
-              for (var i = 0; i < names.length; i++) {
-                getProjectAuthInfo(names[i], function (err) {
-                  if (--wait === 0) {
-                    callback(null, fullList);
-                  }
-                });
+                        for (i = 0; i < names.length; i += 1) {
+                            getProjectAuthInfo(names[i], projectAuthInfoResponse);
               }
             } else {
               callback(null, {});
@@ -19736,7 +19706,7 @@ define('client/js/client',[
           if (projectname === _projectName) {
             callback(null);
           } else {
-            closeOpenedProject(function (err) {
+                    closeOpenedProject(function (/*err*/) {
               //TODO what can we do with the error??
               openProject(projectname, function (err) {
                 //TODO is there a meaningful error which we should propagate towards user???
@@ -19764,7 +19734,7 @@ define('client/js/client',[
                         //TODO currently this is just a hack
                         p.setInfo(projectInfo || {
                           visibleName:projectname,
-                          description:"project in webGME",
+                                                description: 'project in webGME',
                           tags:{}
                         },function(err){
                           callback(err);
@@ -19808,14 +19778,18 @@ define('client/js/client',[
         if (_database) {
           if (_project) {
             _project.getBranchNames(function (err, names) {
+                        var missing = 0,
+                            branchArray = [],
+                            error = null,
+                            getBranchValues,
+                            i,
+                            element;
+
               if (!err && names) {
-                var missing = 0;
-                var branchArray = [];
-                var error = null;
-                var getBranchValues = function (name) {
+                            getBranchValues = function (name) {
                   _project.getBranchHash(name, '#hack', function (err, newhash, forked) {
                     if (!err && newhash) {
-                      var element = {name: name, commitId: newhash};
+                                        element = {name: name, commitId: newhash};
                       if (forked) {
                         element.sync = false;
                       } else {
@@ -19826,15 +19800,17 @@ define('client/js/client',[
                       error = error || err;
                     }
 
-                    if (--missing === 0) {
+                                    missing -= 1;
+                                    if (missing === 0) {
                       callback(error, branchArray);
                     }
                   });
                 };
 
-                for (var i in names) {
-                  missing++;
+                            for (i in names) {
+                                missing += 1;
                 }
+
                 if (missing > 0) {
                   for (i in names) {
                     getBranchValues(i);
@@ -19868,7 +19844,8 @@ define('client/js/client',[
           if (!err && commitObj) {
             loading(commitObj.root, callback);
           } else {
-            logger.error('Cannot view given ' + hash + ' commit as it\'s root cannot be loaded! [' + JSON.stringify(err) + ']');
+                    logger.error('Cannot view given ' + hash + ' commit as it\'s root cannot be loaded! [' +
+                    JSON.stringify(err) + ']');
             callback(err || new Error('commit object cannot be found!'));
           }
         });
@@ -19895,12 +19872,12 @@ define('client/js/client',[
             if (--waiting === 0) {
               callback(error);
             }
-          }
+                };
+
         if (_database) {
           if (_project) {
                 stopRunningAddOns();
                 branchWatcher(branch, innerCallback);
-                //startCoreAddOnsAsync(_projectName,branch,innerCallback);
           } else {
             callback(new Error('there is no open project!'));
           }
@@ -19982,9 +19959,11 @@ define('client/js/client',[
       }
 
       function commitAsync(params, callback) {
+            var msg;
+
         if (_database) {
           if (_project) {
-            var msg = params.message || '';
+                    msg = params.message || '';
             saveRoot(msg, callback);
           } else {
             callback(new Error('there is no open project!'));
@@ -20012,13 +19991,18 @@ define('client/js/client',[
           });
           _database.closeDatabase(function () {
           });
-          _networkStatus = "";
+                _networkStatus = '';
           changeBranchState(null);
         }
         _database = newDatabase();
 
         _database.openDatabase(function (err) {
-          if (!err) {
+                if (err) {
+                    logger.error('Cannot open database');
+                    callback(err);
+                    return;
+                }
+
             if (_networkWatcher) {
               _networkWatcher.stop();
             }
@@ -20044,82 +20028,106 @@ define('client/js/client',[
             } else {
               callback(null);
             }
-          } else {
-            logger.error('Cannot open database');
-            callback(err);
-          }
         });
       }
 
       //MGA
       function copyMoreNodes(parameters, msg) {
-        var pathestocopy = [];
-        if (typeof parameters.parentId === 'string' && _nodes[parameters.parentId] && typeof _nodes[parameters.parentId].node === 'object') {
-          for (var i in parameters) {
-            if (i !== "parentId") {
+            var pathestocopy = [],
+                i,
+                j,
+                newNode;
+
+            if (typeof parameters.parentId === 'string' && _nodes[parameters.parentId] &&
+                typeof _nodes[parameters.parentId].node === 'object') {
+                for (i in parameters) {
+                    if (i !== 'parentId') {
               pathestocopy.push(i);
             }
           }
 
           msg = msg || 'copyMoreNodes(' + pathestocopy + ',' + parameters.parentId + ')';
           if (pathestocopy.length < 1) {
+                    // empty on purpose
           } else if (pathestocopy.length === 1) {
-            var newNode = _core.copyNode(_nodes[pathestocopy[0]].node, _nodes[parameters.parentId].node);
+                    newNode = _core.copyNode(_nodes[pathestocopy[0]].node, _nodes[parameters.parentId].node);
             storeNode(newNode);
             if (parameters[pathestocopy[0]]) {
-              for (var j in parameters[pathestocopy[0]].attributes) {
+                        for (j in parameters[pathestocopy[0]].attributes) {
+                            if (parameters[pathestocopy[0]].attributes.hasOwnProperty(j)) {
                 _core.setAttribute(newNode, j, parameters[pathestocopy[0]].attributes[j]);
               }
+                        }
               for (j in parameters[pathestocopy[0]].registry) {
+                            if (parameters[pathestocopy[0]].registry.hasOwnProperty(j)) {
                 _core.setRegistry(newNode, j, parameters[pathestocopy[0]].registry[j]);
               }
             }
+                    }
             saveRoot(msg);
           } else {
             copyMoreNodesAsync(pathestocopy, parameters.parentId, function (err, copyarr) {
+                        var i,
+                            j;
               if (err) {
                 //rollBackModification();
-              }
-              else {
-                for (var i in copyarr) {
-                  if (parameters[i]) {
-                    for (var j in parameters[i].attributes) {
+                            logger.error(err);
+                        } else {
+                            for (i in copyarr) {
+                                if (copyarr.hasOwnProperty(i) && parameters[i]) {
+                                    for (j in parameters[i].attributes) {
+                                        if (parameters[i].attributes.hasOwnProperty(j)) {
                       _core.setAttribute(copyarr[i], j, parameters[i].attributes[j]);
                     }
+                                    }
                     for (j in parameters[i].registry) {
+                                        if (parameters[i].registry.hasOwnProperty(j)) {
                       _core.setRegistry(copyarr[i], j, parameters[i].registry[j]);
                     }
                   }
                 }
+                            }
                 saveRoot(msg);
               }
             });
           }
         } else {
-          console.log('wrong parameters for copy operation - denied -');
+                logger.error('wrong parameters for copy operation - denied -');
         }
       }
 
 
       function copyMoreNodesAsync(nodePaths, parentPath, callback) {
-        var checkPaths = function () {
-          var result = true;
-          for (var i = 0; i < nodePaths.length; i++) {
+            var i,
+                tempFrom,
+                tempTo,
+                helpArray,
+                subPathArray,
+                parent,
+                returnArray,
+                checkPaths = function () {
+                    var i,
+                        result = true;
+
+                    for (i = 0; i < nodePaths.length; i += 1) {
             result = result && (_nodes[nodePaths[i]] && typeof _nodes[nodePaths[i]].node === 'object');
           }
           return result;
         };
 
         if (_nodes[parentPath] && typeof _nodes[parentPath].node === 'object' && checkPaths()) {
-          var helpArray = {},
-            subPathArray = {},
-            parent = _nodes[parentPath].node,
+                helpArray = {};
+                subPathArray = {};
+                parent = _nodes[parentPath].node;
             returnArray = {};
 
           //creating the 'from' object
-          var tempFrom = _core.createNode({parent: parent, base: _core.getTypeRoot(_nodes[nodePaths[0]].node)});
+                tempFrom = _core.createNode({
+                    parent: parent,
+                    base: _core.getTypeRoot(_nodes[nodePaths[0]].node)
+                });
           //and moving every node under it
-          for (var i = 0; i < nodePaths.length; i++) {
+                for (i = 0; i < nodePaths.length; i += 1) {
             helpArray[nodePaths[i]] = {};
             helpArray[nodePaths[i]].origparent = _core.getParent(_nodes[nodePaths[i]].node);
             helpArray[nodePaths[i]].tempnode = _core.moveNode(_nodes[nodePaths[i]].node, tempFrom);
@@ -20128,24 +20136,27 @@ define('client/js/client',[
           }
 
           //do the copy
-          var tempTo = _core.copyNode(tempFrom, parent);
+                tempTo = _core.copyNode(tempFrom, parent);
 
           //moving back the temporary source
-          for (var i = 0; i < nodePaths.length; i++) {
-            helpArray[nodePaths[i]].node = _core.moveNode(helpArray[nodePaths[i]].tempnode, helpArray[nodePaths[i]].origparent);
+                for (i = 0; i < nodePaths.length; i += 1) {
+                    helpArray[nodePaths[i]].node = _core.moveNode(helpArray[nodePaths[i]].tempnode,
+                        helpArray[nodePaths[i]].origparent);
             storeNode(helpArray[nodePaths[i]].node);
           }
 
           //gathering the destination nodes
           _core.loadChildren(tempTo, function (err, children) {
+                    var newNode;
+
             if (!err && children && children.length > 0) {
-              for (i = 0; i < children.length; i++) {
+                        for (i = 0; i < children.length; i += 1) {
                 if (subPathArray[_core.getRelid(children[i])]) {
-                  var newNode = _core.moveNode(children[i], parent);
+                                newNode = _core.moveNode(children[i], parent);
                   storeNode(newNode);
                   returnArray[subPathArray[_core.getRelid(children[i])]] = newNode;
                 } else {
-                  console.log('635 - should never happen!!!');
+                                logger.error('635 - should never happen!!!');
                 }
               }
               _core.deleteNode(tempFrom);
@@ -20161,68 +20172,41 @@ define('client/js/client',[
         }
       }
 
-        //TODO should be removed if the copyMoreNodes is functioning right now
-      //function _copyMoreNodes(parameters) {
-      //  //now we will use the multiple copy function of the core
-      //  var nodes = [],
-      //    copiedNodes,
-      //    i, j, paths, keys,
-      //    parent = _nodes[parameters.parentId].node,
-      //    resultMap = {};
-      //  keys = Object.keys(parameters);
-      //  keys.splice(keys.indexOf('parentId'), 1);
-      //  paths = keys;
-      //  for (i = 0; i < paths.length; i++) {
-      //    nodes.push(_nodes[paths[i]].node);
-      //  }
-      //
-      //  copiedNodes = _core.copyNodes(nodes, parent);
-      //
-      //  for (i = 0; i < paths.length; i++) {
-      //    keys = Object.keys(parameters[paths[i]].attributes || {});
-      //    for (j = 0; j < keys.length; j++) {
-      //      _core.setAttribute(copiedNodes[i], keys[j], parameters[paths[i]].attributes[keys[j]]);
-      //    }
-      //
-      //    keys = Object.keys(parameters[paths[i]].registry || {});
-      //    for (j = 0; j < keys.length; j++) {
-      //      _core.setRegistry(copiedNodes[i], keys[j], parameters[paths[i]].registry[keys[j]]);
-      //    }
-      //  }
-      //
-      //
-      //  //creating the result map and storing the nodes to our cache, so the user will know which path became which
-      //  for (i = 0; i < paths.length; i++) {
-      //    resultMap[paths[i]] = storeNode(copiedNodes[i]);
-      //  }
-      //
-      //  return resultMap;
-      //}
-
       function moveMoreNodes(parameters) {
         var pathsToMove = [],
-          returnParams = {};
-        for (var i in parameters) {
+                returnParams = {},
+                i,
+                j,
+                newNode;
+
+            for (i in parameters) {
+                if (parameters.hasOwnProperty(i)) {
           if (i !== 'parentId') {
             pathsToMove.push(i);
           }
         }
+            }
 
-        if (pathsToMove.length > 0 && typeof parameters.parentId === 'string' && _nodes[parameters.parentId] && typeof _nodes[parameters.parentId].node === 'object') {
-          for (var i = 0; i < pathsToMove.length; i++) {
+            if (pathsToMove.length > 0 && typeof parameters.parentId === 'string' && _nodes[parameters.parentId] &&
+                typeof _nodes[parameters.parentId].node === 'object') {
+                for (i = 0; i < pathsToMove.length; i += 1) {
             if (_nodes[pathsToMove[i]] && typeof _nodes[pathsToMove[i]].node === 'object') {
-              var newNode = _core.moveNode(_nodes[pathsToMove[i]].node, _nodes[parameters.parentId].node);
+                        newNode = _core.moveNode(_nodes[pathsToMove[i]].node, _nodes[parameters.parentId].node);
               returnParams[pathsToMove[i]] = _core.getPath(newNode);
               if (parameters[pathsToMove[i]].attributes) {
-                for (var j in parameters[pathsToMove[i]].attributes) {
+                            for (j in parameters[pathsToMove[i]].attributes) {
+                                if (parameters[pathsToMove[i]].attributes.hasOwnProperty(j)) {
                   _core.setAttribute(newNode, j, parameters[pathsToMove[i]].attributes[j]);
                 }
               }
+                        }
               if (parameters[pathsToMove[i]].registry) {
-                for (var j in parameters[pathsToMove[i]].registry) {
+                            for (j in parameters[pathsToMove[i]].registry) {
+                                if (parameters[pathsToMove[i]].registry.hasOwnProperty(j)) {
                   _core.setRegistry(newNode, j, parameters[pathsToMove[i]].registry[j]);
                 }
               }
+                        }
 
               delete _nodes[pathsToMove[i]];
               storeNode(newNode, true);
@@ -20237,12 +20221,15 @@ define('client/js/client',[
         //TODO we also have to check out what is happening with the sets!!!
         var result = {},
           paths = [],
-          nodes = [], node,
+                nodes = [],
+                node,
           parent = _nodes[parameters.parentId].node,
-          names, i, j, index, keys, pointer,
-          newChildren = [], relations = [];
+                names, i, j, index, pointer,
+                newChildren = [],
+                relations = [];
 
-        //to allow 'meaningfull' instantiation of multiple objects we have to recreate the internal relations - except the base
+            //to allow 'meaningfull' instantiation of multiple objects
+            // we have to recreate the internal relations - except the base
         paths = Object.keys(parameters);
         paths.splice(paths.indexOf('parentId'), 1);
         for (i = 0; i < paths.length; i++) {
@@ -20374,16 +20361,27 @@ define('client/js/client',[
         var newID;
 
         if (_core) {
-          if (typeof parameters.parentId === 'string' && _nodes[parameters.parentId] && typeof _nodes[parameters.parentId].node === 'object') {
+                if (typeof parameters.parentId === 'string' && _nodes[parameters.parentId] &&
+                    typeof _nodes[parameters.parentId].node === 'object') {
             var baseNode = null;
             if (_nodes[parameters.baseId]) {
               baseNode = _nodes[parameters.baseId].node || baseNode;
             }
-            var child = _core.createNode({parent: _nodes[parameters.parentId].node, base: baseNode, guid: parameters.guid, relid: parameters.relid});
+                    var child = _core.createNode({
+                        parent: _nodes[parameters.parentId].node,
+                        base: baseNode,
+                        guid: parameters.guid,
+                        relid: parameters.relid
+                    });
             if (parameters.position) {
-              _core.setRegistry(child, "position", { "x": parameters.position.x || 100, "y": parameters.position.y || 100});
+                        _core.setRegistry(child,
+                            'position',
+                            {
+                                x: parameters.position.x || 100,
+                                y: parameters.position.y || 100
+                            });
             } else {
-              _core.setRegistry(child, "position", { "x": 100, "y": 100});
+                        _core.setRegistry(child, 'position', {x: 100, y: 100});
             }
             storeNode(child);
             newID = _core.getPath(child);
@@ -20441,7 +20439,9 @@ define('client/js/client',[
       function setMemberAttribute(path, memberpath, setid, name, value, msg) {
         if (_nodes[path] && typeof _nodes[path].node === 'object') {
           _core.setMemberAttribute(_nodes[path].node, setid, memberpath, name, value);
-          msg = msg || 'setMemberAttribute(' + path + "," + memberpath + "," + setid + "," + name + "," + value + ")";
+                msg = msg ||
+                'setMemberAttribute(' + path + ',' + memberpath + ',' + setid + ',' + name + ',' + value +
+                ')';
           saveRoot(msg);
         }
       }
@@ -20449,7 +20449,7 @@ define('client/js/client',[
       function delMemberAttribute(path, memberpath, setid, name, msg) {
         if (_nodes[path] && typeof _nodes[path].node === 'object') {
           _core.delMemberAttribute(_nodes[path].node, setid, memberpath, name);
-          msg = msg || 'delMemberAttribute(' + path + "," + memberpath + "," + setid + "," + name + ")";
+                msg = msg || 'delMemberAttribute(' + path + ',' + memberpath + ',' + setid + ',' + name + ')';
           saveRoot(msg);
         }
       }
@@ -20457,7 +20457,8 @@ define('client/js/client',[
       function setMemberRegistry(path, memberpath, setid, name, value, msg) {
         if (_nodes[path] && typeof _nodes[path].node === 'object') {
           _core.setMemberRegistry(_nodes[path].node, setid, memberpath, name, value);
-          msg = msg || 'setMemberRegistry(' + path + "," + memberpath + "," + setid + "," + name + "," + value + ")";
+                msg = msg ||
+                'setMemberRegistry(' + path + ',' + memberpath + ',' + setid + ',' + name + ',' + value + ')';
           saveRoot(msg);
         }
       }
@@ -20465,7 +20466,7 @@ define('client/js/client',[
       function delMemberRegistry(path, memberpath, setid, name, msg) {
         if (_nodes[path] && typeof _nodes[path].node === 'object') {
           _core.delMemberRegistry(_nodes[path].node, setid, memberpath, name);
-          msg = msg || 'delMemberRegistry(' + path + "," + memberpath + "," + setid + "," + name + ")";
+                msg = msg || 'delMemberRegistry(' + path + ',' + memberpath + ',' + setid + ',' + name + ')';
           saveRoot(msg);
         }
       }
@@ -20473,7 +20474,7 @@ define('client/js/client',[
       function createSet(path, setid, msg) {
         if (_nodes[path] && typeof _nodes[path].node === 'object') {
           _core.createSet(_nodes[path].node, setid);
-          msg = msg || 'createSet(' + path + "," + setid + ")";
+                msg = msg || 'createSet(' + path + ',' + setid + ')';
           saveRoot(msg);
         }
       }
@@ -20481,7 +20482,7 @@ define('client/js/client',[
       function deleteSet(path, setid, msg) {
         if (_nodes[path] && typeof _nodes[path].node === 'object') {
           _core.deleteSet(_nodes[path].node, setid);
-          msg = msg || 'deleteSet(' + path + "," + setid + ")";
+                msg = msg || 'deleteSet(' + path + ',' + setid + ')';
           saveRoot(msg);
         }
       }
@@ -20492,7 +20493,8 @@ define('client/js/client',[
          _core.setRegistry(_nodes[path].node,'base',basepath);
          saveRoot('setBase('+path+','+basepath+')');
          }*/
-        if (_core && _nodes[path] && typeof _nodes[path].node === 'object' && _nodes[basepath] && typeof _nodes[basepath].node === 'object') {
+            if (_core && _nodes[path] && typeof _nodes[path].node === 'object' && _nodes[basepath] &&
+                typeof _nodes[basepath].node === 'object') {
           _core.setBase(_nodes[path].node, _nodes[basepath].node);
           saveRoot('setBase(' + path + ',' + basepath + ')');
         }
@@ -20548,37 +20550,36 @@ define('client/js/client',[
       }
 
       function updateTerritory(guid, patterns) {
+            var missing,
+                error,
+                patternLoaded,
+                i;
+
         if (_users[guid]) {
           if (_project) {
             if (_nodes[ROOT_PATH]) {
               //TODO: this has to be optimized
-              var missing = 0;
-              var error = null;
+                        missing = 0;
+                        error = null;
 
-              var patternLoaded = function (err) {
+                        patternLoaded = function (err) {
                 error = error || err;
-                if (--missing === 0) {
+                            missing -= 1;
+                            if (missing === 0) {
                   //allDone();
                   _updateTerritoryAllDone(guid, patterns, error);
                 }
               };
 
-              //EXTRADTED OUT TO: _updateTerritoryAllDone
-              /*var allDone = function(){
-               if(_users[guid]){
-               _users[guid].PATTERNS = JSON.parse(JSON.stringify(patterns));
-               if(!error){
-               userEvents(guid,[]);
-               }
-               }
-               };*/
-              for (var i in patterns) {
-                missing++;
+                        for (i in patterns) {
+                            missing += 1;
               }
               if (missing > 0) {
                 for (i in patterns) {
+                                if (patterns.hasOwnProperty(i)) {
                   loadPattern(_core, i, patterns[i], _nodes, patternLoaded);
                 }
+                            }
               } else {
                 //allDone();
                 _updateTerritoryAllDone(guid, patterns, error);
@@ -20586,7 +20587,8 @@ define('client/js/client',[
             } else {
               //something funny is going on
               if (_loadNodes[ROOT_PATH]) {
-                //probably we are in the loading process, so we should redo this update when the loading finishes
+                            //probably we are in the loading process,
+                            // so we should redo this update when the loading finishes
                 //setTimeout(updateTerritory,100,guid,patterns);
               } else {
                 //root is not in nodes and has not even started to load it yet...
@@ -20603,184 +20605,196 @@ define('client/js/client',[
       //getNode
       function getNode(_id) {
 
-        var setNames = {
-          VALIDCHILDREN: 'ValidChildren',
-          VALIDSOURCE: 'ValidSource',
-          VALIDDESTINATION: 'ValidDestination',
-          VALIDINHERITOR: 'ValidInheritor',
-          GENERAL: 'General'
-        };
-
-        var getParentId = function () {
+            function getParentId() {
           return storeNode(_core.getParent(_nodes[_id].node)); //just for sure, as it may missing from the cache
-        };
+            }
 
-        var getId = function () {
+            function getId() {
           return _id;
-        };
+            }
 
-        var getGuid = function () {
+            function getGuid() {
           return _core.getGuid(_nodes[_id].node);
-        };
+            }
 
-        var getChildrenIds = function () {
+            function getChildrenIds() {
           return _core.getChildrenPaths(_nodes[_id].node);
-        };
+            }
 
-        var getBaseId = function () {
-          return storeNode(_core.getBase(_nodes[_id].node)); //just for sure, maybe the base is missing from the cache
-        };
+            function getBaseId() {
+                var base = _core.getBase(_nodes[_id].node);
+                if (base) {
+                    return storeNode(base);
+                } else {
+                    return null;
+                }
 
-        var getInheritorIds = function () {
+            }
+
+            function getInheritorIds() {
           return [];
-        };
+            }
 
-        var getAttribute = function (name) {
+            function getAttribute(name) {
           return _core.getAttribute(_nodes[_id].node, name);
-        };
-        var getOwnAttribute = function (name) {
-          return _core.getOwnAttribute(_nodes[_id].node, name);
-        };
+            }
 
-        var getEditableAttribute = function (name) {
+            function getOwnAttribute(name) {
+          return _core.getOwnAttribute(_nodes[_id].node, name);
+            }
+
+            function getEditableAttribute(name) {
           var value = _core.getAttribute(_nodes[_id].node, name);
           if (typeof value === 'object') {
             return JSON.parse(JSON.stringify(value));
           }
           return value;
-        };
-        var getOwnEditableAttribute = function (name) {
+            }
+
+            function getOwnEditableAttribute(name) {
           var value = _core.getOwnAttribute(_nodes[_id].node, name);
           if (typeof value === 'object') {
             return JSON.parse(JSON.stringify(value));
           }
           return value;
-        };
+            }
 
-        var getRegistry = function (name) {
+            function getRegistry(name) {
           return _core.getRegistry(_nodes[_id].node, name);
-        };
-        var getOwnRegistry = function (name) {
-          return _core.getOwnRegistry(_nodes[_id].node, name);
-        };
+            }
 
-        var getEditableRegistry = function (name) {
+            function getOwnRegistry(name) {
+          return _core.getOwnRegistry(_nodes[_id].node, name);
+            }
+
+            function getEditableRegistry(name) {
           var value = _core.getRegistry(_nodes[_id].node, name);
           if (typeof value === 'object') {
             return JSON.parse(JSON.stringify(value));
           }
           return value;
-        };
-        var getOwnEditableRegistry = function (name) {
+            }
+
+            function getOwnEditableRegistry(name) {
           var value = _core.getOwnRegistry(_nodes[_id].node, name);
           if (typeof value === 'object') {
             return JSON.parse(JSON.stringify(value));
           }
           return value;
-        };
+            }
 
-        var getPointer = function (name) {
+            function getPointer(name) {
           //return _core.getPointerPath(_nodes[_id].node,name);
           if (name === 'base') {
             //base is a special case as it complicates with inherited children
             return {to: _core.getPath(_core.getBase(_nodes[_id].node)), from: []};
           }
           return {to: _core.getPointerPath(_nodes[_id].node, name), from: []};
-        };
-        var getOwnPointer = function (name) {
+            }
+
+            function getOwnPointer(name) {
           return {to: _core.getOwnPointerPath(_nodes[_id].node, name), from: []};
-        };
+            }
 
-        var getPointerNames = function () {
+            function getPointerNames() {
           return _core.getPointerNames(_nodes[_id].node);
-        };
-        var getOwnPointerNames = function () {
+            }
+
+            function getOwnPointerNames() {
           return _core.getOwnPointerNames(_nodes[_id].node);
-        };
+            }
 
-        var getAttributeNames = function () {
+            function getAttributeNames() {
           return _core.getAttributeNames(_nodes[_id].node);
-        };
-        var getOwnAttributeNames = function () {
-          return _core.getOwnAttributeNames(_nodes[_id].node);
-        };
+            }
 
+            function getOwnAttributeNames() {
+                return _core.getOwnAttributeNames(_nodes[_id].node);
+            }
 
-        var getRegistryNames = function () {
+            function getRegistryNames() {
           return _core.getRegistryNames(_nodes[_id].node);
-        };
-        var getOwnRegistryNames = function () {
+            }
+
+            function getOwnRegistryNames() {
           return _core.getOwnRegistryNames(_nodes[_id].node);
-        };
+            }
 
         //SET
-        var getMemberIds = function (setid) {
+            function getMemberIds(setid) {
           return _core.getMemberPaths(_nodes[_id].node, setid);
-        };
-        var getSetNames = function () {
+            }
+
+            function getSetNames() {
           return _core.getSetNames(_nodes[_id].node);
-        };
-        var getMemberAttributeNames = function (setid, memberid) {
+            }
+
+            function getMemberAttributeNames(setid, memberid) {
           return _core.getMemberAttributeNames(_nodes[_id].node, setid, memberid);
-        };
-        var getMemberAttribute = function (setid, memberid, name) {
+            }
+
+            function getMemberAttribute(setid, memberid, name) {
           return _core.getMemberAttribute(_nodes[_id].node, setid, memberid, name);
-        };
-        var getEditableMemberAttribute = function (setid, memberid, name) {
+            }
+
+            function getEditableMemberAttribute(setid, memberid, name) {
           var attr = _core.getMemberAttribute(_nodes[_id].node, setid, memberid, name);
           if (attr !== null && attr !== undefined) {
             return JSON.parse(JSON.stringify(attr));
           }
           return null;
-        };
+            }
 
-        var getMemberRegistryNames = function (setid, memberid) {
+            function getMemberRegistryNames(setid, memberid) {
           return _core.getMemberRegistryNames(_nodes[_id].node, setid, memberid);
-        };
-        var getMemberRegistry = function (setid, memberid, name) {
+            }
+
+            function getMemberRegistry(setid, memberid, name) {
           return _core.getMemberRegistry(_nodes[_id].node, setid, memberid, name);
-        };
-        var getEditableMemberRegistry = function (setid, memberid, name) {
+            }
+
+            function getEditableMemberRegistry(setid, memberid, name) {
           var attr = _core.getMemberRegistry(_nodes[_id].node, setid, memberid, name);
           if (attr !== null && attr !== undefined) {
             return JSON.parse(JSON.stringify(attr));
           }
           return null;
-        };
+            }
 
         //META
-        var getValidChildrenTypes = function () {
+            function getValidChildrenTypes() {
           //return getMemberIds('ValidChildren');
           return META.getValidChildrenTypes(_id);
-        };
-
+            }
 
         //constraint functions
-        var getConstraintNames = function () {
+            function getConstraintNames() {
           return _core.getConstraintNames(_nodes[_id].node);
-        };
-        var getOwnConstraintNames = function () {
+            }
+
+            function getOwnConstraintNames() {
           return _core.getOwnConstraintNames(_nodes[_id].node);
-        };
-        var getConstraint = function (name) {
+            }
+
+            function getConstraint(name) {
           return _core.getConstraint(_nodes[_id].node, name);
-        };
-        //ASSERT(_nodes[_id]);
+            }
 
-        var printData = function () {
-          //probably we will still use it for test purposes, but now it goes officially into printing the node's json representation
-          ToJson(_core, _nodes[_id].node, "", 'guid', function (err, jNode) {
-            console.log('node in JSON format[status = ', err, ']:', jNode);
+            function printData() {
+                //probably we will still use it for test purposes, but now it goes officially
+                // into printing the node's json representation
+                toJson(_core, _nodes[_id].node, '', 'guid', function (err, jNode) {
+                    logger.debug('node in JSON format[status = ', err, ']:', jNode);
           });
-        };
+            }
 
-        var toString = function () {
+            function toString() {
           return _core.getAttribute(_nodes[_id].node, 'name') + ' (' + _id + ')';
-        };
+            }
 
-        var getCollectionPaths = function (name) {
+            function getCollectionPaths(name) {
           return _core.getCollectionPaths(_nodes[_id].node, name);
-        };
+            }
 
         if (_nodes[_id]) {
           return {
@@ -20849,8 +20863,13 @@ define('client/js/client',[
           }
         }
 
-        //DumpMore(_core,nodes,"",'guid',callback);
-        _database.simpleRequest({command: 'dumpMoreNodes', name: _projectName, hash: _rootHash || _core.getHash(_nodes[ROOT_PATH].node), nodes: paths}, function (err, resId) {
+            _database.simpleRequest({
+                    command: 'dumpMoreNodes',
+                    name: _projectName,
+                    hash: _rootHash || _core.getHash(_nodes[ROOT_PATH].node),
+                    nodes: paths
+                },
+                function (err, resId) {
           if (err) {
             callback(err);
           } else {
@@ -20861,33 +20880,22 @@ define('client/js/client',[
 
 
       function getExportItemsUrlAsync(paths, filename, callback) {
-        _database.simpleRequest({command: 'dumpMoreNodes', name: _projectName, hash: _rootHash || _core.getHash(_nodes[ROOT_PATH].node), nodes: paths}, function (err, resId) {
+            _database.simpleRequest({
+                    command: 'dumpMoreNodes',
+                    name: _projectName,
+                    hash: _rootHash || _core.getHash(_nodes[ROOT_PATH].node),
+                    nodes: paths
+                },
+                function (err, resId) {
           if (err) {
             callback(err);
           } else {
-            callback(null, window.location.protocol + '//' + window.location.host + '/worker/simpleResult/' + resId + '/' + filename);
+                        callback(null,
+                            window.location.protocol + '//' + window.location.host + '/worker/simpleResult/' +
+                            resId + '/' + filename);
           }
         });
       }
-
-        //TODO should be either removed or refactored as it is currently not used and probably there is no need for such functionality here
-      //function getExternalInterpreterConfigUrlAsync(selectedItemsPaths, filename, callback) {
-      //  var config = {};
-      //  config.host = window.location.protocol + "//" + window.location.host;
-      //  config.project = _projectName;
-      //  config.token = _TOKEN.getToken();
-      //  config.selected = plainUrl({command: 'node', path: selectedItemsPaths[0] || ""});
-      //  config.commit = URL.addSpecialChars(_recentCommits[0] || "");
-      //  config.root = plainUrl({command: 'node'});
-      //  config.branch = _branch
-      //  _database.simpleRequest({command: 'generateJsonURL', object: config}, function (err, resId) {
-      //    if (err) {
-      //      callback(err);
-      //    } else {
-      //      callback(null, window.location.protocol + '//' + window.location.host + '/worker/simpleResult/' + resId + '/' + filename);
-      //    }
-      //  });
-      //}
 
       function getExportLibraryUrlAsync(libraryRootPath, filename, callback) {
         var command = {};
@@ -20900,7 +20908,9 @@ define('client/js/client',[
             if (err) {
               callback(err);
             } else {
-              callback(null, window.location.protocol + '//' + window.location.host + '/worker/simpleResult/' + resId + '/' + filename);
+                        callback(null,
+                            window.location.protocol + '//' + window.location.host + '/worker/simpleResult/' +
+                            resId + '/' + filename);
             }
           });
         } else {
@@ -20914,25 +20924,25 @@ define('client/js/client',[
             return callback(err);
           }
 
-          saveRoot("library update done\nlogs:\n" + log, callback);
+                saveRoot('library update done\nlogs:\n' + log, callback);
         });
       }
 
       function addLibraryAsync(libraryParentPath, newLibrary, callback) {
-        startTransaction("creating library as a child of " + libraryParentPath);
-        var libraryRoot = createChild({parentId: libraryParentPath, baseId: null}, "library placeholder");
+            startTransaction('creating library as a child of ' + libraryParentPath);
+            var libraryRoot = createChild({parentId: libraryParentPath, baseId: null}, 'library placeholder');
         Serialization.import(_core, _nodes[libraryRoot].node, newLibrary, function (err, log) {
           if (err) {
             return callback(err);
           }
 
-          completeTransaction("library update done\nlogs:\n" + log, callback);
+                completeTransaction('library update done\nlogs:\n' + log, callback);
         });
       }
 
       function dumpNodeAsync(path, callback) {
         if (_nodes[path]) {
-          Dump(_core, _nodes[path].node, "", 'guid', callback);
+                dump(_core, _nodes[path].node, '', 'guid', callback);
         } else {
           callback('unknown object', null);
         }
@@ -20943,7 +20953,7 @@ define('client/js/client',[
         if (_nodes[parentPath]) {
           node = _nodes[parentPath].node;
         }
-        Import(_core, _nodes[parentPath].node, jNode, function (err) {
+            importing(_core, _nodes[parentPath].node, jNode, function (err) {
           if (err) {
             callback(err);
           } else {
@@ -20957,7 +20967,7 @@ define('client/js/client',[
         if (_nodes[parentPath]) {
           node = _nodes[parentPath].node;
         }
-        MergeImport(_core, _nodes[parentPath].node, jNode, function (err) {
+            mergeImport(_core, _nodes[parentPath].node, jNode, function (err) {
           if (err) {
             callback(err);
           } else {
@@ -20967,16 +20977,16 @@ define('client/js/client',[
       }
 
       function createProjectFromFileAsync(projectname, jProject, callback) {
-        //if called on an existing project, it will ruin it!!! - although the old commits will be untouched
-        //TODO somehow the export / import should contain the INFO field so the tags and description could come from it
-        createProjectAsync(projectname, {}, function (err) {
-          selectProjectAsync(projectname, function (err) {
+            //TODO somehow the export / import should contain the INFO field
+            // so the tags and description could come from it
+            createProjectAsync(projectname, {}, function (/*err*/) {
+                selectProjectAsync(projectname, function (/*err*/) {
             Serialization.import(_core, _root, jProject, function (err) {
               if (err) {
                 return callback(err);
               }
 
-              saveRoot("library has been updated...", callback);
+                        saveRoot('library has been updated...', callback);
             });
           });
         });
@@ -20985,7 +20995,7 @@ define('client/js/client',[
       function plainUrl(parameters) {
         //setting the default values
         parameters.command = parameters.command || 'etf';
-        parameters.path = parameters.path || "";
+            parameters.path = parameters.path || '';
         parameters.project = parameters.project || _projectName;
 
         if (!parameters.root && !parameters.branch && !parameters.commit) {
@@ -21000,22 +21010,23 @@ define('client/js/client',[
 
         //now we compose the URL
         if (window && window.location) {
-          var address = window.location.protocol + '//' + window.location.host + '/rest/' + parameters.command + '?';
-          address += "&project=" + URL.addSpecialChars(parameters.project);
+                var address = window.location.protocol + '//' + window.location.host + '/rest/' +
+                    parameters.command + '?';
+                address += '&project=' + URL.addSpecialChars(parameters.project);
           if (parameters.root) {
-            address += "&root=" + URL.addSpecialChars(parameters.root);
+                    address += '&root=' + URL.addSpecialChars(parameters.root);
           } else {
             if (parameters.commit) {
-              address += "&commit=" + URL.addSpecialChars(parameters.commit);
+                        address += '&commit=' + URL.addSpecialChars(parameters.commit);
             } else {
-              address += "&branch=" + URL.addSpecialChars(parameters.branch);
+                        address += '&branch=' + URL.addSpecialChars(parameters.branch);
             }
           }
 
-          address += "&path=" + URL.addSpecialChars(parameters.path);
+                address += '&path=' + URL.addSpecialChars(parameters.path);
 
           if (parameters.output) {
-            address += "&output=" + URL.addSpecialChars(parameters.output);
+                    address += '&output=' + URL.addSpecialChars(parameters.output);
           }
 
           return address;
@@ -21026,7 +21037,7 @@ define('client/js/client',[
       }
 
       function getDumpURL(parameters) {
-        parameters.output = parameters.output || "dump_url.out";
+            parameters.output = parameters.output || 'dump_url.out';
         return plainUrl(parameters);
       }
 
@@ -21040,8 +21051,8 @@ define('client/js/client',[
               return [];
           }
         var names = [];
-        var valids = _nodes[ROOT_PATH] ? _core.getRegistry(_nodes[ROOT_PATH].node, 'validPlugins') || "" : "";
-        valids = valids.split(" ");
+            var valids = _nodes[ROOT_PATH] ? _core.getRegistry(_nodes[ROOT_PATH].node, 'validPlugins') || '' : '';
+            valids = valids.split(' ');
         for (var i = 0; i < valids.length; i++) {
           if (AllPlugins.indexOf(valids[i]) !== -1) {
             names.push(valids[i]);
@@ -21072,12 +21083,17 @@ define('client/js/client',[
       }
 
       function setProjectInfoAsync(projectId,info,callback){
-        _database.simpleRequest({command:'setProjectInfo',projectId:projectId,info:info},function(err,rId){
+            _database.simpleRequest({
+                    command: 'setProjectInfo',
+                    projectId: projectId,
+                    info: info
+                },
+                function (err, rId) {
           if(err){
             return callback(err);
           }
           _database.simpleResult(rId,callback);
-        })
+                });
       }
 
       function getProjectInfoAsync(projectId,callback){
@@ -21086,7 +21102,7 @@ define('client/js/client',[
             return callback(err);
           }
           _database.simpleResult(rId,callback);
-        })
+            });
       }
 
       function getAllInfoTagsAsync(callback){
@@ -21095,11 +21111,18 @@ define('client/js/client',[
             return callback(err);
           }
           _database.simpleResult(rId,callback);
-        })
+            });
       }
 
       function createGenericBranchAsync(project, branch, commit, callback) {
-        _database.simpleRequest({command: 'setBranch', project: project, branch: branch, old: '', new: commit}, function (err, id) {
+            _database.simpleRequest({
+                    command: 'setBranch',
+                    project: project,
+                    branch: branch,
+                    old: '',
+                    new: commit
+                },
+                function (err, id) {
           if (err) {
             return callback(err);
           }
@@ -21108,7 +21131,14 @@ define('client/js/client',[
       }
 
       function deleteGenericBranchAsync(project, branch, commit, callback) {
-        _database.simpleRequest({command: 'setBranch', project: project, branch: branch, old: commit, new: ''}, function (err, id) {
+            _database.simpleRequest({
+                    command: 'setBranch',
+                    project: project,
+                    branch: branch,
+                    old: commit,
+                    new: ''
+                },
+                function (err, id) {
           if (err) {
             return callback(err);
           }
@@ -21200,7 +21230,7 @@ define('client/js/client',[
       //                return callback(err);
       //              }
       //
-      //              var newHash = _project.makeCommit(parents,core.getHash(root),"merging",function(err){
+        //              var newHash = _project.makeCommit(parents,core.getHash(root),'merging',function(err){
       //                if(err){
       //                  return callback(err);
       //                }
@@ -21219,7 +21249,10 @@ define('client/js/client',[
       //}
 
       //function merge(whereBranch,whatCommit,whereCommit,callback){
-      //  ASSERT(_project && typeof whatCommit === 'string' && typeof whereCommit === 'string' && typeof callback === 'function');
+        //  ASSERT(_project &&
+        // typeof whatCommit === 'string' &&
+        // typeof whereCommit === 'string' &&
+        // typeof callback === 'function');
       //  _project.getCommonAncestorCommit(whatCommit,whereCommit,function(err,baseCommit){
       //    if(!err && baseCommit){
       //      var base,what,where,baseToWhat,baseToWhere,rootNeeds = 3,error = null,
@@ -21263,7 +21296,8 @@ define('client/js/client',[
       //                if(err){
       //                  callback(err);
       //                } else {
-      //                  var newHash = _project.makeCommit([whatCommit,whereCommit],_core.getHash(base), "merging", function(err){
+        //                  var newHash = _project.makeCommit([whatCommit,whereCommit],
+        //                    _core.getHash(base), 'merging', function(err){
       //                    if(err){
       //                      callback(err);
       //                    } else {
@@ -21289,7 +21323,8 @@ define('client/js/client',[
       //                  if(err){
       //                    callback(err);
       //                  } else {
-      //                    var newHash = _project.makeCommit([whatCommit,whereCommit],_core.getHash(base), "merging", function(err){
+        //                    var newHash = _project.makeCommit([whatCommit,whereCommit],
+        //                      _core.getHash(base), 'merging', function(err){
       //                      if(err){
       //                        callback(err);
       //                      } else {
@@ -21394,54 +21429,22 @@ define('client/js/client',[
       //        if(err){
       //          callback(err);
       //        } else {
-      //          var newHash = _project.makeCommit([theirsCommit,mineCommit],_core.getHash(baseObject), "merging", function(err){
+        //                    var newHash = _project.makeCommit([theirsCommit, mineCommit],
+        //                        _core.getHash(baseObject),
+        //                        'merging',
+        //                        function (err) {
       //            if(err){
       //              callback(err);
       //            } else {
       //              console.log('setting branch hash after merge');
       //              _project.setBranchHash(branch,mineCommit,newHash,callback);
       //            }
-      //          });
-      //        }
-      //      });
-      //    }
-      //  });
-      //}
-
-        //TODO this should be removed as right now we do not have option where the client would open the project by itself
-      //initialization
-      //function initialize() {
-      //  _database = newDatabase();
-      //  _database.openDatabase(function (err) {
-      //    if (!err) {
-      //      _networkWatcher = networkWatcher();
-      //      serverEventer();
-      //      _database.getProjectNames(function (err, names) {
-      //        if (!err && names && names.length > 0) {
-      //          var projectName = null;
-      //            //FIXME: Who sets this project?
-      //          if (_configuration.project && names.indexOf(_configuration.project) !== -1) {
-      //            projectName = _configuration.project;
-      //          } else {
-      //            projectName = names[0];
-      //          }
-      //          openProject(projectName, function (err) {
-      //            if (err) {
-      //              logger.error('Problem during project opening:' + JSON.stringify(err));
       //            }
-      //          });
-      //        } else {
-      //          logger.error('Cannot get project names / There is no project on the server');
+        //                    );
       //        }
       //      });
-      //    } else {
-      //      logger.error('Cannot open database');
       //    }
       //  });
-      //}
-      //FIXME: Who sets this configuration?
-      //if (_configuration.autostart) {
-      //  initialize();
       //}
 
       _redoer = new UndoRedo({
@@ -21455,7 +21458,8 @@ define('client/js/client',[
           removeEventListener: _self.removeEventListener,
           removeAllEventListeners: _self.removeAllEventListeners,
           dispatchEvent: _self.dispatchEvent,
-          getProjectObject: getProjectObject});
+            getProjectObject: getProjectObject
+        });
 
       return {
         //eventer
@@ -21635,28 +21639,49 @@ define('client/js/client',[
     return Client;
   });
 
-define('blob/BlobConfig',[], function(){
+/*globals define*/
+/*jshint browser: true, node:true*/
 
+/**
+ * Client module for accessing the blob.
+ *
+ * @author lattmann / https://github.com/lattmann
+ */
+
+define('blob/BlobConfig',[], function () {
+    
     var BlobConfig = {
         hashMethod: 'sha1', // TODO: in the future we may switch to sha512
         hashRegex: new RegExp('^[0-9a-f]{40}$')
     };
+
     return BlobConfig;
 });
-/*
- * Copyright (C) 2014 Vanderbilt University, All rights reserved.
+/*globals define*/
+/*jshint browser: true, node:true*/
+
+/**
+ * Client module for accessing the blob.
  *
- * Author: Zsolt Lattmann
+ * @author lattmann / https://github.com/lattmann
  */
 
-define('blob/BlobMetadata',['blob/BlobConfig'], function(BlobConfig){
+define('blob/BlobMetadata',['blob/BlobConfig'], function (BlobConfig) {
+    
 
     /**
      * Initializes a new instance of BlobMetadata
-     * @param {Object<string, string|number|Object>} metadata A serialized metadata object. Name and content must be defined.
+     * @param {object} metadata - A serialized metadata object.
+     * @param {string} metadata.name
+     * @param {string|Object} metadata.content
+     * @param {number} [metadata.size=0]
+     * @param {BlobMetadata.CONTENT_TYPES} [metadata.contentType=BlobMetadata.CONTENT_TYPES.OBJECT]
+     * @param {string} [metadata.mime='']
+     * @param {boolean} [metadata.isPublic=false]
+     * @param {string[]} [metadata.tags=[]]
      * @constructor
      */
-    var BlobMetadata = function(metadata) {
+    var BlobMetadata = function (metadata) {
         var key;
         if (metadata) {
             this.name = metadata.name;
@@ -21670,7 +21695,7 @@ define('blob/BlobMetadata',['blob/BlobConfig'], function(BlobConfig){
                 for (key in this.content) {
                     if (this.content.hasOwnProperty(key)) {
                         if (BlobConfig.hashRegex.test(this.content[key].content) === false) {
-                            throw Error("BlobMetadata is malformed: hash is invalid");
+                            throw Error('BlobMetadata is malformed: hash is invalid');
                         }
                     }
                 }
@@ -21692,7 +21717,13 @@ define('blob/BlobMetadata',['blob/BlobConfig'], function(BlobConfig){
 
     /**
      * Serializes the metadata to a JSON object.
-     * @returns {{name: string, size: number, mime: string, tags: Array.<string>, content: (string|Object}, contentType: string}}
+     * @returns {{
+     *  name: string,
+     *  size: number,
+     *  mime: string,
+     *  tags: Array.<string>,
+     *  content: (string|Object},
+     *  contentType: string}}
      */
     BlobMetadata.prototype.serialize = function () {
         var metadata = {
@@ -21721,7 +21752,7 @@ define('blob/BlobMetadata',['blob/BlobConfig'], function(BlobConfig){
         return metadata;
     };
 
-    return BlobMetadata
+    return BlobMetadata;
 });
 /*globals define*/
 /*jshint browser: true, node:true*/
@@ -21821,7 +21852,8 @@ define('blob/Artifact',['blob/BlobMetadata', 'blob/BlobConfig', 'common/core/tas
             }
 
             if (self.descriptor.content.hasOwnProperty(name)) {
-                callback('Another content with the same name was already added. ' + JSON.stringify(self.descriptor.content[name]));
+                callback('Another content with the same name was already added. ' +
+                JSON.stringify(self.descriptor.content[name]));
 
             } else {
                 self.descriptor.size += metadata.size;
@@ -21839,7 +21871,8 @@ define('blob/Artifact',['blob/BlobMetadata', 'blob/BlobConfig', 'common/core/tas
         var self = this,
             addMetadata = function (size) {
                 if (self.descriptor.content.hasOwnProperty(name)) {
-                    callback('Another content with the same name was already added. ' + JSON.stringify(self.descriptor.content[name]));
+                    callback('Another content with the same name was already added. ' +
+                    JSON.stringify(self.descriptor.content[name]));
 
                 } else {
                     self.descriptor.size += size;
@@ -22021,9 +22054,12 @@ define('blob/Artifact',['blob/BlobMetadata', 'blob/BlobConfig', 'common/core/tas
     return Artifact;
 });
 
-/*globals define*/
+/*globals define, escape*/
 /*jshint browser: true, node:true*/
-/*
+
+/**
+ * Client module for accessing the blob.
+ *
  * @author lattmann / https://github.com/lattmann
  * @author ksmyth / https://github.com/ksmyth
  */
@@ -22039,12 +22075,7 @@ define('blob/BlobClient',['blob/Artifact', 'blob/BlobMetadata', 'superagent'], f
             this.serverPort = parameters.serverPort || this.serverPort;
             this.httpsecure = (parameters.httpsecure !== undefined) ? parameters.httpsecure : this.httpsecure;
             this.webgmeclientsession = parameters.webgmeclientsession;
-            this.keepaliveAgentOptions = parameters.keepaliveAgentOptions || {
-                maxSockets: 100,
-                maxFreeSockets: 10,
-                timeout: 60000,
-                keepAliveTimeout: 30000 // free socket keep alive for 30 seconds
-            };
+            this.keepaliveAgentOptions = parameters.keepaliveAgentOptions || { /* use defaults */ };
         }
         this.blobUrl = '';
         if (this.httpsecure !== undefined && this.server && this.serverPort) {
@@ -22102,6 +22133,7 @@ define('blob/BlobClient',['blob/Artifact', 'blob/BlobMetadata', 'superagent'], f
     BlobClient.prototype.putFile = function (name, data, callback) {
         var contentLength,
             req;
+
         function toArrayBuffer(buffer) {
             var ab = new ArrayBuffer(buffer.length);
             var view = new Uint8Array(ab);
@@ -22110,7 +22142,9 @@ define('blob/BlobClient',['blob/Artifact', 'blob/BlobMetadata', 'superagent'], f
             }
             return ab;
         }
-        // on node-webkit, we use XMLHttpRequest, but xhr.send thinks a Buffer is a string and encodes it in utf-8. Send an ArrayBuffer instead
+
+        // On node-webkit, we use XMLHttpRequest, but xhr.send thinks a Buffer is a string and encodes it in utf-8 -
+        // send an ArrayBuffer instead.
         if (typeof window !== 'undefined' && typeof Buffer !== 'undefined' && data instanceof Buffer) {
             data = toArrayBuffer(data); // FIXME will this have performance problems
         }
@@ -22194,7 +22228,7 @@ define('blob/BlobClient',['blob/Artifact', 'blob/BlobMetadata', 'superagent'], f
         if (remaining === 0) {
             callback(null, hashes);
         }
-        putFile = function(filename, data) {
+        putFile = function (filename, data) {
             self.putFile(filename, data, function (err, hash) {
                 remaining -= 1;
 
@@ -22249,7 +22283,7 @@ define('blob/BlobClient',['blob/Artifact', 'blob/BlobMetadata', 'superagent'], f
             };
             require('util').inherits(BuffersWritable, Writable);
 
-            BuffersWritable.prototype._write = function(chunk, encoding, callback) {
+            BuffersWritable.prototype._write = function (chunk, encoding, callback) {
                 this.buffers.push(chunk);
                 callback();
             };
@@ -22273,7 +22307,7 @@ define('blob/BlobClient',['blob/Artifact', 'blob/BlobMetadata', 'superagent'], f
                 }
             });
             // req.on('error', callback);
-            req.on('end', function() {
+            req.on('end', function () {
                 if (req.xhr.status > 399) {
                     callback(req.xhr.status);
                 } else {
@@ -22353,7 +22387,7 @@ define('blob/BlobClient',['blob/Artifact', 'blob/BlobMetadata', 'superagent'], f
             callback(null, hashes);
         }
 
-        saveCallback = function(err, hash) {
+        saveCallback = function (err, hash) {
             remaining -= 1;
 
             hashes.push(hash);
@@ -22375,8 +22409,12 @@ define('blob/BlobClient',['blob/Artifact', 'blob/BlobMetadata', 'superagent'], f
     return BlobClient;
 });
 
-/*globals define, WebGMEGlobal, require*/
+/*globals define*/
+/*jshint browser: true, node:true*/
+
 /**
+ * Client module for creating, monitoring executor jobs.
+ *
  * @author lattmann / https://github.com/lattmann
  * @author ksmyth / https://github.com/ksmyth
  */
@@ -22387,8 +22425,8 @@ define('executor/ExecutorClient',['superagent'], function (superagent) {
 
     var ExecutorClient = function (parameters) {
         parameters = parameters || {};
-        this.isNodeJS = (typeof window === 'undefined') && (typeof process === "object");
-        this.isNodeWebkit = (typeof window === 'object') && (typeof process === "object");
+        this.isNodeJS = (typeof window === 'undefined') && (typeof process === 'object');
+        this.isNodeWebkit = (typeof window === 'object') && (typeof process === 'object');
         //console.log(isNode);
         if (this.isNodeJS) {
             this.server = '127.0.0.1';
@@ -22405,7 +22443,8 @@ define('executor/ExecutorClient',['superagent'], function (superagent) {
             this.executorUrl = (this.httpsecure ? 'https://' : 'http://') + this.server + ':' + this.serverPort;
         }
         // TODO: TOKEN???
-        this.executorUrl = this.executorUrl + '/rest/executor/'; // TODO: any ways to ask for this or get it from the configuration?
+        // TODO: any ways to ask for this or get it from the configuration?
+        this.executorUrl = this.executorUrl + '/rest/executor/';
         if (parameters.executorNonce) {
             this.executorNonce = parameters.executorNonce;
         }
@@ -22445,14 +22484,16 @@ define('executor/ExecutorClient',['superagent'], function (superagent) {
     };
 
     ExecutorClient.prototype.updateJob = function (jobInfo, callback) {
-        this.sendHttpRequestWithData('POST', this.executorUrl + 'update/' + jobInfo.hash, jobInfo, function (err, response) {
-            if (err) {
-                callback(err);
-                return;
-            }
+        this.sendHttpRequestWithData('POST', this.executorUrl + 'update/' + jobInfo.hash, jobInfo,
+            function (err, response) {
+                if (err) {
+                    callback(err);
+                    return;
+                }
 
-            callback(null, response);
-        });
+                callback(null, response);
+            }
+        );
     };
 
     ExecutorClient.prototype.getInfo = function (hash, callback) {
@@ -22543,15 +22584,15 @@ define('executor/ExecutorClient',['superagent'], function (superagent) {
     return ExecutorClient;
 });
 
-/*
- * Copyright (C) 2014 Vanderbilt University, All rights reserved.
- *
- * Author: Zsolt Lattmann
+/*globals define*/
+/*jshint browser: true, node:true*/
+
+/**
+ * @author lattmann / https://github.com/lattmann
  */
 
-
 define('plugin/PluginConfig',[], function () {
-
+    
     /**
      * Initializes a new instance of plugin configuration.
      *
@@ -22590,15 +22631,16 @@ define('plugin/PluginConfig',[], function () {
 
     return PluginConfig;
 });
-/*
- * Copyright (C) 2014 Vanderbilt University, All rights reserved.
- *
- * Author: Zsolt Lattmann
+/*globals define*/
+/*jshint browser: true, node:true*/
+
+/**
+ * @author lattmann / https://github.com/lattmann
  */
 
 
 define('plugin/PluginNodeDescription',[], function () {
-
+    
     /**
      * Initializes a new instance of plugin node description object.
      *
@@ -22622,11 +22664,12 @@ define('plugin/PluginNodeDescription',[], function () {
      *
      * @returns {{}}
      */
-    PluginNodeDescription.prototype.serialize = function() {
-        var keys = Object.keys(this);
-        var result = {};
+    PluginNodeDescription.prototype.serialize = function () {
+        var keys = Object.keys(this),
+            result = {},
+            i;
 
-        for (var i = 0; i < keys.length; i += 1) {
+        for (i = 0; i < keys.length; i += 1) {
             // TODO: check for type on serialization
             result[keys[i]] = this[keys[i]];
         }
@@ -22636,14 +22679,16 @@ define('plugin/PluginNodeDescription',[], function () {
 
     return PluginNodeDescription;
 });
-/*
- * Copyright (C) 2014 Vanderbilt University, All rights reserved.
- *
- * Author: Zsolt Lattmann
+/*globals define*/
+/*jshint browser: true, node:true*/
+
+/**
+ * @author lattmann / https://github.com/lattmann
  */
 
 
 define('plugin/PluginMessage',['plugin/PluginNodeDescription'], function (PluginNodeDescription) {
+    
 
     /**
      * Initializes a new instance of plugin message.
@@ -22694,13 +22739,16 @@ define('plugin/PluginMessage',['plugin/PluginNodeDescription'], function (Plugin
 
     return PluginMessage;
 });
+/*globals define*/
+/*jshint browser: true, node:true*/
+
 /**
- * Created by zsolt on 3/20/14.
+ * @author lattmann / https://github.com/lattmann
  */
 
 
 define('plugin/PluginResult',['plugin/PluginMessage'], function (PluginMessage) {
-
+    
     /**
      * Initializes a new instance of a plugin result object.
      *
@@ -22710,6 +22758,8 @@ define('plugin/PluginResult',['plugin/PluginMessage'], function (PluginMessage) 
      * @constructor
      */
     var PluginResult = function (config) {
+        var pluginMessage,
+            i;
         if (config) {
             this.success = config.success;
             this.pluginName = config.pluginName;
@@ -22719,8 +22769,7 @@ define('plugin/PluginResult',['plugin/PluginMessage'], function (PluginMessage) 
             this.artifacts = config.artifacts;
             this.error = config.error;
 
-            for (var i = 0; i < config.messages.length; i += 1) {
-                var pluginMessage;
+            for (i = 0; i < config.messages.length; i += 1) {
                 if (config.messages[i] instanceof PluginMessage) {
                     pluginMessage = config.messages[i];
                 } else {
@@ -22872,9 +22921,10 @@ define('plugin/PluginResult',['plugin/PluginMessage'], function (PluginMessage) 
             startTime: this.startTime,
             finishTime: this.finishTime,
             error: this.error
-        };
+        },
+            i;
 
-        for (var i = 0; i < this.messages.length; i += 1) {
+        for (i = 0; i < this.messages.length; i += 1) {
             result.messages.push(this.messages[i].serialize());
         }
 
@@ -22883,102 +22933,106 @@ define('plugin/PluginResult',['plugin/PluginMessage'], function (PluginMessage) 
 
     return PluginResult;
 });
-/*
- * Copyright (C) 2014 Vanderbilt University, All rights reserved.
+/*globals define*/
+/*jshint browser: true, node:true*/
+
+/**
+ * This is the base class that plugins should inherit from.
+ * (Using the plugin-generator - the generated plugin will do that.)
  *
- * Author: Zsolt Lattmann
+ * @author lattmann / https://github.com/lattmann
  */
 
-
-define('plugin/PluginBase',['plugin/PluginConfig',
+define('plugin/PluginBase',[
+    'plugin/PluginConfig',
     'plugin/PluginResult',
     'plugin/PluginMessage',
-    'plugin/PluginNodeDescription'],
-    function (PluginConfig, PluginResult, PluginMessage, PluginNodeDescription) {
+    'plugin/PluginNodeDescription'
+], function (PluginConfig, PluginResult, PluginMessage, PluginNodeDescription) {
+    
 
+    /**
+     * Initializes a new instance of a plugin object, which should be a derived class.
+     *
+     * @constructor
+     */
+    var PluginBase = function () {
+        // set by initialize
+        this.logger = null;
+        this.blobClient = null;
+        this._currentConfig = null;
 
-        /**
-         * Initializes a new instance of a plugin object, which should be a derived class.
-         *
-         * @constructor
-         */
-        var PluginBase = function () {
-            // set by initialize
-            this.logger = null;
-            this.blobClient = null;
-            this._currentConfig = null;
+        // set by configure
+        this.core = null;
+        this.project = null;
+        this.projectName = null;
+        this.branchName = null;
+        this.branchHash = null;
+        this.commitHash = null;
+        this.currentHash = null;
+        this.rootNode = null;
+        this.activeNode = null;
+        this.activeSelection = [];
+        this.META = null;
 
-            // set by configure
-            this.core = null;
-            this.project = null;
-            this.projectName = null;
-            this.branchName = null;
-            this.branchHash = null;
-            this.commitHash = null;
-            this.currentHash = null;
-            this.rootNode = null;
-            this.activeNode = null;
-            this.activeSelection = [];
-            this.META = null;
+        this.result = null;
+        this.isConfigured = false;
+        this.gmeConfig = null;
+    };
 
-            this.result = null;
-            this.isConfigured = false;
-            this.gmeConfig = null;
-        };
+    //--------------------------------------------------------------------------------------------------------------
+    //---------- Methods must be overridden by the derived classes
 
-        //--------------------------------------------------------------------------------------------------------------
-        //---------- Methods must be overridden by the derived classes
+    /**
+     * Main function for the plugin to execute. This will perform the execution.
+     * Notes:
+     * - do NOT use console.log use this.logger.[error,warning,info,debug] instead
+     * - do NOT put any user interaction logic UI, etc. inside this function
+     * - callback always have to be called even if error happened
+     *
+     * @param {function(string, plugin.PluginResult)} callback - the result callback
+     */
+    PluginBase.prototype.main = function (/*callback*/) {
+        throw new Error('implement this function in the derived class');
+    };
 
-        /**
-         * Main function for the plugin to execute. This will perform the execution.
-         * Notes:
-         * - do NOT use console.log use this.logger.[error,warning,info,debug] instead
-         * - do NOT put any user interaction logic UI, etc. inside this function
-         * - callback always have to be called even if error happened
-         *
-         * @param {function(string, plugin.PluginResult)} callback - the result callback
-         */
-        PluginBase.prototype.main = function (callback) {
-            throw new Error('implement this function in the derived class');
-        };
+    /**
+     * Readable name of this plugin that can contain spaces.
+     *
+     * @returns {string}
+     */
+    PluginBase.prototype.getName = function () {
+        throw new Error('implement this function in the derived class - getting type automatically is a bad idea,' +
+        'when the js scripts are minified names are useless.');
+    };
 
-        /**
-         * Readable name of this plugin that can contain spaces.
-         *
-         * @returns {string}
-         */
-        PluginBase.prototype.getName = function () {
-            throw new Error('implement this function in the derived class - getting type automatically is a bad idea,' +
-                'when the js scripts are minified names are useless.');
-        };
+    //--------------------------------------------------------------------------------------------------------------
+    //---------- Methods could be overridden by the derived classes
 
-        //--------------------------------------------------------------------------------------------------------------
-        //---------- Methods could be overridden by the derived classes
+    /**
+     * Current version of this plugin using semantic versioning.
+     * @returns {string}
+     */
+    PluginBase.prototype.getVersion = function () {
+        return '0.1.0';
+    };
 
-        /**
-         * Current version of this plugin using semantic versioning.
-         * @returns {string}
-         */
-        PluginBase.prototype.getVersion = function () {
-            return '0.1.0';
-        };
+    /**
+     * A detailed description of this plugin and its purpose. It can be one or more sentences.
+     *
+     * @returns {string}
+     */
+    PluginBase.prototype.getDescription = function () {
+        return '';
+    };
 
-        /**
-         * A detailed description of this plugin and its purpose. It can be one or more sentences.
-         *
-         * @returns {string}
-         */
-        PluginBase.prototype.getDescription = function () {
-            return '';
-        };
-
-        /**
-         * Configuration structure with names, descriptions, minimum, maximum values, default values and
-         * type definitions.
-         *
-         * Example:
-         *
-         * [{
+    /**
+     * Configuration structure with names, descriptions, minimum, maximum values, default values and
+     * type definitions.
+     *
+     * Example:
+     *
+     * [{
          *    "name": "logChildrenNames",
          *    "displayName": "Log Children Names",
          *    "description": '',
@@ -23007,360 +23061,371 @@ define('plugin/PluginBase',['plugin/PluginConfig',
          *    "valueType": "number",
          *    "readOnly": false
          * }]
-         *
-         * @returns {object[]}
-         */
-        PluginBase.prototype.getConfigStructure = function () {
-            return [];
-        };
+     *
+     * @returns {object[]}
+     */
+    PluginBase.prototype.getConfigStructure = function () {
+        return [];
+    };
 
-        //--------------------------------------------------------------------------------------------------------------
-        //---------- Methods that can be used by the derived classes
+    //--------------------------------------------------------------------------------------------------------------
+    //---------- Methods that can be used by the derived classes
 
-        /**
-         * Updates the current success flag with a new value.
-         *
-         * NewValue = OldValue && Value
-         *
-         * @param {boolean} value - apply this flag on current success value
-         * @param {string|null} message - optional detailed message
-         */
-        PluginBase.prototype.updateSuccess = function (value, message) {
-            var prevSuccess = this.result.getSuccess();
-            var newSuccessValue = prevSuccess && value;
+    /**
+     * Updates the current success flag with a new value.
+     *
+     * NewValue = OldValue && Value
+     *
+     * @param {boolean} value - apply this flag on current success value
+     * @param {string|null} message - optional detailed message
+     */
+    PluginBase.prototype.updateSuccess = function (value, message) {
+        var prevSuccess = this.result.getSuccess();
+        var newSuccessValue = prevSuccess && value;
 
-            this.result.setSuccess(newSuccessValue);
-            var msg = '';
-            if (message) {
-                msg = ' - ' + message;
+        this.result.setSuccess(newSuccessValue);
+        var msg = '';
+        if (message) {
+            msg = ' - ' + message;
+        }
+
+        this.logger.debug('Success was updated from ' + prevSuccess + ' to ' + newSuccessValue + msg);
+    };
+
+    /**
+     * WebGME can export the META types as path and this method updates the generated domain specific types with
+     * webgme node objects. These can be used to define the base class of new objects created through the webgme API.
+     *
+     * @param {object} generatedMETA
+     */
+    PluginBase.prototype.updateMETA = function (generatedMETA) {
+        var name;
+        for (name in this.META) {
+            if (this.META.hasOwnProperty(name)) {
+                generatedMETA[name] = this.META[name];
             }
+        }
 
-            this.logger.debug('Success was updated from ' + prevSuccess + ' to ' + newSuccessValue + msg);
-        };
+        // TODO: check if names are not the same
+        // TODO: log if META is out of date
+    };
 
-        /**
-         * WebGME can export the META types as path and this method updates the generated domain specific types with
-         * webgme node objects. These can be used to define the base class of new objects created through the webgme API.
-         *
-         * @param {object} generatedMETA
-         */
-        PluginBase.prototype.updateMETA = function (generatedMETA) {
-            var name;
-            for (name in this.META) {
-                if (this.META.hasOwnProperty(name)) {
-                    generatedMETA[name] = this.META[name];
-                }
-            }
-
-            // TODO: check if names are not the same
-            // TODO: log if META is out of date
-        };
-
-        /**
-         * Checks if the given node is of the given meta-type.
-         * Usage: <tt>self.isMetaTypeOf(aNode, self.META['FCO']);</tt>
-         * @param node - Node to be checked for type.
-         * @param metaNode - Node object defining the meta type.
-         * @returns {boolean} - True if the given object was of the META type.
-         */
-        PluginBase.prototype.isMetaTypeOf = function (node, metaNode) {
-            var self = this;
-            while (node) {
-                if (self.core.getGuid(node) === self.core.getGuid(metaNode)) {
-                    return true;
-                }
-                node = self.core.getBase(node);
-            }
-            return false;
-        };
-
-        /**
-         * Finds and returns the node object defining the meta type for the given node.
-         * @param node - Node to be checked for type.
-         * @returns {Object} - Node object defining the meta type of node.
-         */
-        PluginBase.prototype.getMetaType = function (node) {
-            var self = this,
-                name;
-            while (node) {
-                name = self.core.getAttribute(node, 'name');
-                if (self.META.hasOwnProperty(name) && self.core.getGuid(node) === self.core.getGuid(self.META[name])) {
-                    break;
-                }
-                node = self.core.getBase(node);
-            }
-            return node;
-        };
-
-        /**
-         * Returns true if node is a direct instance of a meta-type node (or a meta-type node itself).
-         * @param node - Node to be checked.
-         * @returns {boolean}
-         */
-        PluginBase.prototype.baseIsMeta = function (node) {
-            var self = this,
-                baseName,
-                baseNode = self.core.getBase(node);
-            if (!baseNode) {
-                // FCO does not have a base node, by definition function returns true.
+    /**
+     * Checks if the given node is of the given meta-type.
+     * Usage: <tt>self.isMetaTypeOf(aNode, self.META['FCO']);</tt>
+     * @param node - Node to be checked for type.
+     * @param metaNode - Node object defining the meta type.
+     * @returns {boolean} - True if the given object was of the META type.
+     */
+    PluginBase.prototype.isMetaTypeOf = function (node, metaNode) {
+        var self = this;
+        while (node) {
+            if (self.core.getGuid(node) === self.core.getGuid(metaNode)) {
                 return true;
             }
-            baseName = self.core.getAttribute(baseNode, 'name');
-            return self.META.hasOwnProperty(baseName) && self.core.getGuid(self.META[baseName]) === self.core.getGuid(baseNode);
-        };
+            node = self.core.getBase(node);
+        }
+        return false;
+    };
 
-        /**
-         * Gets the current configuration of the plugin that was set by the user and plugin manager.
-         *
-         * @returns {object}
-         */
-        PluginBase.prototype.getCurrentConfig = function () {
-            return this._currentConfig;
-        };
-
-        /**
-         * Creates a new message for the user and adds it to the result.
-         *
-         * @param {object} node - webgme object which is related to the message
-         * @param {string} message - feedback to the user
-         * @param {string} severity - severity level of the message: 'debug', 'info' (default), 'warning', 'error'.
-         */
-        PluginBase.prototype.createMessage = function (node, message, severity) {
-            var severityLevel = severity || 'info';
-            //this occurence of the function will always handle a single node
-
-            var descriptor = new PluginNodeDescription({
-                    name: node ? this.core.getAttribute(node, 'name') : "",
-                    id: node ? this.core.getPath(node) : ""
-                });
-            var pluginMessage = new PluginMessage({
-                    commitHash: this.currentHash,
-                    activeNode: descriptor,
-                    message: message,
-                    severity: severityLevel
-                });
-
-            this.result.addMessage(pluginMessage);
-        };
-
-        /**
-         * Saves all current changes if there is any to a new commit.
-         * If the changes were started from a branch, then tries to fast forward the branch to the new commit.
-         * Note: Does NOT handle any merges at this point.
-         *
-         * @param {string|null} message - commit message
-         * @param callback
-         */
-        PluginBase.prototype.save = function (message, callback) {
-            var self = this;
-
-            this.logger.debug('Saving project');
-
-            this.core.persist(this.rootNode,function(err){if (err) {self.logger.error(err);}});
-            var newRootHash = self.core.getHash(self.rootNode);
-
-            var commitMessage = '[Plugin] ' + self.getName() + ' (v' + self.getVersion() + ') updated the model.';
-            if (message) {
-                commitMessage += ' - ' + message;
+    /**
+     * Finds and returns the node object defining the meta type for the given node.
+     * @param node - Node to be checked for type.
+     * @returns {Object} - Node object defining the meta type of node.
+     */
+    PluginBase.prototype.getMetaType = function (node) {
+        var self = this,
+            name;
+        while (node) {
+            name = self.core.getAttribute(node, 'name');
+            if (self.META.hasOwnProperty(name) && self.core.getGuid(node) === self.core.getGuid(self.META[name])) {
+                break;
             }
-            self.currentHash = self.project.makeCommit([self.currentHash], newRootHash, commitMessage, function (err) {if (err) {self.logger.error(err);}});
+            node = self.core.getBase(node);
+        }
+        return node;
+    };
 
-            if (self.branchName) {
-                // try to fast forward branch if there was a branch name defined
+    /**
+     * Returns true if node is a direct instance of a meta-type node (or a meta-type node itself).
+     * @param node - Node to be checked.
+     * @returns {boolean}
+     */
+    PluginBase.prototype.baseIsMeta = function (node) {
+        var self = this,
+            baseName,
+            baseNode = self.core.getBase(node);
+        if (!baseNode) {
+            // FCO does not have a base node, by definition function returns true.
+            return true;
+        }
+        baseName = self.core.getAttribute(baseNode, 'name');
+        return self.META.hasOwnProperty(baseName) &&
+            self.core.getGuid(self.META[baseName]) === self.core.getGuid(baseNode);
+    };
 
-                // FIXME: what if master branch is already in a different state?
+    /**
+     * Gets the current configuration of the plugin that was set by the user and plugin manager.
+     *
+     * @returns {object}
+     */
+    PluginBase.prototype.getCurrentConfig = function () {
+        return this._currentConfig;
+    };
 
-                // try to fast forward branch to the current commit
-                self.project.setBranchHash(self.branchName, self.branchHash, self.currentHash, function (err) {
-                    if (err) {
-                        // fast forward failed
-                        // TODO: try auto-merge
+    /**
+     * Creates a new message for the user and adds it to the result.
+     *
+     * @param {object} node - webgme object which is related to the message
+     * @param {string} message - feedback to the user
+     * @param {string} severity - severity level of the message: 'debug', 'info' (default), 'warning', 'error'.
+     */
+    PluginBase.prototype.createMessage = function (node, message, severity) {
+        var severityLevel = severity || 'info';
+        //this occurence of the function will always handle a single node
 
-                        self.logger.error(err);
-                        self.logger.info('"' + self.branchName + '" was NOT updated');
-                        self.logger.info('Project was saved to ' + self.currentHash + ' commit.');
-                    } else {
-                        // successful fast forward of branch to the new commit
-                        self.logger.info('"' + self.branchName + '" was updated to the new commit.');
-                        // roll starting point on success
-                        self.branchHash = self.currentHash;
-                    }
-                    callback(err);
-                });
+        var descriptor = new PluginNodeDescription({
+            name: node ? this.core.getAttribute(node, 'name') : '',
+            id: node ? this.core.getPath(node) : ''
+        });
+        var pluginMessage = new PluginMessage({
+            commitHash: this.currentHash,
+            activeNode: descriptor,
+            message: message,
+            severity: severityLevel
+        });
 
-                // FIXME: is this call async??
-                // FIXME: we are not tracking all commits that we make
+        this.result.addMessage(pluginMessage);
+    };
 
-            } else {
-                // making commits, we have not started from a branch
-                self.logger.info('Project was saved to ' + self.currentHash + ' commit.');
-                callback(null);
+    /**
+     * Saves all current changes if there is any to a new commit.
+     * If the changes were started from a branch, then tries to fast forward the branch to the new commit.
+     * Note: Does NOT handle any merges at this point.
+     *
+     * @param {string|null} message - commit message
+     * @param callback
+     */
+    PluginBase.prototype.save = function (message, callback) {
+        var self = this;
+
+        this.logger.debug('Saving project');
+
+        this.core.persist(this.rootNode, function (err) {
+            if (err) {
+                self.logger.error(err);
             }
+        });
+        var newRootHash = self.core.getHash(self.rootNode);
 
-            // Commit changes.
-/*            this.core.persist(this.rootNode, function (err) {
-                // TODO: any error here?
+        var commitMessage = '[Plugin] ' + self.getName() + ' (v' + self.getVersion() + ') updated the model.';
+        if (message) {
+            commitMessage += ' - ' + message;
+        }
+        self.currentHash = self.project.makeCommit([self.currentHash], newRootHash, commitMessage, function (err) {
+            if (err) {
+                self.logger.error(err);
+            }
+        });
+
+        if (self.branchName) {
+            // try to fast forward branch if there was a branch name defined
+
+            // FIXME: what if master branch is already in a different state?
+
+            // try to fast forward branch to the current commit
+            self.project.setBranchHash(self.branchName, self.branchHash, self.currentHash, function (err) {
                 if (err) {
+                    // fast forward failed
+                    // TODO: try auto-merge
+
                     self.logger.error(err);
+                    self.logger.info('"' + self.branchName + '" was NOT updated');
+                    self.logger.info('Project was saved to ' + self.currentHash + ' commit.');
+                } else {
+                    // successful fast forward of branch to the new commit
+                    self.logger.info('"' + self.branchName + '" was updated to the new commit.');
+                    // roll starting point on success
+                    self.branchHash = self.currentHash;
                 }
+                callback(err);
+            });
 
-                var newRootHash = self.core.getHash(self.rootNode);
+            // FIXME: is this call async??
+            // FIXME: we are not tracking all commits that we make
 
-                var commitMessage = '[Plugin] ' + self.getName() + ' (v' + self.getVersion() + ') updated the model.';
-                if (message) {
-                    commitMessage += ' - ' + message;
-                }
+        } else {
+            // making commits, we have not started from a branch
+            self.logger.info('Project was saved to ' + self.currentHash + ' commit.');
+            callback(null);
+        }
 
-                self.currentHash = self.project.makeCommit([self.currentHash], newRootHash, commitMessage, function (err) {
-                    // TODO: any error handling here?
-                    if (err) {
-                        self.logger.error(err);
-                    }
+        // Commit changes.
+        /*            this.core.persist(this.rootNode, function (err) {
+         // TODO: any error here?
+         if (err) {
+         self.logger.error(err);
+         }
 
-                    if (self.branchName) {
-                        // try to fast forward branch if there was a branch name defined
+         var newRootHash = self.core.getHash(self.rootNode);
 
-                        // FIXME: what if master branch is already in a different state?
+         var commitMessage = '[Plugin] ' + self.getName() + ' (v' + self.getVersion() + ') updated the model.';
+         if (message) {
+         commitMessage += ' - ' + message;
+         }
 
-                        self.project.getBranchNames(function (err, branchNames) {
-                            if (branchNames.hasOwnProperty(self.branchName)) {
-                                var branchHash = branchNames[self.branchName];
-                                if (branchHash === self.branchHash) {
-                                    // the branch does not have any new commits
-                                    // try to fast forward branch to the current commit
-                                    self.project.setBranchHash(self.branchName, self.branchHash, self.currentHash, function (err) {
-                                        if (err) {
-                                            // fast forward failed
-                                            self.logger.error(err);
-                                            self.logger.info('"' + self.branchName + '" was NOT updated');
-                                            self.logger.info('Project was saved to ' + self.currentHash + ' commit.');
-                                        } else {
-                                            // successful fast forward of branch to the new commit
-                                            self.logger.info('"' + self.branchName + '" was updated to the new commit.');
-                                            // roll starting point on success
-                                            self.branchHash = self.currentHash;
-                                        }
-                                        callback(err);
-                                    });
-                                } else {
-                                    // branch has changes a merge is required
-                                    // TODO: try auto-merge, if fails ...
-                                    self.logger.warn('Cannot fast forward "' + self.branchName + '" branch. Merge is required but not supported yet.');
-                                    self.logger.info('Project was saved to ' + self.currentHash + ' commit.');
-                                    callback(null);
-                                }
-                            } else {
-                                // branch was deleted or not found, do nothing
-                                self.logger.info('Project was saved to ' + self.currentHash + ' commit.');
-                                callback(null);
-                            }
-                        });
-                        // FIXME: is this call async??
-                        // FIXME: we are not tracking all commits that we make
+         self.currentHash = self.project.makeCommit([self.currentHash], newRootHash, commitMessage, function (err) {
+         // TODO: any error handling here?
+         if (err) {
+         self.logger.error(err);
+         }
 
-                    } else {
-                        // making commits, we have not started from a branch
-                        self.logger.info('Project was saved to ' + self.currentHash + ' commit.');
-                        callback(null);
-                    }
-                });
+         if (self.branchName) {
+         // try to fast forward branch if there was a branch name defined
 
-            });*/
-        };
+         // FIXME: what if master branch is already in a different state?
 
-        //--------------------------------------------------------------------------------------------------------------
-        //---------- Methods that are used by the Plugin Manager. Derived classes should not use these methods
+         self.project.getBranchNames(function (err, branchNames) {
+         if (branchNames.hasOwnProperty(self.branchName)) {
+         var branchHash = branchNames[self.branchName];
+         if (branchHash === self.branchHash) {
+         // the branch does not have any new commits
+         // try to fast forward branch to the current commit
+         self.project.setBranchHash(self.branchName, self.branchHash, self.currentHash, function (err) {
+         if (err) {
+         // fast forward failed
+         self.logger.error(err);
+         self.logger.info('"' + self.branchName + '" was NOT updated');
+         self.logger.info('Project was saved to ' + self.currentHash + ' commit.');
+         } else {
+         // successful fast forward of branch to the new commit
+         self.logger.info('"' + self.branchName + '" was updated to the new commit.');
+         // roll starting point on success
+         self.branchHash = self.currentHash;
+         }
+         callback(err);
+         });
+         } else {
+         // branch has changes a merge is required
+         // TODO: try auto-merge, if fails ...
+         self.logger.warn('Cannot fast forward "' + self.branchName + '" branch.
+         Merge is required but not supported yet.');
+         self.logger.info('Project was saved to ' + self.currentHash + ' commit.');
+         callback(null);
+         }
+         } else {
+         // branch was deleted or not found, do nothing
+         self.logger.info('Project was saved to ' + self.currentHash + ' commit.');
+         callback(null);
+         }
+         });
+         // FIXME: is this call async??
+         // FIXME: we are not tracking all commits that we make
 
-        /**
-         * Initializes the plugin with objects that can be reused within the same plugin instance.
-         *
-         * @param {logManager} logger - logging capability to console (or file) based on PluginManager configuration
-         * @param {blob.BlobClient} blobClient - virtual file system where files can be generated then saved as a zip file.
-         * @param {object} gmeConfig - global configuration for webGME.
-         */
-        PluginBase.prototype.initialize = function (logger, blobClient, gmeConfig) {
-            if (logger) {
-                this.logger = logger;
-            } else {
-                this.logger = console;
-            }
-            if (!gmeConfig) {
-                // TODO: Remove this check at some point
-                throw new Error('gmeConfig was not provided to Plugin.initialize!');
-            }
-            this.blobClient = blobClient;
-            this.gmeConfig = gmeConfig;
+         } else {
+         // making commits, we have not started from a branch
+         self.logger.info('Project was saved to ' + self.currentHash + ' commit.');
+         callback(null);
+         }
+         });
 
-            this._currentConfig = null;
-            // initialize default configuration
-            this.setCurrentConfig(this.getDefaultConfig());
+         });*/
+    };
 
-            this.isConfigured = false;
-        };
+    //--------------------------------------------------------------------------------------------------------------
+    //---------- Methods that are used by the Plugin Manager. Derived classes should not use these methods
 
-        /**
-         * Configures this instance of the plugin for a specific execution. This function is called before the main by
-         * the PluginManager.
-         * Initializes the result with a new object.
-         *
-         * @param {PluginContext} config - specific context: project, branch, core, active object and active selection.
-         */
-        PluginBase.prototype.configure = function (config) {
-            this.core = config.core;
-            this.project = config.project;
-            this.projectName = config.projectName;
-            this.branchName = config.branchName;
-            this.branchHash = config.branchName ? config.commitHash : null;
-            this.commitHash = config.commitHash;
-            this.currentHash = config.commitHash;
-            this.rootNode = config.rootNode;
-            this.activeNode = config.activeNode;
-            this.activeSelection = config.activeSelection;
-            this.META = config.META;
+    /**
+     * Initializes the plugin with objects that can be reused within the same plugin instance.
+     *
+     * @param {logManager} logger - logging capability to console (or file) based on PluginManager configuration
+     * @param {blob.BlobClient} blobClient - virtual file system where files can be generated then saved as a zip file.
+     * @param {object} gmeConfig - global configuration for webGME.
+     */
+    PluginBase.prototype.initialize = function (logger, blobClient, gmeConfig) {
+        if (logger) {
+            this.logger = logger;
+        } else {
+            this.logger = console;
+        }
+        if (!gmeConfig) {
+            // TODO: Remove this check at some point
+            throw new Error('gmeConfig was not provided to Plugin.initialize!');
+        }
+        this.blobClient = blobClient;
+        this.gmeConfig = gmeConfig;
 
-            this.result = new PluginResult();
+        this._currentConfig = null;
+        // initialize default configuration
+        this.setCurrentConfig(this.getDefaultConfig());
+
+        this.isConfigured = false;
+    };
+
+    /**
+     * Configures this instance of the plugin for a specific execution. This function is called before the main by
+     * the PluginManager.
+     * Initializes the result with a new object.
+     *
+     * @param {PluginContext} config - specific context: project, branch, core, active object and active selection.
+     */
+    PluginBase.prototype.configure = function (config) {
+        this.core = config.core;
+        this.project = config.project;
+        this.projectName = config.projectName;
+        this.branchName = config.branchName;
+        this.branchHash = config.branchName ? config.commitHash : null;
+        this.commitHash = config.commitHash;
+        this.currentHash = config.commitHash;
+        this.rootNode = config.rootNode;
+        this.activeNode = config.activeNode;
+        this.activeSelection = config.activeSelection;
+        this.META = config.META;
+
+        this.result = new PluginResult();
 
 
-            this.isConfigured = true;
-        };
+        this.isConfigured = true;
+    };
 
-        /**
-         * Gets the default configuration based on the configuration structure for this plugin.
-         *
-         * @returns {plugin.PluginConfig}
-         */
-        PluginBase.prototype.getDefaultConfig = function () {
-            var configStructure = this.getConfigStructure();
+    /**
+     * Gets the default configuration based on the configuration structure for this plugin.
+     *
+     * @returns {plugin.PluginConfig}
+     */
+    PluginBase.prototype.getDefaultConfig = function () {
+        var configStructure = this.getConfigStructure();
 
-            var defaultConfig = new PluginConfig();
+        var defaultConfig = new PluginConfig();
 
-            for (var i = 0; i < configStructure.length; i += 1) {
-                defaultConfig[configStructure[i].name] = configStructure[i].value;
-            }
+        for (var i = 0; i < configStructure.length; i += 1) {
+            defaultConfig[configStructure[i].name] = configStructure[i].value;
+        }
 
-            return defaultConfig;
-        };
+        return defaultConfig;
+    };
 
-        /**
-         * Sets the current configuration of the plugin.
-         *
-         * @param {object} newConfig - this is the actual configuration and NOT the configuration structure.
-         */
-        PluginBase.prototype.setCurrentConfig = function (newConfig) {
-            this._currentConfig = newConfig;
-        };
+    /**
+     * Sets the current configuration of the plugin.
+     *
+     * @param {object} newConfig - this is the actual configuration and NOT the configuration structure.
+     */
+    PluginBase.prototype.setCurrentConfig = function (newConfig) {
+        this._currentConfig = newConfig;
+    };
 
-        return PluginBase;
-    });
+    return PluginBase;
+});
 
-/*
- * Copyright (C) 2014 Vanderbilt University, All rights reserved.
- *
- * Author: Zsolt Lattmann
+/*globals define*/
+/*jshint browser: true, node:true*/
+
+/**
+ * @author lattmann / https://github.com/lattmann
  */
 
-
 define('plugin/PluginContext',[], function () {
+    
 
     /**
      * Initializes a new instance of PluginContext. This context is set through PluginBase.configure method for a given
@@ -23384,11 +23449,10 @@ define('plugin/PluginContext',[], function () {
     return PluginContext;
 });
 /*globals define*/
+/*jshint browser: true, node:true*/
 
-/*
- * Copyright (C) 2014 Vanderbilt University, All rights reserved.
- *
- * Author: Zsolt Lattmann
+/**
+ * @author lattmann / https://github.com/lattmann
  */
 
 // TODO: Use PluginManagerConfiguration
@@ -23399,9 +23463,7 @@ define('plugin/PluginContext',[], function () {
 // TODO: PluginManager should download the plugins
 
 
-define('plugin/PluginManagerBase',['./PluginBase',
-        './PluginContext'],
-    function (PluginBase, PluginContext) {
+define('plugin/PluginManagerBase',['plugin/PluginBase', 'plugin/PluginContext'], function (PluginBase, PluginContext) {
 
 
         var PluginManagerBase = function (storage, Core, logger, plugins, gmeConfig) {
@@ -23426,6 +23488,7 @@ define('plugin/PluginManagerBase',['./PluginBase',
 
         PluginManagerBase.prototype.initialize = function (managerConfiguration, configCallback, callbackContext) {
             var self = this,
+                pluginName,
                 plugins = this._plugins;
 
             //#1: PluginManagerBase should load the plugins
@@ -23433,19 +23496,19 @@ define('plugin/PluginManagerBase',['./PluginBase',
             //#2: PluginManagerBase iterates through each plugin and collects the config data
             var pluginConfigs = {};
 
-            for (var p in plugins) {
-                if (plugins.hasOwnProperty(p)) {
-                    var plugin = new plugins[p]();
-                    pluginConfigs[p] = plugin.getConfigStructure();
+            for (pluginName in plugins) {
+                if (plugins.hasOwnProperty(pluginName)) {
+                    var plugin = new plugins[pluginName]();
+                    pluginConfigs[pluginName] = plugin.getConfigStructure();
                 }
             }
 
             if (configCallback) {
                 configCallback.call(callbackContext, pluginConfigs, function (updatedPluginConfig) {
-                    for (var p in updatedPluginConfig) {
-                        if (updatedPluginConfig.hasOwnProperty(p)) {
+                    for (pluginName in updatedPluginConfig) {
+                        if (updatedPluginConfig.hasOwnProperty(pluginName)) {
                             //save it back to the plugin
-                            self._pluginConfigs[p] = updatedPluginConfig[p];
+                            self._pluginConfigs[pluginName] = updatedPluginConfig[pluginName];
                         }
                     }
                 });
@@ -23512,13 +23575,10 @@ define('plugin/PluginManagerBase',['./PluginBase',
          * @param {function} callback
          */
         PluginManagerBase.prototype.getPluginContext = function (managerConfiguration, callback) {
+            var self = this,
+                pluginContext = new PluginContext();
 
             // TODO: check if callback is a function
-
-            var self = this;
-
-            var pluginContext = new PluginContext();
-
             // based on the string values get the node objects
             // 1) Open project
             // 2) Load branch OR commit hash
@@ -23539,35 +23599,38 @@ define('plugin/PluginManagerBase',['./PluginBase',
             pluginContext.activeSelection = []; // selected objects
 
             // add activeSelection
-            var loadActiveSelectionAndMetaNodes = function () {
-                if (managerConfiguration.activeSelection.length === 0) {
-                    self.loadMetaNodes(pluginContext, callback);
-                } else {
-                    var remaining = managerConfiguration.activeSelection.length;
-
-                    for (var i = 0; i < managerConfiguration.activeSelection.length; i += 1) {
-                        (function (activeNodePath) {
-                            pluginContext.core.loadByPath(pluginContext.rootNode, activeNodePath, function (err, activeNode) {
+            function loadActiveSelectionAndMetaNodes() {
+                var remaining = managerConfiguration.activeSelection.length,
+                    i;
+                function loadNodeByNode(selectedNodePath) {
+                    pluginContext.core.loadByPath(pluginContext.rootNode, selectedNodePath,
+                        function (err, selectedNode) {
                                 remaining -= 1;
 
                                 if (err) {
-                                    self.logger.warn('unable to load active selection: ' + activeNodePath);
+                                self.logger.warn('unable to load active selection: ' + selectedNodePath);
                                 } else {
-                                    pluginContext.activeSelection.push(activeNode);
+                                pluginContext.activeSelection.push(selectedNode);
                                 }
 
                                 if (remaining === 0) {
                                     // all nodes from active selection are loaded
                                     self.loadMetaNodes(pluginContext, callback);
                                 }
-                            });
-                        })(managerConfiguration.activeSelection[i]);
+                        }
+                    );
+                }
+                if (managerConfiguration.activeSelection.length === 0) {
+                    self.loadMetaNodes(pluginContext, callback);
+                } else {
+                    for (i = 0; i < managerConfiguration.activeSelection.length; i += 1) {
+                        loadNodeByNode(managerConfiguration.activeSelection[i]);
+                    }
                     }
                 }
-            };
 
             // add activeNode
-            var loadCommitHashAndRun = function (commitHash) {
+            function loadCommitHashAndRun(commitHash) {
                 self.logger.info('Loading commit ' + commitHash);
                 pluginContext.project.loadObject(commitHash, function (err, commitObj) {
                     if (err) {
@@ -23582,28 +23645,30 @@ define('plugin/PluginManagerBase',['./PluginBase',
 
                     pluginContext.core.loadRoot(commitObj.root, function (err, rootNode) {
                         if (err) {
-                            callback("unable to load root", pluginContext);
+                            callback('unable to load root', pluginContext);
                             return;
                         }
 
                         pluginContext.rootNode = rootNode;
                         if (typeof managerConfiguration.activeNode === 'string') {
-                            pluginContext.core.loadByPath(pluginContext.rootNode, managerConfiguration.activeNode, function (err, activeNode) {
+                            pluginContext.core.loadByPath(pluginContext.rootNode, managerConfiguration.activeNode,
+                                function (err, activeNode) {
                                 if (err) {
-                                    callback("unable to load selected object", pluginContext);
+                                        callback('unable to load selected object', pluginContext);
                                     return;
                                 }
 
                                 pluginContext.activeNode = activeNode;
                                 loadActiveSelectionAndMetaNodes();
-                            });
+                                }
+                            );
                         } else {
                             pluginContext.activeNode = null;
                             loadActiveSelectionAndMetaNodes();
                         }
                     });
                 });
-            };
+            }
 
             // load commit hash and run based on branch name or commit hash
             if (managerConfiguration.branchName) {
@@ -23695,20 +23760,24 @@ define('js/Dialogs/PluginConfig/PluginConfigDialog',[], function () {
    return;
 });
 
-/*globals define, _, requirejs, WebGMEGlobal*/
+/*globals define, WebGMEGlobal, requirejs*/
+/*jshint browser: true*/
 
-define('js/Utils/InterpreterManager',['common/core/core',
-        'plugin/PluginManagerBase',
-        'plugin/PluginResult',
-        'blob/BlobClient',
-        'js/Dialogs/PluginConfig/PluginConfigDialog',
-        'js/logger'
-                                    ], function (Core,
-                                               PluginManagerBase,
-                                               PluginResult,
-                                               BlobClient,
-                                               PluginConfigDialog,
-                                               Logger) {
+/**
+ * @author rkereskenyi / https://github.com/rkereskenyi
+ * @author lattmann / https://github.com/lattmann
+ * @author pmeijer / https://github.com/pmeijer
+ */
+
+define('js/Utils/InterpreterManager',[
+    'common/core/core',
+    'plugin/PluginManagerBase',
+    'plugin/PluginResult',
+    'blob/BlobClient',
+    'js/Dialogs/PluginConfig/PluginConfigDialog',
+    'js/logger'
+], function (Core, PluginManagerBase, PluginResult, BlobClient, PluginConfigDialog, Logger) {
+
     
 
     var InterpreterManager = function (client, gmeConfig) {
@@ -23720,7 +23789,7 @@ define('js/Utils/InterpreterManager',['common/core/core',
         this.logger.debug('InterpreterManager ctor');
     };
 
-    var getPlugin = function(name,callback){
+    var getPlugin = function (name, callback) {
         if (WebGMEGlobal && WebGMEGlobal.plugins && WebGMEGlobal.plugins.hasOwnProperty(name)) {
             callback(null, WebGMEGlobal.plugins[name]);
         } else {
@@ -23747,9 +23816,9 @@ define('js/Utils/InterpreterManager',['common/core/core',
      */
     InterpreterManager.prototype.run = function (name, silentPluginCfg, callback) {
         var self = this;
-        getPlugin(name,function(err,plugin){
+        getPlugin(name, function (err, plugin) {
             self.logger.debug('Getting getPlugin in run.');
-            if(!err && plugin) {
+            if (!err && plugin) {
                 var plugins = {},
                     runWithConfiguration;
                 plugins[name] = plugin;
@@ -23759,26 +23828,27 @@ define('js/Utils/InterpreterManager',['common/core/core',
                     //#1: display config to user
                     var noServerExecution = self.gmeConfig.plugin.allowServerExecution === false,
                         hackedConfig = {
-                        'Global Options': [
-                            {
-                                "name": "runOnServer",
-                                "displayName": "Execute on Server",
-                                "description": noServerExecution ? 'Server side execution is disabled.' : '',
-                                "value": false, // this is the 'default config'
-                                "valueType": "boolean",
-                                "readOnly": noServerExecution
-                            }
-                        ]
-                    };
+                            'Global Options': [
+                                {
+                                    name: 'runOnServer',
+                                    displayName: 'Execute on Server',
+                                    description: noServerExecution ? 'Server side execution is disabled.' : '',
+                                    value: false, // this is the 'default config'
+                                    valueType: 'boolean',
+                                    readOnly: noServerExecution
+                                }
+                            ]
+                        },
+                        i, j, d, len;
 
-                    for (var i in pluginConfigs) {
+                    for (i in pluginConfigs) {
                         if (pluginConfigs.hasOwnProperty(i)) {
                             hackedConfig[i] = pluginConfigs[i];
 
                             // retrieve user settings from previous run
                             if (self._savedConfigs.hasOwnProperty(i)) {
                                 var iConfig = self._savedConfigs[i];
-                                var len = hackedConfig[i].length;
+                                len = hackedConfig[i].length;
 
                                 while (len--) {
                                     if (iConfig.hasOwnProperty(hackedConfig[i][len].name)) {
@@ -23799,14 +23869,14 @@ define('js/Utils/InterpreterManager',['common/core/core',
 
                         activeNode = silentPluginCfg.activeNode;
                         if (!activeNode && WebGMEGlobal && WebGMEGlobal.State) {
-                                activeNode = WebGMEGlobal.State.getActiveObject();
+                            activeNode = WebGMEGlobal.State.getActiveObject();
                         }
                         activeSelection = silentPluginCfg.activeSelection;
                         if (!activeSelection && WebGMEGlobal && WebGMEGlobal.State) {
                             activeSelection = WebGMEGlobal.State.getActiveSelection();
                         }
                         // save config from user
-                        for (var i in updatedConfig) {
+                        for (i in updatedConfig) {
                             self._savedConfigs[i] = updatedConfig[i];
                         }
 
@@ -23814,24 +23884,27 @@ define('js/Utils/InterpreterManager',['common/core/core',
                         if (configSaveCallback) {
                             configSaveCallback(updatedConfig);
 
-                            // TODO: if global config says try to merge branch then we should pass the name of the branch
+                            // TODO: If global config says try to merge branch then we
+                            // TODO: should pass the name of the branch.
                             var config = {
-                                "project": self._client.getActiveProjectName(),
-                                "token": "",
-                                "activeNode": activeNode, // active object in the editor
-                                "activeSelection": activeSelection || [],
-                                "commit": self._client.getActualCommit(), //"#668b3babcdf2ddcd7ba38b51acb62d63da859d90",
-                                "branchName": self._client.getActualBranch() // this has priority over the commit if not null
+                                project: self._client.getActiveProjectName(),
+                                token: '',
+                                activeNode: activeNode, // active object in the editor
+                                activeSelection: activeSelection || [],
+                                commit: self._client.getActualCommit(), //#668b3babcdf2ddcd7ba38b51acb62d63da859d90,
+
+                                // this has priority over the commit if not null
+                                branchName: self._client.getActualBranch()
                             };
 
-                            if(globalconfig.runOnServer === true || silentPluginCfg.runOnServer === true){
+                            if (globalconfig.runOnServer === true || silentPluginCfg.runOnServer === true) {
                                 var context = {
                                     managerConfig: config,
-                                    pluginConfigs:updatedConfig
+                                    pluginConfigs: updatedConfig
                                 };
-                                self._client.runServerPlugin(name,context,function(err,result){
-                                    if(err){
-                                        console.error(err);
+                                self._client.runServerPlugin(name, context, function (err, result) {
+                                    if (err) {
+                                        self.logger.error(err);
                                         callback(new PluginResult()); //TODO return proper error result
                                     } else {
                                         var resultObject = new PluginResult(result);
@@ -23843,7 +23916,7 @@ define('js/Utils/InterpreterManager',['common/core/core',
 
                                 pluginManager.executePlugin(name, config, function (err, result) {
                                     if (err) {
-                                        console.error(err);
+                                        self.logger.error(err);
                                     }
                                     callback(result);
                                 });
@@ -23853,35 +23926,36 @@ define('js/Utils/InterpreterManager',['common/core/core',
 
                     if (silentPluginCfg) {
                         var updatedConfig = {};
-                        for (var i in hackedConfig) {
+                        for (i in hackedConfig) {
                             updatedConfig[i] = {};
-                            var len = hackedConfig[i].length;
+                            len = hackedConfig[i].length;
                             while (len--) {
                                 updatedConfig[i][hackedConfig[i][len].name] = hackedConfig[i][len].value;
                             }
 
                             if (silentPluginCfg && silentPluginCfg.pluginConfig) {
-                                for (var j in silentPluginCfg.pluginConfig) {
+                                for (j in silentPluginCfg.pluginConfig) {
                                     updatedConfig[i][j] = silentPluginCfg.pluginConfig[j];
                                 }
                             }
                         }
                         runWithConfiguration(updatedConfig);
                     } else {
-                        var d = new PluginConfigDialog();
+                        d = new PluginConfigDialog();
                         silentPluginCfg = {};
                         d.show(hackedConfig, runWithConfiguration);
                     }
                 });
             } else {
-                console.error(err);
-                console.error('unable to load plugin');
+                self.logger.error(err);
+                self.logger.error('unable to load plugin');
                 callback(null); //TODO proper result
             }
         });
     };
 
-    //TODO somehow it would feel more right if we do run in async mode, but if not then we should provide getState and getResult synchronous functions as well
+    //TODO: Somehow it would feel more right if we do run in async mode, but if not then we should provide getState and
+    //TODO: getResult synchronous functions as well.
 
     return InterpreterManager;
 });
@@ -25193,149 +25267,158 @@ module.exports = function(arr, fn, initial){
 },{}]},{},[1])(1)
 });
 /*globals define, document, console, window, GME, docReady, setTimeout*/
-/*jshint browser:true, evil:false*/
+/*jshint browser:true, evil:true*/
 
-define('webgme.classes',
-    [
-        'client/js/client',
-        'blob/BlobClient',
-        'executor/ExecutorClient',
-        'js/Utils/InterpreterManager',
-        'common/core/core',
-        'common/storage/clientstorage',
-        'js/logger',
-        'lib/superagent/superagent-1.1.0'
-    ], function (Client, BlobClient, ExecutorClient, InterpreterManager, Core, Storage, Logger, superagent) {
+/**
+ * @author kecso / https://github.com/kecso
+ * @author lattmann / https://github.com/lattmann
+ * @author nabana / https://github.com/nabana
+ * @author ksmyth / https://github.com/ksmyth
+ * @author pmeijer / https://github.com/pmeijer
+ */
 
-        
-        // Setting global classes
+define('webgme.classes', [
+    'client/js/client',
+    'blob/BlobClient',
+    'executor/ExecutorClient',
+    'js/Utils/InterpreterManager',
+    'common/core/core',
+    'common/storage/clientstorage',
+    'js/logger',
+    'lib/superagent/superagent-1.1.0'
+], function (Client, BlobClient, ExecutorClient, InterpreterManager, Core, Storage, Logger, superagent) {
 
-        GME.classes.Client = Client;
-        GME.classes.BlobClient = BlobClient;
-        GME.classes.ExecutorClient = ExecutorClient;
-        GME.classes.InterpreterManager = InterpreterManager;
-        GME.classes.Core = Core;
-        GME.classes.Storage = Storage;
-        GME.classes.Logger = Logger;
+    
+    // Setting global classes
 
-        // Exposing built in libraries
-        GME.utils.superagent = superagent;
+    GME.classes.Client = Client;
+    GME.classes.BlobClient = BlobClient;
+    GME.classes.ExecutorClient = ExecutorClient;
+    GME.classes.InterpreterManager = InterpreterManager;
+    GME.classes.Core = Core;
+    GME.classes.Storage = Storage;
+    GME.classes.Logger = Logger;
 
-        // Pure JavaScript equivalent to jQuery's $.ready() from https://github.com/jfriend00/docReady
+    // Exposing built in libraries
+    GME.utils.superagent = superagent;
 
-        (function(funcName, baseObj) {
-            // The public function name defaults to window.docReady
-            // but you can pass in your own object and own function name and those will be used
-            // if you want to put them in a different namespace
-            funcName = funcName || "docReady";
-            baseObj = baseObj || window;
-            var readyList = [];
-            var readyFired = false;
-            var readyEventHandlersInstalled = false;
+    // Pure JavaScript equivalent to jQuery's $.ready() from https://github.com/jfriend00/docReady
 
-            // call this when the document is ready
-            // this function protects itself against being called more than once
-            function ready() {
-                if (!readyFired) {
-                    // this must be set to true before we start calling callbacks
-                    readyFired = true;
-                    for (var i = 0; i < readyList.length; i++) {
-                        // if a callback here happens to add new ready handlers,
-                        // the docReady() function will see that it already fired
-                        // and will schedule the callback to run right after
-                        // this event loop finishes so all handlers will still execute
-                        // in order and no new ones will be added to the readyList
-                        // while we are processing the list
-                        readyList[i].fn.call(window, readyList[i].ctx);
-                    }
-                    // allow any closures held by these functions to free
-                    readyList = [];
+    (function (funcName, baseObj) {
+        // The public function name defaults to window.docReady
+        // but you can pass in your own object and own function name and those will be used
+        // if you want to put them in a different namespace
+        funcName = funcName || 'docReady';
+        baseObj = baseObj || window;
+        var readyList = [];
+        var readyFired = false;
+        var readyEventHandlersInstalled = false;
+
+        // call this when the document is ready
+        // this function protects itself against being called more than once
+        function ready() {
+            if (!readyFired) {
+                // this must be set to true before we start calling callbacks
+                readyFired = true;
+                for (var i = 0; i < readyList.length; i++) {
+                    // if a callback here happens to add new ready handlers,
+                    // the docReady() function will see that it already fired
+                    // and will schedule the callback to run right after
+                    // this event loop finishes so all handlers will still execute
+                    // in order and no new ones will be added to the readyList
+                    // while we are processing the list
+                    readyList[i].fn.call(window, readyList[i].ctx);
                 }
+                // allow any closures held by these functions to free
+                readyList = [];
             }
-
-            function readyStateChange() {
-                if ( document.readyState === "complete" ) {
-                    ready();
-                }
-            }
-
-            // This is the one public interface
-            // docReady(fn, context);
-            // the context argument is optional - if present, it will be passed
-            // as an argument to the callback
-            baseObj[funcName] = function(callback, context) {
-                // if ready has already fired, then just schedule the callback
-                // to fire asynchronously, but right away
-                if (readyFired) {
-                    setTimeout(function() {callback(context);}, 1);
-                    return;
-                } else {
-                    // add the function and context to the list
-                    readyList.push({fn: callback, ctx: context});
-                }
-                // if document already ready to go, schedule the ready function to run
-                if (document.readyState === "complete") {
-                    setTimeout(ready, 1);
-                } else if (!readyEventHandlersInstalled) {
-                    // otherwise if we don't have event handlers installed, install them
-                    if (document.addEventListener) {
-                        // first choice is DOMContentLoaded event
-                        document.addEventListener("DOMContentLoaded", ready, false);
-                        // backup is window load event
-                        window.addEventListener("load", ready, false);
-                    } else {
-                        // must be IE
-                        document.attachEvent("onreadystatechange", readyStateChange);
-                        window.attachEvent("onload", ready);
-                    }
-                    readyEventHandlersInstalled = true;
-                }
-            }
-        })("docReady", window);
-
-        // See if there is handler attached to body tag when ready
-
-        var evalOnGmeInit = function() {
-            if (document.body.getAttribute('on-gme-init')) {
-                eval(document.body.getAttribute('on-gme-init'));
-            } else {
-                console.warn('To use GME, define a javascript function and set the body ' +
-                'element\'s on-gme-init property.');
-            }
-        };
-
-        // wait for document.readyState !== 'loading' and getGmeConfig
-        var stillLoading = 2;
-        var somethingFinishedLoading = function () {
-            if (--stillLoading === 0) {
-                evalOnGmeInit();
-            }
-        };
-
-        if (document.readyState === 'loading') {
-            docReady(function () {
-                somethingFinishedLoading();
-            });
-        } else {
-            somethingFinishedLoading();
         }
 
+        function readyStateChange() {
+            if (document.readyState === 'complete') {
+                ready();
+            }
+        }
 
-        (function getGmeConfig() {
-            var http = new XMLHttpRequest(),
-                configUrl = window.location.origin + '/gmeConfig.json';
-            http.onreadystatechange = function () {
-                if (http.readyState === 4 && http.status === 200) {
-                    GME.gmeConfig = JSON.parse(http.responseText);
-                    somethingFinishedLoading();
-                } else if (http.readyState === 4 && http.status !== 200) {
-                    console.warn('Could not load gmeConfig at', configUrl);
-                    somethingFinishedLoading();
+        // This is the one public interface
+        // docReady(fn, context);
+        // the context argument is optional - if present, it will be passed
+        // as an argument to the callback
+        baseObj[funcName] = function (callback, context) {
+            // if ready has already fired, then just schedule the callback
+            // to fire asynchronously, but right away
+            if (readyFired) {
+                setTimeout(function () {
+                    callback(context);
+                }, 1);
+                return;
+            } else {
+                // add the function and context to the list
+                readyList.push({fn: callback, ctx: context});
+            }
+            // if document already ready to go, schedule the ready function to run
+            if (document.readyState === 'complete') {
+                setTimeout(ready, 1);
+            } else if (!readyEventHandlersInstalled) {
+                // otherwise if we don't have event handlers installed, install them
+                if (document.addEventListener) {
+                    // first choice is DOMContentLoaded event
+                    document.addEventListener('DOMContentLoaded', ready, false);
+                    // backup is window load event
+                    window.addEventListener('load', ready, false);
+                } else {
+                    // must be IE
+                    document.attachEvent('onreadystatechange', readyStateChange);
+                    window.attachEvent('onload', ready);
                 }
-            };
-            http.open('GET', configUrl, true);
-            http.send();
-        })();
+                readyEventHandlersInstalled = true;
+            }
+        };
+    })('docReady', window);
+
+    // See if there is handler attached to body tag when ready
+
+    var evalOnGmeInit = function () {
+        if (document.body.getAttribute('on-gme-init')) {
+            eval(document.body.getAttribute('on-gme-init'));
+        } else {
+            console.warn('To use GME, define a javascript function and set the body ' +
+            'element\'s on-gme-init property.');
+        }
+    };
+
+    // wait for document.readyState !== 'loading' and getGmeConfig
+    var stillLoading = 2;
+    var somethingFinishedLoading = function () {
+        if (--stillLoading === 0) {
+            evalOnGmeInit();
+        }
+    };
+
+    if (document.readyState === 'loading') {
+        docReady(function () {
+            somethingFinishedLoading();
+        });
+    } else {
+        somethingFinishedLoading();
+    }
+
+
+    (function getGmeConfig() {
+        var http = new XMLHttpRequest(),
+            configUrl = window.location.origin + '/gmeConfig.json';
+        http.onreadystatechange = function () {
+            if (http.readyState === 4 && http.status === 200) {
+                GME.gmeConfig = JSON.parse(http.responseText);
+                somethingFinishedLoading();
+            } else if (http.readyState === 4 && http.status !== 200) {
+                console.warn('Could not load gmeConfig at', configUrl);
+                somethingFinishedLoading();
+            }
+        };
+        http.open('GET', configUrl, true);
+        http.send();
+    })();
 });
 
 

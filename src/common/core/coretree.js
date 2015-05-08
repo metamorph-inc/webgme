@@ -62,7 +62,10 @@ define([
 		var MAX_MUTATE = 30000; // MAGIC NUMBER
 
 		var ID_NAME = storage.ID_NAME;
-		var EMPTY_DATA = {};
+        //var EMPTY_DATA = {};
+        var __getEmptyData = function () {
+            return {};
+        };
 
 		var roots = [];
 		var ticks = 0;
@@ -218,7 +221,7 @@ define([
 
             if (typeof data === 'object' && data !== null) {
 				data = data[relid];
-                return typeof data === 'undefined' ? EMPTY_DATA : data;
+                return typeof data === 'undefined' ? __getEmptyData() : data;
 			} else {
 				return null;
 			}
@@ -375,7 +378,7 @@ define([
 				relid: relid,
 				age: 0,
 				children: [],
-				data: EMPTY_DATA
+                data: __getEmptyData()
 			};
 
 			// TODO: make sure that it is not on the list
@@ -438,7 +441,7 @@ define([
 			node = normalize(node);
             if (typeof node.data !== 'object' || node.data === null) {
 				return false;
-			} else if (node.data === EMPTY_DATA) {
+            } else if (node.data === __getEmptyData()) {
 				return true;
 			}
 
@@ -557,7 +560,7 @@ define([
 
 			var data = node.data;
 
-			node.data = EMPTY_DATA;
+            node.data = __getEmptyData();
 			__reloadChildrenData(node);
 
 			return data;
@@ -620,7 +623,7 @@ define([
 
 			var child = __getChildNode(node.children, name);
 			if (child !== null) {
-				child.data = EMPTY_DATA;
+                child.data = __getEmptyData();
 				__reloadChildrenData(child);
 			}
 		};
@@ -720,14 +723,14 @@ define([
 		var __saveData = function (data) {
 			ASSERT(__isMutableData(data));
 
-			var done = EMPTY_DATA;
+            var done = __getEmptyData();
 			delete data._mutable;
 
 			for (var relid in data) {
 				var child = data[relid];
 				if (__isMutableData(child)) {
 					var sub = __saveData(child);
-					if (sub === EMPTY_DATA) {
+                    if (sub === __getEmptyData()) {
 						delete data[relid];
 					} else {
 						done = FUTURE.join(done, sub);
@@ -740,7 +743,7 @@ define([
 				}
 			}
 
-			if (done !== EMPTY_DATA) {
+            if (done !== __getEmptyData()) {
 				var hash = data[ID_NAME];
                 ASSERT(hash === '' || typeof hash === 'undefined');
 

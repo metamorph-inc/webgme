@@ -3695,7 +3695,10 @@ define('common/core/coretree',[
 		var MAX_MUTATE = 30000; // MAGIC NUMBER
 
 		var ID_NAME = storage.ID_NAME;
-		var EMPTY_DATA = {};
+        //var EMPTY_DATA = {};
+        var __getEmptyData = function () {
+            return {};
+        };
 
 		var roots = [];
 		var ticks = 0;
@@ -3851,7 +3854,7 @@ define('common/core/coretree',[
 
             if (typeof data === 'object' && data !== null) {
 				data = data[relid];
-                return typeof data === 'undefined' ? EMPTY_DATA : data;
+                return typeof data === 'undefined' ? __getEmptyData() : data;
 			} else {
 				return null;
 			}
@@ -4008,7 +4011,7 @@ define('common/core/coretree',[
 				relid: relid,
 				age: 0,
 				children: [],
-				data: EMPTY_DATA
+                data: __getEmptyData()
 			};
 
 			// TODO: make sure that it is not on the list
@@ -4071,7 +4074,7 @@ define('common/core/coretree',[
 			node = normalize(node);
             if (typeof node.data !== 'object' || node.data === null) {
 				return false;
-			} else if (node.data === EMPTY_DATA) {
+            } else if (node.data === __getEmptyData()) {
 				return true;
 			}
 
@@ -4190,7 +4193,7 @@ define('common/core/coretree',[
 
 			var data = node.data;
 
-			node.data = EMPTY_DATA;
+            node.data = __getEmptyData();
 			__reloadChildrenData(node);
 
 			return data;
@@ -4253,7 +4256,7 @@ define('common/core/coretree',[
 
 			var child = __getChildNode(node.children, name);
 			if (child !== null) {
-				child.data = EMPTY_DATA;
+                child.data = __getEmptyData();
 				__reloadChildrenData(child);
 			}
 		};
@@ -4353,14 +4356,14 @@ define('common/core/coretree',[
 		var __saveData = function (data) {
 			ASSERT(__isMutableData(data));
 
-			var done = EMPTY_DATA;
+            var done = __getEmptyData();
 			delete data._mutable;
 
 			for (var relid in data) {
 				var child = data[relid];
 				if (__isMutableData(child)) {
 					var sub = __saveData(child);
-					if (sub === EMPTY_DATA) {
+                    if (sub === __getEmptyData()) {
 						delete data[relid];
 					} else {
 						done = FUTURE.join(done, sub);
@@ -4373,7 +4376,7 @@ define('common/core/coretree',[
 				}
 			}
 
-			if (done !== EMPTY_DATA) {
+            if (done !== __getEmptyData()) {
 				var hash = data[ID_NAME];
                 ASSERT(hash === '' || typeof hash === 'undefined');
 
@@ -4813,6 +4816,7 @@ define('common/core/corerel',['common/util/assert', 'common/core/coretree', 'com
                 if (path === prefix || path.substr(0, prefix2.length) === prefix2) {
                     var node = coretree.getChild(overlays, path);
                     var names = coretree.getKeys(node);
+                    
                     for (var j = 0; j < names.length; ++j) {
                         var name = names[j];
                         if (isPointerName(name)) {
@@ -6339,6 +6343,8 @@ define('common/core/coretype',['common/util/assert', 'common/core/core', 'common
                             child = core.getChild(n, r);
                             core.setHashed(child, true, true);
                             child.base = b;
+                            n.children.push(child);
+                            n.data[r] = child.data; //FIXME there should be a proper way to do this
                             return child;
                         }
                     }, basechild, child, node, relid);
@@ -14710,2079 +14716,6 @@ define('common/core/users/tojson',['common/core/users/meta', 'common/util/url'],
     return getJsonNode;
 });
 
-/*globals define*/
-/*jshint node: true, browser: true*/
-
-/**
- * @author kecso / https://github.com/kecso
- */
-
-define('common/core/users/dump',['common/core/users/tojson', 'common/util/url'], function (toJson, URL) {
-    
-
-    var _refTypes = {
-            url: 'url',
-            path: 'path',
-            guid: 'guid'
-        },
-        _cache = {},
-        _rootPath = '',
-        _refType = 'url',
-        _core = null;
-
-    var isRefObject = function (obj) {
-        if (obj && typeof obj.$ref === 'string') {
-            return true;
-        }
-        return false;
-    };
-
-    var getRefObjectPath = function (obj) {
-        var result = null;
-        if (isRefObject(obj) === true) {
-            var refValue = obj.$ref;
-            switch (_refType) {
-                case _refTypes.url:
-                    if (refValue === null) {
-                        result = null;
-                    } else {
-                        refValue = refValue.split('/');
-                        result = URL.removeSpecialChars(refValue[refValue.length - 1]);
-                    }
-                    break;
-                case _refTypes.path:
-                case _refTypes.guid:
-                    result = refValue;
-                    break;
-                default:
-                    result = null;
-                    break;
-            }
-        }
-
-        return result;
-    };
-
-    var refToRelRefObj = function (path, refObj) {
-        if (_cache[path]) {
-            refObj.$ref = _cache[path];
-        } else {
-            refObj = {$ref: null};
-        }
-    };
-
-    var isSubordinate = function (path) {
-        if (path.indexOf(_rootPath) === 0) {
-            return true;
-        }
-        return false;
-    };
-
-    var dumpChildren = function (node, dumpObject, urlPrefix, relPath, callback) {
-        var needed = dumpObject.children.length;
-        if (needed > 0) {
-            _core.loadChildren(node, function (err, children) {
-                if (err) {
-                    callback(err);
-                } else {
-                    if (children === null || children === undefined || !children.length > 0) { //FIXME: Indeed jshint
-                        callback(new Error('invalid children info found'));
-                    } else {
-                        var setChildJson = function (child, cb) {
-                            toJson(_core, child, urlPrefix, _refType, function (err, jChild) {
-                                if (err) {
-                                    cb(err);
-                                } else {
-                                    if (jChild) {
-                                        var childRelPath,
-                                            childPath = _core.getPath(child);
-                                        for (var j = 0; j < dumpObject.children.length; j++) {
-                                            if (childPath === getRefObjectPath(dumpObject.children[j])) {
-                                                childRelPath = relPath + '/children[' + j + ']';
-                                                _cache[childPath] = childRelPath;
-                                                dumpObject.children[j] = jChild;
-                                                break;
-                                            }
-                                        }
-                                        dumpChildren(child, dumpObject.children[j], urlPrefix, childRelPath, cb);
-                                    }
-                                }
-                            });
-                        };
-                        var error = null;
-
-                        for (var i = 0; i < children.length; i++) {
-                            setChildJson(children[i], function (err) {
-                                error = error || err;
-                                if (--needed === 0) {
-                                    callback(error);
-                                }
-                            }); //FIXME
-                        }
-                    }
-                }
-            });
-        } else {
-            callback(null);
-        }
-    };
-    var checkForInternalReferences = function (dumpObject) {
-        if (typeof dumpObject === 'object') {
-            for (var i in dumpObject) {
-                if (typeof dumpObject[i] === 'object') {
-                    if (isRefObject(dumpObject[i])) {
-                        var path = getRefObjectPath(dumpObject[i]);
-                        if (isSubordinate(path)) {
-                            refToRelRefObj(path, dumpObject[i]);
-                        }
-                    } else {
-                        checkForInternalReferences(dumpObject[i]);
-                    }
-                }
-            }
-        }
-    };
-
-    var dumpJsonNode = function (core, node, urlPrefix, refType, callback) {
-        _cache = {};
-        _core = core;
-        _rootPath = core.getPath(node);
-        _refType = refType;
-
-        //TODO this needs to be done in another way
-        toJson(core, node, urlPrefix, _refType, function (err, jDump) {
-            if (err) {
-                callback(err, null);
-            } else {
-                if (jDump) {
-                    _cache[_rootPath] = '#';
-                }
-                dumpChildren(node, jDump, urlPrefix, _cache[_rootPath], function (err) {
-                    if (err) {
-                        callback(err);
-                    } else {
-                        checkForInternalReferences(jDump);
-                        callback(null, jDump);
-                    }
-                });
-            }
-        });
-    };
-
-    return dumpJsonNode;
-});
-
-
-/*globals define*/
-/*jshint node: true, browser: true*/
-
-/**
- * this type of import is for merge purposes
- * it tries to import not only the outgoing relations but the incoming ones as well
- * it also tries to keep both the GUID and the relid's
- * if it finds the same guid in the same place then it overwrites the node with the imported one!!!
- * it not searches for GUID!!! so be careful when to use this method
- *
- * @author kecso / https://github.com/kecso
- */
-
-define('common/core/users/import',['common/core/users/meta'], function (BaseMeta) {
-    
-    var _core = null,
-        _root = null,
-        _cache = {},
-        _underImport = {},
-        _internalRefHash = {},
-        META = new BaseMeta();
-
-    function internalRefCreated(intPath, node) {
-        _cache[_core.getPath(node)] = node;
-        _internalRefHash[intPath] = _core.getPath(node);
-        var callbacks = _underImport[intPath] || [];
-        delete _underImport[intPath];
-        for (var i = 0; i < callbacks.length; i++) {
-            callbacks[i](null, node);
-        }
-    }
-
-    function objectLoaded(error, node) {
-        if (error === null) {
-            _cache[_core.getPath(node)] = node;
-        }
-
-        var callbacks = _underImport[_core.getPath(node)] || [];
-        delete _underImport[_core.getPath(node)];
-        for (var i = 0; i < callbacks.length; i++) {
-            callbacks[i](error, node);
-        }
-    }
-
-    function isInternalReference(refObj) {
-        if (refObj && typeof refObj.$ref === 'string') {
-            if (refObj.$ref.indexOf('#') === 0) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    function getReferenceNode(refObj, callback) {
-        //we allow the internal references and the
-        if (refObj && typeof refObj.$ref === 'string') {
-            if (refObj.$ref.indexOf('#') === 0) {
-                //we assume that it is an internal reference
-                if (_internalRefHash[refObj.$ref] !== undefined) {
-                    callback(null, _cache[_internalRefHash[refObj.$ref]]);
-                } else if (_underImport[refObj.$ref] !== undefined) {
-                    _underImport[refObj.$ref].push(callback);
-                } else {
-                    //TODO we should check if the loading order is really finite this way
-                    _underImport[refObj.$ref] = [callback];
-                }
-            } else if (refObj.$ref === null) {
-                callback(null, null);
-            } else {
-                if (_cache[refObj.$ref]) {
-                    callback(null, _cache[refObj.$ref]);
-                } else if (_underImport[refObj.$ref]) {
-                    _underImport[refObj.$ref].push(callback);
-                } else {
-                    _underImport[refObj.$ref] = [callback];
-                    _core.loadByPath(_root, refObj.$ref, function (err, node) {
-                        if (err) {
-                            objectLoaded(err, null);
-                        } else {
-                            if (refObj.GUID) {
-                                if (refObj.GUID === _core.getGuid(node)) {
-                                    objectLoaded(err, node);
-                                } else {
-                                    objectLoaded('GUID mismatch', node);
-                                }
-                            } else {
-                                objectLoaded(err, node);
-                            }
-                        }
-                    });
-                }
-            }
-        } else {
-            callback(null, null);
-        }
-    }
-
-    function importChildren(node, jNode, pIntPath, callback) {
-        if (jNode && jNode.children && jNode.children.length) {
-            var needed = jNode.children.length;
-
-            if (needed > 0) {
-                var error = null;
-                for (var i = 0; i < jNode.children.length; i++) {
-                    importNode(jNode.children[i], node, pIntPath + '/children[' + i + ']', true, function (err) {
-                        error = error || err;
-                        if (--needed === 0) {
-                            callback(error);
-                        }
-                    });
-                }
-            } else {
-                callback(null);
-            }
-
-        } else {
-            callback(null); //TODO maybe we should be more strict
-        }
-    }
-
-    function importAttributes(node, jNode) {
-        if (typeof jNode.attributes === 'object') {
-            var names = Object.keys(jNode.attributes);
-            if (jNode.OWN) {
-                names = jNode.OWN.attributes;
-            }
-
-            for (var i = 0; i < names.length; i++) {
-                var value = jNode.attributes[names[i]];
-                if (value !== undefined) {
-                    _core.setAttribute(node, names[i], value);
-                }
-            }
-        }
-    }
-
-    function importRegistry(node, jNode) {
-        if (typeof jNode.registry === 'object') {
-            var names = Object.keys(jNode.registry);
-            if (jNode.OWN) {
-                names = jNode.OWN.registry;
-            }
-
-            for (var i = 0; i < names.length; i++) {
-                var value = jNode.registry[names[i]];
-                if (value !== undefined) {
-                    _core.setRegistry(node, names[i], value);
-                }
-            }
-        }
-    }
-
-    function importPointer(node, jNode, pName, callback) {
-        if (jNode.pointers[pName].to && jNode.pointers[pName].from) {
-            var needed = jNode.pointers[pName].to.length + jNode.pointers[pName].from.length,
-                i,
-                error = null;
-            var ownPointer = true;
-            if (jNode.OWN) {
-                if (jNode.OWN.pointers.indexOf(pName) === -1) {
-                    ownPointer = false;
-                    needed -= jNode.pointers[pName].to.length;
-                }
-            }
-            if (needed === 0) {
-                callback(null);
-            } else {
-                if (ownPointer) {
-                    for (i = 0; i < jNode.pointers[pName].to.length; i++) {
-                        getReferenceNode(jNode.pointers[pName].to[i], function (err, target) {
-                            error = error || err;
-                            _core.setPointer(node, pName, target);
-
-                            if (--needed === 0) {
-                                callback(error);
-                            }
-                        });
-                    }
-                }
-
-                for (i = 0; i < jNode.pointers[pName].from.length; i++) {
-                    if (!isInternalReference(jNode.pointers[pName].from[i])) {
-                        getReferenceNode(jNode.pointers[pName].from[i], function (err, source) {
-                            error = error || err;
-                            if (source) {
-                                _core.setPointer(source, pName, node);
-                            }
-
-                            if (--needed === 0) {
-                                callback(error);
-                            }
-                        });
-                    } else {
-                        if (--needed === 0) {
-                            callback(error);
-                        }
-                    }
-                }
-            }
-        } else {
-            callback(null);
-        }
-    }
-
-    function importSet(node, jNode, sName, callback) {
-        if (jNode.pointers[sName].to && jNode.pointers[sName].from) {
-            var needed = 0,
-                i,
-                importSetRegAndAtr = function (sOwner, sMember, atrAndReg) {
-                    _core.addMember(sOwner, sName, sMember);
-                    var mPath = _core.getPath(sMember);
-                    atrAndReg.attributes = atrAndReg.attributes || {};
-                    for (i in atrAndReg.attributes) {
-                        _core.setMemberAttribute(sOwner, sName, mPath, i, atrAndReg.attributes[i]);
-                    }
-                    atrAndReg.registry = atrAndReg.registry || {};
-                    for (i in atrAndReg.registry) {
-                        _core.setMemberRegistry(sOwner, sName, mPath, i, atrAndReg.registry[i]);
-                    }
-                },
-                importSetReference = function (isTo, index, cb) {
-                    var jObj = isTo === true ? jNode.pointers[sName].to[index] : jNode.pointers[sName].from[index];
-                    getReferenceNode(jObj, function (err, sNode) {
-                        if (err) {
-                            cb(err);
-                        } else {
-                            if (sNode) {
-                                var sOwner = isTo === true ? node : sNode,
-                                    sMember = isTo === true ? sNode : node;
-                                importSetRegAndAtr(sOwner, sMember, jObj);
-                            }
-                            cb(null);
-                        }
-                    });
-                },
-                error = null;
-
-            if (jNode.pointers[sName].to.length > 0) {
-                needed += jNode.pointers[sName].to.length;
-                _core.createSet(node, sName);
-            }
-            if (jNode.pointers[sName].from.length > 0) {
-                needed += jNode.pointers[sName].from.length;
-            }
-
-            if (needed > 0) {
-                for (i = 0; i < jNode.pointers[sName].to.length; i++) {
-                    importSetReference(true, i, function (err) {
-                        error = error || err;
-                        if (--needed === 0) {
-                            callback(error);
-                        }
-                    });
-                }
-                for (i = 0; i < jNode.pointers[sName].from.length; i++) {
-                    importSetReference(false, i, function (err) {
-                        error = error || err;
-                        if (--needed === 0) {
-                            callback(error);
-                        }
-                    });
-                }
-            } else {
-                callback(null);
-            }
-        } else {
-            callback(null); //TODO now we just simply try to ignore faulty data import
-        }
-    }
-
-    function importRelations(node, jNode, callback) {
-        //TODO now se use the pointer's 'set' attribute to decide if it is a set or a pointer really
-        var pointers = [],
-            sets = [],
-            needed = 0,
-            error = null,
-            i;
-        if (typeof jNode.pointers !== 'object') {
-            callback(null); //TODO should we drop an error???
-        } else {
-            for (i in jNode.pointers) {
-                if (jNode.pointers[i].set === true) {
-                    sets.push(i);
-                } else {
-                    pointers.push(i);
-                }
-            }
-
-            needed = sets.length + pointers.length;
-
-            if (needed > 0) {
-                for (i = 0; i < pointers.length; i++) {
-                    importPointer(node, jNode, pointers[i], function (err) {
-                        error = error || err;
-                        if (--needed === 0) {
-                            callback(error);
-                        }
-                    });
-                }
-                for (i = 0; i < sets.length; i++) {
-                    importSet(node, jNode, sets[i], function (err) {
-                        error = error || err;
-                        if (--needed === 0) {
-                            callback(error);
-                        }
-                    });
-                }
-            } else {
-                callback(null);
-            }
-        }
-    }
-
-    function importMeta(node, jNode, callback) {
-        //TODO now this function searches the whole meta data for reference objects and load them, then call setMeta
-        var loadReference = function (refObj, cb) {
-                getReferenceNode(refObj, function (err, rNode) {
-                    if (err) {
-                        cb(err);
-                    } else {
-                        if (rNode) {
-                            refObj.$ref = _core.getPath(rNode);
-                        }
-                        cb(null);
-                    }
-                });
-            },
-            loadMetaReferences = function (jObject, cb) {
-                var needed = 0,
-                    i,
-                    error = null;
-                for (i in jObject) {
-                    if (jObject[i] !== null && typeof jObject[i] === 'object') {
-                        needed++;
-                    }
-                }
-
-                if (needed > 0) {
-                    for (i in jObject) {
-                        if (jObject[i] !== null && typeof jObject[i] === 'object') {
-                            if (jObject[i].$ref) {
-                                loadReference(jObject[i], function (err) {
-                                    error = error || err;
-                                    if (--needed === 0) {
-                                        cb(error);
-                                    }
-                                });
-                            } else {
-                                loadMetaReferences(jObject[i], function (err) {
-                                    error = error || err;
-                                    if (--needed === 0) {
-                                        cb(error);
-                                    }
-                                });
-                            }
-                        }
-                    }
-                } else {
-                    cb(error);
-                }
-            };
-
-        loadMetaReferences(jNode.meta || {}, function (err) {
-            if (err) {
-                callback(err);
-            } else {
-                META.setMeta(_core.getPath(node), jNode.meta || {});
-                callback(null);
-            }
-        });
-    }
-
-    function importRoot(jNode, callback) {
-        //first we create the root node itself, then the other parts of the function is pretty much like the importNode
-        _root = _core.createNode({guid: jNode.GUID});
-        internalRefCreated('#', _root);
-        importAttributes(_root, jNode);
-        importRegistry(_root, jNode);
-        importChildren(_root, jNode, '#', function (err) {
-            if (err) {
-                callback(err);
-            } else {
-                importRelations(_root, jNode, function (err) {
-                    if (err) {
-                        callback(err);
-                    } else {
-                        importMeta(_root, jNode, function (err) {
-                            callback(err, _root);
-                        });
-                    }
-                });
-            }
-        });
-    }
-
-    //function clearOldNode(relid, guid, parentNode, callback) {
-    //    var relids = _core.getChildrenRelids(parentNode);
-    //    if (relids.indexOf(relid) !== -1) {
-    //        _core.loadChild(parentNode, relid, function (err, oldChild) {
-    //            if (err) {
-    //                callback(err);
-    //            } else {
-    //                if (_core.getGuid(oldChild) === guid) {
-    //                    var root = _core.getRoot(oldChild);
-    //                    _core.deleteNode(oldChild);
-    //                    _core.persist(root, function () {
-    //                        callback(null);
-    //                    });
-    //                } else {
-    //                    callback(null);
-    //                }
-    //            }
-    //        });
-    //    } else {
-    //        callback(null);
-    //    }
-    //}
-
-    function getEmptyNode(jNode, parentNode, baseNode, noClear, callback) {
-        var relids = _core.getChildrenRelids(parentNode),
-            returnNewNode = function () {
-                var node = _core.createNode({base: baseNode, parent: parentNode, relid: jNode.RELID, guid: jNode.GUID});
-                callback(null, node);
-            };
-        if (relids.indexOf(jNode.RELID) !== -1) {
-            _core.loadChild(parentNode, jNode.RELID, function (err, oldChild) {
-                if (err) {
-                    callback(err, null);
-                } else {
-                    if (_core.getGuid(oldChild) === jNode.GUID) {
-                        if (noClear === true) {
-                            callback(null, oldChild);
-                        } else {
-                            var root = _core.getRoot(oldChild);
-                            _core.deleteNode(oldChild);
-                            _core.persist(root, function () {
-                                returnNewNode();
-                            });
-                        }
-                    } else {
-                        returnNewNode();
-                    }
-                }
-            });
-        } else {
-            returnNewNode();
-        }
-    }
-
-    function importNode(jNode, parentNode, intPath, noClear, callback) {
-        //first we have to get the base of the node
-        if (jNode.pointers && jNode.pointers.base && jNode.pointers.base.to) {
-            getReferenceNode(jNode.pointers.base.to[0], function (err, base) {
-                if (err) {
-                    callback(err);
-                } else {
-                    getEmptyNode(jNode, parentNode, base, noClear, function (err, node) {
-                        if (err) {
-                            callback(err);
-                        } else {
-                            internalRefCreated(intPath, node);
-                            importAttributes(node, jNode);
-                            importRegistry(node, jNode);
-                            importChildren(node, jNode, intPath, function (err) {
-                                if (err) {
-                                    callback(err);
-                                } else {
-                                    importRelations(node, jNode, function (err) {
-                                        if (err) {
-                                            callback(err);
-                                        } else {
-                                            importMeta(node, jNode, function (err) {
-                                                callback(err);
-                                            });
-                                        }
-                                    });
-                                }
-                            });
-                        }
-                    });
-                }
-            });
-        } else {
-            callback('wrong import format: base info is wrong');
-        }
-    }
-
-    function importing(core, parent, jNode, callback) {
-        _core = core;
-        _cache = {};
-        _underImport = {};
-        _internalRefHash = {};
-        META.initialize(_core, _cache, function () {
-        });
-
-        if (jNode.length) {
-            //multiple objects
-            if (parent) {
-                var needed = jNode.length,
-                    error = null;
-                _cache[core.getPath(parent)] = parent;
-                _root = core.getRoot(parent);
-                for (var i = 0; i < jNode.length; i++) {
-                    importNode(jNode[i], parent, '#[' + i + ']', false, function (err) {
-                        error = error || err;
-                        if (--needed === 0) {
-                            callback(error);
-                        }
-                    });
-                }
-            } else {
-                callback('no parent given!!!');
-            }
-        } else {
-            //single object
-            if (parent) {
-                _cache[core.getPath(parent)] = parent;
-                _root = core.getRoot(parent);
-                importNode(jNode, parent, '#', false, callback);
-            } else {
-                importRoot(jNode, callback);
-            }
-        }
-    }
-
-    return importing;
-});
-
-
-/*globals define*/
-/*jshint node: true, browser: true*/
-
-/**
- * This import will only enter the outgoing relations and the internal ones.
- * This import will try to import an array of objects as well as a single object.
- * Although this import also assumes that there is no loop in the references so it can simply wait for
- *
- * @author kecso / https://github.com/kecso
- */
-
-define('common/core/users/copyimport',['common/core/users/meta'], function (BaseMeta) {
-    
-    var _core = null,
-        _root = null,
-        _cache = {},
-        _underImport = {},
-        _internalRefHash = {},
-        META = new BaseMeta();
-
-    function internalRefCreated(intPath, node) {
-        _cache[_core.getPath(node)] = node;
-        _internalRefHash[intPath] = _core.getPath(node);
-        var callbacks = _underImport[intPath] || [];
-        delete _underImport[intPath];
-        for (var i = 0; i < callbacks.length; i++) {
-            callbacks[i](null, node);
-        }
-    }
-
-    function objectLoaded(error, node) {
-        if (error === null) {
-            _cache[_core.getPath(node)] = node;
-        }
-
-        var callbacks = _underImport[_core.getPath(node)] || [];
-        delete _underImport[_core.getPath(node)];
-        for (var i = 0; i < callbacks.length; i++) {
-            callbacks[i](error, node);
-        }
-    }
-
-    //function isInternalReference(refObj) {
-    //    if (refObj && typeof refObj.$ref === 'string') {
-    //        if (refObj.$ref.indexOf('#') === 0) {
-    //            return true;
-    //        }
-    //    }
-    //    return false;
-    //}
-
-    function getReferenceNode(refObj, callback) {
-        //we allow the internal references and the
-        if (refObj && typeof refObj.$ref === 'string') {
-            if (refObj.$ref.indexOf('#') === 0) {
-                //we assume that it is an internal reference
-                if (_internalRefHash[refObj.$ref] !== undefined) {
-                    callback(null, _cache[_internalRefHash[refObj.$ref]]);
-                } else if (_underImport[refObj.$ref] !== undefined) {
-                    _underImport[refObj.$ref].push(callback);
-                } else {
-                    //TODO we should check if the loading order is really finite this way
-                    _underImport[refObj.$ref] = [callback];
-                }
-            } else if (refObj.$ref === null) {
-                callback(null, null);
-            } else {
-                if (_cache[refObj.$ref]) {
-                    callback(null, _cache[refObj.$ref]);
-                } else if (_underImport[refObj.$ref]) {
-                    _underImport[refObj.$ref].push(callback);
-                } else {
-                    _underImport[refObj.$ref] = [callback];
-                    _core.loadByPath(_root, refObj.$ref, function (err, node) {
-                        if (err) {
-                            objectLoaded(err, null);
-                        } else {
-                            if (refObj.GUID) {
-                                if (refObj.GUID === _core.getGuid(node)) {
-                                    objectLoaded(err, node);
-                                } else {
-                                    objectLoaded('GUID mismatch', node);
-                                }
-                            } else {
-                                objectLoaded(err, node);
-                            }
-                        }
-                    });
-                }
-            }
-        } else {
-            callback(null, null);
-        }
-    }
-
-    function importChildren(node, jNode, pIntPath, callback) {
-        if (jNode && jNode.children && jNode.children.length) {
-            var needed = jNode.children.length;
-
-            if (needed > 0) {
-                var error = null;
-                for (var i = 0; i < jNode.children.length; i++) {
-                    importNode(jNode.children[i], node, pIntPath + '/children[' + i + ']', function (err) {
-                        error = error || err;
-                        if (--needed === 0) {
-                            callback(error);
-                        }
-                    }); //FIXME
-                }
-            } else {
-                callback(null);
-            }
-
-        } else {
-            callback(null); //TODO maybe we should be more strict
-        }
-    }
-
-    function importAttributes(node, jNode) {
-        if (typeof jNode.attributes === 'object') {
-            for (var i in jNode.attributes) {
-                _core.setAttribute(node, i, jNode.attributes[i]);
-            }
-        }
-    }
-
-    function importRegistry(node, jNode) {
-        if (typeof jNode.registry === 'object') {
-            for (var i in jNode.registry) {
-                _core.setRegistry(node, i, jNode.registry[i]);
-            }
-        }
-    }
-
-    function importPointer(node, jNode, pName, callback) {
-        if (jNode.pointers[pName].to && jNode.pointers[pName].to.length > 0) {
-            var needed = jNode.pointers[pName].to.length,
-                i,
-                error = null;
-
-            for (i = 0; i < jNode.pointers[pName].to.length; i++) {
-                getReferenceNode(jNode.pointers[pName].to[i], function (err, target) {
-                    error = error || err;
-                    if (target !== undefined) {
-                        _core.setPointer(node, pName, target);
-                    }
-
-                    if (--needed === 0) {
-                        callback(error);
-                    }
-                }); //FIXME
-            }
-
-        } else {
-            callback(null);
-        }
-    }
-
-    function importSet(node, jNode, sName, callback) {
-        if (jNode.pointers[sName].to && jNode.pointers[sName].to.length > 0) {
-            var needed = 0,
-                i,
-                key,
-                importSetRegAndAtr = function (sOwner, sMember, atrAndReg) {
-                    _core.addMember(sOwner, sName, sMember);
-                    var mPath = _core.getPath(sMember);
-                    atrAndReg.attributes = atrAndReg.attributes || {};
-                    for (key in atrAndReg.attributes) {
-                        _core.setMemberAttribute(sOwner, sName, mPath, key, atrAndReg.attributes[key]);
-                    }
-                    atrAndReg.registry = atrAndReg.registry || {};
-                    for (key in atrAndReg.registry) {
-                        _core.setMemberRegistry(sOwner, sName, mPath, key, atrAndReg.registry[key]);
-                    }
-                },
-                importSetReference = function (isTo, index, cb) {
-                    var jObj = isTo === true ? jNode.pointers[sName].to[index] : jNode.pointers[sName].from[index];
-                    getReferenceNode(jObj, function (err, sNode) {
-                        if (err) {
-                            cb(err);
-                        } else {
-                            if (sNode) {
-                                var sOwner = isTo === true ? node : sNode,
-                                    sMember = isTo === true ? sNode : node;
-                                importSetRegAndAtr(sOwner, sMember, jObj);
-                            }
-                            cb(null);
-                        }
-                    });
-                },
-                error = null;
-
-            _core.createSet(node, sName);
-            needed = jNode.pointers[sName].to.length;
-            for (i = 0; i < jNode.pointers[sName].to.length; i++) {
-                importSetReference(true, i, function (err) {
-                    error = error || err;
-                    if (--needed === 0) {
-                        callback(error);
-                    }
-                }); //FIXME
-            }
-        } else {
-            callback(null); //TODO now we just simply try to ignore faulty data import
-        }
-    }
-
-    //function _importSet(node, jNode, sName, callback) {
-    //    if (jNode.pointers[sName].to) {
-    //        var needed = 0,
-    //            importSetRegAndAtr = function (sOwner, sMember, atrAndReg) {
-    //                _core.addMember(sOwner, sName, sMember);
-    //                var mPath = _core.getPath(sMember);
-    //                atrAndReg.attributes = atrAndReg.attributes || {};
-    //                for (var i in atrAndReg.attributes) {
-    //                    _core.setMemberAttribute(sOwner, sName, mPath, i, atrAndReg.attributes[i]);
-    //                }
-    //                atrAndReg.registry = atrAndReg.registry || {};
-    //                for (var i in atrAndReg.registry) {
-    //                    _core.setMemberRegistry(sOwner, sName, mPath, i, atrAndReg.registry[i]);
-    //                }
-    //            },
-    //            importSetReference = function (isTo, index, cb) {
-    //                var jObj = isTo === true ? jNode.pointers[sName].to[index] : jNode.pointers[sName].from[index];
-    //                getReferenceNode(jObj, function (err, sNode) {
-    //                    if (err) {
-    //                        cb(err);
-    //                    } else {
-    //                        if (sNode) {
-    //                            var sOwner = isTo === true ? node : sNode,
-    //                                sMember = isTo === true ? sNode : node;
-    //                            importSetRegAndAtr(sOwner, sMember, jObj);
-    //                        }
-    //                        cb(null);
-    //                    }
-    //                });
-    //            },
-    //            error = null;
-    //
-    //        if (jNode.pointers[sName].to.length > 0) {
-    //            needed += jNode.pointers[sName].to.length;
-    //            _core.createSet(node, sName);
-    //        }
-    //
-    //        if (needed > 0) {
-    //            for (var i = 0; i < jNode.pointers[sName].to.length; i++) {
-    //                importSetReference(true, i, function (err) {
-    //                    error = error || err;
-    //                    if (--needed === 0) {
-    //                        callback(error);
-    //                    }
-    //                });
-    //            }
-    //        } else {
-    //            callback(null);
-    //        }
-    //    } else {
-    //        callback(null); //TODO now we just simply try to ignore faulty data import
-    //    }
-    //}
-
-    function importRelations(node, jNode, callback) {
-        //TODO now se use the pointer's 'set' attribute to decide if it is a set or a pointer really
-        var pointers = [],
-            sets = [],
-            needed = 0,
-            error = null,
-            i;
-        if (typeof jNode.pointers !== 'object') {
-            callback(null); //TODO should we drop an error???
-        } else {
-            for (i in jNode.pointers) {
-                if (jNode.pointers[i].set === true) {
-                    sets.push(i);
-                } else {
-                    pointers.push(i);
-                }
-            }
-
-            needed = sets.length + pointers.length;
-
-            if (needed > 0) {
-                for (i = 0; i < pointers.length; i++) {
-                    importPointer(node, jNode, pointers[i], function (err) {
-                        error = error || err;
-                        if (--needed === 0) {
-                            callback(error);
-                        }
-                    });
-                }
-                for (i = 0; i < sets.length; i++) {
-                    importSet(node, jNode, sets[i], function (err) {
-                        error = error || err;
-                        if (--needed === 0) {
-                            callback(error);
-                        }
-                    });
-                }
-            } else {
-                callback(null);
-            }
-        }
-    }
-
-    function importMeta(node, jNode, callback) {
-
-        //TODO now this function searches the whole meta data for reference objects and load them, then call setMeta
-        var loadReference = function (refObj, cb) {
-                getReferenceNode(refObj, function (err, rNode) {
-                    if (err) {
-                        cb(err);
-                    } else {
-                        if (rNode) {
-                            refObj.$ref = _core.getPath(rNode);
-                        }
-                        cb(null);
-                    }
-                });
-            },
-            loadMetaReferences = function (jObject, cb) {
-                var needed = 0,
-                    i,
-                    error = null;
-                for (i in jObject) {
-                    if (jObject[i] !== null && typeof jObject[i] === 'object') {
-                        needed++;
-                    }
-                }
-
-                if (needed > 0) {
-                    for (i in jObject) {
-                        if (jObject[i] !== null && typeof jObject[i] === 'object') {
-                            if (jObject[i].$ref) {
-                                loadReference(jObject[i], function (err) {
-                                    error = error || err;
-                                    if (--needed === 0) {
-                                        cb(error);
-                                    }
-                                });
-                            } else {
-                                loadMetaReferences(jObject[i], function (err) {
-                                    error = error || err;
-                                    if (--needed === 0) {
-                                        cb(error);
-                                    }
-                                });
-                            }
-                        }
-                    }
-                } else {
-                    cb(error);
-                }
-            };
-
-        loadMetaReferences(jNode.meta || {}, function (err) {
-            if (err) {
-                callback(err);
-            } else {
-                META.setMeta(_core.getPath(node), jNode.meta || {});
-                callback(null);
-            }
-        });
-    }
-
-    function importRoot(jNode, callback) {
-        //first we create the root node itself, then the other parts of the function is pretty much like the importNode
-
-        _root = _core.createNode();
-        internalRefCreated('#', _root);
-        importAttributes(_root, jNode);
-        importRegistry(_root, jNode);
-        importChildren(_root, jNode, '#', function (err) {
-            if (err) {
-                callback(err);
-            } else {
-                importRelations(_root, jNode, function (err) {
-                    if (err) {
-                        callback(err);
-                    } else {
-                        importMeta(_root, jNode, function (err) {
-                            callback(err, _root);
-                        });
-                    }
-                });
-            }
-        });
-    }
-
-    function importNode(jNode, parentNode, intPath, callback) {
-        //return callback('not implemented');
-        //first we have to get the base of the node
-        if (jNode.pointers && jNode.pointers.base && jNode.pointers.base.to) {
-            getReferenceNode(jNode.pointers.base.to[0], function (err, base) {
-                if (err) {
-                    callback(err);
-                } else {
-                    //now we are ready to create the node itself
-                    var node = _core.createNode({base: base, parent: parentNode});
-                    internalRefCreated(intPath, node);
-                    importAttributes(node, jNode);
-                    importRegistry(node, jNode);
-                    importChildren(node, jNode, intPath, function (err) {
-                        if (err) {
-                            callback(err);
-                        } else {
-                            importRelations(node, jNode, function (err) {
-                                if (err) {
-                                    callback(err);
-                                } else {
-                                    importMeta(node, jNode, callback);
-                                }
-                            });
-                        }
-                    });
-                }
-            });
-        } else {
-            callback('wrong import format: base info is wrong');
-        }
-    }
-
-    function importing(core, parent, jNode, callback) {
-        _core = core;
-        _cache = {};
-        _underImport = {};
-        _internalRefHash = {};
-        META.initialize(_core, _cache, function () {
-        });
-
-        if (jNode.length) {
-            //multiple objects
-            if (parent) {
-                var needed = jNode.length,
-                    error = null;
-                _cache[core.getPath(parent)] = parent;
-                _root = core.getRoot(parent);
-                for (var i = 0; i < jNode.length; i++) {
-                    importNode(jNode[i], parent, '#[' + i + ']', function (err) {
-                        error = error || err;
-                        if (--needed === 0) {
-                            callback(error);
-                        }
-                    });
-                }
-            } else {
-                callback('no parent given!!!');
-            }
-        } else {
-            //single object
-            if (parent) {
-                _cache[core.getPath(parent)] = parent;
-                _root = core.getRoot(parent);
-                importNode(jNode, parent, '#', callback);
-            } else {
-                importRoot(jNode, callback);
-            }
-        }
-    }
-
-    return importing;
-});
-/*globals define*/
-/*jshint node: true, browser: true*/
-
-/**
- * @author kecso / https://github.com/kecso
- */
-
-define('common/core/users/serialization',['common/util/assert'], function (ASSERT) {
-
-    
-    var _nodes = {},
-        _core = null,
-        _pathToGuidMap = {},
-        _guidKeys = [], //ordered list of GUIDs
-        _extraBasePaths = {},
-        _export = {},
-        _import = {},
-        _newNodeGuids = [],
-        _removedNodeGuids = [],
-        _updatedNodeGuids = [],
-        _log = '';
-
-    function log(txt) {
-        if (_log) {
-            _log += '\n' + txt;
-        } else {
-            _log = '' + txt;
-        }
-    }
-
-    function exportLibrary(core, libraryRoot, callback) {
-        //initialization
-        _core = core;
-        _nodes = {};
-        _pathToGuidMap = {};
-        _guidKeys = [];
-        _extraBasePaths = {};
-        _export = {};
-
-        //loading all library element
-        gatherNodesSlowly(libraryRoot, function (err) {
-            if (err) {
-                return callback(err);
-            }
-
-            _guidKeys = _guidKeys.sort();
-            gatherAncestors(); //collecting the 'external' base classes - probably we should avoid these
-
-            var keys = Object.keys(_extraBasePaths),
-                i;
-            _export.bases = {};
-            for (i = 0; i < keys.length; i++) {
-                _export.bases[_extraBasePaths[keys[i]]] = keys[i];
-            }
-
-            //_export.bases = _extraBasePaths;
-            // we save this info alongside with the library export, to be on the safe side
-
-            _export.root = getLibraryRootInfo(libraryRoot);
-            _export.relids = getRelIdInfo();
-            _export.containment = {};
-            fillContainmentTree(libraryRoot, _export.containment);
-            _export.nodes = getNodesData();
-
-            //we export MetaSheet info only if not the whole project is exported!!!
-            _export.metaSheets = core.getParent(libraryRoot) ? getMetaSheetInfo(_core.getRoot(libraryRoot)) : {};
-
-            callback(null, _export);
-
-        });
-    }
-
-    function getMetaSheetInfo(root) {
-        var getMemberRegistry = function (setname, memberpath) {
-                var names = _core.getMemberRegistryNames(root, setname, memberpath),
-                    i,
-                    registry = {};
-                for (i = 0; i < names.length; i++) {
-                    registry[names[i]] = _core.getMemberRegistry(root, setname, memberpath, names[i]);
-                }
-                return registry;
-            },
-            getMemberAttributes = function (setname, memberpath) {
-                var names = _core.getMemberAttributeNames(root, setname, memberpath),
-                    i,
-                    attributes = {};
-                for (i = 0; i < names.length; i++) {
-                    attributes[names[i]] = _core.getMemberAttribute(root, setname, memberpath, names[i]);
-                }
-                return attributes;
-            },
-            getRegistryEntry = function (setname) {
-                var index = registry.length;
-
-                while (--index >= 0) {
-                    if (registry[index].SetID === setname) {
-                        return registry[index];
-                    }
-                }
-                return {};
-            },
-            sheets = {},
-            registry = _core.getRegistry(root, 'MetaSheets'),
-            keys = _core.getSetNames(root),
-            elements, guid,
-            i,
-            j;
-
-        for (i = 0; i < keys.length; i++) {
-            if (keys[i].indexOf('MetaAspectSet') === 0) {
-                elements = _core.getMemberPaths(root, keys[i]);
-                for (j = 0; j < elements.length; j++) {
-                    guid = _pathToGuidMap[elements[j]] || _extraBasePaths[elements[j]];
-                    if (guid) {
-                        sheets[keys[i]] = sheets[keys[i]] || {};
-                        sheets[keys[i]][guid] = {
-                            registry: getMemberRegistry(keys[i], elements[j]),
-                            attributes: getMemberAttributes(keys[i], elements[j])
-                        };
-                    }
-                }
-
-                if (sheets[keys[i]] && keys[i] !== 'MetaAspectSet') {
-                    //we add the global registry values as well
-                    sheets[keys[i]].global = getRegistryEntry(keys[i]);
-                }
-            }
-        }
-        console.log('sheets', sheets);
-        return sheets;
-    }
-
-    function importMetaSheetInfo(root) {
-        var setMemberAttributesAndRegistry = function (setname, memberguid) {
-                var attributes = oldSheets[setname][memberguid].attributes || {},
-                    registry = oldSheets[setname][memberguid].registry || {},
-                    keys = Object.keys(attributes),
-                    i;
-
-                for (i = 0; i < keys.length; i++) {
-                    _core.setMemberAttribute(root, setname, _core.getPath(_nodes[memberguid]), keys[i],
-                        attributes[keys[i]]);
-                }
-                keys = Object.keys(registry);
-                for (i = 0; i < keys.length; i++) {
-                    _core.setMemberRegistry(root, setname, _core.getPath(_nodes[memberguid]), keys[i],
-                        registry[keys[i]]);
-                }
-            },
-            updateSheet = function (name) {
-                //the removed object should be already removed...
-                //if some element is extra in the place of import, then it stays untouched
-                var oldMemberGuids = Object.keys(oldSheets[name]),
-                    i;
-                oldMemberGuids.splice(oldMemberGuids.indexOf('global'), 1);
-                for (i = 0; i < oldMemberGuids.length; i++) {
-                    _core.addMember(root, name, _nodes[oldMemberGuids[i]]);
-                    setMemberAttributesAndRegistry(name, oldMemberGuids[i]);
-                }
-            },
-            addSheet = function (name) {
-                var registry = JSON.parse(JSON.stringify(_core.getRegistry(root, 'MetaSheets')) || {}),
-                    i,
-                    memberpath,
-                    memberguids = Object.keys(oldSheets[name]);
-
-                memberguids.splice(memberguids.indexOf('global'), 1);
-
-                if (name !== 'MetaAspectSet') {
-                    registry.push(oldSheets[name].global);
-                    _core.setRegistry(root, 'MetaSheets', registry);
-                }
-
-                _core.createSet(root, name);
-                for (i = 0; i < memberguids.length; i++) {
-                    memberpath = _core.getPath(_nodes[memberguids[i]]);
-                    _core.addMember(root, name, _nodes[memberguids[i]]);
-                    setMemberAttributesAndRegistry(name, memberguids[i]);
-                }
-            },
-            oldSheets = _import.metaSheets || {},
-            newSheets = _export.metaSheets || {},
-            oldSheetNames = Object.keys(oldSheets),
-            newSheetNames = Object.keys(newSheets),
-            i;
-
-        for (i = 0; i < oldSheetNames.length; i++) {
-            if (newSheetNames.indexOf(oldSheetNames[i]) !== -1) {
-                updateSheet(oldSheetNames[i]);
-            } else {
-                addSheet(oldSheetNames[i]);
-            }
-        }
-    }
-
-    function getLibraryRootInfo(node) {
-        return {
-            path: _core.getPath(node),
-            guid: _core.getGuid(node)
-        };
-    }
-
-    function gatherNodesSlowly(node, callback) {
-        _core.loadSubTree(node, function (err, nodes) {
-            var guid, i;
-            if (!err && nodes) {
-                for (i = 0; i < nodes.length; i++) {
-                    guid = _core.getGuid(nodes[i]);
-                    _nodes[guid] = nodes[i];
-                    _guidKeys.push(guid);
-                    _pathToGuidMap[_core.getPath(nodes[i])] = guid;
-                }
-                callback(null);
-            } else {
-                callback(err);
-            }
-        });
-    }
-
-    function gatherAncestors() {
-        //this function inserts the needed base classes which were not included in the library
-        var i, base, guid;
-        for (i = 0; i < _guidKeys.length; i++) {
-            base = _nodes[_guidKeys[i]];
-            while (base !== null) {
-                guid = _core.getGuid(base);
-                if (!_nodes[guid]) {
-                    _nodes[guid] = base;
-                    _extraBasePaths[_core.getPath(base)] = guid;
-                } else if (_guidKeys.indexOf(guid) === -1) {
-                    _extraBasePaths[_core.getPath(base)] = guid;
-                }
-                base = _core.getBase(base);
-            }
-        }
-    }
-
-    function pathsToSortedGuidList(pathsList) { //it will also filter out not wanted elements
-        var i, guids = [];
-        for (i = 0; i < pathsList.length; i++) {
-            if (_pathToGuidMap[pathsList[i]]) {
-                guids.push(_pathToGuidMap[pathsList[i]]);
-            }
-        }
-        return guids.sort();
-    }
-
-    function fillContainmentTree(node, myTreeObject) {
-        var childrenGuids = pathsToSortedGuidList(_core.getChildrenPaths(node)),
-            i;
-        for (i = 0; i < childrenGuids.length; i++) {
-            myTreeObject[childrenGuids[i]] = {};
-            fillContainmentTree(_nodes[childrenGuids[i]], myTreeObject[childrenGuids[i]]);
-        }
-    }
-
-    function getRelIdInfo() {
-        var i,
-            relIdInfo = {};
-        for (i = 0; i < _guidKeys.length; i++) {
-            relIdInfo[_guidKeys[i]] = _core.getRelid(_nodes[_guidKeys[i]]);
-        }
-        return relIdInfo;
-    }
-
-    function getNodesData() {
-        var data = {},
-            i;
-        for (i = 0; i < _guidKeys.length; i++) {
-            data[_guidKeys[i]] = getNodeData(_nodes[_guidKeys[i]]);
-        }
-        return data;
-    }
-
-    function getNodeData(node) {
-        /*{
-         //only the ones defined on this level
-         attributes:{name:value},
-         base:GUID,
-         registry:{name:value},
-         parent:GUID,
-         pointers:{name:targetGuid},
-         sets:{name:[{guid:GUID,attributes:{name:value},registy:{name:value}}]}
-         meta:{}
-         }*/
-        return {
-            attributes: getAttributesOfNode(node),
-            base: _core.getBase(node) ? _core.getGuid(_core.getBase(node)) : null,
-            meta: pathsToGuids(JSON.parse(JSON.stringify(_core.getOwnJsonMeta(node)) || {})),
-            parent: _core.getParent(node) ? _core.getGuid(_core.getParent(node)) : null,
-            pointers: getPointersOfNode(node),
-            registry: getRegistryOfNode(node),
-            sets: getSetsOfNode(node),
-            constraints: getConstraintsOfNode(node)
-        };
-    }
-
-    function baseGuid(path) {
-        /*var keys = Object.keys(_extraBasePaths),
-         i;
-         for(i=0;i<keys.length;i++){
-         if(_extraBasePaths[keys[i]] === path){
-         return keys[i];
-         }
-         }
-         return null;*/
-        return _extraBasePaths[path];
-    }
-
-    var sortMultipleArrays = function () {
-        var index = getSortedIndex(arguments[0]);
-        for (var j = 0; j < arguments.length; j++) {
-            var _arr = arguments[j].slice();
-            for (var i = 0; i < _arr.length; i++) {
-                arguments[j][i] = _arr[index[i]];
-            }
-        }
-    };
-
-    var getSortedIndex = function (arr) {
-        var index = [];
-        for (var i = 0; i < arr.length; i++) {
-            index.push(i);
-        }
-        index = index.sort((function (arr) {
-            return function (a, b) {
-                return ((arr[a] > arr[b]) ? 1 : ((arr[a] < arr[b]) ? -1 : 0));
-            };
-        })(arr));
-        return index;
-    };
-
-    function pathsToGuids(jsonObject) {
-        if (jsonObject && typeof jsonObject === 'object') {
-            var keys = Object.keys(jsonObject),
-                i, j, k, toDelete, tArray;
-
-            for (i = 0; i < keys.length; i++) {
-                if (keys[i] === 'items') {
-                    //here comes the transformation itself
-                    toDelete = [];
-                    for (j = 0; j < jsonObject.items.length; j++) {
-                        if (_pathToGuidMap[jsonObject.items[j]]) {
-                            jsonObject.items[j] = _pathToGuidMap[jsonObject.items[j]];
-                        } else if (baseGuid(jsonObject.items[j])) {
-                            jsonObject.items[j] = baseGuid(jsonObject.items[j]);
-                        } else {
-                            toDelete.push(j);
-                        }
-                    }
-
-                    if (toDelete.length > 0) {
-                        toDelete = toDelete.sort();
-                        toDelete = toDelete.reverse();
-                        for (j = 0; j < toDelete.length; j++) {
-                            jsonObject.items.splice(toDelete[j], 1);
-                            jsonObject.minItems.splice(toDelete[j], 1);
-                            jsonObject.maxItems.splice(toDelete[j], 1);
-                        }
-                    }
-                    sortMultipleArrays(jsonObject.items, jsonObject.minItems, jsonObject.maxItems);
-                } else if (keys[i] === 'aspects') {
-                    //aspects are a bunch of named path list, so we have to handle them separately
-                    tArray = Object.keys(jsonObject[keys[i]]);
-                    for (j = 0; j < tArray.length; j++) {
-                        //here comes the transformation itself
-                        toDelete = [];
-                        for (k = 0; k < jsonObject.aspects[tArray[j]].length; k++) {
-                            if (_pathToGuidMap[jsonObject.aspects[tArray[j]][k]]) {
-                                jsonObject.aspects[tArray[j]][k] = _pathToGuidMap[jsonObject.aspects[tArray[j]][k]];
-                            } else if (baseGuid(jsonObject.aspects[tArray[j]][k])) {
-                                jsonObject.aspects[tArray[j]][k] = baseGuid(jsonObject.aspects[tArray[j]][k]);
-                            } else {
-                                toDelete.push(k);
-                            }
-                        }
-
-                        if (toDelete.length > 0) {
-                            toDelete = toDelete.sort();
-                            toDelete = toDelete.reverse();
-                            for (k = 0; k < toDelete.length; k++) {
-                                jsonObject.aspects[tArray[j]].splice(toDelete[k], 1);
-                            }
-                        }
-
-                        jsonObject.aspects[tArray[j]] = jsonObject.aspects[tArray[j]].sort();
-
-                    }
-                } else {
-                    if (typeof jsonObject[keys[i]] === 'object') {
-                        jsonObject[keys[i]] = pathsToGuids(jsonObject[keys[i]]);
-                    }
-                }
-            }
-
-        }
-        return jsonObject;
-    }
-
-    function getAttributesOfNode(node) {
-        var names = _core.getOwnAttributeNames(node).sort(),
-            i,
-            result = {};
-        for (i = 0; i < names.length; i++) {
-            result[names[i]] = _core.getAttribute(node, names[i]);
-        }
-        return result;
-    }
-
-    function getRegistryOfNode(node) {
-        var names = _core.getOwnRegistryNames(node).sort(),
-            i,
-            result = {};
-        for (i = 0; i < names.length; i++) {
-            result[names[i]] = _core.getRegistry(node, names[i]);
-        }
-        return result;
-    }
-
-    function getConstraintsOfNode(node) {
-        var names = _core.getOwnConstraintNames(node).sort(),
-            i,
-            result = {};
-        for (i = 0; i < names.length; i++) {
-            result[names[i]] = _core.getConstraint(node, names[i]);
-        }
-        return result;
-    }
-
-    function getPointersOfNode(node) {
-        var names = _core.getOwnPointerNames(node).sort(),
-            i,
-            result = {},
-            target;
-        for (i = 0; i < names.length; i++) {
-            target = _core.getPointerPath(node, names[i]);
-            if (_pathToGuidMap[target] || baseGuid(target) || target === null) {
-                result[names[i]] = _pathToGuidMap[target] || baseGuid(target) || null;
-            }
-        }
-        return result;
-    }
-
-    function getOwnMemberPaths(node, setName) {
-        var base = _core.getBase(node),
-            baseMembers = base === null ? [] : _core.getMemberPaths(base, setName),
-            members = _core.getMemberPaths(node, setName),
-            ownMembers = [],
-            i;
-        for (i = 0; i < members.length; i++) {
-            if (baseMembers.indexOf(members[i]) === -1) {
-                ownMembers.push(members[i]);
-            }
-        }
-        return ownMembers;
-    }
-
-    function getSetsOfNode(node) {
-        var names = _core.getSetNames(node).sort(),
-            i, j, k,
-            result = {},
-            targetGuids,
-            attributeNames,
-            registryNames,
-            memberInfo,
-            path;
-        for (i = 0; i < names.length; i++) {
-            targetGuids = pathsToSortedGuidList(getOwnMemberPaths(node, names[i]));
-            result[names[i]] = [];
-            for (j = 0; j < targetGuids.length; j++) {
-                path = _core.getPath(_nodes[targetGuids[j]]);
-                memberInfo = {
-                    attributes: {},
-                    guid: targetGuids[j],
-                    registry: {}
-                };
-
-                //attributes
-                attributeNames = _core.getMemberAttributeNames(node, names[i], path).sort();
-                for (k = 0; k < attributeNames.length; k++) {
-                    memberInfo.attributes[attributeNames[k]] =
-                        _core.getMemberAttribute(node, names[i], path, attributeNames[k]);
-                }
-
-                //registry
-                registryNames = _core.getMemberRegistryNames(node, names[i], path).sort();
-                for (k = 0; k < registryNames.length; k++) {
-                    memberInfo.registry[registryNames[k]] =
-                        _core.getMemberRegistry(node, names[i], path, registryNames[k]);
-                }
-
-                result[names[i]].push(memberInfo);
-            }
-        }
-        return result;
-    }
-
-    function logId(nodes, id) {
-        var txtId = id + '';
-        if (nodes[id] && nodes[id].attributes && nodes[id].attributes.name) {
-            txtId = nodes[id].attributes.name + '(' + id + ')';
-        }
-
-        return txtId;
-    }
-
-    function loadImportBases(guids, root, callback) {
-        var needed = [],
-            error = null,
-            stillToGo = 0,
-            i,
-            guidList = Object.keys(guids),
-            loadBase = function (guid, path, cb) {
-                _core.loadByPath(root, path, function (err, node) {
-                    if (err) {
-                        return cb(err);
-                    }
-                    if (_core.getGuid(node) !== guid) {
-                        return cb('GUID mismatch');
-                    }
-
-                    _nodes[guid] = node;
-                    cb(null);
-                });
-            };
-
-        for (i = 0; i < guidList.length; i++) {
-            if (_nodes[guidList[i]] === undefined) {
-                needed.push(guidList[i]);
-            }
-        }
-
-        if (needed.length > 0) {
-            stillToGo = needed.length;
-            for (i = 0; i < needed.length; i++) {
-                loadBase(needed[i], guids[needed[i]], function (err) {
-                    error = error || err;
-                    if (--stillToGo === 0) {
-                        callback(error);
-                    }
-                });
-            }
-        } else {
-            return callback(null);
-        }
-
-    }
-
-    function importLibrary(core, originLibraryRoot, updatedLibraryJson, callback) {
-        _core = core;
-        _import = updatedLibraryJson;
-        _newNodeGuids = [];
-        _updatedNodeGuids = [];
-        _removedNodeGuids = [];
-        _log = '';
-
-        synchronizeRoots(originLibraryRoot, _import.root.guid);
-        exportLibrary(core, originLibraryRoot, function (err) {
-            //we do not need the returned json object as that is stored in our global _export variable
-            if (err) {
-                return callback(err);
-            }
-
-            //now we will search for the bases of the import and load them
-            loadImportBases(_import.bases, _core.getRoot(originLibraryRoot), function (err) {
-                if (err) {
-                    return callback(err);
-                }
-
-                //now we fill the insert/update/remove lists of GUIDs
-                var oldkeys = Object.keys(_export.nodes),
-                    newkeys = Object.keys(_import.nodes),
-                    i;
-
-                //TODO now we make three rounds although one would be sufficient on ordered lists
-                for (i = 0; i < oldkeys.length; i++) {
-                    if (newkeys.indexOf(oldkeys[i]) === -1) {
-                        log('node ' + logId(_export.nodes, oldkeys[i]) +
-                        ', all of its sub-types and its children will be removed');
-
-                        _removedNodeGuids.push(oldkeys[i]);
-                    }
-                }
-
-                for (i = 0; i < oldkeys.length; i++) {
-                    if (newkeys.indexOf(oldkeys[i]) !== -1) {
-                        log('node ' + logId(_export.nodes, oldkeys[i]) + ' will be updated');
-                        _updatedNodeGuids.push(oldkeys[i]);
-                    }
-                }
-
-                for (i = 0; i < newkeys.length; i++) {
-                    if (oldkeys.indexOf(newkeys[i]) === -1) {
-                        log('node ' + logId(_import.nodes, newkeys[i]) + ' will be added');
-                        _newNodeGuids.push(newkeys[i]);
-                    }
-                }
-
-                //Now we normalize the removedGUIDs by containment and remove them
-                var toDelete = [],
-                    parent;
-                for (i = 0; i < _removedNodeGuids.length; i++) {
-                    parent = _core.getParent(_nodes[_removedNodeGuids[i]]);
-                    if (parent && _removedNodeGuids.indexOf(_core.getGuid(parent)) === -1) {
-                        toDelete.push(_removedNodeGuids[i]);
-                    }
-                }
-                //and as a final step we remove all that is needed
-                for (i = 0; i < toDelete.length; i++) {
-                    _core.deleteNode(_nodes[toDelete[i]]);
-                }
-
-                //as a second step we should deal with the updated nodes
-                //we should go among containment hierarchy
-                updateNodes(_import.root.guid, null, _import.containment);
-
-                //now update inheritance chain
-                //we assume that our inheritance chain comes from the FCO and that it is identical everywhere
-                updateInheritance();
-
-                //now we can add or modify the relations of the nodes - we go along the hierarchy chain
-                updateRelations();
-
-                //finally we need to update the meta rules of each node - again along the containment hierarchy
-                updateMetaRules(_import.root.guid, _import.containment);
-
-                //after everything is done we try to synchronize the metaSheet info
-                importMetaSheetInfo(_core.getRoot(originLibraryRoot));
-
-                callback(null, _log);
-            });
-        });
-    }
-
-    function synchronizeRoots(oldRoot, newGuid) {
-        _core.setGuid(oldRoot, newGuid);
-    }
-
-    //it will update the modified nodes and create the new ones regarding their place in the hierarchy chain
-    function updateNodes(guid, parent, containmentTreeObject) {
-        if (_updatedNodeGuids.indexOf(guid) !== -1) {
-            updateNode(guid, parent);
-        }
-
-        var keys = Object.keys(containmentTreeObject),
-            i,
-            node = _nodes[guid],
-            relid;
-
-        for (i = 0; i < keys.length; i++) {
-            if (_updatedNodeGuids.indexOf(keys[i]) === -1) {
-                relid = _import.relids[keys[i]];
-                if (_core.getChildrenRelids(node).indexOf(relid) !== -1) {
-                    relid = undefined;
-                }
-                //this child is a new one so we should create
-                _nodes[keys[i]] = _core.createNode({parent: node, guid: keys[i], relid: relid});
-                addNode(keys[i]);
-            }
-            updateNodes(keys[i], node, containmentTreeObject[keys[i]]);
-        }
-    }
-
-    function updateRegistry(guid) {
-        var keys, i,
-            node = _nodes[guid],
-            jsonNode = _import.nodes[guid];
-
-        keys = _core.getOwnRegistryNames(node);
-        for (i = 0; i < keys.length; i++) {
-            _core.delRegistry(node, keys[i]);
-        }
-        keys = Object.keys(jsonNode.registry);
-        for (i = 0; i < keys.length; i++) {
-            _core.setRegistry(node, keys[i], jsonNode.registry[keys[i]]);
-        }
-    }
-
-    function updateAttributes(guid) {
-        var keys, i,
-            node = _nodes[guid],
-            jsonNode = _import.nodes[guid];
-
-        keys = _core.getOwnAttributeNames(node);
-        for (i = 0; i < keys.length; i++) {
-            _core.delAttribute(node, keys[i]);
-        }
-        keys = Object.keys(jsonNode.attributes);
-        for (i = 0; i < keys.length; i++) {
-            _core.setAttribute(node, keys[i], jsonNode.attributes[keys[i]]);
-        }
-    }
-
-    function updateConstraints(guid) {
-        var keys, i,
-            node = _nodes[guid],
-            jsonNode = _import.nodes[guid];
-        keys = _core.getOwnConstraintNames(node);
-        for (i = 0; i < keys.length; i++) {
-            _core.delConstraint(node, keys[i]);
-        }
-
-        keys = Object.keys(jsonNode.constraints || {});
-        for (i = 0; i < keys.length; i++) {
-            _core.setConstraint(node, keys[i], jsonNode.constraints[keys[i]]);
-        }
-    }
-
-    //this function does not cover relations - it means only attributes and registry have been updated here
-    function updateNode(guid, parent) {
-        //first we check if the node have to be moved
-        var node = _nodes[guid];
-
-        if (parent && _core.getParent(node) && _core.getGuid(parent) !== _core.getGuid(_core.getParent(node))) {
-            //parent changed so it has to be moved...
-            _nodes[guid] = _core.moveNode(node, parent);
-        }
-
-        updateAttributes(guid);
-        updateRegistry(guid);
-        updateConstraints(guid);
-    }
-
-    //this function doesn't not cover relations - so only attributes and registry have been taken care of here
-    function addNode(guid) {
-        //at this point we assume that an empty vessel has been already created and part of the _nodes
-        updateAttributes(guid);
-        updateRegistry(guid);
-        updateConstraints(guid);
-    }
-
-    function getInheritanceBasedGuidOrder() {
-        var inheritanceOrdered = Object.keys(_import.nodes).sort(),
-            i = 0,
-            baseGuid,
-            baseIndex;
-
-        while (i < inheritanceOrdered.length) {
-            baseGuid = _import.nodes[inheritanceOrdered[i]].base;
-            if (baseGuid) {
-                baseIndex = inheritanceOrdered.indexOf(baseGuid);
-                if (baseIndex > i) {
-                    inheritanceOrdered.splice(baseIndex, 1);
-                    inheritanceOrdered.splice(i, 0, baseGuid);
-                } else {
-                    ++i;
-                }
-            } else {
-                ++i;
-            }
-        }
-        return inheritanceOrdered;
-    }
-
-    function updateRelations() {
-        var guids = getInheritanceBasedGuidOrder(),
-            i;
-        for (i = 0; i < guids.length; i++) {
-            updateNodeRelations(guids[i]);
-        }
-    }
-
-    function updateNodeRelations(guid) {
-        // Although it is possible that we set the base pointer at this point
-        // we should go through inheritance just to be sure.
-        var node = _nodes[guid],
-            jsonNode = _import.nodes[guid],
-            keys, i, j, k, target, memberGuid;
-
-        //pointers
-        keys = _core.getOwnPointerNames(node);
-        for (i = 0; i < keys.length; i++) {
-            _core.deletePointer(node, keys[i]);
-        }
-        keys = Object.keys(jsonNode.pointers);
-        for (i = 0; i < keys.length; i++) {
-            target = jsonNode.pointers[keys[i]];
-            if (target === null) {
-                _core.setPointer(node, keys[i], null);
-            } else if (_nodes[target] && _removedNodeGuids.indexOf(target) === -1) {
-                _core.setPointer(node, keys[i], _nodes[target]);
-            } else {
-                console.log('error handling needed???!!!???');
-            }
-        }
-
-        //sets
-        keys = _core.getSetNames(node);
-        for (i = 0; i < keys.length; i++) {
-            _core.deleteSet(node, keys[i]);
-        }
-        keys = Object.keys(jsonNode.sets);
-        for (i = 0; i < keys.length; i++) {
-            //for every set we create it, go through its members...
-            _core.createSet(node, keys[i]);
-            for (j = 0; j < jsonNode.sets[keys[i]].length; j++) {
-                memberGuid = jsonNode.sets[keys[i]][j].guid;
-                if (_nodes[memberGuid]) {
-                    _core.addMember(node, keys[i], _nodes[memberGuid]);
-                    for (k in jsonNode.sets[keys[i]][j].attributes) {
-                        _core.setMemberAttribute(node, keys[i], _core.getPath(_nodes[memberGuid]), k,
-                            jsonNode.sets[keys[i]][j].attributes[k]);
-                    }
-                    for (k in jsonNode.sets[keys[i]][j].registry) {
-                        _core.setMemberRegistry(node, keys[i], _core.getPath(_nodes[memberGuid]), k,
-                            jsonNode.sets[keys[i]][j].registry[k]);
-                    }
-                }
-            }
-        }
-    }
-
-    function updateInheritance() {
-        var i,
-            guidList = Object.keys(_import.nodes),
-            base;
-        for (i = 0; i < guidList.length; i++) {
-            base = _core.getBase(_nodes[guidList[i]]);
-            if ((base && _core.getGuid(base) !== _import.nodes[guidList[i]].base) ||
-                (base === null && _import.nodes[guidList[i]].base !== null)) {
-
-                updateNodeInheritance(guidList[i]);
-            }
-        }
-    }
-
-    function updateNodeInheritance(guid) {
-        _core.setBase(_nodes[guid], _nodes[_import.nodes[guid].base]);
-    }
-
-    function updateMetaRules(guid, containmentTreeObject) {
-
-        var keys, i;
-
-        updateMeta(guid);
-
-        keys = Object.keys(containmentTreeObject);
-        for (i = 0; i < keys.length; i++) {
-            updateMetaRules(keys[i], containmentTreeObject[keys[i]]);
-        }
-    }
-
-    function updateMeta(guid) {
-        _core.clearMetaRules(_nodes[guid]);
-
-        updateAttributeMeta(guid);
-        updateChildrenMeta(guid);
-        updatePointerMeta(guid);
-        updateAspectMeta(guid);
-        updateConstraintMeta(guid);
-    }
-
-    function updateAttributeMeta(guid) {
-        var jsonMeta = _import.nodes[guid].meta.attributes || {},
-            node = _nodes[guid],
-            keys, i;
-
-        keys = Object.keys(jsonMeta);
-        for (i = 0; i < keys.length; i++) {
-            _core.setAttributeMeta(node, keys[i], jsonMeta[keys[i]]);
-        }
-    }
-
-    function updateChildrenMeta(guid) {
-        var jsonMeta = _import.nodes[guid].meta.children || {items: [], minItems: [], maxItems: []},
-            i;
-        ASSERT(jsonMeta.items.length === jsonMeta.minItems.length &&
-        jsonMeta.minItems.length === jsonMeta.maxItems.length);
-
-        _core.setChildrenMetaLimits(_nodes[guid], jsonMeta.min, jsonMeta.max);
-        for (i = 0; i < jsonMeta.items.length; i++) {
-            _core.setChildMeta(_nodes[guid], _nodes[jsonMeta.items[i]], jsonMeta.minItems[i], jsonMeta.maxItems[i]);
-        }
-    }
-
-    function updatePointerMeta(guid) {
-        var jsonMeta = _import.nodes[guid].meta.pointers || {},
-            keys = Object.keys(jsonMeta),
-            i, j;
-
-        for (i = 0; i < keys.length; i++) {
-            ASSERT(jsonMeta[keys[i]].items.length === jsonMeta[keys[i]].minItems.length &&
-            jsonMeta[keys[i]].maxItems.length === jsonMeta[keys[i]].minItems.length);
-
-            for (j = 0; j < jsonMeta[keys[i]].items.length; j++) {
-                _core.setPointerMetaTarget(_nodes[guid], keys[i], _nodes[jsonMeta[keys[i]].items[j]],
-                    jsonMeta[keys[i]].minItems[j], jsonMeta[keys[i]].maxItems[j]);
-            }
-            _core.setPointerMetaLimits(_nodes[guid], keys[i], jsonMeta[keys[i]].min, jsonMeta[keys[i]].max);
-        }
-    }
-
-    function updateAspectMeta(guid) {
-        var jsonMeta = _import.nodes[guid].meta.aspects || {},
-            keys = Object.keys(jsonMeta),
-            i, j;
-
-        for (i = 0; i < keys.length; i++) {
-            for (j = 0; j < jsonMeta[keys[i]].length; j++) {
-                _core.setAspectMetaTarget(_nodes[guid], keys[i], _nodes[jsonMeta[keys[i]][j]]);
-            }
-        }
-    }
-
-    function updateConstraintMeta(guid) {
-        var jsonMeta = _import.nodes[guid].meta.constraints || {},
-            keys = Object.keys(jsonMeta),
-            i;
-
-        for (i = 0; i < keys.length; i++) {
-            _core.setConstraint(_nodes[guid], keys[i], jsonMeta[keys[i]]);
-        }
-    }
-
-    return {
-        export: exportLibrary,
-        import: importLibrary
-    };
-});
-
 !function(e){if("object"==typeof exports&&"undefined"!=typeof module)module.exports=e();else if("function"==typeof define&&define.amd)define('superagent',[],e);else{var f;"undefined"!=typeof window?f=window:"undefined"!=typeof global?f=global:"undefined"!=typeof self&&(f=self),f.superagent=e()}}(function(){var define,module,exports;return (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
 /**
  * Module dependencies.
@@ -18091,12 +16024,3946 @@ module.exports = function(arr, fn, initial){
 });
 /*globals define*/
 /*jshint browser: true*/
+/**
+ * @author kecso / https://github.com/kecso
+ */
+define('client/js/client/undoredo',[], function () {
+    
+    function UndoRedo(_client) {
+        var
+            currentModification = null,
+            canDoUndo = false,
+            canDoRedo = false,
+            currentTarget = null,
+            addModification = function (commitHash, info) {
+                var newElement = {
+                    previous: currentModification,
+                    commit: commitHash,
+                    info: info,
+                    next: null
+                };
+                if (currentModification) {
+                    currentModification.next = newElement;
+                }
+                currentModification = newElement;
+            },
+            undo = function (branch, callback) {
+                var from, to, project;
+                if (canDoUndo && currentModification && currentModification.previous) {
+                    project = _client.getProjectObject();
+                    from = currentModification.commit;
+                    to = currentModification.previous.commit;
+                    currentModification = currentModification.previous;
+                    currentTarget = to;
+                    project.setBranchHash(branch, from, to, callback);
+                } else {
+                    callback(new Error('unable to execute undo'));
+                }
+            },
+            redo = function (branch, callback) {
+                var from, to, project;
+                if (canDoRedo && currentModification && currentModification.next) {
+                    project = _client.getProjectObject();
+                    from = currentModification.commit;
+                    to = currentModification.next.commit;
+                    currentModification = currentModification.next;
+                    currentTarget = to;
+                    project.setBranchHash(branch, from, to, callback);
+                } else {
+                    callback(new Error('unable to execute redo'));
+                }
+            },
+            clean = function () {
+                currentModification = null;
+                canDoUndo = false;
+                canDoRedo = false;
+            },
+            checkStatus = function () {
+                return {
+                    undo: currentModification ? currentModification.previous !== null &&
+                    currentModification.previous !== undefined : false,
+                    redo: currentModification ? currentModification.next !== null &&
+                    currentModification.next !== undefined : false
+                };
+            },
+            isCurrentTarget = function (commitHash) {
+                if (currentTarget === commitHash) {
+                    currentTarget = null;
+                    return true;
+                }
+                return false;
+            };
+
+        _client.addEventListener(_client.events.UNDO_AVAILABLE, function (client, parameters) {
+            canDoUndo = parameters === true;
+        });
+        _client.addEventListener(_client.events.REDO_AVAILABLE, function (client, parameters) {
+            canDoRedo = parameters === true;
+        });
+        return {
+            undo: undo,
+            redo: redo,
+            addModification: addModification,
+            clean: clean,
+            checkStatus: checkStatus,
+            isCurrentTarget: isCurrentTarget
+        };
+
+    }
+
+    return UndoRedo;
+});
+/*globals define*/
+/*jshint browser: true*/
+/**
+ * @author kecso / https://github.com/kecso
+ */
+define('client/js/client/gmeNodeGetter',['common/core/users/tojson'], function (toJson) {
+    
+
+    //getNode
+    function getNode(_id, _clientGlobal) {
+
+
+        function getParentId() {
+            //just for sure, as it may missing from the cache
+            return _clientGlobal.functions.storeNode(_clientGlobal.core.getParent(_clientGlobal.nodes[_id].node));
+        }
+
+        function getId() {
+            return _id;
+        }
+
+        function getGuid() {
+            return _clientGlobal.core.getGuid(_clientGlobal.nodes[_id].node);
+        }
+
+        function getChildrenIds() {
+            return _clientGlobal.core.getChildrenPaths(_clientGlobal.nodes[_id].node);
+        }
+
+        function getBaseId() {
+            var base = _clientGlobal.core.getBase(_clientGlobal.nodes[_id].node);
+            if (base) {
+                return _clientGlobal.functions.storeNode(base);
+            } else {
+                return null;
+            }
+
+        }
+
+        function getInheritorIds() {
+            return [];
+        }
+
+        function getAttribute(name) {
+            return _clientGlobal.core.getAttribute(_clientGlobal.nodes[_id].node, name);
+        }
+
+        function getOwnAttribute(name) {
+            return _clientGlobal.core.getOwnAttribute(_clientGlobal.nodes[_id].node, name);
+        }
+
+        function getEditableAttribute(name) {
+            var value = _clientGlobal.core.getAttribute(_clientGlobal.nodes[_id].node, name);
+            if (typeof value === 'object') {
+                return JSON.parse(JSON.stringify(value));
+            }
+            return value;
+        }
+
+        function getOwnEditableAttribute(name) {
+            var value = _clientGlobal.core.getOwnAttribute(_clientGlobal.nodes[_id].node, name);
+            if (typeof value === 'object') {
+                return JSON.parse(JSON.stringify(value));
+            }
+            return value;
+        }
+
+        function getRegistry(name) {
+            return _clientGlobal.core.getRegistry(_clientGlobal.nodes[_id].node, name);
+        }
+
+        function getOwnRegistry(name) {
+            return _clientGlobal.core.getOwnRegistry(_clientGlobal.nodes[_id].node, name);
+        }
+
+        function getEditableRegistry(name) {
+            var value = _clientGlobal.core.getRegistry(_clientGlobal.nodes[_id].node, name);
+            if (typeof value === 'object') {
+                return JSON.parse(JSON.stringify(value));
+            }
+            return value;
+        }
+
+        function getOwnEditableRegistry(name) {
+            var value = _clientGlobal.core.getOwnRegistry(_clientGlobal.nodes[_id].node, name);
+            if (typeof value === 'object') {
+                return JSON.parse(JSON.stringify(value));
+            }
+            return value;
+        }
+
+        function getPointer(name) {
+            //return _core.getPointerPath(_nodes[_id].node,name);
+            if (name === 'base') {
+                //base is a special case as it complicates with inherited children
+                return {to: _clientGlobal.core.getPath(_clientGlobal.core.getBase(_clientGlobal.nodes[_id].node)),
+                    from: []};
+            }
+            return {to: _clientGlobal.core.getPointerPath(_clientGlobal.nodes[_id].node, name), from: []};
+        }
+
+        function getOwnPointer(name) {
+            return {to: _clientGlobal.core.getOwnPointerPath(_clientGlobal.nodes[_id].node, name), from: []};
+        }
+
+        function getPointerNames() {
+            return _clientGlobal.core.getPointerNames(_clientGlobal.nodes[_id].node);
+        }
+
+        function getOwnPointerNames() {
+            return _clientGlobal.core.getOwnPointerNames(_clientGlobal.nodes[_id].node);
+        }
+
+        function getAttributeNames() {
+            return _clientGlobal.core.getAttributeNames(_clientGlobal.nodes[_id].node);
+        }
+
+        function getOwnAttributeNames() {
+            return _clientGlobal.core.getOwnAttributeNames(_clientGlobal.nodes[_id].node);
+        }
+
+        function getRegistryNames() {
+            return _clientGlobal.core.getRegistryNames(_clientGlobal.nodes[_id].node);
+        }
+
+        function getOwnRegistryNames() {
+            return _clientGlobal.core.getOwnRegistryNames(_clientGlobal.nodes[_id].node);
+        }
+
+        //SET
+        function getMemberIds(setid) {
+            return _clientGlobal.core.getMemberPaths(_clientGlobal.nodes[_id].node, setid);
+        }
+
+        function getSetNames() {
+            return _clientGlobal.core.getSetNames(_clientGlobal.nodes[_id].node);
+        }
+
+        function getMemberAttributeNames(setid, memberid) {
+            return _clientGlobal.core.getMemberAttributeNames(_clientGlobal.nodes[_id].node, setid, memberid);
+        }
+
+        function getMemberAttribute(setid, memberid, name) {
+            return _clientGlobal.core.getMemberAttribute(_clientGlobal.nodes[_id].node, setid, memberid, name);
+        }
+
+        function getEditableMemberAttribute(setid, memberid, name) {
+            var attr = _clientGlobal.core.getMemberAttribute(_clientGlobal.nodes[_id].node, setid, memberid, name);
+            if (attr !== null && attr !== undefined) {
+                return JSON.parse(JSON.stringify(attr));
+            }
+            return null;
+        }
+
+        function getMemberRegistryNames(setid, memberid) {
+            return _clientGlobal.core.getMemberRegistryNames(_clientGlobal.nodes[_id].node, setid, memberid);
+        }
+
+        function getMemberRegistry(setid, memberid, name) {
+            return _clientGlobal.core.getMemberRegistry(_clientGlobal.nodes[_id].node, setid, memberid, name);
+        }
+
+        function getEditableMemberRegistry(setid, memberid, name) {
+            var attr = _clientGlobal.core.getMemberRegistry(_clientGlobal.nodes[_id].node, setid, memberid, name);
+            if (attr !== null && attr !== undefined) {
+                return JSON.parse(JSON.stringify(attr));
+            }
+            return null;
+        }
+
+        //META
+        function getValidChildrenTypes() {
+            //return getMemberIds('ValidChildren');
+            return _clientGlobal.META.getValidChildrenTypes(_id);
+        }
+
+        //constraint functions
+        function getConstraintNames() {
+            return _clientGlobal.core.getConstraintNames(_clientGlobal.nodes[_id].node);
+        }
+
+        function getOwnConstraintNames() {
+            return _clientGlobal.core.getOwnConstraintNames(_clientGlobal.nodes[_id].node);
+        }
+
+        function getConstraint(name) {
+            return _clientGlobal.core.getConstraint(_clientGlobal.nodes[_id].node, name);
+        }
+
+        function printData() {
+            //probably we will still use it for test purposes, but now it goes officially
+            // into printing the node's json representation
+            toJson(_clientGlobal.core, _clientGlobal.nodes[_id].node, '', 'guid', function (err, jNode) {
+                _clientGlobal.logger.debug('node in JSON format[status = ', err, ']:', jNode);
+            });
+        }
+
+        function toString() {
+            return _clientGlobal.core.getAttribute(_clientGlobal.nodes[_id].node, 'name') + ' (' + _id + ')';
+        }
+
+        function getCollectionPaths(name) {
+            return _clientGlobal.core.getCollectionPaths(_clientGlobal.nodes[_id].node, name);
+        }
+
+        if (_clientGlobal.nodes[_id]) {
+            return {
+                getParentId: getParentId,
+                getId: getId,
+                getGuid: getGuid,
+                getChildrenIds: getChildrenIds,
+                getBaseId: getBaseId,
+                getInheritorIds: getInheritorIds,
+                getAttribute: getAttribute,
+                getEditableAttribute: getEditableAttribute,
+                getRegistry: getRegistry,
+                getEditableRegistry: getEditableRegistry,
+                getOwnAttribute: getOwnAttribute,
+                getOwnEditableAttribute: getOwnEditableAttribute,
+                getOwnRegistry: getOwnRegistry,
+                getOwnEditableRegistry: getOwnEditableRegistry,
+                getPointer: getPointer,
+                getPointerNames: getPointerNames,
+                getAttributeNames: getAttributeNames,
+                getRegistryNames: getRegistryNames,
+                getOwnAttributeNames: getOwnAttributeNames,
+                getOwnRegistryNames: getOwnRegistryNames,
+                getOwnPointer: getOwnPointer,
+                getOwnPointerNames: getOwnPointerNames,
+
+                //SetFunctions
+                getMemberIds: getMemberIds,
+                getSetNames: getSetNames,
+                getMemberAttributeNames: getMemberAttributeNames,
+                getMemberAttribute: getMemberAttribute,
+                getEditableMemberAttribute: getEditableMemberAttribute,
+                getMemberRegistryNames: getMemberRegistryNames,
+                getMemberRegistry: getMemberRegistry,
+                getEditableMemberRegistry: getEditableMemberRegistry,
+
+                //META functions
+                getValidChildrenTypes: getValidChildrenTypes,
+
+                //constraint functions
+                getConstraintNames: getConstraintNames,
+                getOwnConstraintNames: getOwnConstraintNames,
+                getConstraint: getConstraint,
+
+                printData: printData,
+                toString: toString,
+
+                getCollectionPaths: getCollectionPaths
+
+            };
+        }
+
+        return null;
+
+    }
+
+    return getNode;
+});
+/*globals define*/
+/*jshint browser: true*/
+/**
+ * @author kecso / https://github.com/kecso
+ */
+define('client/js/client/gmeNodeSetter',[], function () {
+    
+    function gmeNodeSetter(_clientGlobal) {
+
+        function setAttributes(path, name, value, msg) {
+            if (_clientGlobal.core && _clientGlobal.nodes[path] && typeof _clientGlobal.nodes[path].node === 'object') {
+                _clientGlobal.core.setAttribute(_clientGlobal.nodes[path].node, name, value);
+                msg = msg || 'setAttribute(' + path + ',' + name + ',' + value + ')';
+                _clientGlobal.functions.saveRoot(msg);
+            }
+        }
+
+        function delAttributes(path, name, msg) {
+            if (_clientGlobal.core && _clientGlobal.nodes[path] && typeof _clientGlobal.nodes[path].node === 'object') {
+                _clientGlobal.core.delAttribute(_clientGlobal.nodes[path].node, name);
+                msg = msg || 'delAttribute(' + path + ',' + name + ')';
+                _clientGlobal.functions.saveRoot(msg);
+            }
+        }
+
+        function setRegistry(path, name, value, msg) {
+            if (_clientGlobal.core && _clientGlobal.nodes[path] && typeof _clientGlobal.nodes[path].node === 'object') {
+                _clientGlobal.core.setRegistry(_clientGlobal.nodes[path].node, name, value);
+                msg = msg || 'setRegistry(' + path + ',' + ',' + name + ',' + value + ')';
+                _clientGlobal.functions.saveRoot(msg);
+            }
+        }
+
+        function delRegistry(path, name, msg) {
+            if (_clientGlobal.core && _clientGlobal.nodes[path] && typeof _clientGlobal.nodes[path].node === 'object') {
+                _clientGlobal.core.delRegistry(_clientGlobal.nodes[path].node, name);
+                msg = msg || 'delRegistry(' + path + ',' + ',' + name + ')';
+                _clientGlobal.functions.saveRoot(msg);
+            }
+        }
+
+        function copyMoreNodes(parameters, msg) {
+            var pathestocopy = [],
+                i,
+                j,
+                newNode;
+
+            if (typeof parameters.parentId === 'string' && _clientGlobal.nodes[parameters.parentId] &&
+                typeof _clientGlobal.nodes[parameters.parentId].node === 'object') {
+                for (i in parameters) {
+                    if (i !== 'parentId') {
+                        pathestocopy.push(i);
+                    }
+                }
+
+                msg = msg || 'copyMoreNodes(' + pathestocopy + ',' + parameters.parentId + ')';
+                if (pathestocopy.length < 1) {
+                    // empty on purpose
+                } else if (pathestocopy.length === 1) {
+                    newNode = _clientGlobal.core.copyNode(_clientGlobal.nodes[pathestocopy[0]].node,
+                        _clientGlobal.nodes[parameters.parentId].node);
+                    _clientGlobal.functions.storeNode(newNode);
+                    if (parameters[pathestocopy[0]]) {
+                        for (j in parameters[pathestocopy[0]].attributes) {
+                            if (parameters[pathestocopy[0]].attributes.hasOwnProperty(j)) {
+                                _clientGlobal.core.setAttribute(newNode, j, parameters[pathestocopy[0]].attributes[j]);
+                            }
+                        }
+                        for (j in parameters[pathestocopy[0]].registry) {
+                            if (parameters[pathestocopy[0]].registry.hasOwnProperty(j)) {
+                                _clientGlobal.core.setRegistry(newNode, j, parameters[pathestocopy[0]].registry[j]);
+                            }
+                        }
+                    }
+                    _clientGlobal.functions.saveRoot(msg);
+                } else {
+                    copyMoreNodesAsync(pathestocopy, parameters.parentId, function (err, copyarr) {
+                        var i,
+                            j;
+                        if (err) {
+                            //rollBackModification();
+                            _clientGlobal.logger.error(err);
+                        } else {
+                            for (i in copyarr) {
+                                if (copyarr.hasOwnProperty(i) && parameters[i]) {
+                                    for (j in parameters[i].attributes) {
+                                        if (parameters[i].attributes.hasOwnProperty(j)) {
+                                            _clientGlobal.core.setAttribute(copyarr[i], j, parameters[i].attributes[j]);
+                                        }
+                                    }
+                                    for (j in parameters[i].registry) {
+                                        if (parameters[i].registry.hasOwnProperty(j)) {
+                                            _clientGlobal.core.setRegistry(copyarr[i], j, parameters[i].registry[j]);
+                                        }
+                                    }
+                                }
+                            }
+                            _clientGlobal.functions.saveRoot(msg);
+                        }
+                    });
+                }
+            } else {
+                _clientGlobal.logger.error('wrong parameters for copy operation - denied -');
+            }
+        }
+
+        function copyMoreNodesAsync(nodePaths, parentPath, callback) {
+            var i,
+                tempFrom,
+                tempTo,
+                helpArray,
+                subPathArray,
+                parent,
+                returnArray,
+                checkPaths = function () {
+                    var i,
+                        result = true;
+
+                    for (i = 0; i < nodePaths.length; i += 1) {
+                        result = result && (_clientGlobal.nodes[nodePaths[i]] &&
+                            typeof _clientGlobal.nodes[nodePaths[i]].node === 'object');
+                    }
+                    return result;
+                };
+
+            if (_clientGlobal.nodes[parentPath] &&
+                typeof _clientGlobal.nodes[parentPath].node === 'object' && checkPaths()) {
+                helpArray = {};
+                subPathArray = {};
+                parent = _clientGlobal.nodes[parentPath].node;
+                returnArray = {};
+
+                //creating the 'from' object
+                tempFrom = _clientGlobal.core.createNode({
+                    parent: parent,
+                    base: _clientGlobal.core.getTypeRoot(_clientGlobal.nodes[nodePaths[0]].node)
+                });
+                //and moving every node under it
+                for (i = 0; i < nodePaths.length; i += 1) {
+                    helpArray[nodePaths[i]] = {};
+                    helpArray[nodePaths[i]].origparent =
+                        _clientGlobal.core.getParent(_clientGlobal.nodes[nodePaths[i]].node);
+                    helpArray[nodePaths[i]].tempnode =
+                        _clientGlobal.core.moveNode(_clientGlobal.nodes[nodePaths[i]].node, tempFrom);
+                    subPathArray[_clientGlobal.core.getRelid(helpArray[nodePaths[i]].tempnode)] = nodePaths[i];
+                    delete _clientGlobal.nodes[nodePaths[i]];
+                }
+
+                //do the copy
+                tempTo = _clientGlobal.core.copyNode(tempFrom, parent);
+
+                //moving back the temporary source
+                for (i = 0; i < nodePaths.length; i += 1) {
+                    helpArray[nodePaths[i]].node = _clientGlobal.core.moveNode(helpArray[nodePaths[i]].tempnode,
+                        helpArray[nodePaths[i]].origparent);
+                    _clientGlobal.functions.storeNode(helpArray[nodePaths[i]].node);
+                }
+
+                //gathering the destination nodes
+                _clientGlobal.core.loadChildren(tempTo, function (err, children) {
+                    var newNode;
+
+                    if (!err && children && children.length > 0) {
+                        for (i = 0; i < children.length; i += 1) {
+                            if (subPathArray[_clientGlobal.core.getRelid(children[i])]) {
+                                newNode = _clientGlobal.core.moveNode(children[i], parent);
+                                _clientGlobal.functions.storeNode(newNode);
+                                returnArray[subPathArray[_clientGlobal.core.getRelid(children[i])]] = newNode;
+                            } else {
+                                _clientGlobal.logger.error('635 - should never happen!!!');
+                            }
+                        }
+                        _clientGlobal.core.deleteNode(tempFrom);
+                        _clientGlobal.core.deleteNode(tempTo);
+                        callback(null, returnArray);
+                    } else {
+                        //clean up the mess and return
+                        _clientGlobal.core.deleteNode(tempFrom);
+                        _clientGlobal.core.deleteNode(tempTo);
+                        callback(err, {});
+                    }
+                });
+            }
+        }
+
+        function moveMoreNodes(parameters) {
+            var pathsToMove = [],
+                returnParams = {},
+                i,
+                j,
+                newNode;
+
+            for (i in parameters) {
+                if (parameters.hasOwnProperty(i)) {
+                    if (i !== 'parentId') {
+                        pathsToMove.push(i);
+                    }
+                }
+            }
+
+            if (pathsToMove.length > 0 &&
+                typeof parameters.parentId === 'string' &&
+                _clientGlobal.nodes[parameters.parentId] &&
+                typeof _clientGlobal.nodes[parameters.parentId].node === 'object') {
+                for (i = 0; i < pathsToMove.length; i += 1) {
+                    if (_clientGlobal.nodes[pathsToMove[i]] &&
+                        typeof _clientGlobal.nodes[pathsToMove[i]].node === 'object') {
+                        newNode = _clientGlobal.core.moveNode(_clientGlobal.nodes[pathsToMove[i]].node,
+                            _clientGlobal.nodes[parameters.parentId].node);
+                        returnParams[pathsToMove[i]] = _clientGlobal.core.getPath(newNode);
+                        if (parameters[pathsToMove[i]].attributes) {
+                            for (j in parameters[pathsToMove[i]].attributes) {
+                                if (parameters[pathsToMove[i]].attributes.hasOwnProperty(j)) {
+                                    _clientGlobal.core.setAttribute(newNode,
+                                        j, parameters[pathsToMove[i]].attributes[j]);
+                                }
+                            }
+                        }
+                        if (parameters[pathsToMove[i]].registry) {
+                            for (j in parameters[pathsToMove[i]].registry) {
+                                if (parameters[pathsToMove[i]].registry.hasOwnProperty(j)) {
+                                    _clientGlobal.core.setRegistry(newNode,
+                                        j, parameters[pathsToMove[i]].registry[j]);
+                                }
+                            }
+                        }
+
+                        delete _clientGlobal.nodes[pathsToMove[i]];
+                        _clientGlobal.functions.storeNode(newNode, true);
+                    }
+                }
+            }
+
+            return returnParams;
+        }
+
+        function createChildren(parameters, msg) {
+            //TODO we also have to check out what is happening with the sets!!!
+            var result = {},
+                paths = [],
+                nodes = [],
+                node,
+                parent = _clientGlobal.nodes[parameters.parentId].node,
+                names, i, j, index, pointer,
+                newChildren = [],
+                relations = [];
+
+            //to allow 'meaningfull' instantiation of multiple objects
+            // we have to recreate the internal relations - except the base
+            paths = Object.keys(parameters);
+            paths.splice(paths.indexOf('parentId'), 1);
+            for (i = 0; i < paths.length; i++) {
+                node = _clientGlobal.nodes[paths[i]].node;
+                nodes.push(node);
+                pointer = {};
+                names = _clientGlobal.core.getPointerNames(node);
+                index = names.indexOf('base');
+                if (index !== -1) {
+                    names.splice(index, 1);
+                }
+
+                for (j = 0; j < names.length; j++) {
+                    index = paths.indexOf(_clientGlobal.core.getPointerPath(node, names[j]));
+                    if (index !== -1) {
+                        pointer[names[j]] = index;
+                    }
+                }
+                relations.push(pointer);
+            }
+
+            //now the instantiation
+            for (i = 0; i < nodes.length; i++) {
+                newChildren.push(_clientGlobal.core.createNode({parent: parent, base: nodes[i]}));
+            }
+
+            //now for the storage and relation setting
+            for (i = 0; i < paths.length; i++) {
+                //attributes
+                names = Object.keys(parameters[paths[i]].attributes || {});
+                for (j = 0; j < names.length; j++) {
+                    _clientGlobal.core.setAttribute(newChildren[i],
+                        names[j], parameters[paths[i]].attributes[names[j]]);
+                }
+                //registry
+                names = Object.keys(parameters[paths[i]].registry || {});
+                for (j = 0; j < names.length; j++) {
+                    _clientGlobal.core.setRegistry(newChildren[i],
+                        names[j], parameters[paths[i]].registry[names[j]]);
+                }
+
+                //relations
+                names = Object.keys(relations[i]);
+                for (j = 0; j < names.length; j++) {
+                    _clientGlobal.core.setPointer(newChildren[i], names[j], newChildren[relations[i][names[j]]]);
+                }
+
+                //store
+                result[paths[i]] = _clientGlobal.functions.storeNode(newChildren[i]);
+
+            }
+
+            msg = msg || 'createChildren(' + JSON.stringify(result) + ')';
+            _clientGlobal.functions.saveRoot(msg);
+            return result;
+        }
+
+        //TODO should be removed as there is no user or public API related to this function
+        //function deleteNode(path, msg) {
+        //  if (_clientGlobal.core && _clientGlobal.nodes[path] && typeof _clientGlobal.nodes[path].node === 'object') {
+        //    _clientGlobal.core.deleteNode(_clientGlobal.nodes[path].node);
+        //    //delete _clientGlobal.nodes[path];
+        //    msg = msg || 'deleteNode(' + path + ')';
+        //    saveRoot(msg);
+        //  }
+        //}
+
+        function delMoreNodes(paths, msg) {
+            if (_clientGlobal.core) {
+                for (var i = 0; i < paths.length; i++) {
+                    if (_clientGlobal.nodes[paths[i]] && typeof _clientGlobal.nodes[paths[i]].node === 'object') {
+                        _clientGlobal.core.deleteNode(_clientGlobal.nodes[paths[i]].node);
+                        //delete _clientGlobal.nodes[paths[i]];
+                    }
+                }
+                msg = msg || 'delMoreNodes(' + paths + ')';
+                _clientGlobal.functions.saveRoot(msg);
+            }
+        }
+
+        function createChild(parameters, msg) {
+            var newID;
+
+            if (_clientGlobal.core) {
+                if (typeof parameters.parentId === 'string' && _clientGlobal.nodes[parameters.parentId] &&
+                    typeof _clientGlobal.nodes[parameters.parentId].node === 'object') {
+                    var baseNode = null;
+                    if (_clientGlobal.nodes[parameters.baseId]) {
+                        baseNode = _clientGlobal.nodes[parameters.baseId].node || baseNode;
+                    }
+                    var child = _clientGlobal.core.createNode({
+                        parent: _clientGlobal.nodes[parameters.parentId].node,
+                        base: baseNode,
+                        guid: parameters.guid,
+                        relid: parameters.relid
+                    });
+                    if (parameters.position) {
+                        _clientGlobal.core.setRegistry(child,
+                            'position',
+                            {
+                                x: parameters.position.x || 100,
+                                y: parameters.position.y || 100
+                            });
+                    } else {
+                        _clientGlobal.core.setRegistry(child, 'position', {x: 100, y: 100});
+                    }
+                    _clientGlobal.functions.storeNode(child);
+                    newID = _clientGlobal.core.getPath(child);
+                    msg = msg || 'createChild(' + parameters.parentId + ',' + parameters.baseId + ',' + newID + ')';
+                    _clientGlobal.functions.saveRoot(msg);
+                }
+            }
+
+            return newID;
+        }
+
+        function makePointer(id, name, to, msg) {
+            if (to === null) {
+                _clientGlobal.core.setPointer(_clientGlobal.nodes[id].node, name, to);
+            } else {
+
+
+                _clientGlobal.core.setPointer(_clientGlobal.nodes[id].node, name, _clientGlobal.nodes[to].node);
+            }
+
+            msg = msg || 'makePointer(' + id + ',' + name + ',' + to + ')';
+            _clientGlobal.functions.saveRoot(msg);
+        }
+
+        function delPointer(path, name, msg) {
+            if (_clientGlobal.core && _clientGlobal.nodes[path] && typeof _clientGlobal.nodes[path].node === 'object') {
+                _clientGlobal.core.deletePointer(_clientGlobal.nodes[path].node, name);
+                msg = msg || 'delPointer(' + path + ',' + name + ')';
+                _clientGlobal.functions.saveRoot(msg);
+            }
+        }
+
+
+        //MGAlike - set functions
+        function addMember(path, memberpath, setid, msg) {
+            if (_clientGlobal.nodes[path] &&
+                _clientGlobal.nodes[memberpath] &&
+                typeof _clientGlobal.nodes[path].node === 'object' &&
+                typeof _clientGlobal.nodes[memberpath].node === 'object') {
+                _clientGlobal.core.addMember(_clientGlobal.nodes[path].node,
+                    setid, _clientGlobal.nodes[memberpath].node);
+                msg = msg || 'addMember(' + path + ',' + memberpath + ',' + setid + ')';
+                _clientGlobal.functions.saveRoot(msg);
+            }
+        }
+
+        function removeMember(path, memberpath, setid, msg) {
+            if (_clientGlobal.nodes[path] &&
+                typeof _clientGlobal.nodes[path].node === 'object') {
+                _clientGlobal.core.delMember(_clientGlobal.nodes[path].node, setid, memberpath);
+                msg = msg || 'removeMember(' + path + ',' + memberpath + ',' + setid + ')';
+                _clientGlobal.functions.saveRoot(msg);
+            }
+        }
+
+        function setMemberAttribute(path, memberpath, setid, name, value, msg) {
+            if (_clientGlobal.nodes[path] && typeof _clientGlobal.nodes[path].node === 'object') {
+                _clientGlobal.core.setMemberAttribute(_clientGlobal.nodes[path].node, setid, memberpath, name, value);
+                msg = msg ||
+                    'setMemberAttribute(' + path + ',' + memberpath + ',' + setid + ',' + name + ',' + value +
+                    ')';
+                _clientGlobal.functions.saveRoot(msg);
+            }
+        }
+
+        function delMemberAttribute(path, memberpath, setid, name, msg) {
+            if (_clientGlobal.nodes[path] && typeof _clientGlobal.nodes[path].node === 'object') {
+                _clientGlobal.core.delMemberAttribute(_clientGlobal.nodes[path].node, setid, memberpath, name);
+                msg = msg || 'delMemberAttribute(' + path + ',' + memberpath + ',' + setid + ',' + name + ')';
+                _clientGlobal.functions.saveRoot(msg);
+            }
+        }
+
+        function setMemberRegistry(path, memberpath, setid, name, value, msg) {
+            if (_clientGlobal.nodes[path] && typeof _clientGlobal.nodes[path].node === 'object') {
+                _clientGlobal.core.setMemberRegistry(_clientGlobal.nodes[path].node, setid, memberpath, name, value);
+                msg = msg ||
+                    'setMemberRegistry(' + path + ',' + memberpath + ',' + setid + ',' + name + ',' + value + ')';
+                _clientGlobal.functions.saveRoot(msg);
+            }
+        }
+
+        function delMemberRegistry(path, memberpath, setid, name, msg) {
+            if (_clientGlobal.nodes[path] && typeof _clientGlobal.nodes[path].node === 'object') {
+                _clientGlobal.core.delMemberRegistry(_clientGlobal.nodes[path].node, setid, memberpath, name);
+                msg = msg || 'delMemberRegistry(' + path + ',' + memberpath + ',' + setid + ',' + name + ')';
+                _clientGlobal.functions.saveRoot(msg);
+            }
+        }
+
+        function createSet(path, setid, msg) {
+            if (_clientGlobal.nodes[path] && typeof _clientGlobal.nodes[path].node === 'object') {
+                _clientGlobal.core.createSet(_clientGlobal.nodes[path].node, setid);
+                msg = msg || 'createSet(' + path + ',' + setid + ')';
+                _clientGlobal.functions.saveRoot(msg);
+            }
+        }
+
+        function deleteSet(path, setid, msg) {
+            if (_clientGlobal.nodes[path] && typeof _clientGlobal.nodes[path].node === 'object') {
+                _clientGlobal.core.deleteSet(_clientGlobal.nodes[path].node, setid);
+                msg = msg || 'deleteSet(' + path + ',' + setid + ')';
+                _clientGlobal.functions.saveRoot(msg);
+            }
+        }
+
+        function setBase(path, basepath) {
+            /*if (_clientGlobal.core &&
+             _clientGlobal.nodes[path] && typeof _clientGlobal.nodes[path].node === 'object') {
+             _clientGlobal.core.setRegistry(_clientGlobal.nodes[path].node,'base',basepath);
+             saveRoot('setBase('+path+','+basepath+')');
+             }*/
+            if (_clientGlobal.core &&
+                _clientGlobal.nodes[path] &&
+                typeof _clientGlobal.nodes[path].node === 'object' &&
+                _clientGlobal.nodes[basepath] &&
+                typeof _clientGlobal.nodes[basepath].node === 'object') {
+                _clientGlobal.core.setBase(_clientGlobal.nodes[path].node, _clientGlobal.nodes[basepath].node);
+                _clientGlobal.functions.saveRoot('setBase(' + path + ',' + basepath + ')');
+            }
+        }
+
+        function delBase(path) {
+            /*if (_clientGlobal.core &&
+             _clientGlobal.nodes[path] && typeof _clientGlobal.nodes[path].node === 'object') {
+             _clientGlobal.core.delRegistry(_clientGlobal.nodes[path].node,'base');
+             saveRoot('delBase('+path+')');
+             }*/
+            if (_clientGlobal.core && _clientGlobal.nodes[path] && typeof _clientGlobal.nodes[path].node === 'object') {
+                _clientGlobal.core.setBase(_clientGlobal.nodes[path].node, null);
+                _clientGlobal.functions.saveRoot('delBase(' + path + ')');
+            }
+        }
+
+
+        _clientGlobal.nodeSetter = {
+            setAttributes: setAttributes,
+            delAttributes: delAttributes,
+            setRegistry: setRegistry,
+            delRegistry: delRegistry,
+            copyMoreNodes: copyMoreNodes,
+            moveMoreNodes: moveMoreNodes,
+            delMoreNodes: delMoreNodes,
+            createChild: createChild,
+            createChildren: createChildren,
+            makePointer: makePointer,
+            delPointer: delPointer,
+            addMember: addMember,
+            removeMember: removeMember,
+            setMemberAttribute: setMemberAttribute,
+            delMemberAttribute: delMemberAttribute,
+            setMemberRegistry: setMemberRegistry,
+            delMemberRegistry: delMemberRegistry,
+            createSet: createSet,
+            deleteSet: deleteSet,
+
+            setBase: setBase,
+            delBase: delBase,
+        };
+    }
+
+    return gmeNodeSetter;
+});
+/*globals define*/
+/*jshint browser: true*/
+/**
+ * @author kecso / https://github.com/kecso
+ */
+define('client/js/client/commitCache',[], function () {
+    
+
+    function commitCache(_clientGlobal) {
+        var _cache = {},
+            _timeOrder = [];
+
+        function clearCache() {
+            _cache = {};
+            _timeOrder = [];
+        }
+
+        function addCommit(commitObject) {
+            var index;
+
+            if (!_cache[commitObject._id]) {
+                _cache[commitObject._id] = commitObject;
+                index = 0;
+                while (index < _timeOrder.length && _cache[_timeOrder[index]].time > commitObject.time) {
+                    index++;
+                }
+                _timeOrder.splice(index, 0, commitObject._id);
+            }
+        }
+
+        function getNCommitsFrom(commitHash, number, callback) {
+            var fillCache,
+                returnNCommitsFromHash,
+                cacheFilled,
+                index;
+
+            fillCache = function (time, number, cb) {
+                _clientGlobal.project.getCommits(time, number, function (err, commits) {
+                    var i;
+                    if (!err && commits) {
+                        for (i = 0; i < commits.length; i++) {
+                            addCommit(commits[i]);
+                        }
+                        cb(null);
+                    } else {
+                        //we cannot get new commits from the server
+                        //we should use our very own ones
+                        cb(null);
+                    }
+                });
+            };
+            returnNCommitsFromHash = function (hash, num, cb) {
+                //now we should have all the commits in place
+                var index = _timeOrder.indexOf(hash),
+                    commits = [];
+                if (index > -1 || hash === null) {
+                    if (hash === null) {
+                        index = 0;
+                    } else {
+                        index++;
+
+                    }
+                    while (commits.length < num && index < _timeOrder.length) {
+                        commits.push(_cache[_timeOrder[index]]);
+                        index++;
+                    }
+                    cb(null, commits);
+                } else {
+                    cb('cannot found starting commit');
+                }
+            };
+            cacheFilled = function (err) {
+                if (err) {
+                    callback(err);
+                } else {
+                    returnNCommitsFromHash(commitHash, number, callback);
+                }
+            };
+
+
+            if (commitHash) {
+                if (_cache[commitHash]) {
+                    //we can be lucky :)
+                    index = _timeOrder.indexOf(commitHash);
+                    if (_timeOrder.length > index + number) {
+                        //we are lucky
+                        cacheFilled(null);
+                    } else {
+                        //not that lucky
+                        fillCache(_cache[_timeOrder[_timeOrder.length - 1]].time,
+                            number - (_timeOrder.length - (index + 1)),
+                            cacheFilled);
+                    }
+                } else {
+                    //we are not lucky enough so we have to download the commit
+                    _clientGlobal.project.loadObject(commitHash, function (err, commitObject) {
+                        if (!err && commitObject) {
+                            addCommit(commitObject);
+                            fillCache(commitObject.time, number, cacheFilled);
+                        } else {
+                            callback(err);
+                        }
+                    });
+                }
+            } else {
+                //initial call
+                fillCache((new Date()).getTime(), number, cacheFilled);
+            }
+        }
+
+        function newCommit(commitHash) {
+            if (_cache[commitHash]) {
+                return;
+            }
+
+            _clientGlobal.project.loadObject(commitHash, function (err, commitObj) {
+                if (!err && commitObj) {
+                    addCommit(commitObj);
+                }
+
+            });
+        }
+
+        _clientGlobal.commitCache = {
+            getNCommitsFrom: getNCommitsFrom,
+            clearCache: clearCache,
+            newCommit: newCommit
+        };
+    }
+
+    return commitCache;
+});
+/*globals define*/
+/*jshint browser: true*/
+/**
+ * @author kecso / https://github.com/kecso
+ */
+
+//TODO this functionality will be refactored sooon
+define('client/js/client/serverEventer',[], function () {
+    
+
+    function serverEventer(_clientGlobal) {
+        var lastGuid = '',
+            nextServerEvent = function (err, guid, parameters) {
+                lastGuid = guid || lastGuid;
+                if (!err && parameters) {
+                    switch (parameters.type) {
+                        case 'PROJECT_CREATED':
+                            _clientGlobal.eDispatcher.dispatchEvent(_clientGlobal.events.SERVER_PROJECT_CREATED,
+                                parameters.project);
+                            break;
+                        case 'PROJECT_DELETED':
+                            _clientGlobal.eDispatcher.dispatchEvent(_clientGlobal.events.SERVER_PROJECT_DELETED,
+                                parameters.project);
+                            break;
+                        case 'BRANCH_CREATED':
+                            _clientGlobal.eDispatcher.dispatchEvent(_clientGlobal.events.SERVER_BRANCH_CREATED,
+                                {
+                                    project: parameters.project,
+                                    branch: parameters.branch,
+                                    commit: parameters.commit
+                                });
+                            break;
+                        case 'BRANCH_DELETED':
+                            _clientGlobal.eDispatcher.dispatchEvent(_clientGlobal.events.SERVER_BRANCH_DELETED,
+                                {
+                                    project: parameters.project,
+                                    branch: parameters.branch
+                                });
+                            break;
+                        case 'BRANCH_UPDATED':
+                            _clientGlobal.eDispatcher.dispatchEvent(_clientGlobal.events.SERVER_BRANCH_UPDATED,
+                                {
+                                    project: parameters.project,
+                                    branch: parameters.branch,
+                                    commit: parameters.commit
+                                });
+                            break;
+                    }
+                    return _clientGlobal.db.getNextServerEvent(lastGuid, nextServerEvent);
+                } else {
+                    setTimeout(function () {
+                        return _clientGlobal.db.getNextServerEvent(lastGuid, nextServerEvent);
+                    }, 1000);
+                }
+            };
+        _clientGlobal.db.getNextServerEvent(lastGuid, nextServerEvent);
+    }
+    
+    return serverEventer;
+});
+/*globals define*/
+/*jshint browser: true*/
+/**
+ * @author kecso / https://github.com/kecso
+ */
+define('client/js/client/addon',[], function () {
+    
+
+    function AddOn(_clientGlobal) {
+        var _addOns = {},
+            _constraintCallback = function () {
+            };
+        //addOn functions
+        function startAddOn(name) {
+            if (_addOns[name] === undefined) {
+                _addOns[name] = 'loading';
+                _clientGlobal.db.simpleRequest({
+                        command: 'connectedWorkerStart',
+                        workerName: name,
+                        project: _clientGlobal.projectName,
+                        branch: _clientGlobal.branch
+                    },
+                    function (err, id) {
+                        if (err) {
+                            _clientGlobal.logger.error('starting addon failed ' + err);
+                            delete _addOns[name];
+                            return _clientGlobal.logger.error(err);
+                        }
+
+                        _clientGlobal.logger.debug('started addon ' + name + ' ' + id);
+                        _addOns[name] = id;
+                    });
+            }
+
+        }
+
+        function queryAddOn(name, query, callback) {
+            if (!_addOns[name] || _addOns[name] === 'loading') {
+                return callback(new Error('no such addOn is ready for queries'));
+            }
+            _clientGlobal.db.simpleQuery(_addOns[name], query, callback);
+        }
+
+        function stopAddOn(name, callback) {
+            if (_addOns[name] && _addOns[name] !== 'loading') {
+                _clientGlobal.db.simpleResult(_addOns[name], callback);
+                delete _addOns[name];
+            } else {
+                callback(_addOns[name] ? new Error('addon loading') : null);
+            }
+        }
+
+        //generic project related addOn handling
+        function updateRunningAddOns(root) {
+            var i,
+                neededAddOns,
+                runningAddOns,
+                callback = function (err) {
+                    _clientGlobal.logger.error(err);
+                };
+
+            if (_clientGlobal.gmeConfig.addOn.enable === true) {
+                neededAddOns = _clientGlobal.core.getRegistry(root, 'usedAddOns');
+                runningAddOns = getRunningAddOnNames();
+                neededAddOns = neededAddOns ? neededAddOns.split(' ') : [];
+                for (i = 0; i < neededAddOns.length; i += 1) {
+                    if (!_addOns[neededAddOns[i]]) {
+                        startAddOn(neededAddOns[i]);
+                    }
+                }
+                for (i = 0; i < runningAddOns.length; i += 1) {
+                    if (neededAddOns.indexOf(runningAddOns[i]) === -1) {
+                        stopAddOn(runningAddOns[i], callback);
+                    }
+                }
+            }
+        }
+
+        function stopRunningAddOns() {
+            var i,
+                keys,
+                callback;
+
+            if (_clientGlobal.gmeConfig.addOn.enable === true) {
+                keys = Object.keys(_addOns);
+                callback = function (err) {
+                    if (err) {
+                        _clientGlobal.logger.error('stopAddOn' + err);
+                    }
+                };
+
+                for (i = 0; i < keys.length; i++) {
+                    stopAddOn(keys[i], callback);
+                }
+            }
+        }
+
+        function getRunningAddOnNames() {
+            var i,
+                names = [],
+                keys = Object.keys(_addOns);
+            for (i = 0; i < keys.length; i++) {
+                if (_addOns[keys[i]] !== 'loading') {
+                    names.push(keys[i]);
+                }
+            }
+            return names;
+        }
+
+        //core addOns
+        //history
+        function getDetailedHistoryAsync(callback) {
+            if (_addOns.hasOwnProperty('HistoryAddOn') && _addOns.HistoryAddOn !== 'loading') {
+                queryAddOn('HistoryAddOn', {}, callback);
+            } else {
+                callback(new Error('history information is not available'));
+            }
+        }
+
+        //constraint
+        function validateProjectAsync(callback) {
+            callback = callback || _constraintCallback || function (/*err, result*/) {
+                };
+            if (_addOns.hasOwnProperty('ConstraintAddOn') && _addOns.ConstraintAddOn !== 'loading') {
+                queryAddOn('ConstraintAddOn', {querytype: 'checkProject'}, callback);
+            } else {
+                callback(new Error('constraint checking is not available'));
+            }
+        }
+
+        function validateModelAsync(path, callback) {
+            callback = callback || _constraintCallback || function (/* err, result */) {
+                };
+            if (_addOns.hasOwnProperty('ConstraintAddOn') && _addOns.ConstraintAddOn !== 'loading') {
+                queryAddOn('ConstraintAddOn', {querytype: 'checkModel', path: path}, callback);
+            } else {
+                callback(new Error('constraint checking is not available'));
+            }
+        }
+
+        function validateNodeAsync(path, callback) {
+            callback = callback || _constraintCallback || function (/* err, result */) {
+                };
+            if (_addOns.hasOwnProperty('ConstraintAddOn') && _addOns.ConstraintAddOn !== 'loading') {
+                queryAddOn('ConstraintAddOn', {querytype: 'checkNode', path: path}, callback);
+            } else {
+                callback(new Error('constraint checking is not available'));
+            }
+        }
+
+        function setValidationCallback(cFunction) {
+            if (typeof cFunction === 'function' || cFunction === null) {
+                _constraintCallback = cFunction;
+            }
+        }
+
+        //core addOns end
+
+        _clientGlobal.addOn = {
+            startAddOn: startAddOn,
+            queryAddOn: queryAddOn,
+            stopAddOn: stopAddOn,
+            updateRunningAddOns: updateRunningAddOns,
+            stopRunningAddOns: stopRunningAddOns,
+            getDetailedHistoryAsync: getDetailedHistoryAsync,
+            validateProjectAsync: validateProjectAsync,
+            validateModelAsync: validateModelAsync,
+            validateNodeAsync: validateNodeAsync,
+            setValidationCallback: setValidationCallback
+        };
+    }
+
+    return AddOn;
+});
+/*globals define*/
+/*jshint node: true, browser: true*/
 
 /**
  * @author kecso / https://github.com/kecso
  */
 
-define('client/js/client',[
+define('common/core/users/serialization',['common/util/assert'], function (ASSERT) {
+
+    
+    var _nodes = {},
+        _core = null,
+        _pathToGuidMap = {},
+        _guidKeys = [], //ordered list of GUIDs
+        _extraBasePaths = {},
+        _export = {},
+        _import = {},
+        _newNodeGuids = [],
+        _removedNodeGuids = [],
+        _updatedNodeGuids = [],
+        _log = '';
+
+    function log(txt) {
+        if (_log) {
+            _log += '\n' + txt;
+        } else {
+            _log = '' + txt;
+        }
+    }
+
+    function exportLibrary(core, libraryRoot, callback) {
+        //initialization
+        _core = core;
+        _nodes = {};
+        _pathToGuidMap = {};
+        _guidKeys = [];
+        _extraBasePaths = {};
+        _export = {};
+
+        //loading all library element
+        gatherNodesSlowly(libraryRoot, function (err) {
+            if (err) {
+                return callback(err);
+            }
+
+            _guidKeys = _guidKeys.sort();
+            gatherAncestors(); //collecting the 'external' base classes - probably we should avoid these
+
+            var keys = Object.keys(_extraBasePaths),
+                i;
+            _export.bases = {};
+            for (i = 0; i < keys.length; i++) {
+                _export.bases[_extraBasePaths[keys[i]]] = keys[i];
+            }
+
+            //_export.bases = _extraBasePaths;
+            // we save this info alongside with the library export, to be on the safe side
+
+            _export.root = getLibraryRootInfo(libraryRoot);
+            _export.relids = getRelIdInfo();
+            _export.containment = {};
+            fillContainmentTree(libraryRoot, _export.containment);
+            _export.nodes = getNodesData();
+
+            //we export MetaSheet info only if not the whole project is exported!!!
+            _export.metaSheets = core.getParent(libraryRoot) ? getMetaSheetInfo(_core.getRoot(libraryRoot)) : {};
+
+            callback(null, _export);
+
+        });
+    }
+
+    function getMetaSheetInfo(root) {
+        var getMemberRegistry = function (setname, memberpath) {
+                var names = _core.getMemberRegistryNames(root, setname, memberpath),
+                    i,
+                    registry = {};
+                for (i = 0; i < names.length; i++) {
+                    registry[names[i]] = _core.getMemberRegistry(root, setname, memberpath, names[i]);
+                }
+                return registry;
+            },
+            getMemberAttributes = function (setname, memberpath) {
+                var names = _core.getMemberAttributeNames(root, setname, memberpath),
+                    i,
+                    attributes = {};
+                for (i = 0; i < names.length; i++) {
+                    attributes[names[i]] = _core.getMemberAttribute(root, setname, memberpath, names[i]);
+                }
+                return attributes;
+            },
+            getRegistryEntry = function (setname) {
+                var index = registry.length;
+
+                while (--index >= 0) {
+                    if (registry[index].SetID === setname) {
+                        return registry[index];
+                    }
+                }
+                return {};
+            },
+            sheets = {},
+            registry = _core.getRegistry(root, 'MetaSheets'),
+            keys = _core.getSetNames(root),
+            elements, guid,
+            i,
+            j;
+
+        for (i = 0; i < keys.length; i++) {
+            if (keys[i].indexOf('MetaAspectSet') === 0) {
+                elements = _core.getMemberPaths(root, keys[i]);
+                for (j = 0; j < elements.length; j++) {
+                    guid = _pathToGuidMap[elements[j]] || _extraBasePaths[elements[j]];
+                    if (guid) {
+                        sheets[keys[i]] = sheets[keys[i]] || {};
+                        sheets[keys[i]][guid] = {
+                            registry: getMemberRegistry(keys[i], elements[j]),
+                            attributes: getMemberAttributes(keys[i], elements[j])
+                        };
+                    }
+                }
+
+                if (sheets[keys[i]] && keys[i] !== 'MetaAspectSet') {
+                    //we add the global registry values as well
+                    sheets[keys[i]].global = getRegistryEntry(keys[i]);
+                }
+            }
+        }
+        console.log('sheets', sheets);
+        return sheets;
+    }
+
+    function importMetaSheetInfo(root) {
+        var setMemberAttributesAndRegistry = function (setname, memberguid) {
+                var attributes = oldSheets[setname][memberguid].attributes || {},
+                    registry = oldSheets[setname][memberguid].registry || {},
+                    keys = Object.keys(attributes),
+                    i;
+
+                for (i = 0; i < keys.length; i++) {
+                    _core.setMemberAttribute(root, setname, _core.getPath(_nodes[memberguid]), keys[i],
+                        attributes[keys[i]]);
+                }
+                keys = Object.keys(registry);
+                for (i = 0; i < keys.length; i++) {
+                    _core.setMemberRegistry(root, setname, _core.getPath(_nodes[memberguid]), keys[i],
+                        registry[keys[i]]);
+                }
+            },
+            updateSheet = function (name) {
+                //the removed object should be already removed...
+                //if some element is extra in the place of import, then it stays untouched
+                var oldMemberGuids = Object.keys(oldSheets[name]),
+                    i;
+                oldMemberGuids.splice(oldMemberGuids.indexOf('global'), 1);
+                for (i = 0; i < oldMemberGuids.length; i++) {
+                    _core.addMember(root, name, _nodes[oldMemberGuids[i]]);
+                    setMemberAttributesAndRegistry(name, oldMemberGuids[i]);
+                }
+            },
+            addSheet = function (name) {
+                var registry = JSON.parse(JSON.stringify(_core.getRegistry(root, 'MetaSheets')) || {}),
+                    i,
+                    memberpath,
+                    memberguids = Object.keys(oldSheets[name]);
+
+                memberguids.splice(memberguids.indexOf('global'), 1);
+
+                if (name !== 'MetaAspectSet') {
+                    registry.push(oldSheets[name].global);
+                    _core.setRegistry(root, 'MetaSheets', registry);
+                }
+
+                _core.createSet(root, name);
+                for (i = 0; i < memberguids.length; i++) {
+                    memberpath = _core.getPath(_nodes[memberguids[i]]);
+                    _core.addMember(root, name, _nodes[memberguids[i]]);
+                    setMemberAttributesAndRegistry(name, memberguids[i]);
+                }
+            },
+            oldSheets = _import.metaSheets || {},
+            newSheets = _export.metaSheets || {},
+            oldSheetNames = Object.keys(oldSheets),
+            newSheetNames = Object.keys(newSheets),
+            i;
+
+        for (i = 0; i < oldSheetNames.length; i++) {
+            if (newSheetNames.indexOf(oldSheetNames[i]) !== -1) {
+                updateSheet(oldSheetNames[i]);
+            } else {
+                addSheet(oldSheetNames[i]);
+            }
+        }
+    }
+
+    function getLibraryRootInfo(node) {
+        return {
+            path: _core.getPath(node),
+            guid: _core.getGuid(node)
+        };
+    }
+
+    function gatherNodesSlowly(node, callback) {
+        _core.loadSubTree(node, function (err, nodes) {
+            var guid, i;
+            if (!err && nodes) {
+                for (i = 0; i < nodes.length; i++) {
+                    guid = _core.getGuid(nodes[i]);
+                    _nodes[guid] = nodes[i];
+                    _guidKeys.push(guid);
+                    _pathToGuidMap[_core.getPath(nodes[i])] = guid;
+                }
+                callback(null);
+            } else {
+                callback(err);
+            }
+        });
+    }
+
+    function gatherAncestors() {
+        //this function inserts the needed base classes which were not included in the library
+        var i, base, guid;
+        for (i = 0; i < _guidKeys.length; i++) {
+            base = _nodes[_guidKeys[i]];
+            while (base !== null) {
+                guid = _core.getGuid(base);
+                if (!_nodes[guid]) {
+                    _nodes[guid] = base;
+                    _extraBasePaths[_core.getPath(base)] = guid;
+                } else if (_guidKeys.indexOf(guid) === -1) {
+                    _extraBasePaths[_core.getPath(base)] = guid;
+                }
+                base = _core.getBase(base);
+            }
+        }
+    }
+
+    function pathsToSortedGuidList(pathsList) { //it will also filter out not wanted elements
+        var i, guids = [];
+        for (i = 0; i < pathsList.length; i++) {
+            if (_pathToGuidMap[pathsList[i]]) {
+                guids.push(_pathToGuidMap[pathsList[i]]);
+            }
+        }
+        return guids.sort();
+    }
+
+    function fillContainmentTree(node, myTreeObject) {
+        var childrenGuids = pathsToSortedGuidList(_core.getChildrenPaths(node)),
+            i;
+        for (i = 0; i < childrenGuids.length; i++) {
+            myTreeObject[childrenGuids[i]] = {};
+            fillContainmentTree(_nodes[childrenGuids[i]], myTreeObject[childrenGuids[i]]);
+        }
+    }
+
+    function getRelIdInfo() {
+        var i,
+            relIdInfo = {};
+        for (i = 0; i < _guidKeys.length; i++) {
+            relIdInfo[_guidKeys[i]] = _core.getRelid(_nodes[_guidKeys[i]]);
+        }
+        return relIdInfo;
+    }
+
+    function getNodesData() {
+        var data = {},
+            i;
+        for (i = 0; i < _guidKeys.length; i++) {
+            data[_guidKeys[i]] = getNodeData(_nodes[_guidKeys[i]]);
+        }
+        return data;
+    }
+
+    function getNodeData(node) {
+        /*{
+         //only the ones defined on this level
+         attributes:{name:value},
+         base:GUID,
+         registry:{name:value},
+         parent:GUID,
+         pointers:{name:targetGuid},
+         sets:{name:[{guid:GUID,attributes:{name:value},registy:{name:value}}]}
+         meta:{}
+         }*/
+        return {
+            attributes: getAttributesOfNode(node),
+            base: _core.getBase(node) ? _core.getGuid(_core.getBase(node)) : null,
+            meta: pathsToGuids(JSON.parse(JSON.stringify(_core.getOwnJsonMeta(node)) || {})),
+            parent: _core.getParent(node) ? _core.getGuid(_core.getParent(node)) : null,
+            pointers: getPointersOfNode(node),
+            registry: getRegistryOfNode(node),
+            sets: getSetsOfNode(node),
+            constraints: getConstraintsOfNode(node)
+        };
+    }
+
+    function baseGuid(path) {
+        /*var keys = Object.keys(_extraBasePaths),
+         i;
+         for(i=0;i<keys.length;i++){
+         if(_extraBasePaths[keys[i]] === path){
+         return keys[i];
+         }
+         }
+         return null;*/
+        return _extraBasePaths[path];
+    }
+
+    var sortMultipleArrays = function () {
+        var index = getSortedIndex(arguments[0]);
+        for (var j = 0; j < arguments.length; j++) {
+            var _arr = arguments[j].slice();
+            for (var i = 0; i < _arr.length; i++) {
+                arguments[j][i] = _arr[index[i]];
+            }
+        }
+    };
+
+    var getSortedIndex = function (arr) {
+        var index = [];
+        for (var i = 0; i < arr.length; i++) {
+            index.push(i);
+        }
+        index = index.sort((function (arr) {
+            return function (a, b) {
+                return ((arr[a] > arr[b]) ? 1 : ((arr[a] < arr[b]) ? -1 : 0));
+            };
+        })(arr));
+        return index;
+    };
+
+    function pathsToGuids(jsonObject) {
+        if (jsonObject && typeof jsonObject === 'object') {
+            var keys = Object.keys(jsonObject),
+                i, j, k, toDelete, tArray;
+
+            for (i = 0; i < keys.length; i++) {
+                if (keys[i] === 'items') {
+                    //here comes the transformation itself
+                    toDelete = [];
+                    for (j = 0; j < jsonObject.items.length; j++) {
+                        if (_pathToGuidMap[jsonObject.items[j]]) {
+                            jsonObject.items[j] = _pathToGuidMap[jsonObject.items[j]];
+                        } else if (baseGuid(jsonObject.items[j])) {
+                            jsonObject.items[j] = baseGuid(jsonObject.items[j]);
+                        } else {
+                            toDelete.push(j);
+                        }
+                    }
+
+                    if (toDelete.length > 0) {
+                        toDelete = toDelete.sort();
+                        toDelete = toDelete.reverse();
+                        for (j = 0; j < toDelete.length; j++) {
+                            jsonObject.items.splice(toDelete[j], 1);
+                            jsonObject.minItems.splice(toDelete[j], 1);
+                            jsonObject.maxItems.splice(toDelete[j], 1);
+                        }
+                    }
+                    sortMultipleArrays(jsonObject.items, jsonObject.minItems, jsonObject.maxItems);
+                } else if (keys[i] === 'aspects') {
+                    //aspects are a bunch of named path list, so we have to handle them separately
+                    tArray = Object.keys(jsonObject[keys[i]]);
+                    for (j = 0; j < tArray.length; j++) {
+                        //here comes the transformation itself
+                        toDelete = [];
+                        for (k = 0; k < jsonObject.aspects[tArray[j]].length; k++) {
+                            if (_pathToGuidMap[jsonObject.aspects[tArray[j]][k]]) {
+                                jsonObject.aspects[tArray[j]][k] = _pathToGuidMap[jsonObject.aspects[tArray[j]][k]];
+                            } else if (baseGuid(jsonObject.aspects[tArray[j]][k])) {
+                                jsonObject.aspects[tArray[j]][k] = baseGuid(jsonObject.aspects[tArray[j]][k]);
+                            } else {
+                                toDelete.push(k);
+                            }
+                        }
+
+                        if (toDelete.length > 0) {
+                            toDelete = toDelete.sort();
+                            toDelete = toDelete.reverse();
+                            for (k = 0; k < toDelete.length; k++) {
+                                jsonObject.aspects[tArray[j]].splice(toDelete[k], 1);
+                            }
+                        }
+
+                        jsonObject.aspects[tArray[j]] = jsonObject.aspects[tArray[j]].sort();
+
+                    }
+                } else {
+                    if (typeof jsonObject[keys[i]] === 'object') {
+                        jsonObject[keys[i]] = pathsToGuids(jsonObject[keys[i]]);
+                    }
+                }
+            }
+
+        }
+        return jsonObject;
+    }
+
+    function getAttributesOfNode(node) {
+        var names = _core.getOwnAttributeNames(node).sort(),
+            i,
+            result = {};
+        for (i = 0; i < names.length; i++) {
+            result[names[i]] = _core.getAttribute(node, names[i]);
+        }
+        return result;
+    }
+
+    function getRegistryOfNode(node) {
+        var names = _core.getOwnRegistryNames(node).sort(),
+            i,
+            result = {};
+        for (i = 0; i < names.length; i++) {
+            result[names[i]] = _core.getRegistry(node, names[i]);
+        }
+        return result;
+    }
+
+    function getConstraintsOfNode(node) {
+        var names = _core.getOwnConstraintNames(node).sort(),
+            i,
+            result = {};
+        for (i = 0; i < names.length; i++) {
+            result[names[i]] = _core.getConstraint(node, names[i]);
+        }
+        return result;
+    }
+
+    function getPointersOfNode(node) {
+        var names = _core.getOwnPointerNames(node).sort(),
+            i,
+            result = {},
+            target;
+        for (i = 0; i < names.length; i++) {
+            target = _core.getPointerPath(node, names[i]);
+            if (_pathToGuidMap[target] || baseGuid(target) || target === null) {
+                result[names[i]] = _pathToGuidMap[target] || baseGuid(target) || null;
+            }
+        }
+        return result;
+    }
+
+    function getOwnMemberPaths(node, setName) {
+        var base = _core.getBase(node),
+            baseMembers = base === null ? [] : _core.getMemberPaths(base, setName),
+            members = _core.getMemberPaths(node, setName),
+            ownMembers = [],
+            i;
+        for (i = 0; i < members.length; i++) {
+            if (baseMembers.indexOf(members[i]) === -1) {
+                ownMembers.push(members[i]);
+            }
+        }
+        return ownMembers;
+    }
+
+    function getSetsOfNode(node) {
+        var names = _core.getSetNames(node).sort(),
+            i, j, k,
+            result = {},
+            targetGuids,
+            attributeNames,
+            registryNames,
+            memberInfo,
+            path;
+        for (i = 0; i < names.length; i++) {
+            targetGuids = pathsToSortedGuidList(getOwnMemberPaths(node, names[i]));
+            result[names[i]] = [];
+            for (j = 0; j < targetGuids.length; j++) {
+                path = _core.getPath(_nodes[targetGuids[j]]);
+                memberInfo = {
+                    attributes: {},
+                    guid: targetGuids[j],
+                    registry: {}
+                };
+
+                //attributes
+                attributeNames = _core.getMemberAttributeNames(node, names[i], path).sort();
+                for (k = 0; k < attributeNames.length; k++) {
+                    memberInfo.attributes[attributeNames[k]] =
+                        _core.getMemberAttribute(node, names[i], path, attributeNames[k]);
+                }
+
+                //registry
+                registryNames = _core.getMemberRegistryNames(node, names[i], path).sort();
+                for (k = 0; k < registryNames.length; k++) {
+                    memberInfo.registry[registryNames[k]] =
+                        _core.getMemberRegistry(node, names[i], path, registryNames[k]);
+                }
+
+                result[names[i]].push(memberInfo);
+            }
+        }
+        return result;
+    }
+
+    function logId(nodes, id) {
+        var txtId = id + '';
+        if (nodes[id] && nodes[id].attributes && nodes[id].attributes.name) {
+            txtId = nodes[id].attributes.name + '(' + id + ')';
+        }
+
+        return txtId;
+    }
+
+    function loadImportBases(guids, root, callback) {
+        var needed = [],
+            error = null,
+            stillToGo = 0,
+            i,
+            guidList = Object.keys(guids),
+            loadBase = function (guid, path, cb) {
+                _core.loadByPath(root, path, function (err, node) {
+                    if (err) {
+                        return cb(err);
+                    }
+                    if (_core.getGuid(node) !== guid) {
+                        return cb('GUID mismatch');
+                    }
+
+                    _nodes[guid] = node;
+                    cb(null);
+                });
+            };
+
+        for (i = 0; i < guidList.length; i++) {
+            if (_nodes[guidList[i]] === undefined) {
+                needed.push(guidList[i]);
+            }
+        }
+
+        if (needed.length > 0) {
+            stillToGo = needed.length;
+            for (i = 0; i < needed.length; i++) {
+                loadBase(needed[i], guids[needed[i]], function (err) {
+                    error = error || err;
+                    if (--stillToGo === 0) {
+                        callback(error);
+                    }
+                });
+            }
+        } else {
+            return callback(null);
+        }
+
+    }
+
+    function importLibrary(core, originLibraryRoot, updatedLibraryJson, callback) {
+        _core = core;
+        _import = updatedLibraryJson;
+        _newNodeGuids = [];
+        _updatedNodeGuids = [];
+        _removedNodeGuids = [];
+        _log = '';
+
+        synchronizeRoots(originLibraryRoot, _import.root.guid);
+        exportLibrary(core, originLibraryRoot, function (err) {
+            //we do not need the returned json object as that is stored in our global _export variable
+            if (err) {
+                return callback(err);
+            }
+
+            //now we will search for the bases of the import and load them
+            loadImportBases(_import.bases, _core.getRoot(originLibraryRoot), function (err) {
+                if (err) {
+                    return callback(err);
+                }
+
+                //now we fill the insert/update/remove lists of GUIDs
+                var oldkeys = Object.keys(_export.nodes),
+                    newkeys = Object.keys(_import.nodes),
+                    i;
+
+                //TODO now we make three rounds although one would be sufficient on ordered lists
+                for (i = 0; i < oldkeys.length; i++) {
+                    if (newkeys.indexOf(oldkeys[i]) === -1) {
+                        log('node ' + logId(_export.nodes, oldkeys[i]) +
+                        ', all of its sub-types and its children will be removed');
+
+                        _removedNodeGuids.push(oldkeys[i]);
+                    }
+                }
+
+                for (i = 0; i < oldkeys.length; i++) {
+                    if (newkeys.indexOf(oldkeys[i]) !== -1) {
+                        log('node ' + logId(_export.nodes, oldkeys[i]) + ' will be updated');
+                        _updatedNodeGuids.push(oldkeys[i]);
+                    }
+                }
+
+                for (i = 0; i < newkeys.length; i++) {
+                    if (oldkeys.indexOf(newkeys[i]) === -1) {
+                        log('node ' + logId(_import.nodes, newkeys[i]) + ' will be added');
+                        _newNodeGuids.push(newkeys[i]);
+                    }
+                }
+
+                //Now we normalize the removedGUIDs by containment and remove them
+                var toDelete = [],
+                    parent;
+                for (i = 0; i < _removedNodeGuids.length; i++) {
+                    parent = _core.getParent(_nodes[_removedNodeGuids[i]]);
+                    if (parent && _removedNodeGuids.indexOf(_core.getGuid(parent)) === -1) {
+                        toDelete.push(_removedNodeGuids[i]);
+                    }
+                }
+                //and as a final step we remove all that is needed
+                for (i = 0; i < toDelete.length; i++) {
+                    _core.deleteNode(_nodes[toDelete[i]]);
+                }
+
+                //as a second step we should deal with the updated nodes
+                //we should go among containment hierarchy
+                updateNodes(_import.root.guid, null, _import.containment);
+
+                //now update inheritance chain
+                //we assume that our inheritance chain comes from the FCO and that it is identical everywhere
+                updateInheritance();
+
+                //now we can add or modify the relations of the nodes - we go along the hierarchy chain
+                updateRelations();
+
+                //finally we need to update the meta rules of each node - again along the containment hierarchy
+                updateMetaRules(_import.root.guid, _import.containment);
+
+                //after everything is done we try to synchronize the metaSheet info
+                importMetaSheetInfo(_core.getRoot(originLibraryRoot));
+
+                callback(null, _log);
+            });
+        });
+    }
+
+    function synchronizeRoots(oldRoot, newGuid) {
+        _core.setGuid(oldRoot, newGuid);
+    }
+
+    //it will update the modified nodes and create the new ones regarding their place in the hierarchy chain
+    function updateNodes(guid, parent, containmentTreeObject) {
+        if (_updatedNodeGuids.indexOf(guid) !== -1) {
+            updateNode(guid, parent);
+        }
+
+        var keys = Object.keys(containmentTreeObject),
+            i,
+            node = _nodes[guid],
+            relid;
+
+        for (i = 0; i < keys.length; i++) {
+            if (_updatedNodeGuids.indexOf(keys[i]) === -1) {
+                relid = _import.relids[keys[i]];
+                if (_core.getChildrenRelids(node).indexOf(relid) !== -1) {
+                    relid = undefined;
+                }
+                //this child is a new one so we should create
+                _nodes[keys[i]] = _core.createNode({parent: node, guid: keys[i], relid: relid});
+                addNode(keys[i]);
+            }
+            updateNodes(keys[i], node, containmentTreeObject[keys[i]]);
+        }
+    }
+
+    function updateRegistry(guid) {
+        var keys, i,
+            node = _nodes[guid],
+            jsonNode = _import.nodes[guid];
+
+        keys = _core.getOwnRegistryNames(node);
+        for (i = 0; i < keys.length; i++) {
+            _core.delRegistry(node, keys[i]);
+        }
+        keys = Object.keys(jsonNode.registry);
+        for (i = 0; i < keys.length; i++) {
+            _core.setRegistry(node, keys[i], jsonNode.registry[keys[i]]);
+        }
+    }
+
+    function updateAttributes(guid) {
+        var keys, i,
+            node = _nodes[guid],
+            jsonNode = _import.nodes[guid];
+
+        keys = _core.getOwnAttributeNames(node);
+        for (i = 0; i < keys.length; i++) {
+            _core.delAttribute(node, keys[i]);
+        }
+        keys = Object.keys(jsonNode.attributes);
+        for (i = 0; i < keys.length; i++) {
+            _core.setAttribute(node, keys[i], jsonNode.attributes[keys[i]]);
+        }
+    }
+
+    function updateConstraints(guid) {
+        var keys, i,
+            node = _nodes[guid],
+            jsonNode = _import.nodes[guid];
+        keys = _core.getOwnConstraintNames(node);
+        for (i = 0; i < keys.length; i++) {
+            _core.delConstraint(node, keys[i]);
+        }
+
+        keys = Object.keys(jsonNode.constraints || {});
+        for (i = 0; i < keys.length; i++) {
+            _core.setConstraint(node, keys[i], jsonNode.constraints[keys[i]]);
+        }
+    }
+
+    //this function does not cover relations - it means only attributes and registry have been updated here
+    function updateNode(guid, parent) {
+        //first we check if the node have to be moved
+        var node = _nodes[guid];
+
+        if (parent && _core.getParent(node) && _core.getGuid(parent) !== _core.getGuid(_core.getParent(node))) {
+            //parent changed so it has to be moved...
+            _nodes[guid] = _core.moveNode(node, parent);
+        }
+
+        updateAttributes(guid);
+        updateRegistry(guid);
+        updateConstraints(guid);
+    }
+
+    //this function doesn't not cover relations - so only attributes and registry have been taken care of here
+    function addNode(guid) {
+        //at this point we assume that an empty vessel has been already created and part of the _nodes
+        updateAttributes(guid);
+        updateRegistry(guid);
+        updateConstraints(guid);
+    }
+
+    function getInheritanceBasedGuidOrder() {
+        var inheritanceOrdered = Object.keys(_import.nodes).sort(),
+            i = 0,
+            baseGuid,
+            baseIndex;
+
+        while (i < inheritanceOrdered.length) {
+            baseGuid = _import.nodes[inheritanceOrdered[i]].base;
+            if (baseGuid) {
+                baseIndex = inheritanceOrdered.indexOf(baseGuid);
+                if (baseIndex > i) {
+                    inheritanceOrdered.splice(baseIndex, 1);
+                    inheritanceOrdered.splice(i, 0, baseGuid);
+                } else {
+                    ++i;
+                }
+            } else {
+                ++i;
+            }
+        }
+        return inheritanceOrdered;
+    }
+
+    function updateRelations() {
+        var guids = getInheritanceBasedGuidOrder(),
+            i;
+        for (i = 0; i < guids.length; i++) {
+            updateNodeRelations(guids[i]);
+        }
+    }
+
+    function updateNodeRelations(guid) {
+        // Although it is possible that we set the base pointer at this point
+        // we should go through inheritance just to be sure.
+        var node = _nodes[guid],
+            jsonNode = _import.nodes[guid],
+            keys, i, j, k, target, memberGuid;
+
+        //pointers
+        keys = _core.getOwnPointerNames(node);
+        for (i = 0; i < keys.length; i++) {
+            _core.deletePointer(node, keys[i]);
+        }
+        keys = Object.keys(jsonNode.pointers);
+        for (i = 0; i < keys.length; i++) {
+            target = jsonNode.pointers[keys[i]];
+            if (target === null) {
+                _core.setPointer(node, keys[i], null);
+            } else if (_nodes[target] && _removedNodeGuids.indexOf(target) === -1) {
+                _core.setPointer(node, keys[i], _nodes[target]);
+            } else {
+                console.log('error handling needed???!!!???');
+            }
+        }
+
+        //sets
+        keys = _core.getSetNames(node);
+        for (i = 0; i < keys.length; i++) {
+            _core.deleteSet(node, keys[i]);
+        }
+        keys = Object.keys(jsonNode.sets);
+        for (i = 0; i < keys.length; i++) {
+            //for every set we create it, go through its members...
+            _core.createSet(node, keys[i]);
+            for (j = 0; j < jsonNode.sets[keys[i]].length; j++) {
+                memberGuid = jsonNode.sets[keys[i]][j].guid;
+                if (_nodes[memberGuid]) {
+                    _core.addMember(node, keys[i], _nodes[memberGuid]);
+                    for (k in jsonNode.sets[keys[i]][j].attributes) {
+                        _core.setMemberAttribute(node, keys[i], _core.getPath(_nodes[memberGuid]), k,
+                            jsonNode.sets[keys[i]][j].attributes[k]);
+                    }
+                    for (k in jsonNode.sets[keys[i]][j].registry) {
+                        _core.setMemberRegistry(node, keys[i], _core.getPath(_nodes[memberGuid]), k,
+                            jsonNode.sets[keys[i]][j].registry[k]);
+                    }
+                }
+            }
+        }
+    }
+
+    function updateInheritance() {
+        var i,
+            guidList = Object.keys(_import.nodes),
+            base;
+        for (i = 0; i < guidList.length; i++) {
+            base = _core.getBase(_nodes[guidList[i]]);
+            if ((base && _core.getGuid(base) !== _import.nodes[guidList[i]].base) ||
+                (base === null && _import.nodes[guidList[i]].base !== null)) {
+
+                updateNodeInheritance(guidList[i]);
+            }
+        }
+    }
+
+    function updateNodeInheritance(guid) {
+        _core.setBase(_nodes[guid], _nodes[_import.nodes[guid].base]);
+    }
+
+    function updateMetaRules(guid, containmentTreeObject) {
+
+        var keys, i;
+
+        updateMeta(guid);
+
+        keys = Object.keys(containmentTreeObject);
+        for (i = 0; i < keys.length; i++) {
+            updateMetaRules(keys[i], containmentTreeObject[keys[i]]);
+        }
+    }
+
+    function updateMeta(guid) {
+        _core.clearMetaRules(_nodes[guid]);
+
+        updateAttributeMeta(guid);
+        updateChildrenMeta(guid);
+        updatePointerMeta(guid);
+        updateAspectMeta(guid);
+        updateConstraintMeta(guid);
+    }
+
+    function updateAttributeMeta(guid) {
+        var jsonMeta = _import.nodes[guid].meta.attributes || {},
+            node = _nodes[guid],
+            keys, i;
+
+        keys = Object.keys(jsonMeta);
+        for (i = 0; i < keys.length; i++) {
+            _core.setAttributeMeta(node, keys[i], jsonMeta[keys[i]]);
+        }
+    }
+
+    function updateChildrenMeta(guid) {
+        var jsonMeta = _import.nodes[guid].meta.children || {items: [], minItems: [], maxItems: []},
+            i;
+        ASSERT(jsonMeta.items.length === jsonMeta.minItems.length &&
+        jsonMeta.minItems.length === jsonMeta.maxItems.length);
+
+        _core.setChildrenMetaLimits(_nodes[guid], jsonMeta.min, jsonMeta.max);
+        for (i = 0; i < jsonMeta.items.length; i++) {
+            _core.setChildMeta(_nodes[guid], _nodes[jsonMeta.items[i]], jsonMeta.minItems[i], jsonMeta.maxItems[i]);
+        }
+    }
+
+    function updatePointerMeta(guid) {
+        var jsonMeta = _import.nodes[guid].meta.pointers || {},
+            keys = Object.keys(jsonMeta),
+            i, j;
+
+        for (i = 0; i < keys.length; i++) {
+            ASSERT(jsonMeta[keys[i]].items.length === jsonMeta[keys[i]].minItems.length &&
+            jsonMeta[keys[i]].maxItems.length === jsonMeta[keys[i]].minItems.length);
+
+            for (j = 0; j < jsonMeta[keys[i]].items.length; j++) {
+                _core.setPointerMetaTarget(_nodes[guid], keys[i], _nodes[jsonMeta[keys[i]].items[j]],
+                    jsonMeta[keys[i]].minItems[j], jsonMeta[keys[i]].maxItems[j]);
+            }
+            _core.setPointerMetaLimits(_nodes[guid], keys[i], jsonMeta[keys[i]].min, jsonMeta[keys[i]].max);
+        }
+    }
+
+    function updateAspectMeta(guid) {
+        var jsonMeta = _import.nodes[guid].meta.aspects || {},
+            keys = Object.keys(jsonMeta),
+            i, j;
+
+        for (i = 0; i < keys.length; i++) {
+            for (j = 0; j < jsonMeta[keys[i]].length; j++) {
+                _core.setAspectMetaTarget(_nodes[guid], keys[i], _nodes[jsonMeta[keys[i]][j]]);
+            }
+        }
+    }
+
+    function updateConstraintMeta(guid) {
+        var jsonMeta = _import.nodes[guid].meta.constraints || {},
+            keys = Object.keys(jsonMeta),
+            i;
+
+        for (i = 0; i < keys.length; i++) {
+            _core.setConstraint(_nodes[guid], keys[i], jsonMeta[keys[i]]);
+        }
+    }
+
+    return {
+        export: exportLibrary,
+        import: importLibrary
+    };
+});
+
+/*globals define*/
+/*jshint node: true, browser: true*/
+
+/**
+ * @author kecso / https://github.com/kecso
+ */
+
+define('common/core/users/dump',['common/core/users/tojson', 'common/util/url'], function (toJson, URL) {
+    
+
+    var _refTypes = {
+            url: 'url',
+            path: 'path',
+            guid: 'guid'
+        },
+        _cache = {},
+        _rootPath = '',
+        _refType = 'url',
+        _core = null;
+
+    var isRefObject = function (obj) {
+        if (obj && typeof obj.$ref === 'string') {
+            return true;
+        }
+        return false;
+    };
+
+    var getRefObjectPath = function (obj) {
+        var result = null;
+        if (isRefObject(obj) === true) {
+            var refValue = obj.$ref;
+            switch (_refType) {
+                case _refTypes.url:
+                    if (refValue === null) {
+                        result = null;
+                    } else {
+                        refValue = refValue.split('/');
+                        result = URL.removeSpecialChars(refValue[refValue.length - 1]);
+                    }
+                    break;
+                case _refTypes.path:
+                case _refTypes.guid:
+                    result = refValue;
+                    break;
+                default:
+                    result = null;
+                    break;
+            }
+        }
+
+        return result;
+    };
+
+    var refToRelRefObj = function (path, refObj) {
+        if (_cache[path]) {
+            refObj.$ref = _cache[path];
+        } else {
+            refObj = {$ref: null};
+        }
+    };
+
+    var isSubordinate = function (path) {
+        if (path.indexOf(_rootPath) === 0) {
+            return true;
+        }
+        return false;
+    };
+
+    var dumpChildren = function (node, dumpObject, urlPrefix, relPath, callback) {
+        var needed = dumpObject.children.length;
+        if (needed > 0) {
+            _core.loadChildren(node, function (err, children) {
+                if (err) {
+                    callback(err);
+                } else {
+                    if (children === null || children === undefined || !children.length > 0) { //FIXME: Indeed jshint
+                        callback(new Error('invalid children info found'));
+                    } else {
+                        var setChildJson = function (child, cb) {
+                            toJson(_core, child, urlPrefix, _refType, function (err, jChild) {
+                                if (err) {
+                                    cb(err);
+                                } else {
+                                    if (jChild) {
+                                        var childRelPath,
+                                            childPath = _core.getPath(child);
+                                        for (var j = 0; j < dumpObject.children.length; j++) {
+                                            if (childPath === getRefObjectPath(dumpObject.children[j])) {
+                                                childRelPath = relPath + '/children[' + j + ']';
+                                                _cache[childPath] = childRelPath;
+                                                dumpObject.children[j] = jChild;
+                                                break;
+                                            }
+                                        }
+                                        dumpChildren(child, dumpObject.children[j], urlPrefix, childRelPath, cb);
+                                    }
+                                }
+                            });
+                        };
+                        var error = null;
+
+                        for (var i = 0; i < children.length; i++) {
+                            setChildJson(children[i], function (err) {
+                                error = error || err;
+                                if (--needed === 0) {
+                                    callback(error);
+                                }
+                            }); //FIXME
+                        }
+                    }
+                }
+            });
+        } else {
+            callback(null);
+        }
+    };
+    var checkForInternalReferences = function (dumpObject) {
+        if (typeof dumpObject === 'object') {
+            for (var i in dumpObject) {
+                if (typeof dumpObject[i] === 'object') {
+                    if (isRefObject(dumpObject[i])) {
+                        var path = getRefObjectPath(dumpObject[i]);
+                        if (isSubordinate(path)) {
+                            refToRelRefObj(path, dumpObject[i]);
+                        }
+                    } else {
+                        checkForInternalReferences(dumpObject[i]);
+                    }
+                }
+            }
+        }
+    };
+
+    var dumpJsonNode = function (core, node, urlPrefix, refType, callback) {
+        _cache = {};
+        _core = core;
+        _rootPath = core.getPath(node);
+        _refType = refType;
+
+        //TODO this needs to be done in another way
+        toJson(core, node, urlPrefix, _refType, function (err, jDump) {
+            if (err) {
+                callback(err, null);
+            } else {
+                if (jDump) {
+                    _cache[_rootPath] = '#';
+                }
+                dumpChildren(node, jDump, urlPrefix, _cache[_rootPath], function (err) {
+                    if (err) {
+                        callback(err);
+                    } else {
+                        checkForInternalReferences(jDump);
+                        callback(null, jDump);
+                    }
+                });
+            }
+        });
+    };
+
+    return dumpJsonNode;
+});
+
+
+/*globals define*/
+/*jshint node: true, browser: true*/
+
+/**
+ * This import will only enter the outgoing relations and the internal ones.
+ * This import will try to import an array of objects as well as a single object.
+ * Although this import also assumes that there is no loop in the references so it can simply wait for
+ *
+ * @author kecso / https://github.com/kecso
+ */
+
+define('common/core/users/copyimport',['common/core/users/meta'], function (BaseMeta) {
+    
+    var _core = null,
+        _root = null,
+        _cache = {},
+        _underImport = {},
+        _internalRefHash = {},
+        META = new BaseMeta();
+
+    function internalRefCreated(intPath, node) {
+        _cache[_core.getPath(node)] = node;
+        _internalRefHash[intPath] = _core.getPath(node);
+        var callbacks = _underImport[intPath] || [];
+        delete _underImport[intPath];
+        for (var i = 0; i < callbacks.length; i++) {
+            callbacks[i](null, node);
+        }
+    }
+
+    function objectLoaded(error, node) {
+        if (error === null) {
+            _cache[_core.getPath(node)] = node;
+        }
+
+        var callbacks = _underImport[_core.getPath(node)] || [];
+        delete _underImport[_core.getPath(node)];
+        for (var i = 0; i < callbacks.length; i++) {
+            callbacks[i](error, node);
+        }
+    }
+
+    //function isInternalReference(refObj) {
+    //    if (refObj && typeof refObj.$ref === 'string') {
+    //        if (refObj.$ref.indexOf('#') === 0) {
+    //            return true;
+    //        }
+    //    }
+    //    return false;
+    //}
+
+    function getReferenceNode(refObj, callback) {
+        //we allow the internal references and the
+        if (refObj && typeof refObj.$ref === 'string') {
+            if (refObj.$ref.indexOf('#') === 0) {
+                //we assume that it is an internal reference
+                if (_internalRefHash[refObj.$ref] !== undefined) {
+                    callback(null, _cache[_internalRefHash[refObj.$ref]]);
+                } else if (_underImport[refObj.$ref] !== undefined) {
+                    _underImport[refObj.$ref].push(callback);
+                } else {
+                    //TODO we should check if the loading order is really finite this way
+                    _underImport[refObj.$ref] = [callback];
+                }
+            } else if (refObj.$ref === null) {
+                callback(null, null);
+            } else {
+                if (_cache[refObj.$ref]) {
+                    callback(null, _cache[refObj.$ref]);
+                } else if (_underImport[refObj.$ref]) {
+                    _underImport[refObj.$ref].push(callback);
+                } else {
+                    _underImport[refObj.$ref] = [callback];
+                    _core.loadByPath(_root, refObj.$ref, function (err, node) {
+                        if (err) {
+                            objectLoaded(err, null);
+                        } else {
+                            if (refObj.GUID) {
+                                if (refObj.GUID === _core.getGuid(node)) {
+                                    objectLoaded(err, node);
+                                } else {
+                                    objectLoaded('GUID mismatch', node);
+                                }
+                            } else {
+                                objectLoaded(err, node);
+                            }
+                        }
+                    });
+                }
+            }
+        } else {
+            callback(null, null);
+        }
+    }
+
+    function importChildren(node, jNode, pIntPath, callback) {
+        if (jNode && jNode.children && jNode.children.length) {
+            var needed = jNode.children.length;
+
+            if (needed > 0) {
+                var error = null;
+                for (var i = 0; i < jNode.children.length; i++) {
+                    importNode(jNode.children[i], node, pIntPath + '/children[' + i + ']', function (err) {
+                        error = error || err;
+                        if (--needed === 0) {
+                            callback(error);
+                        }
+                    }); //FIXME
+                }
+            } else {
+                callback(null);
+            }
+
+        } else {
+            callback(null); //TODO maybe we should be more strict
+        }
+    }
+
+    function importAttributes(node, jNode) {
+        if (typeof jNode.attributes === 'object') {
+            for (var i in jNode.attributes) {
+                _core.setAttribute(node, i, jNode.attributes[i]);
+            }
+        }
+    }
+
+    function importRegistry(node, jNode) {
+        if (typeof jNode.registry === 'object') {
+            for (var i in jNode.registry) {
+                _core.setRegistry(node, i, jNode.registry[i]);
+            }
+        }
+    }
+
+    function importPointer(node, jNode, pName, callback) {
+        if (jNode.pointers[pName].to && jNode.pointers[pName].to.length > 0) {
+            var needed = jNode.pointers[pName].to.length,
+                i,
+                error = null;
+
+            for (i = 0; i < jNode.pointers[pName].to.length; i++) {
+                getReferenceNode(jNode.pointers[pName].to[i], function (err, target) {
+                    error = error || err;
+                    if (target !== undefined) {
+                        _core.setPointer(node, pName, target);
+                    }
+
+                    if (--needed === 0) {
+                        callback(error);
+                    }
+                }); //FIXME
+            }
+
+        } else {
+            callback(null);
+        }
+    }
+
+    function importSet(node, jNode, sName, callback) {
+        if (jNode.pointers[sName].to && jNode.pointers[sName].to.length > 0) {
+            var needed = 0,
+                i,
+                key,
+                importSetRegAndAtr = function (sOwner, sMember, atrAndReg) {
+                    _core.addMember(sOwner, sName, sMember);
+                    var mPath = _core.getPath(sMember);
+                    atrAndReg.attributes = atrAndReg.attributes || {};
+                    for (key in atrAndReg.attributes) {
+                        _core.setMemberAttribute(sOwner, sName, mPath, key, atrAndReg.attributes[key]);
+                    }
+                    atrAndReg.registry = atrAndReg.registry || {};
+                    for (key in atrAndReg.registry) {
+                        _core.setMemberRegistry(sOwner, sName, mPath, key, atrAndReg.registry[key]);
+                    }
+                },
+                importSetReference = function (isTo, index, cb) {
+                    var jObj = isTo === true ? jNode.pointers[sName].to[index] : jNode.pointers[sName].from[index];
+                    getReferenceNode(jObj, function (err, sNode) {
+                        if (err) {
+                            cb(err);
+                        } else {
+                            if (sNode) {
+                                var sOwner = isTo === true ? node : sNode,
+                                    sMember = isTo === true ? sNode : node;
+                                importSetRegAndAtr(sOwner, sMember, jObj);
+                            }
+                            cb(null);
+                        }
+                    });
+                },
+                error = null;
+
+            _core.createSet(node, sName);
+            needed = jNode.pointers[sName].to.length;
+            for (i = 0; i < jNode.pointers[sName].to.length; i++) {
+                importSetReference(true, i, function (err) {
+                    error = error || err;
+                    if (--needed === 0) {
+                        callback(error);
+                    }
+                }); //FIXME
+            }
+        } else {
+            callback(null); //TODO now we just simply try to ignore faulty data import
+        }
+    }
+
+    //function _importSet(node, jNode, sName, callback) {
+    //    if (jNode.pointers[sName].to) {
+    //        var needed = 0,
+    //            importSetRegAndAtr = function (sOwner, sMember, atrAndReg) {
+    //                _core.addMember(sOwner, sName, sMember);
+    //                var mPath = _core.getPath(sMember);
+    //                atrAndReg.attributes = atrAndReg.attributes || {};
+    //                for (var i in atrAndReg.attributes) {
+    //                    _core.setMemberAttribute(sOwner, sName, mPath, i, atrAndReg.attributes[i]);
+    //                }
+    //                atrAndReg.registry = atrAndReg.registry || {};
+    //                for (var i in atrAndReg.registry) {
+    //                    _core.setMemberRegistry(sOwner, sName, mPath, i, atrAndReg.registry[i]);
+    //                }
+    //            },
+    //            importSetReference = function (isTo, index, cb) {
+    //                var jObj = isTo === true ? jNode.pointers[sName].to[index] : jNode.pointers[sName].from[index];
+    //                getReferenceNode(jObj, function (err, sNode) {
+    //                    if (err) {
+    //                        cb(err);
+    //                    } else {
+    //                        if (sNode) {
+    //                            var sOwner = isTo === true ? node : sNode,
+    //                                sMember = isTo === true ? sNode : node;
+    //                            importSetRegAndAtr(sOwner, sMember, jObj);
+    //                        }
+    //                        cb(null);
+    //                    }
+    //                });
+    //            },
+    //            error = null;
+    //
+    //        if (jNode.pointers[sName].to.length > 0) {
+    //            needed += jNode.pointers[sName].to.length;
+    //            _core.createSet(node, sName);
+    //        }
+    //
+    //        if (needed > 0) {
+    //            for (var i = 0; i < jNode.pointers[sName].to.length; i++) {
+    //                importSetReference(true, i, function (err) {
+    //                    error = error || err;
+    //                    if (--needed === 0) {
+    //                        callback(error);
+    //                    }
+    //                });
+    //            }
+    //        } else {
+    //            callback(null);
+    //        }
+    //    } else {
+    //        callback(null); //TODO now we just simply try to ignore faulty data import
+    //    }
+    //}
+
+    function importRelations(node, jNode, callback) {
+        //TODO now se use the pointer's 'set' attribute to decide if it is a set or a pointer really
+        var pointers = [],
+            sets = [],
+            needed = 0,
+            error = null,
+            i;
+        if (typeof jNode.pointers !== 'object') {
+            callback(null); //TODO should we drop an error???
+        } else {
+            for (i in jNode.pointers) {
+                if (jNode.pointers[i].set === true) {
+                    sets.push(i);
+                } else {
+                    pointers.push(i);
+                }
+            }
+
+            needed = sets.length + pointers.length;
+
+            if (needed > 0) {
+                for (i = 0; i < pointers.length; i++) {
+                    importPointer(node, jNode, pointers[i], function (err) {
+                        error = error || err;
+                        if (--needed === 0) {
+                            callback(error);
+                        }
+                    });
+                }
+                for (i = 0; i < sets.length; i++) {
+                    importSet(node, jNode, sets[i], function (err) {
+                        error = error || err;
+                        if (--needed === 0) {
+                            callback(error);
+                        }
+                    });
+                }
+            } else {
+                callback(null);
+            }
+        }
+    }
+
+    function importMeta(node, jNode, callback) {
+
+        //TODO now this function searches the whole meta data for reference objects and load them, then call setMeta
+        var loadReference = function (refObj, cb) {
+                getReferenceNode(refObj, function (err, rNode) {
+                    if (err) {
+                        cb(err);
+                    } else {
+                        if (rNode) {
+                            refObj.$ref = _core.getPath(rNode);
+                        }
+                        cb(null);
+                    }
+                });
+            },
+            loadMetaReferences = function (jObject, cb) {
+                var needed = 0,
+                    i,
+                    error = null;
+                for (i in jObject) {
+                    if (jObject[i] !== null && typeof jObject[i] === 'object') {
+                        needed++;
+                    }
+                }
+
+                if (needed > 0) {
+                    for (i in jObject) {
+                        if (jObject[i] !== null && typeof jObject[i] === 'object') {
+                            if (jObject[i].$ref) {
+                                loadReference(jObject[i], function (err) {
+                                    error = error || err;
+                                    if (--needed === 0) {
+                                        cb(error);
+                                    }
+                                });
+                            } else {
+                                loadMetaReferences(jObject[i], function (err) {
+                                    error = error || err;
+                                    if (--needed === 0) {
+                                        cb(error);
+                                    }
+                                });
+                            }
+                        }
+                    }
+                } else {
+                    cb(error);
+                }
+            };
+
+        loadMetaReferences(jNode.meta || {}, function (err) {
+            if (err) {
+                callback(err);
+            } else {
+                META.setMeta(_core.getPath(node), jNode.meta || {});
+                callback(null);
+            }
+        });
+    }
+
+    function importRoot(jNode, callback) {
+        //first we create the root node itself, then the other parts of the function is pretty much like the importNode
+
+        _root = _core.createNode();
+        internalRefCreated('#', _root);
+        importAttributes(_root, jNode);
+        importRegistry(_root, jNode);
+        importChildren(_root, jNode, '#', function (err) {
+            if (err) {
+                callback(err);
+            } else {
+                importRelations(_root, jNode, function (err) {
+                    if (err) {
+                        callback(err);
+                    } else {
+                        importMeta(_root, jNode, function (err) {
+                            callback(err, _root);
+                        });
+                    }
+                });
+            }
+        });
+    }
+
+    function importNode(jNode, parentNode, intPath, callback) {
+        //return callback('not implemented');
+        //first we have to get the base of the node
+        if (jNode.pointers && jNode.pointers.base && jNode.pointers.base.to) {
+            getReferenceNode(jNode.pointers.base.to[0], function (err, base) {
+                if (err) {
+                    callback(err);
+                } else {
+                    //now we are ready to create the node itself
+                    var node = _core.createNode({base: base, parent: parentNode});
+                    internalRefCreated(intPath, node);
+                    importAttributes(node, jNode);
+                    importRegistry(node, jNode);
+                    importChildren(node, jNode, intPath, function (err) {
+                        if (err) {
+                            callback(err);
+                        } else {
+                            importRelations(node, jNode, function (err) {
+                                if (err) {
+                                    callback(err);
+                                } else {
+                                    importMeta(node, jNode, callback);
+                                }
+                            });
+                        }
+                    });
+                }
+            });
+        } else {
+            callback('wrong import format: base info is wrong');
+        }
+    }
+
+    function importing(core, parent, jNode, callback) {
+        _core = core;
+        _cache = {};
+        _underImport = {};
+        _internalRefHash = {};
+        META.initialize(_core, _cache, function () {
+        });
+
+        if (jNode.length) {
+            //multiple objects
+            if (parent) {
+                var needed = jNode.length,
+                    error = null;
+                _cache[core.getPath(parent)] = parent;
+                _root = core.getRoot(parent);
+                for (var i = 0; i < jNode.length; i++) {
+                    importNode(jNode[i], parent, '#[' + i + ']', function (err) {
+                        error = error || err;
+                        if (--needed === 0) {
+                            callback(error);
+                        }
+                    });
+                }
+            } else {
+                callback('no parent given!!!');
+            }
+        } else {
+            //single object
+            if (parent) {
+                _cache[core.getPath(parent)] = parent;
+                _root = core.getRoot(parent);
+                importNode(jNode, parent, '#', callback);
+            } else {
+                importRoot(jNode, callback);
+            }
+        }
+    }
+
+    return importing;
+});
+/*globals define*/
+/*jshint node: true, browser: true*/
+
+/**
+ * this type of import is for merge purposes
+ * it tries to import not only the outgoing relations but the incoming ones as well
+ * it also tries to keep both the GUID and the relid's
+ * if it finds the same guid in the same place then it overwrites the node with the imported one!!!
+ * it not searches for GUID!!! so be careful when to use this method
+ *
+ * @author kecso / https://github.com/kecso
+ */
+
+define('common/core/users/import',['common/core/users/meta'], function (BaseMeta) {
+    
+    var _core = null,
+        _root = null,
+        _cache = {},
+        _underImport = {},
+        _internalRefHash = {},
+        META = new BaseMeta();
+
+    function internalRefCreated(intPath, node) {
+        _cache[_core.getPath(node)] = node;
+        _internalRefHash[intPath] = _core.getPath(node);
+        var callbacks = _underImport[intPath] || [];
+        delete _underImport[intPath];
+        for (var i = 0; i < callbacks.length; i++) {
+            callbacks[i](null, node);
+        }
+    }
+
+    function objectLoaded(error, node) {
+        if (error === null) {
+            _cache[_core.getPath(node)] = node;
+        }
+
+        var callbacks = _underImport[_core.getPath(node)] || [];
+        delete _underImport[_core.getPath(node)];
+        for (var i = 0; i < callbacks.length; i++) {
+            callbacks[i](error, node);
+        }
+    }
+
+    function isInternalReference(refObj) {
+        if (refObj && typeof refObj.$ref === 'string') {
+            if (refObj.$ref.indexOf('#') === 0) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    function getReferenceNode(refObj, callback) {
+        //we allow the internal references and the
+        if (refObj && typeof refObj.$ref === 'string') {
+            if (refObj.$ref.indexOf('#') === 0) {
+                //we assume that it is an internal reference
+                if (_internalRefHash[refObj.$ref] !== undefined) {
+                    callback(null, _cache[_internalRefHash[refObj.$ref]]);
+                } else if (_underImport[refObj.$ref] !== undefined) {
+                    _underImport[refObj.$ref].push(callback);
+                } else {
+                    //TODO we should check if the loading order is really finite this way
+                    _underImport[refObj.$ref] = [callback];
+                }
+            } else if (refObj.$ref === null) {
+                callback(null, null);
+            } else {
+                if (_cache[refObj.$ref]) {
+                    callback(null, _cache[refObj.$ref]);
+                } else if (_underImport[refObj.$ref]) {
+                    _underImport[refObj.$ref].push(callback);
+                } else {
+                    _underImport[refObj.$ref] = [callback];
+                    _core.loadByPath(_root, refObj.$ref, function (err, node) {
+                        if (err) {
+                            objectLoaded(err, null);
+                        } else {
+                            if (refObj.GUID) {
+                                if (refObj.GUID === _core.getGuid(node)) {
+                                    objectLoaded(err, node);
+                                } else {
+                                    objectLoaded('GUID mismatch', node);
+                                }
+                            } else {
+                                objectLoaded(err, node);
+                            }
+                        }
+                    });
+                }
+            }
+        } else {
+            callback(null, null);
+        }
+    }
+
+    function importChildren(node, jNode, pIntPath, callback) {
+        if (jNode && jNode.children && jNode.children.length) {
+            var needed = jNode.children.length;
+
+            if (needed > 0) {
+                var error = null;
+                for (var i = 0; i < jNode.children.length; i++) {
+                    importNode(jNode.children[i], node, pIntPath + '/children[' + i + ']', true, function (err) {
+                        error = error || err;
+                        if (--needed === 0) {
+                            callback(error);
+                        }
+                    });
+                }
+            } else {
+                callback(null);
+            }
+
+        } else {
+            callback(null); //TODO maybe we should be more strict
+        }
+    }
+
+    function importAttributes(node, jNode) {
+        if (typeof jNode.attributes === 'object') {
+            var names = Object.keys(jNode.attributes);
+            if (jNode.OWN) {
+                names = jNode.OWN.attributes;
+            }
+
+            for (var i = 0; i < names.length; i++) {
+                var value = jNode.attributes[names[i]];
+                if (value !== undefined) {
+                    _core.setAttribute(node, names[i], value);
+                }
+            }
+        }
+    }
+
+    function importRegistry(node, jNode) {
+        if (typeof jNode.registry === 'object') {
+            var names = Object.keys(jNode.registry);
+            if (jNode.OWN) {
+                names = jNode.OWN.registry;
+            }
+
+            for (var i = 0; i < names.length; i++) {
+                var value = jNode.registry[names[i]];
+                if (value !== undefined) {
+                    _core.setRegistry(node, names[i], value);
+                }
+            }
+        }
+    }
+
+    function importPointer(node, jNode, pName, callback) {
+        if (jNode.pointers[pName].to && jNode.pointers[pName].from) {
+            var needed = jNode.pointers[pName].to.length + jNode.pointers[pName].from.length,
+                i,
+                error = null;
+            var ownPointer = true;
+            if (jNode.OWN) {
+                if (jNode.OWN.pointers.indexOf(pName) === -1) {
+                    ownPointer = false;
+                    needed -= jNode.pointers[pName].to.length;
+                }
+            }
+            if (needed === 0) {
+                callback(null);
+            } else {
+                if (ownPointer) {
+                    for (i = 0; i < jNode.pointers[pName].to.length; i++) {
+                        getReferenceNode(jNode.pointers[pName].to[i], function (err, target) {
+                            error = error || err;
+                            _core.setPointer(node, pName, target);
+
+                            if (--needed === 0) {
+                                callback(error);
+                            }
+                        });
+                    }
+                }
+
+                for (i = 0; i < jNode.pointers[pName].from.length; i++) {
+                    if (!isInternalReference(jNode.pointers[pName].from[i])) {
+                        getReferenceNode(jNode.pointers[pName].from[i], function (err, source) {
+                            error = error || err;
+                            if (source) {
+                                _core.setPointer(source, pName, node);
+                            }
+
+                            if (--needed === 0) {
+                                callback(error);
+                            }
+                        });
+                    } else {
+                        if (--needed === 0) {
+                            callback(error);
+                        }
+                    }
+                }
+            }
+        } else {
+            callback(null);
+        }
+    }
+
+    function importSet(node, jNode, sName, callback) {
+        if (jNode.pointers[sName].to && jNode.pointers[sName].from) {
+            var needed = 0,
+                i,
+                importSetRegAndAtr = function (sOwner, sMember, atrAndReg) {
+                    _core.addMember(sOwner, sName, sMember);
+                    var mPath = _core.getPath(sMember);
+                    atrAndReg.attributes = atrAndReg.attributes || {};
+                    for (i in atrAndReg.attributes) {
+                        _core.setMemberAttribute(sOwner, sName, mPath, i, atrAndReg.attributes[i]);
+                    }
+                    atrAndReg.registry = atrAndReg.registry || {};
+                    for (i in atrAndReg.registry) {
+                        _core.setMemberRegistry(sOwner, sName, mPath, i, atrAndReg.registry[i]);
+                    }
+                },
+                importSetReference = function (isTo, index, cb) {
+                    var jObj = isTo === true ? jNode.pointers[sName].to[index] : jNode.pointers[sName].from[index];
+                    getReferenceNode(jObj, function (err, sNode) {
+                        if (err) {
+                            cb(err);
+                        } else {
+                            if (sNode) {
+                                var sOwner = isTo === true ? node : sNode,
+                                    sMember = isTo === true ? sNode : node;
+                                importSetRegAndAtr(sOwner, sMember, jObj);
+                            }
+                            cb(null);
+                        }
+                    });
+                },
+                error = null;
+
+            if (jNode.pointers[sName].to.length > 0) {
+                needed += jNode.pointers[sName].to.length;
+                _core.createSet(node, sName);
+            }
+            if (jNode.pointers[sName].from.length > 0) {
+                needed += jNode.pointers[sName].from.length;
+            }
+
+            if (needed > 0) {
+                for (i = 0; i < jNode.pointers[sName].to.length; i++) {
+                    importSetReference(true, i, function (err) {
+                        error = error || err;
+                        if (--needed === 0) {
+                            callback(error);
+                        }
+                    });
+                }
+                for (i = 0; i < jNode.pointers[sName].from.length; i++) {
+                    importSetReference(false, i, function (err) {
+                        error = error || err;
+                        if (--needed === 0) {
+                            callback(error);
+                        }
+                    });
+                }
+            } else {
+                callback(null);
+            }
+        } else {
+            callback(null); //TODO now we just simply try to ignore faulty data import
+        }
+    }
+
+    function importRelations(node, jNode, callback) {
+        //TODO now se use the pointer's 'set' attribute to decide if it is a set or a pointer really
+        var pointers = [],
+            sets = [],
+            needed = 0,
+            error = null,
+            i;
+        if (typeof jNode.pointers !== 'object') {
+            callback(null); //TODO should we drop an error???
+        } else {
+            for (i in jNode.pointers) {
+                if (jNode.pointers[i].set === true) {
+                    sets.push(i);
+                } else {
+                    pointers.push(i);
+                }
+            }
+
+            needed = sets.length + pointers.length;
+
+            if (needed > 0) {
+                for (i = 0; i < pointers.length; i++) {
+                    importPointer(node, jNode, pointers[i], function (err) {
+                        error = error || err;
+                        if (--needed === 0) {
+                            callback(error);
+                        }
+                    });
+                }
+                for (i = 0; i < sets.length; i++) {
+                    importSet(node, jNode, sets[i], function (err) {
+                        error = error || err;
+                        if (--needed === 0) {
+                            callback(error);
+                        }
+                    });
+                }
+            } else {
+                callback(null);
+            }
+        }
+    }
+
+    function importMeta(node, jNode, callback) {
+        //TODO now this function searches the whole meta data for reference objects and load them, then call setMeta
+        var loadReference = function (refObj, cb) {
+                getReferenceNode(refObj, function (err, rNode) {
+                    if (err) {
+                        cb(err);
+                    } else {
+                        if (rNode) {
+                            refObj.$ref = _core.getPath(rNode);
+                        }
+                        cb(null);
+                    }
+                });
+            },
+            loadMetaReferences = function (jObject, cb) {
+                var needed = 0,
+                    i,
+                    error = null;
+                for (i in jObject) {
+                    if (jObject[i] !== null && typeof jObject[i] === 'object') {
+                        needed++;
+                    }
+                }
+
+                if (needed > 0) {
+                    for (i in jObject) {
+                        if (jObject[i] !== null && typeof jObject[i] === 'object') {
+                            if (jObject[i].$ref) {
+                                loadReference(jObject[i], function (err) {
+                                    error = error || err;
+                                    if (--needed === 0) {
+                                        cb(error);
+                                    }
+                                });
+                            } else {
+                                loadMetaReferences(jObject[i], function (err) {
+                                    error = error || err;
+                                    if (--needed === 0) {
+                                        cb(error);
+                                    }
+                                });
+                            }
+                        }
+                    }
+                } else {
+                    cb(error);
+                }
+            };
+
+        loadMetaReferences(jNode.meta || {}, function (err) {
+            if (err) {
+                callback(err);
+            } else {
+                META.setMeta(_core.getPath(node), jNode.meta || {});
+                callback(null);
+            }
+        });
+    }
+
+    function importRoot(jNode, callback) {
+        //first we create the root node itself, then the other parts of the function is pretty much like the importNode
+        _root = _core.createNode({guid: jNode.GUID});
+        internalRefCreated('#', _root);
+        importAttributes(_root, jNode);
+        importRegistry(_root, jNode);
+        importChildren(_root, jNode, '#', function (err) {
+            if (err) {
+                callback(err);
+            } else {
+                importRelations(_root, jNode, function (err) {
+                    if (err) {
+                        callback(err);
+                    } else {
+                        importMeta(_root, jNode, function (err) {
+                            callback(err, _root);
+                        });
+                    }
+                });
+            }
+        });
+    }
+
+    //function clearOldNode(relid, guid, parentNode, callback) {
+    //    var relids = _core.getChildrenRelids(parentNode);
+    //    if (relids.indexOf(relid) !== -1) {
+    //        _core.loadChild(parentNode, relid, function (err, oldChild) {
+    //            if (err) {
+    //                callback(err);
+    //            } else {
+    //                if (_core.getGuid(oldChild) === guid) {
+    //                    var root = _core.getRoot(oldChild);
+    //                    _core.deleteNode(oldChild);
+    //                    _core.persist(root, function () {
+    //                        callback(null);
+    //                    });
+    //                } else {
+    //                    callback(null);
+    //                }
+    //            }
+    //        });
+    //    } else {
+    //        callback(null);
+    //    }
+    //}
+
+    function getEmptyNode(jNode, parentNode, baseNode, noClear, callback) {
+        var relids = _core.getChildrenRelids(parentNode),
+            returnNewNode = function () {
+                var node = _core.createNode({base: baseNode, parent: parentNode, relid: jNode.RELID, guid: jNode.GUID});
+                callback(null, node);
+            };
+        if (relids.indexOf(jNode.RELID) !== -1) {
+            _core.loadChild(parentNode, jNode.RELID, function (err, oldChild) {
+                if (err) {
+                    callback(err, null);
+                } else {
+                    if (_core.getGuid(oldChild) === jNode.GUID) {
+                        if (noClear === true) {
+                            callback(null, oldChild);
+                        } else {
+                            var root = _core.getRoot(oldChild);
+                            _core.deleteNode(oldChild);
+                            _core.persist(root, function () {
+                                returnNewNode();
+                            });
+                        }
+                    } else {
+                        returnNewNode();
+                    }
+                }
+            });
+        } else {
+            returnNewNode();
+        }
+    }
+
+    function importNode(jNode, parentNode, intPath, noClear, callback) {
+        //first we have to get the base of the node
+        if (jNode.pointers && jNode.pointers.base && jNode.pointers.base.to) {
+            getReferenceNode(jNode.pointers.base.to[0], function (err, base) {
+                if (err) {
+                    callback(err);
+                } else {
+                    getEmptyNode(jNode, parentNode, base, noClear, function (err, node) {
+                        if (err) {
+                            callback(err);
+                        } else {
+                            internalRefCreated(intPath, node);
+                            importAttributes(node, jNode);
+                            importRegistry(node, jNode);
+                            importChildren(node, jNode, intPath, function (err) {
+                                if (err) {
+                                    callback(err);
+                                } else {
+                                    importRelations(node, jNode, function (err) {
+                                        if (err) {
+                                            callback(err);
+                                        } else {
+                                            importMeta(node, jNode, function (err) {
+                                                callback(err);
+                                            });
+                                        }
+                                    });
+                                }
+                            });
+                        }
+                    });
+                }
+            });
+        } else {
+            callback('wrong import format: base info is wrong');
+        }
+    }
+
+    function importing(core, parent, jNode, callback) {
+        _core = core;
+        _cache = {};
+        _underImport = {};
+        _internalRefHash = {};
+        META.initialize(_core, _cache, function () {
+        });
+
+        if (jNode.length) {
+            //multiple objects
+            if (parent) {
+                var needed = jNode.length,
+                    error = null;
+                _cache[core.getPath(parent)] = parent;
+                _root = core.getRoot(parent);
+                for (var i = 0; i < jNode.length; i++) {
+                    importNode(jNode[i], parent, '#[' + i + ']', false, function (err) {
+                        error = error || err;
+                        if (--needed === 0) {
+                            callback(error);
+                        }
+                    });
+                }
+            } else {
+                callback('no parent given!!!');
+            }
+        } else {
+            //single object
+            if (parent) {
+                _cache[core.getPath(parent)] = parent;
+                _root = core.getRoot(parent);
+                importNode(jNode, parent, '#', false, callback);
+            } else {
+                importRoot(jNode, callback);
+            }
+        }
+    }
+
+    return importing;
+});
+
+
+/*globals define*/
+/*jshint browser: true*/
+/**
+ * @author kecso / https://github.com/kecso
+ */
+define('client/js/client/requests',['common/util/assert',
+    'common/core/users/serialization',
+    'common/core/users/dump',
+    'common/core/users/copyimport',
+    'common/core/users/import',
+    'common/util/url'
+], function (ASSERT,
+             Serialization,
+             dump,
+             importing,
+             mergeImport,
+             URL) {
+    
+    var ROOT_PATH = '';
+
+    function Requests(_clientGlobal) {
+        function getAvailableProjectsAsync(callback) {
+            if (_clientGlobal.db) {
+                _clientGlobal.db.getProjectNames(callback);
+            } else {
+                callback(new Error('there is no open database connection!'));
+            }
+        }
+
+        function getViewableProjectsAsync(callback) {
+            if (_clientGlobal.db) {
+                _clientGlobal.db.getAllowedProjectNames(callback);
+            } else {
+                callback(new Error('there is no open database connection!'));
+            }
+        }
+
+        function getProjectAuthInfoAsync(projectname, callback) {
+            if (_clientGlobal.db) {
+                _clientGlobal.db.getAuthorizationInfo(projectname, callback);
+            } else {
+                callback(new Error('there is no open database connection!'));
+            }
+        }
+
+        function getFullProjectListAsync(callback) {
+            _clientGlobal.db.getProjectNames(function (err, names) {
+                var wait,
+                    fullList = {},
+                    getProjectAuthInfo,
+                    i,
+                    projectAuthInfoResponse = function (/*err*/) {
+                        wait -= 1;
+                        if (wait === 0) {
+                            callback(null, fullList);
+                        }
+                    };
+
+                if (!err && names) {
+                    wait = names.length || 0;
+                    if (wait > 0) {
+                        getProjectAuthInfo = function (name, cb) {
+                            _clientGlobal.db.getAuthorizationInfo(name, function (err, authObj) {
+                                if (!err && authObj) {
+                                    fullList[name] = authObj;
+                                }
+                                cb(err);
+                            });
+                        };
+
+                        for (i = 0; i < names.length; i += 1) {
+                            getProjectAuthInfo(names[i], projectAuthInfoResponse);
+                        }
+                    } else {
+                        callback(null, {});
+                    }
+                } else {
+                    callback(err, {});
+                }
+            });
+        }
+
+        function getFullProjectsInfoAsync(callback) {
+            _clientGlobal.db.simpleRequest({command: 'getAllProjectsInfo'}, function (err, id) {
+                if (err) {
+                    return callback(err);
+                }
+                _clientGlobal.db.simpleResult(id, callback);
+            });
+        }
+
+        function setProjectInfoAsync(projectId, info, callback) {
+            _clientGlobal.db.simpleRequest({
+                    command: 'setProjectInfo',
+                    projectId: projectId,
+                    info: info
+                },
+                function (err, rId) {
+                    if (err) {
+                        return callback(err);
+                    }
+                    _clientGlobal.db.simpleResult(rId, callback);
+                });
+        }
+
+        function getProjectInfoAsync(projectId, callback) {
+            _clientGlobal.db.simpleRequest({command: 'getProjectInfo', projectId: projectId}, function (err, rId) {
+                if (err) {
+                    return callback(err);
+                }
+                _clientGlobal.db.simpleResult(rId, callback);
+            });
+        }
+
+        function getAllInfoTagsAsync(callback) {
+            _clientGlobal.db.simpleRequest({command: 'getAllInfoTags'}, function (err, rId) {
+                if (err) {
+                    return callback(err);
+                }
+                _clientGlobal.db.simpleResult(rId, callback);
+            });
+        }
+
+        function createGenericBranchAsync(project, branch, commit, callback) {
+            _clientGlobal.db.simpleRequest({
+                    command: 'setBranch',
+                    project: project,
+                    branch: branch,
+                    old: '',
+                    new: commit
+                },
+                function (err, id) {
+                    if (err) {
+                        return callback(err);
+                    }
+                    _clientGlobal.db.simpleResult(id, callback);
+                });
+        }
+
+        function deleteGenericBranchAsync(project, branch, commit, callback) {
+            _clientGlobal.db.simpleRequest({
+                    command: 'setBranch',
+                    project: project,
+                    branch: branch,
+                    old: commit,
+                    new: ''
+                },
+                function (err, id) {
+                    if (err) {
+                        return callback(err);
+                    }
+                    _clientGlobal.db.simpleResult(id, callback);
+                });
+        }
+
+        function getDumpURL(parameters) {
+            parameters.output = parameters.output || 'dump_url.out';
+            return plainUrl(parameters);
+        }
+
+        function createEmptyProject(project, callback) {
+            var core = _clientGlobal.functions.getNewCore(project,
+                    _clientGlobal.gmeConfig, _clientGlobal.logger.fork('createEmptyProject')),
+                root = core.createNode(),
+                rootHash = '',
+                commitHash = '';
+            core.persist(root, function (/* err */) {
+                rootHash = core.getHash(root);
+                commitHash = project.makeCommit([], rootHash, 'project creation commit', function (/* err */) {
+                    project.setBranchHash('master', '', commitHash, function (err) {
+                        callback(err, commitHash);
+                    });
+                });
+            });
+
+        }
+
+        function exportItems(paths, callback) {
+            var nodes = [];
+            for (var i = 0; i < paths.length; i++) {
+                if (_clientGlobal.nodes[paths[i]]) {
+                    nodes.push(_clientGlobal.nodes[paths[i]].node);
+                } else {
+                    callback('invalid node');
+                    return;
+                }
+            }
+
+            _clientGlobal.db.simpleRequest({
+                    command: 'dumpMoreNodes',
+                    name: _clientGlobal.projectName,
+                    hash: _clientGlobal.root.current || _clientGlobal.core.getHash(_clientGlobal.nodes[ROOT_PATH].node),
+                    nodes: paths
+                },
+                function (err, resId) {
+                    if (err) {
+                        callback(err);
+                    } else {
+                        _clientGlobal.db.simpleResult(resId, callback);
+                    }
+                });
+        }
+
+        function getExportItemsUrlAsync(paths, filename, callback) {
+            _clientGlobal.db.simpleRequest({
+                    command: 'dumpMoreNodes',
+                    name: _clientGlobal.projectName,
+                    hash: _clientGlobal.root.current || _clientGlobal.core.getHash(_clientGlobal.nodes[ROOT_PATH].node),
+                    nodes: paths
+                },
+                function (err, resId) {
+                    if (err) {
+                        callback(err);
+                    } else {
+                        callback(null,
+                            window.location.protocol + '//' + window.location.host + '/worker/simpleResult/' +
+                            resId + '/' + filename);
+                    }
+                });
+        }
+
+        function getExportLibraryUrlAsync(libraryRootPath, filename, callback) {
+            var command = {};
+            command.command = 'exportLibrary';
+            command.name = _clientGlobal.projectName;
+            command.hash = _clientGlobal.root.current ||
+                _clientGlobal.core.getHash(_clientGlobal.nodes[ROOT_PATH].node);
+            command.path = libraryRootPath;
+            if (command.name && command.hash) {
+                _clientGlobal.db.simpleRequest(command, function (err, resId) {
+                    if (err) {
+                        callback(err);
+                    } else {
+                        callback(null,
+                            window.location.protocol + '//' + window.location.host + '/worker/simpleResult/' +
+                            resId + '/' + filename);
+                    }
+                });
+            } else {
+                callback(new Error('there is no open project!'));
+            }
+        }
+
+        function updateLibraryAsync(libraryRootPath, newLibrary, callback) {
+            Serialization.import(_clientGlobal.core,
+                _clientGlobal.nodes[libraryRootPath].node, newLibrary, function (err, log) {
+                    if (err) {
+                        return callback(err);
+                    }
+
+                    _clientGlobal.functions.saveRoot('library update done\nlogs:\n' + log, callback);
+                }
+            );
+        }
+
+        function addLibraryAsync(libraryParentPath, newLibrary, callback) {
+            _clientGlobal.functions.startTransaction('creating library as a child of ' + libraryParentPath);
+            var libraryRoot = _clientGlobal.nodeSetter.createChild({
+                parentId: libraryParentPath,
+                baseId: null
+            }, 'library placeholder');
+            Serialization.import(_clientGlobal.core,
+                _clientGlobal.nodes[libraryRoot].node, newLibrary, function (err, log) {
+                    if (err) {
+                        return callback(err);
+                    }
+
+                    _clientGlobal.functions.completeTransaction('library update done\nlogs:\n' + log, callback);
+                }
+            );
+        }
+
+        function dumpNodeAsync(path, callback) {
+            if (_clientGlobal.nodes[path]) {
+                dump(_clientGlobal.core, _clientGlobal.nodes[path].node, '', 'guid', callback);
+            } else {
+                callback('unknown object', null);
+            }
+        }
+
+        function importNodeAsync(parentPath, jNode, callback) {
+            var node = null;
+            if (_clientGlobal.nodes[parentPath]) {
+                node = _clientGlobal.nodes[parentPath].node;
+            }
+            importing(_clientGlobal.core, _clientGlobal.nodes[parentPath].node, jNode, function (err) {
+                if (err) {
+                    callback(err);
+                } else {
+                    _clientGlobal.functions.saveRoot('importNode under ' + parentPath, callback);
+                }
+            });
+        }
+
+        function mergeNodeAsync(parentPath, jNode, callback) {
+            var node = null;
+            if (_clientGlobal.nodes[parentPath]) {
+                node = _clientGlobal.nodes[parentPath].node;
+            }
+            mergeImport(_clientGlobal.core, _clientGlobal.nodes[parentPath].node, jNode, function (err) {
+                if (err) {
+                    callback(err);
+                } else {
+                    _clientGlobal.functions.saveRoot('importNode under ' + parentPath, callback);
+                }
+            });
+        }
+
+        function createProjectFromFileAsync(projectname, jProject, callback) {
+            //TODO somehow the export / import should contain the INFO field
+            // so the tags and description could come from it
+            createProjectAsync(projectname, {}, function (/*err*/) {
+                selectProjectAsync(projectname, function (/*err*/) {
+                    Serialization.import(_clientGlobal.core, _clientGlobal.root.object, jProject, function (err) {
+                        if (err) {
+                            return callback(err);
+                        }
+
+                        _clientGlobal.functions.saveRoot('library has been updated...', callback);
+                    });
+                });
+            });
+        }
+
+        function selectProjectAsync(projectname, callback) {
+            if (_clientGlobal.db) {
+                if (projectname === _clientGlobal.projectName) {
+                    callback(null);
+                } else {
+                    _clientGlobal.functions.closeOpenedProject(function (/*err*/) {
+                        //TODO what can we do with the error??
+                        _clientGlobal.functions.openProject(projectname, function (err) {
+                            //TODO is there a meaningful error which we should propagate towards user???
+                            if (!err) {
+                                _clientGlobal.functions.reLaunchUsers();
+                            }
+                            callback(err);
+                        });
+                    });
+                }
+            } else {
+                callback(new Error('there is no open database connection!!!'));
+            }
+        }
+
+        function plainUrl(parameters) {
+            //setting the default values
+            parameters.command = parameters.command || 'etf';
+            parameters.path = parameters.path || '';
+            parameters.project = parameters.project || _clientGlobal.projectName;
+
+            if (!parameters.root && !parameters.branch && !parameters.commit) {
+                if (_clientGlobal.root.current) {
+                    parameters.root = _clientGlobal.root.current;
+                } else if (_clientGlobal.nodes && _clientGlobal.nodes[ROOT_PATH]) {
+                    parameters.root = _clientGlobal.core.getHash(_clientGlobal.nodes[ROOT_PATH].node);
+                } else {
+                    parameters.branch = _clientGlobal.branch || 'master';
+                }
+            }
+
+            //now we compose the URL
+            if (window && window.location) {
+                var address = window.location.protocol + '//' + window.location.host + '/rest/' +
+                    parameters.command + '?';
+                address += '&project=' + URL.addSpecialChars(parameters.project);
+                if (parameters.root) {
+                    address += '&root=' + URL.addSpecialChars(parameters.root);
+                } else {
+                    if (parameters.commit) {
+                        address += '&commit=' + URL.addSpecialChars(parameters.commit);
+                    } else {
+                        address += '&branch=' + URL.addSpecialChars(parameters.branch);
+                    }
+                }
+
+                address += '&path=' + URL.addSpecialChars(parameters.path);
+
+                if (parameters.output) {
+                    address += '&output=' + URL.addSpecialChars(parameters.output);
+                }
+
+                return address;
+            }
+
+            return null;
+
+        }
+
+        function createProjectAsync(projectname, projectInfo, callback) {
+            if (_clientGlobal.db) {
+                getAvailableProjectsAsync(function (err, names) {
+                    if (!err && names) {
+                        if (names.indexOf(projectname) === -1) {
+                            _clientGlobal.db.openProject(projectname, function (err, p) {
+                                if (!err && p) {
+                                    createEmptyProject(p, function (err, commit) {
+                                        if (!err && commit) {
+                                            //TODO currently this is just a hack
+                                            p.setInfo(projectInfo || {
+                                                    visibleName: projectname,
+                                                    description: 'project in webGME',
+                                                    tags: {}
+                                                }, function (err) {
+                                                callback(err);
+                                            });
+                                        } else {
+                                            callback(err);
+                                        }
+                                    });
+                                } else {
+                                    callback(err);
+                                }
+                            });
+                        } else {
+                            //TODO maybe the selectProjectAsync could be called :)
+                            callback('the project already exists!');
+                        }
+                    } else {
+                        callback(err);
+                    }
+                });
+            } else {
+                callback(new Error('there is no open database connection!'));
+            }
+
+        }
+
+        function deleteProjectAsync(projectname, callback) {
+            if (_clientGlobal.db) {
+                if (projectname === _clientGlobal.projectName) {
+                    _clientGlobal.functions.closeOpenedProject();
+                }
+                _clientGlobal.db.deleteProject(projectname, callback);
+
+            } else {
+                callback(new Error('there is no open database connection!'));
+            }
+        }
+
+        //branching functionality
+        function getBranchesAsync(callback) {
+            if (_clientGlobal.db) {
+                if (_clientGlobal.project) {
+                    _clientGlobal.project.getBranchNames(function (err, names) {
+                        var missing = 0,
+                            branchArray = [],
+                            error = null,
+                            getBranchValues,
+                            i,
+                            element;
+
+                        if (!err && names) {
+                            getBranchValues = function (name) {
+                                _clientGlobal.project.getBranchHash(name, '#hack', function (err, newhash, forked) {
+                                    if (!err && newhash) {
+                                        element = {name: name, commitId: newhash};
+                                        if (forked) {
+                                            element.sync = false;
+                                        } else {
+                                            element.sync = true;
+                                        }
+                                        branchArray.push(element);
+                                    } else {
+                                        error = error || err;
+                                    }
+
+                                    missing -= 1;
+                                    if (missing === 0) {
+                                        callback(error, branchArray);
+                                    }
+                                });
+                            };
+
+                            for (i in names) {
+                                missing += 1;
+                            }
+
+                            if (missing > 0) {
+                                for (i in names) {
+                                    getBranchValues(i);
+                                }
+                            } else {
+                                callback(null, branchArray);
+                            }
+                        } else {
+                            callback(err);
+                        }
+                    });
+                } else {
+                    callback(new Error('there is no open project!'));
+                }
+            } else {
+                callback(new Error('there is no opened database connection!'));
+            }
+        }
+
+        function selectCommitAsync(hash, callback) {
+            //this should proxy to branch selection and viewer functions
+            if (_clientGlobal.db) {
+                if (_clientGlobal.project) {
+                    _clientGlobal.functions.viewerCommit(hash, callback);
+                } else {
+                    callback(new Error('there is no open project!'));
+                }
+            } else {
+                callback(new Error('there is no open database connection!'));
+            }
+        }
+
+        function selectBranchAsync(branch, callback) {
+            var waiting = 1,
+                error = null,
+                innerCallback = function (err) {
+                    error = error || err;
+                    if (--waiting === 0) {
+                        callback(error);
+                    }
+                };
+
+            if (_clientGlobal.db) {
+                if (_clientGlobal.project) {
+                            _clientGlobal.addOn.stopRunningAddOns();
+                            _clientGlobal.functions.branchWatcher(branch, innerCallback);
+                } else {
+                    callback(new Error('there is no open project!'));
+                }
+            } else {
+                callback(new Error('there is no open database connection!'));
+            }
+        }
+
+        function getCommitsAsync(commitHash, number, callback) {
+            if (_clientGlobal.db) {
+                if (_clientGlobal.project) {
+                    ASSERT(_clientGlobal.commitCache);
+                    if (commitHash === undefined) {
+                        commitHash = null;
+                    }
+                    _clientGlobal.commitCache.getNCommitsFrom(commitHash, number, callback);
+                } else {
+                    callback(new Error('there is no open project!'));
+                }
+            } else {
+                callback(new Error('there is no open database connection!'));
+            }
+        }
+
+        function createBranchAsync(branchName, commitHash, callback) {
+            //it doesn't changes anything, just creates the new branch
+            if (_clientGlobal.db) {
+                if (_clientGlobal.project) {
+                    _clientGlobal.project.setBranchHash(branchName, '', commitHash, callback);
+                } else {
+                    callback(new Error('there is no open project!'));
+                }
+            } else {
+                callback(new Error('there is no open database connection!'));
+            }
+        }
+
+        function deleteBranchAsync(branchName, callback) {
+            if (_clientGlobal.db) {
+                if (_clientGlobal.project) {
+                    _clientGlobal.project.getBranchHash(branchName, '', function (err, newhash, forkedhash) {
+                        if (!err && newhash) {
+                            if (forkedhash) {
+                                _clientGlobal.project.setBranchHash(branchName, newhash, forkedhash, function (err) {
+                                    if (!err) {
+                                        _clientGlobal.functions.changeBranchState(_clientGlobal.branchStates.SYNC);
+                                    }
+                                    callback(err);
+                                });
+                            } else {
+                                _clientGlobal.project.setBranchHash(branchName, newhash, '', callback);
+                            }
+                        } else {
+                            callback(err);
+                        }
+                    });
+                } else {
+                    callback(new Error('there is no open project!'));
+                }
+            } else {
+                callback(new Error('there is no open database connection!'));
+            }
+        }
+
+        return {
+            getAvailableProjectsAsync: getAvailableProjectsAsync,
+            getViewableProjectsAsync: getViewableProjectsAsync,
+            getFullProjectListAsync: getFullProjectListAsync,
+            getProjectAuthInfoAsync: getProjectAuthInfoAsync,
+            createProjectAsync: createProjectAsync,
+            selectProjectAsync: selectProjectAsync,
+            deleteProjectAsync: deleteProjectAsync,
+            getBranchesAsync: getBranchesAsync,
+            selectCommitAsync: selectCommitAsync,
+            getCommitsAsync: getCommitsAsync,
+            createBranchAsync: createBranchAsync,
+            deleteBranchAsync: deleteBranchAsync,
+            selectBranchAsync: selectBranchAsync,
+//JSON functions
+            exportItems: exportItems,
+            getExportItemsUrlAsync: getExportItemsUrlAsync,
+            //getExternalInterpreterConfigUrlAsync: getExternalInterpreterConfigUrlAsync,
+            dumpNodeAsync: dumpNodeAsync,
+            importNodeAsync: importNodeAsync,
+            mergeNodeAsync: mergeNodeAsync,
+            createProjectFromFileAsync: createProjectFromFileAsync,
+            getDumpURL: getDumpURL,
+            getExportLibraryUrlAsync: getExportLibraryUrlAsync,
+            updateLibraryAsync: updateLibraryAsync,
+            addLibraryAsync: addLibraryAsync,
+            getFullProjectsInfoAsync: getFullProjectsInfoAsync,
+            createGenericBranchAsync: createGenericBranchAsync,
+            deleteGenericBranchAsync: deleteGenericBranchAsync,
+            setProjectInfoAsync: setProjectInfoAsync,
+            getProjectInfoAsync: getProjectInfoAsync,
+            getAllInfoTagsAsync: getAllInfoTagsAsync
+        };
+    }
+
+    return Requests;
+});
+/*globals define*/
+/*jshint browser: true*/
+
+/**
+ * @author kecso / https://github.com/kecso
+ */
+
+define('client/js/client/index',[
     'common/util/assert',
     'common/EventDispatcher',
     'common/util/guid',
@@ -18106,169 +19973,471 @@ define('client/js/client',[
     'common/util/url',
     'common/core/users/meta',
     'common/core/users/tojson',
-    'common/core/users/dump',
-    'common/core/users/import',
-    'common/core/users/copyimport',
-    'common/core/users/serialization',
     'common/core/tasync',
-    'superagent'
+    'superagent',
+    './undoredo',
+    './gmeNodeGetter',
+    './gmeNodeSetter',
+    './commitCache',
+    './serverEventer',
+    './addon',
+    './requests'
 ], function (ASSERT,
-    EventDispatcher,
-    GUID,
-    Core,
-    Storage,
-    Logger,
-    URL,
-    BaseMeta,
+             EventDispatcher,
+             GUID,
+             Core,
+             Storage,
+             Logger,
+             URL,
+             BaseMeta,
              toJson,
-             dump,
-             mergeImport,
-             importing,
-    Serialization,
-    TASYNC,
-    superagent) {
+             TASYNC,
+             superagent,
+             UndoRedo,
+             getNode,
+             gmeNodeSetter,
+             createCommitCache,
+             serverEventer,
+             createAddOn,
+             Requests) {
 
     
 
     var ROOT_PATH = '';
 
     function COPY(object) {
-      if (object) {
-        return JSON.parse(JSON.stringify(object));
-      }
-      return null;
+        if (object) {
+            return JSON.parse(JSON.stringify(object));
+        }
+        return null;
     }
 
 
     function getNewCore(project, gmeConfig, logger) {
-      //return new NullPointerCore(new DescriptorCore(new SetCore(new GuidCore(new Core(project)))));
+        //return new NullPointerCore(new DescriptorCore(new SetCore(new GuidCore(new Core(project)))));
         // FIXME: why usertype is nodejs when it is running from the browser?
-      var options = {usertype: 'nodejs', globConf: gmeConfig, logger: logger.fork('core')};
+        var options = {usertype: 'nodejs', globConf: gmeConfig, logger: logger.fork('core')};
         return new Core(project, options);
     }
 
-    function UndoRedo(_client) {
-      var
-        currentModification = null,
-        canDoUndo = false,
-        canDoRedo = false,
-        currentTarget = null,
-        addModification = function (commitHash, info) {
-          var newElement = {
-            previous: currentModification,
-            commit: commitHash,
-            info: info,
-            next: null
-          };
-          if(currentModification){
-              currentModification.next = newElement;
-          }
-          currentModification = newElement;
-        },
-        undo = function (branch, callback) {
-          var from, to, project;
-          if (canDoUndo && currentModification && currentModification.previous) {
-            project = _client.getProjectObject();
-            from = currentModification.commit;
-            to = currentModification.previous.commit;
-            currentModification = currentModification.previous;
-            currentTarget = to;
-            project.setBranchHash(branch, from, to, callback);
-          } else {
-            callback(new Error('unable to execute undo'));
-          }
-        },
-        redo = function (branch, callback) {
-          var from, to, project;
-          if (canDoRedo && currentModification && currentModification.next) {
-            project = _client.getProjectObject();
-            from = currentModification.commit;
-            to = currentModification.next.commit;
-            currentModification = currentModification.next;
-            currentTarget = to;
-            project.setBranchHash(branch, from, to, callback);
-          } else {
-            callback(new Error('unable to execute redo'));
-          }
-        },
-        clean = function() {
-          currentModification = null;
-          canDoUndo = false;
-          canDoRedo = false;
-        },
-        checkStatus = function(){
-          return {
-                    undo: currentModification ? currentModification.previous !== null &&
-                    currentModification.previous !== undefined : false,
-                    redo: currentModification ? currentModification.next !== null &&
-                    currentModification.next !== undefined : false
-          };
-        },
-        isCurrentTarget = function(commitHash){
-          if(currentTarget === commitHash){
-            currentTarget = null;
-            return true;
-          }
-          return false;
-        };
-
-      _client.addEventListener(_client.events.UNDO_AVAILABLE,function(client,parameters){
-        canDoUndo = parameters === true;
-      });
-      _client.addEventListener(_client.events.REDO_AVAILABLE,function(client,parameters){
-        canDoRedo = parameters === true;
-      });
-      return {
-        undo: undo,
-        redo: redo,
-        addModification: addModification,
-        clean: clean,
-        checkStatus: checkStatus,
-        isCurrentTarget: isCurrentTarget
-      };
-
-    }
-
     function Client(gmeConfig) {
-      var _self = this,
-        logger = Logger.create('gme:client', gmeConfig.client.log),
-        _database = null,
-        _projectName = null,
-        _project = null,
-        _core = null,
-        _branch = null,
-        _branchState = null,
-        _nodes = {},
-        _metaNodes = {},
-        _inTransaction = false,
-        _users = {},
-        _patterns = {},
-        _networkStatus = '',
+
+        function storeNode(node /*, basic */) {
+            var path;
+            //basic = basic || true;
+            if (node) {
+                path = _clientGlobal.core.getPath(node);
+                _metaNodes[path] = node;
+                if (_clientGlobal.nodes[path]) {
+                    //TODO we try to avoid this
+                } else {
+                    _clientGlobal.nodes[path] = {node: node, hash: ''/*,incomplete:true,basic:basic*/};
+                    //TODO this only needed when real eventing will be reintroduced
+                    //_inheritanceHash[path] = getInheritanceChain(node);
+                }
+                return path;
+            }
+            return null;
+        }
+
+        function saveRoot(msg, callback) {
+            var newRootHash,
+                newCommitHash;
+
+            callback = callback || function () {
+                };
+            if (!_viewer && !_readOnlyProject) {
+                if (_msg) {
+                    _msg += '\n' + msg;
+                } else {
+                    _msg += msg;
+                }
+                if (!_inTransaction) {
+                    ASSERT(_clientGlobal.project && _clientGlobal.core && _clientGlobal.branch);
+                    _clientGlobal.core.persist(_clientGlobal.nodes[ROOT_PATH].node, function (/*err*/) {
+                    });
+                    newRootHash = _clientGlobal.core.getHash(_clientGlobal.nodes[ROOT_PATH].node);
+                    newCommitHash = _clientGlobal.project.makeCommit([_recentCommits[0]],
+                        newRootHash, _msg, function (/*err*/) {
+                            //TODO now what??? - could we end up here?
+                        });
+                    _msg = '';
+                    addCommit(newCommitHash);
+                    _selfCommits[newCommitHash] = true;
+                    _redoer.addModification(newCommitHash, '');
+                    _clientGlobal.project.setBranchHash(_clientGlobal.branch,
+                        _recentCommits[1], _recentCommits[0], function (err) {
+                            //TODO now what??? - could we screw up?
+                            loading(newRootHash);
+                            callback(err);
+                        });
+                    //loading(newRootHash);
+                }
+            } else {
+                _msg = '';
+                callback(null);
+            }
+        }
+
+        function closeOpenedProject(callback) {
+            var returning,
+                project;
+
+            callback = callback || function () {
+                };
+            returning = function (e) {
+                var oldProjName = _clientGlobal.projectName;
+                _clientGlobal.projectName = null;
+                _inTransaction = false;
+                _clientGlobal.core = null;
+                _clientGlobal.nodes = {};
+                _metaNodes = {};
+                //_commitObject = null;
+                _patterns = {};
+                _msg = '';
+                _recentCommits = [];
+                _clientGlobal.root.current = null;
+                _clientGlobal.root.previous = null;
+                _viewer = false;
+                _readOnlyProject = false;
+                _loadNodes = {};
+                _loadError = 0;
+                _offline = false;
+                cleanUsersTerritories();
+                if (oldProjName) {
+                    //otherwise there were no open project at all
+                    _self.dispatchEvent(_self.events.PROJECT_CLOSED, oldProjName);
+                }
+
+                callback(e);
+            };
+            if (_clientGlobal.branch) {
+                //otherwise the branch will not 'change'
+                _self.dispatchEvent(_self.events.BRANCH_CHANGED, null);
+            }
+            _clientGlobal.branch = null;
+            if (_clientGlobal.project) {
+                project = _clientGlobal.project;
+                _clientGlobal.project = null;
+                project.closeProject(function (err) {
+                    //TODO what if for some reason we are in transaction???
+                    returning(err);
+                });
+            } else {
+                returning(null);
+            }
+        }
+
+        function viewerCommit(hash, callback) {
+            //no project change
+            //we stop watching branch
+            //we create the core
+            //we use the existing territories
+            //we set viewer mode, so there will be no modification allowed to send to server...
+            _clientGlobal.branch = null;
+            _viewer = true;
+            _recentCommits = [hash];
+            _self.dispatchEvent(_self.events.BRANCH_CHANGED, _clientGlobal.branch);
+            _clientGlobal.project.loadObject(hash, function (err, commitObj) {
+                if (!err && commitObj) {
+                    loading(commitObj.root, callback);
+                } else {
+                    logger.error('Cannot view given ' + hash + ' commit as it\'s root cannot be loaded! [' +
+                        JSON.stringify(err) + ']');
+                    callback(err || new Error('commit object cannot be found!'));
+                }
+            });
+        }
+
+        function startTransaction(msg) {
+            if (_clientGlobal.core) {
+                _inTransaction = true;
+                msg = msg || 'startTransaction()';
+                saveRoot(msg);
+            }
+        }
+
+        function completeTransaction(msg, callback) {
+            _inTransaction = false;
+            if (_clientGlobal.core) {
+                msg = msg || 'completeTransaction()';
+                saveRoot(msg, callback);
+            }
+        }
+
+        function branchWatcher(branch, callback) {
+            ASSERT(_clientGlobal.project);
+            callback = callback || function () {
+                };
+            var myCallback = function (err) {
+                myCallback = function () {
+                };
+                callback(err);
+            };
+            var redoerNeedsClean = true;
+            var branchHashUpdated = function (err, newhash, forked) {
+                var doUpdate = false;
+                if (branch === _clientGlobal.branch && !_offline) {
+                    if (!err && typeof newhash === 'string') {
+                        if (newhash === '') {
+                            logger.warn('The current branch ' + branch + ' have been deleted!');
+                            //we should open a viewer with our current commit...
+                            var latestCommit = _recentCommits[0];
+                            viewerCommit(latestCommit, function (err) {
+                                if (err) {
+                                    logger.error('Current branch ' + branch +
+                                        ' have been deleted, and unable to open the latest commit ' +
+                                        latestCommit + '! [' + JSON.stringify(err) + ']');
+                                }
+                            });
+                        } else {
+                            if (_redoer.isCurrentTarget(newhash)) {
+                                addCommit(newhash);
+                                doUpdate = true;
+                            } else if (!_selfCommits[newhash] || redoerNeedsClean) {
+                                redoerNeedsClean = false;
+                                _redoer.clean();
+                                _redoer.addModification(newhash, 'branch initial');
+                                _selfCommits = {};
+                                _selfCommits[newhash] = true;
+                                doUpdate = true;
+                                addCommit(newhash);
+                            }
+                            var redoInfo = _redoer.checkStatus(),
+                                canUndo = false,
+                                canRedo = false;
+
+                            if (_selfCommits[newhash]) {
+                                if (redoInfo.undo) {
+                                    canUndo = true;
+                                }
+                                if (redoInfo.redo) {
+                                    canRedo = true;
+                                }
+                            }
+
+                            _self.dispatchEvent(_self.events.UNDO_AVAILABLE, canUndo);
+                            _self.dispatchEvent(_self.events.REDO_AVAILABLE, canRedo);
+
+                            if (doUpdate) {
+                                _clientGlobal.project.loadObject(newhash, function (err, commitObj) {
+                                    if (!err && commitObj) {
+                                        loading(commitObj.root, myCallback);
+                                    } else {
+                                        setTimeout(function () {
+                                            _clientGlobal.project.loadObject(newhash, function (err, commitObj) {
+                                                if (!err && commitObj) {
+                                                    loading(commitObj.root, myCallback);
+                                                } else {
+                                                    logger.error('second load try failed on commit!!!', err);
+                                                }
+                                            });
+                                        }, 1000);
+                                    }
+                                });
+                            }
+
+                            //branch status update
+                            if (_offline) {
+                                changeBranchState(_self.branchStates.OFFLINE);
+                            } else {
+                                if (forked) {
+                                    changeBranchState(_self.branchStates.FORKED);
+                                }
+                            }
+
+                            //FIXME should kill the branch watcher gracefully as it is possible now to get a callback,
+                            // but the branch is already closed here - actually the whole project is closed
+                            return (branch === _clientGlobal.branch &&
+                            _clientGlobal.db &&
+                            _clientGlobal.project) ? _clientGlobal.project.getBranchHash(branch,
+                                _recentCommits[0],
+                                branchHashUpdated) : null;
+                        }
+                    } else {
+                        myCallback(null);
+                        return _clientGlobal.project.getBranchHash(branch, _recentCommits[0], branchHashUpdated);
+                    }
+                } else {
+                    myCallback(null);
+                }
+            };
+
+            if (_clientGlobal.branch === branch) {
+                if (_offline) {
+                    _viewer = false;
+                    _offline = false;
+                    changeBranchState(_self.branchStates.SYNC);
+                    _clientGlobal.project.getBranchHash(branch, _recentCommits[0], branchHashUpdated);
+                } else {
+                    callback(null);
+                }
+            } else {
+                _clientGlobal.branch = branch;
+                _viewer = false;
+                _offline = false;
+                _recentCommits = [''];
+                _self.dispatchEvent(_self.events.BRANCH_CHANGED, _clientGlobal.branch);
+                changeBranchState(_self.branchStates.SYNC);
+                _clientGlobal.project.getBranchHash(branch, _recentCommits[0], branchHashUpdated);
+            }
+        }
+
+        function reLaunchUsers() {
+            var i;
+            for (i in _users) {
+                if (_users.hasOwnProperty(i)) {
+                    if (_users[i].UI.reLaunch) {
+                        _users[i].UI.reLaunch();
+                    }
+                }
+            }
+        }
+
+        function openProject(name, callback) {
+            //this function cannot create new project
+            ASSERT(_clientGlobal.db);
+            var waiting = 1,
+                innerCallback = function (err) {
+                    error = error || err;
+                    if (--waiting === 0) {
+                        if (error) {
+                            logger.error('The branch ' + firstName + ' of project ' + name +
+                                ' cannot be selected! [' + JSON.stringify(error) + ']');
+                        }
+                        callback(error);
+                    }
+                },
+                firstName = null,
+                error = null;
+            _clientGlobal.db.getProjectNames(function (err, names) {
+                if (err) {
+                    return callback(err);
+                }
+                if (names.indexOf(name) !== -1) {
+                    _clientGlobal.db.openProject(name, function (err, p) {
+                        if (!err && p) {
+                            _clientGlobal.db.getAuthorizationInfo(name, function (err, authInfo) {
+                                _readOnlyProject = authInfo ? (authInfo.write === true ? false : true) : true;
+                                _clientGlobal.project = p;
+                                _clientGlobal.projectName = name;
+                                _inTransaction = false;
+                                _clientGlobal.nodes = {};
+                                _metaNodes = {};
+                                _clientGlobal.core = getNewCore(_clientGlobal.project,
+                                    gmeConfig, logger.fork('project' + name));
+                                _clientGlobal.META.initialize(_clientGlobal.core, _metaNodes, saveRoot);
+                                if (_clientGlobal.commitCache) {
+                                    _clientGlobal.commitCache.clearCache();
+                                } else {
+                                    createCommitCache(_clientGlobal); //attaches itself to the global
+                                }
+                                _self.dispatchEvent(_self.events.PROJECT_OPENED, _clientGlobal.projectName);
+
+                                //check for master or any other branch
+                                _clientGlobal.project.getBranchNames(function (err, names) {
+                                    if (!err && names) {
+
+                                        if (names.master) {
+                                            firstName = 'master';
+                                        } else {
+                                            firstName = Object.keys(names)[0] || null;
+                                        }
+
+                                        if (firstName) {
+                                            _clientGlobal.addOn.stopRunningAddOns();
+                                            branchWatcher(firstName, innerCallback);
+                                        } else {
+                                            //we should try the latest commit
+                                            viewLatestCommit(callback);
+                                        }
+                                    } else {
+                                        //we should try the latest commit
+                                        viewLatestCommit(callback);
+                                    }
+                                });
+                            });
+                        } else {
+                            logger.error('The project ' + name + ' cannot be opened! [' + JSON.stringify(err) +
+                                ']');
+                            callback(err);
+                        }
+                    });
+                } else {
+                    callback(new Error('there is no such project'));
+                }
+
+            });
+        }
+
+        function changeBranchState(newstate) {
+            if (_clientGlobal.branchState !== newstate) {
+                _clientGlobal.branchState = newstate;
+                _self.dispatchEvent(_self.events.BRANCHSTATUS_CHANGED, _clientGlobal.branchState);
+            }
+        }
+
+        var _self = this,
+            logger = Logger.create('gme:client', gmeConfig.client.log),
+            _metaNodes = {},
+            _inTransaction = false,
+            _users = {},
+            _patterns = {},
+            _networkStatus = '',
             _msg = '',
-        _recentCommits = [],
-        _viewer = false,
-        _readOnlyProject = false,
-        _loadNodes = {},
-        _loadError = 0,
-        _commitCache = null,
-        _offline = false,
-        _networkWatcher = null,
-        _TOKEN = null,
-        META = new BaseMeta(),
-        _rootHash = null,
-        _previousRootHash = null,
-            //_changeTree = null,
-        _root = null,
-        _gHash = 0,
-        _addOns = {},
-        _constraintCallback = null,
-        _redoer = null,
-        _selfCommits = {},
-        _configuration = {},
+            _recentCommits = [],
+            _viewer = false,
+            _readOnlyProject = false,
+            _loadNodes = {},
+            _loadError = 0,
+            _offline = false,
+            _networkWatcher = null,
+            _TOKEN = null,
+        //_changeTree = null,
+            _gHash = 0,
+            _redoer = null,
+            _selfCommits = {},
+            _configuration = {},
             AllPlugins,
             AllDecorators,
             eventDispatcher,
-            i;
+            i,
+            _clientGlobal = {
+                gmeConfig: gmeConfig,
+                logger: logger,
+                core: null,
+                branch: null,
+                branchState: null,
+                projectName: null,
+                root: {
+                    current: null,
+                    previous: null,
+                    object: null
+                },
+                nodes: {},
+                project: null,
+                db: null,
+                META: new BaseMeta(),
+                functions: {
+                    toJson: toJson,
+                    storeNode: storeNode,
+                    saveRoot: saveRoot,
+                    getNewCore: getNewCore,
+                    closeOpenedProject: closeOpenedProject,
+                    viewerCommit: viewerCommit,
+                    startTransaction: startTransaction,
+                    completeTransaction: completeTransaction,
+                    branchWatcher: branchWatcher, //refactor this
+                    reLaunchUsers: reLaunchUsers,
+                    openProject: openProject,
+                    changeBranchState: changeBranchState
+                }
+            },
+            _clientAPI = {},
+            _requests = new Requests(_clientGlobal);
+
+        gmeNodeSetter(_clientGlobal); //this attaches itself to the global object
+        createAddOn(_clientGlobal); //this attaches itself to the global
 
         if (window) {
             _configuration.host = window.location.protocol + '//' + window.location.host;
@@ -18278,40 +20447,41 @@ define('client/js/client',[
         }
         // FIXME: These are asynchronous
         superagent.get('/listAllPlugins')
-          .end(function (err, res) {
+            .end(function (err, res) {
                 if (res.status === 200) {
-               AllPlugins = res.body.allPlugins;
-               logger.debug('/listAllPlugins', AllPlugins);
+                    AllPlugins = res.body.allPlugins;
+                    logger.debug('/listAllPlugins', AllPlugins);
                 } else {
                     logger.error('/listAllPlugins failed', err);
-             }
-          });
+                }
+            });
 
         superagent.get('/listAllDecorators')
-          .end(function (err, res) {
+            .end(function (err, res) {
                 if (res.status === 200) {
-               AllDecorators = res.body.allDecorators;
-               logger.debug('/listAllDecorators', AllDecorators);
+                    AllDecorators = res.body.allDecorators;
+                    logger.debug('/listAllDecorators', AllDecorators);
                 } else {
                     logger.error('/listAllDecorators failed', err);
-            }
-          });
+                }
+            });
 
-      //default configuration
+        //default configuration
         //FIXME: Are these gme options or not??
-      _configuration.autoreconnect = true; // MAGIC NUMBERS
-      _configuration.reconndelay = 1000; // MAGIC NUMBERS
-      _configuration.reconnamount = 1000; // MAGIC NUMBERS
-      _configuration.autostart = false; // MAGIC NUMBERS
+        _configuration.autoreconnect = true; // MAGIC NUMBERS
+        _configuration.reconndelay = 1000; // MAGIC NUMBERS
+        _configuration.reconnamount = 1000; // MAGIC NUMBERS
+        _configuration.autostart = false; // MAGIC NUMBERS
 
-      //TODO remove the usage of jquery
-      //$.extend(_self, new EventDispatcher());
+        //TODO remove the usage of jquery
+        //$.extend(_self, new EventDispatcher());
         eventDispatcher = new EventDispatcher();
         for (i in eventDispatcher) {
             _self[i] = eventDispatcher[i];
-      }
+        }
+        _clientGlobal.eDispatcher = _self; //propagating dispatching functionality
 
-      _self.events = {
+        _self.events = {
             NETWORKSTATUS_CHANGED: 'NETWORKSTATUS_CHANGED',
             BRANCHSTATUS_CHANGED: 'BRANCHSTATUS_CHANGED',
             BRANCH_CHANGED: 'BRANCH_CHANGED',
@@ -18326,736 +20496,190 @@ define('client/js/client',[
 
             UNDO_AVAILABLE: 'UNDO_AVAILABLE',
             REDO_AVAILABLE: 'REDO_AVAILABLE'
-      };
+        };
 
-      _self.networkStates = {
+        _clientGlobal.events = _self.events; //propagating the event names
+
+        _self.networkStates = {
             CONNECTED: 'connected',
             DISCONNECTED: 'socket.io is disconnected'
-      };
+        };
 
-      _self.branchStates = {
+        _self.branchStates = {
             SYNC: 'inSync',
             FORKED: 'forked',
             OFFLINE: 'offline'
-      };
+        };
 
-      function getUserId() {
-        var cookies = URL.parseCookie(document.cookie);
-        if (cookies.webgme) {
-          return cookies.webgme;
-        } else {
-          return 'n/a';
+        _clientGlobal.branchStates = _self.branchStates;
+
+        function getUserId() {
+            var cookies = URL.parseCookie(document.cookie);
+            if (cookies.webgme) {
+                return cookies.webgme;
+            } else {
+                return 'n/a';
+            }
         }
-      }
 
         //FIXME remove TESTING
-      function newDatabase() {
+        function newDatabase() {
             var storageOptions = {
                     logger: Logger.create('gme:client:storage', gmeConfig.client.log),
                     host: _configuration.host
                 },
-            protocolStr;
+                protocolStr;
 
             if (typeof TESTING === 'undefined') {
                 storageOptions.user = getUserId();
             } else {
-          protocolStr = gmeConfig.server.https.enable ? 'https' : 'http';
+                protocolStr = gmeConfig.server.https.enable ? 'https' : 'http';
 
-          storageOptions.type = 'node';
-          storageOptions.host = protocolStr + '://127.0.0.1';
-          storageOptions.user = 'TEST';
-        }
+                storageOptions.type = 'node';
+                storageOptions.host = protocolStr + '://127.0.0.1';
+                storageOptions.user = 'TEST';
+            }
 
-        storageOptions.globConf = gmeConfig;
+            storageOptions.globConf = gmeConfig;
             return new Storage(storageOptions);
-      }
-
-      function changeBranchState(newstate) {
-        if (_branchState !== newstate) {
-          _branchState = newstate;
-          _self.dispatchEvent(_self.events.BRANCHSTATUS_CHANGED, _branchState);
         }
-      }
 
-      function connect() {
-        //this is when the user force to go online on network level
-        //TODO implement :) - but how, there is no such function on the storage's API
-        if (_database) {
-                _database.openDatabase(function (/*err*/) {
-          });
-        }
-      }
-
-      //branch handling functions
-      function goOffline() {
-        //TODO stop watching the branch changes
-        _offline = true;
-        changeBranchState(_self.branchStates.OFFLINE);
-      }
-
-      function goOnline() {
-        //TODO we should try to update the branch with our latest commit
-        //and 'restart' listening to branch changes
-        if (_offline) {
-          stopRunningAddOns();
-          branchWatcher(_branch);
-        }
-      }
-
-      function addCommit(commitHash) {
-        _commitCache.newCommit(commitHash);
-        _recentCommits.unshift(commitHash);
-        if (_recentCommits.length > 100) {
-          _recentCommits.pop();
-        }
-      }
-
-      function serverEventer() {
-        var lastGuid = '',
-          nextServerEvent = function (err, guid, parameters) {
-            lastGuid = guid || lastGuid;
-            if (!err && parameters) {
-              switch (parameters.type) {
-                            case 'PROJECT_CREATED':
-                  _self.dispatchEvent(_self.events.SERVER_PROJECT_CREATED, parameters.project);
-                  break;
-                            case 'PROJECT_DELETED':
-                  _self.dispatchEvent(_self.events.SERVER_PROJECT_DELETED, parameters.project);
-                  break;
-                            case 'BRANCH_CREATED':
-                                _self.dispatchEvent(_self.events.SERVER_BRANCH_CREATED,
-                                    {
-                                        project: parameters.project,
-                                        branch: parameters.branch,
-                                        commit: parameters.commit
-                                    });
-                  break;
-                            case 'BRANCH_DELETED':
-                                _self.dispatchEvent(_self.events.SERVER_BRANCH_DELETED,
-                                    {
-                                        project: parameters.project,
-                                        branch: parameters.branch
-                                    });
-                  break;
-                            case 'BRANCH_UPDATED':
-                                _self.dispatchEvent(_self.events.SERVER_BRANCH_UPDATED,
-                                    {
-                                        project: parameters.project,
-                                        branch: parameters.branch,
-                                        commit: parameters.commit
-                                    });
-                  break;
-              }
-              return _database.getNextServerEvent(lastGuid, nextServerEvent);
-            } else {
-              setTimeout(function () {
-                return _database.getNextServerEvent(lastGuid, nextServerEvent);
-              }, 1000);
+        function connect() {
+            //this is when the user force to go online on network level
+            //TODO implement :) - but how, there is no such function on the storage's API
+            if (_clientGlobal.db) {
+                _clientGlobal.db.openDatabase(function (/*err*/) {
+                });
             }
-          };
-        _database.getNextServerEvent(lastGuid, nextServerEvent);
-      }
+        }
 
-      //addOn functions
-      function startAddOn(name) {
-        if (_addOns[name] === undefined) {
-                _addOns[name] = 'loading';
-                _database.simpleRequest({
-                        command: 'connectedWorkerStart',
-                        workerName: name,
-                        project: _projectName,
-                        branch: _branch
-                    },
-                    function (err, id) {
-            if (err) {
-              logger.error('starting addon failed ' + err);
-              delete _addOns[name];
-              return logger.error(err);
+        //branch handling functions
+        function goOffline() {
+            //TODO stop watching the branch changes
+            _offline = true;
+            changeBranchState(_self.branchStates.OFFLINE);
+        }
+
+        function goOnline() {
+            //TODO we should try to update the branch with our latest commit
+            //and 'restart' listening to branch changes
+            if (_offline) {
+                _clientGlobal.addOn.stopRunningAddOns();
+                branchWatcher(_clientGlobal.branch);
             }
-
-            logger.debug('started addon ' + name + ' ' + id);
-            _addOns[name] = id;
-          });
         }
 
-      }
-
-      function queryAddOn(name, query, callback) {
-            if (!_addOns[name] || _addOns[name] === 'loading') {
-          return callback(new Error('no such addOn is ready for queries'));
+        function addCommit(commitHash) {
+            _clientGlobal.commitCache.newCommit(commitHash);
+            _recentCommits.unshift(commitHash);
+            if (_recentCommits.length > 100) {
+                _recentCommits.pop();
+            }
         }
-        _database.simpleQuery(_addOns[name], query, callback);
-      }
 
-      function stopAddOn(name, callback) {
-            if (_addOns[name] && _addOns[name] !== 'loading') {
-          _database.simpleResult(_addOns[name], callback);
-          delete _addOns[name];
-        } else {
-                callback(_addOns[name] ? new Error('addon loading') : null);
-        }
-      }
 
-      //generic project related addOn handling
-      function updateRunningAddOns(root) {
-            var i,
-                neededAddOns,
-                runningAddOns,
-                callback = function (err) {
-                    logger.error(err);
+        function tokenWatcher() {
+            var token = null,
+                refreshToken = function () {
+                    _clientGlobal.db.getToken(function (err, t) {
+                        if (!err) {
+                            token = t || '_';
+                        }
+                    });
+                },
+                getToken = function () {
+                    return token;
                 };
 
-          if(gmeConfig.addOn.enable === true) {
-                neededAddOns = _core.getRegistry(root, 'usedAddOns');
-          runningAddOns = getRunningAddOnNames();
-                neededAddOns = neededAddOns ? neededAddOns.split(' ') : [];
-                for (i = 0; i < neededAddOns.length; i += 1) {
-          if (!_addOns[neededAddOns[i]]) {
-            startAddOn(neededAddOns[i]);
-          }
-        }
-                for (i = 0; i < runningAddOns.length; i += 1) {
-          if (neededAddOns.indexOf(runningAddOns[i]) === -1) {
-                        stopAddOn(runningAddOns[i], callback);
-          }
-        }
-      }
-      }
-
-      function stopRunningAddOns() {
-        var i,
-                keys,
-                callback;
-
-            if (gmeConfig.addOn.enable === true) {
-                keys = Object.keys(_addOns);
-          callback = function (err) {
-            if (err) {
-                        logger.error('stopAddOn' + err);
-            }
-          };
-
-        for (i = 0; i < keys.length; i++) {
-          stopAddOn(keys[i], callback);
-        }
-      }
-      }
-
-      function getRunningAddOnNames() {
-        var i,
-          names = [],
-          keys = Object.keys(_addOns);
-        for (i = 0; i < keys.length; i++) {
-          if (_addOns[keys[i]] !== 'loading') {
-            names.push(keys[i]);
-          }
-        }
-        return names;
-      }
-
-      //core addOns
-      //history
-      function getDetailedHistoryAsync(callback) {
-            if (_addOns.hasOwnProperty('HistoryAddOn') && _addOns.HistoryAddOn !== 'loading') {
-          queryAddOn('HistoryAddOn', {}, callback);
-        } else {
-          callback(new Error('history information is not available'));
-        }
-      }
-
-      //constraint
-      function validateProjectAsync(callback) {
-            callback = callback || _constraintCallback || function (/*err, result*/) {
-        };
-            if (_addOns.hasOwnProperty('ConstraintAddOn') && _addOns.ConstraintAddOn !== 'loading') {
-                queryAddOn('ConstraintAddOn', {querytype: 'checkProject'}, callback);
-        } else {
-          callback(new Error('constraint checking is not available'));
-        }
-      }
-
-      function validateModelAsync(path, callback) {
-            callback = callback || _constraintCallback || function (/* err, result */) {
-        };
-            if (_addOns.hasOwnProperty('ConstraintAddOn') && _addOns.ConstraintAddOn !== 'loading') {
-                queryAddOn('ConstraintAddOn', {querytype: 'checkModel', path: path}, callback);
-        } else {
-          callback(new Error('constraint checking is not available'));
-        }
-      }
-
-      function validateNodeAsync(path, callback) {
-            callback = callback || _constraintCallback || function (/* err, result */) {
-        };
-            if (_addOns.hasOwnProperty('ConstraintAddOn') && _addOns.ConstraintAddOn !== 'loading') {
-                queryAddOn('ConstraintAddOn', {querytype: 'checkNode', path: path}, callback);
-        } else {
-          callback(new Error('constraint checking is not available'));
-        }
-      }
-
-      function setValidationCallback(cFunction) {
-        if (typeof cFunction === 'function' || cFunction === null) {
-          _constraintCallback = cFunction;
-        }
-      }
-
-      //core addOns end
-
-      function tokenWatcher() {
-        var token = null,
-          refreshToken = function () {
-            _database.getToken(function (err, t) {
-              if (!err) {
-                            token = t || '_';
-              }
-            });
-          },
-          getToken = function () {
-            return token;
-          };
-
-        setInterval(refreshToken, 10000); //maybe it could be configurable
-        refreshToken();
-
-        return {
-          getToken: getToken
-        };
-      }
-
-        var Lock = function () {
-            var waiters = [];
+            setInterval(refreshToken, 10000); //maybe it could be configurable
+            refreshToken();
 
             return {
-                lock: function (func) {
-                    waiters.push(func);
-                    if (waiters.length === 1) {
-                        func();
-                    }
-                },
-
-                unlock: function () {
-                    waiters.shift();
-                    if (waiters.length >= 1) {
-                        var func = waiters[0];
-                        func();
-                    }
-                }
+                getToken: getToken
             };
-        };
-        var lock = new Lock();
-
-
-
-        function branchWatcher(branch, callback) {
-        ASSERT(_project);
-        callback = callback || function () {
-        };
-        var myCallback = function(err){
-                myCallback = function () {
-                };
-          callback(err);
-        };
-        var redoerNeedsClean = true;
-        var currentHash = '';
-        var branchHashUpdated = function (err, newhash, forked) {
-          var doUpdate = false;
-          if (branch === _branch && !_offline) {
-            if (!err && typeof newhash === 'string') {
-              if (newhash === '') {
-                logger.warn('The current branch ' + branch + ' have been deleted!');
-                //we should open a viewer with our current commit...
-                var latestCommit = _recentCommits[0];
-                viewerCommit(latestCommit, function (err) {
-                  if (err) {
-                                    logger.error('Current branch ' + branch +
-                                    ' have been deleted, and unable to open the latest commit ' +
-                                    latestCommit + '! [' + JSON.stringify(err) + ']');
-                  }
-                });
-              } else {
-                if(_redoer.isCurrentTarget(newhash)){
-                  addCommit(newhash);
-                  doUpdate = true;
-                } else if(!_selfCommits[newhash] || redoerNeedsClean){
-                  redoerNeedsClean = false;
-                  _redoer.clean();
-                                _redoer.addModification(newhash, 'branch initial');
-                  _selfCommits={};
-                  _selfCommits[newhash] = true;
-                  doUpdate = true;
-                  addCommit(newhash);
-                }
-                var redoInfo = _redoer.checkStatus(),
-                  canUndo = false,
-                  canRedo = false;
-
-                if(_selfCommits[newhash]){
-                  if(redoInfo.undo) {
-                    canUndo = true;
-                  }
-                  if(redoInfo.redo) {
-                    canRedo = true;
-                  }
-                }
-
-                _self.dispatchEvent(_self.events.UNDO_AVAILABLE, canUndo);
-                _self.dispatchEvent(_self.events.REDO_AVAILABLE, canRedo);
-
-                if(doUpdate){
-                  currentHash = newhash;
-                  var doLoad = function (newhash) {
-                      _project.loadObject(newhash, function (err, commitObj) {
-                          if (!err && commitObj) {
-                              loading(commitObj.root, function (err) {
-                                  myCallback(err);
-                                  lock.unlock();
-                              });
-                          } else {
-                              console.log("BUG: first try to load commit failed", err);
-                              setTimeout(function () {
-                                  _project.loadObject(newhash, function (err2, commitObj) {
-                                      if (!err2 && commitObj) {
-                                          loading(commitObj.root, function (err) {
-                                              myCallback(err);
-                                              lock.unlock();
-                                          });
-                                      } else {
-                                                    logger.error('second load try failed on commit!!!', err);
-                                          lock.unlock();
-                                      }
-                                  });
-                              }, 1000);
-                          }
-                      });
-                  }
-                  lock.lock(function () {
-                      doLoad(newhash);
-                  });
-                }
-
-                //branch status update
-                if (_offline) {
-                  changeBranchState(_self.branchStates.OFFLINE);
-                } else {
-                  if (forked) {
-                    changeBranchState(_self.branchStates.FORKED);
-                  }
-                }
-
-                            //FIXME should kill the branch watcher gracefully as it is possible now to get a callback,
-                            // but the branch is already closed here - actually the whole project is closed
-                            return (branch === _branch && _database && _project) ? _project.getBranchHash(branch,
-                                _recentCommits[0],
-                                branchHashUpdated) : null;
-              }
-            } else {
-              myCallback(null);
-              return _project.getBranchHash(branch, _recentCommits[0], branchHashUpdated);
-            }
-          } else {
-            myCallback(null);
-          }
-        };
-
-            if (_branch === branch) {
-                if (_offline) {
-          _viewer = false;
-          _offline = false;
-          changeBranchState(_self.branchStates.SYNC);
-          _project.getBranchHash(branch, _recentCommits[0], branchHashUpdated);
-        } else {
-                    callback(null);
-                }
-            } else {
-                _branch = branch;
-            _viewer = false;
-            _offline = false;
-                _recentCommits = [''];
-                _self.dispatchEvent(_self.events.BRANCH_CHANGED, _branch);
-            changeBranchState(_self.branchStates.SYNC);
-            _project.getBranchHash(branch, _recentCommits[0], branchHashUpdated);
         }
-      }
 
-      function networkWatcher() {
+        function networkWatcher() {
             _networkStatus = '';
-        //FIXME: Are these gme options or not??
+            //FIXME: Are these gme options or not??
 
-        var frequency = 10,
-            running = true,
-            stop = function () {
-              running = false;
-            },
-            checking = false,
-            reconnecting = function (finished) {
-              var connecting = false,
-                  counter = 0,
-                  frequency = _configuration.reconndelay || 10,
-                  timerId = setInterval(function () {
-                    if (!connecting) {
-                      connecting = true;
-                      _database.openDatabase(function (err) {
-                        connecting = false;
-                        if (!err) {
-                          //we are back!
-                          clearInterval(timerId);
-                          return finished(null);
-                        }
-                        if (++counter === _configuration.reconnamount) {
-                          //we failed, stop trying
-                          clearInterval(timerId);
-                          return finished(err);
-                        }
-                      });
-                    }
-                  }, frequency);
-            },
-            checkId = setInterval(function () {
-              if (!checking) {
-                checking = true;
-                _database.getDatabaseStatus(_networkStatus, function (err, newStatus) {
-                  if (running) {
-                    if (_networkStatus !== newStatus) {
-                      _networkStatus = newStatus;
-                      _self.dispatchEvent(_self.events.NETWORKSTATUS_CHANGED, _networkStatus);
+            var frequency = 10,
+                running = true,
+                stop = function () {
+                    running = false;
+                },
+                checking = false,
+                reconnecting = function (finished) {
+                    var connecting = false,
+                        counter = 0,
+                        frequency = _configuration.reconndelay || 10,
+                        timerId = setInterval(function () {
+                            if (!connecting) {
+                                connecting = true;
+                                _clientGlobal.db.openDatabase(function (err) {
+                                    connecting = false;
+                                    if (!err) {
+                                        //we are back!
+                                        clearInterval(timerId);
+                                        return finished(null);
+                                    }
+                                    if (++counter === _configuration.reconnamount) {
+                                        //we failed, stop trying
+                                        clearInterval(timerId);
+                                        return finished(err);
+                                    }
+                                });
+                            }
+                        }, frequency);
+                },
+                checkId = setInterval(function () {
+                    if (!checking) {
+                        checking = true;
+                        _clientGlobal.db.getDatabaseStatus(_networkStatus, function (err, newStatus) {
+                            if (running) {
+                                if (_networkStatus !== newStatus) {
+                                    _networkStatus = newStatus;
+                                    _self.dispatchEvent(_self.events.NETWORKSTATUS_CHANGED, _networkStatus);
                                     if (_networkStatus === _self.networkStates.DISCONNECTED &&
                                         _configuration.autoreconnect) {
-                        reconnecting(function (err) {
-                          checking = false;
-                          if (err) {
-                            logger.error('permanent network failure:', err);
-                            clearInterval(checkId);
-                          }
+                                        reconnecting(function (err) {
+                                            checking = false;
+                                            if (err) {
+                                                logger.error('permanent network failure:', err);
+                                                clearInterval(checkId);
+                                            }
+                                        });
+                                    } else {
+                                        checking = false;
+                                    }
+                                } else {
+                                    checking = false;
+                                }
+                            } else {
+                                clearInterval(checkId);
+                            }
                         });
-                      } else {
-                        checking = false;
-                      }
-                    } else {
-                      checking = false;
                     }
-                  } else {
-                    clearInterval(checkId);
-                  }
-                });
-              }
-            }, frequency);
+                }, frequency);
 
-        return {
-          stop: stop
-        };
-      }
-
-      function commitCache() {
-        var _cache = {},
-          _timeOrder = [];
-
-        function clearCache() {
-          _cache = {};
-          _timeOrder = [];
+            return {
+                stop: stop
+            };
         }
 
-        function addCommit(commitObject) {
-                var index;
-
-                if (!_cache[commitObject._id]) {
-            _cache[commitObject._id] = commitObject;
-                    index = 0;
-            while (index < _timeOrder.length && _cache[_timeOrder[index]].time > commitObject.time) {
-              index++;
-            }
-            _timeOrder.splice(index, 0, commitObject._id);
-          }
-        }
-
-        function getNCommitsFrom(commitHash, number, callback) {
-                var fillCache,
-                    returnNCommitsFromHash,
-                    cacheFilled,
-                    index;
-
-                fillCache = function (time, number, cb) {
-            _project.getCommits(time, number, function (err, commits) {
-                        var i;
-              if (!err && commits) {
-                            for (i = 0; i < commits.length; i++) {
-                  addCommit(commits[i]);
-                }
-                cb(null);
-              } else {
-                //we cannot get new commits from the server
-                //we should use our very own ones
-                cb(null);
-              }
-            });
-          };
-                returnNCommitsFromHash = function (hash, num, cb) {
-            //now we should have all the commits in place
-            var index = _timeOrder.indexOf(hash),
-              commits = [];
-            if (index > -1 || hash === null) {
-              if (hash === null) {
-                index = 0;
-              } else {
-                index++;
-
-              }
-              while (commits.length < num && index < _timeOrder.length) {
-                commits.push(_cache[_timeOrder[index]]);
-                index++;
-              }
-              cb(null, commits);
-            } else {
-              cb('cannot found starting commit');
-            }
-          };
-                cacheFilled = function (err) {
-            if (err) {
-              callback(err);
-            } else {
-              returnNCommitsFromHash(commitHash, number, callback);
-            }
-          };
-
-
-          if (commitHash) {
-            if (_cache[commitHash]) {
-              //we can be lucky :)
-                        index = _timeOrder.indexOf(commitHash);
-              if (_timeOrder.length > index + number) {
-                //we are lucky
-                cacheFilled(null);
-              } else {
-                //not that lucky
-                            fillCache(_cache[_timeOrder[_timeOrder.length - 1]].time,
-                                number - (_timeOrder.length - (index + 1)),
-                                cacheFilled);
-              }
-            } else {
-              //we are not lucky enough so we have to download the commit
-              _project.loadObject(commitHash, function (err, commitObject) {
-                if (!err && commitObject) {
-                  addCommit(commitObject);
-                  fillCache(commitObject.time, number, cacheFilled);
+        function viewLatestCommit(callback) {
+            _clientGlobal.commitCache.getNCommitsFrom(null, 1, function (err, commits) {
+                if (!err && commits && commits.length > 0) {
+                    viewerCommit(commits[0][_clientGlobal.project.ID_NAME], callback);
                 } else {
-                  callback(err);
+                    logger.error('Cannot get latest commit! [' + JSON.stringify(err) + ']');
+                    callback(err);
                 }
-              });
-            }
-          } else {
-            //initial call
-            fillCache((new Date()).getTime(), number, cacheFilled);
-          }
+            });
         }
 
-        function newCommit(commitHash) {
-          if (_cache[commitHash]) {
-            return;
-                }
-
-            _project.loadObject(commitHash, function (err, commitObj) {
-              if (!err && commitObj) {
-                addCommit(commitObj);
-              }
-
-            });
-          }
-
-        return {
-          getNCommitsFrom: getNCommitsFrom,
-          clearCache: clearCache,
-          newCommit: newCommit
-        };
-      }
-
-      function viewLatestCommit(callback) {
-        _commitCache.getNCommitsFrom(null, 1, function (err, commits) {
-          if (!err && commits && commits.length > 0) {
-                    viewerCommit(commits[0][_project.ID_NAME], callback);
-          } else {
-            logger.error('Cannot get latest commit! [' + JSON.stringify(err) + ']');
-            callback(err);
-          }
-        });
-      }
-
-      function openProject(name, callback) {
-        //this function cannot create new project
-        ASSERT(_database);
-        var waiting = 1,
-          innerCallback = function (err) {
-            error = error || err;
-            if (--waiting === 0) {
-              if (error) {
-                            logger.error('The branch ' + firstName + ' of project ' + name +
-                            ' cannot be selected! [' + JSON.stringify(error) + ']');
-              }
-              callback(error);
-            }
-          },
-          firstName = null,
-          error = null;
-        _database.getProjectNames(function (err, names) {
-          if (err) {
-            return callback(err);
-          }
-          if (names.indexOf(name) !== -1) {
-            _database.openProject(name, function (err, p) {
-              if (!err && p) {
-                _database.getAuthorizationInfo(name, function (err, authInfo) {
-                  _readOnlyProject = authInfo ? (authInfo.write === true ? false : true) : true;
-                  _project = p;
-                  _projectName = name;
-                  _inTransaction = false;
-                  _nodes = {};
-                  _metaNodes = {};
-                  _core = getNewCore(_project, gmeConfig, logger.fork('project' + name));
-                  META.initialize(_core, _metaNodes, saveRoot);
-                  if (_commitCache) {
-                    _commitCache.clearCache();
-                  } else {
-                    _commitCache = commitCache();
-                  }
-                  _self.dispatchEvent(_self.events.PROJECT_OPENED, _projectName);
-
-                  //check for master or any other branch
-                  _project.getBranchNames(function (err, names) {
-                    if (!err && names) {
-
-                                        if (names.master) {
-                        firstName = 'master';
-                      } else {
-                        firstName = Object.keys(names)[0] || null;
-                      }
-
-                      if (firstName) {
-                        stopRunningAddOns();
-                        branchWatcher(firstName, innerCallback);
-                      } else {
-                        //we should try the latest commit
-                        viewLatestCommit(callback);
-                      }
-                    } else {
-                      //we should try the latest commit
-                      viewLatestCommit(callback);
-                    }
-                  });
-                });
-              } else {
-                            logger.error('The project ' + name + ' cannot be opened! [' + JSON.stringify(err) +
-                            ']');
-                callback(err);
-              }
-            });
-          } else {
-            callback(new Error('there is no such project'));
-          }
-
-        });
-      }
-
-      //internal functions
-      function cleanUsersTerritories() {
+        //internal functions
+        function cleanUsersTerritories() {
             //look out as the user can remove itself at any time!!!
             var userIds = Object.keys(_users),
                 i,
@@ -19067,108 +20691,91 @@ define('client/js/client',[
                     events = [{eid: null, etype: 'complete'}];
                     for (j in _users[userIds[i]].PATHS
                         ) {
-            events.push({etype: 'unload', eid: j});
-          }
+                        events.push({etype: 'unload', eid: j});
+                    }
                     _users[userIds[i]].PATTERNS = {};
                     _users[userIds[i]].PATHS = {};
                     _users[userIds[i]].SENDEVENTS = true;
                     _users[userIds[i]].FN(events);
                 }
-        }
-      }
-
-      function reLaunchUsers() {
-            var i;
-            for (i in _users) {
-                if (_users.hasOwnProperty(i)) {
-          if (_users[i].UI.reLaunch) {
-            _users[i].UI.reLaunch();
-          }
-        }
-      }
+            }
         }
 
-      function closeOpenedProject(callback) {
-            var returning,
-                project;
-
-        callback = callback || function () {
-        };
-            returning = function (e) {
-          var oldProjName = _projectName;
-          _projectName = null;
-          _inTransaction = false;
-          _core = null;
-          _nodes = {};
-          _metaNodes = {};
-          //_commitObject = null;
-          _patterns = {};
-                _msg = '';
-          _recentCommits = [];
-          _previousRootHash = null;
-          _rootHash = null;
-          _viewer = false;
-          _readOnlyProject = false;
-          _loadNodes = {};
-          _loadError = 0;
-          _offline = false;
-          cleanUsersTerritories();
-          if (oldProjName) {
-            //otherwise there were no open project at all
-            _self.dispatchEvent(_self.events.PROJECT_CLOSED, oldProjName);
-          }
-
-          callback(e);
-        };
-        if (_branch) {
-          //otherwise the branch will not 'change'
-          _self.dispatchEvent(_self.events.BRANCH_CHANGED, null);
-        }
-        _branch = null;
-        if (_project) {
-                project = _project;
-          _project = null;
-          project.closeProject(function (err) {
-            //TODO what if for some reason we are in transaction???
-            returning(err);
-          });
-        } else {
-          returning(null);
-        }
-      }
-
-      function createEmptyProject(project, callback) {
-        var core = getNewCore(project, gmeConfig, logger.fork('createEmptyProject')),
-          root = core.createNode(),
-          rootHash = '',
-          commitHash = '';
-            core.persist(root, function (/* err */) {
-          rootHash = core.getHash(root);
-                commitHash = project.makeCommit([], rootHash, 'project creation commit', function (/* err */) {
-                    project.setBranchHash('master', '', commitHash, function (err) {
-                    callback(err, commitHash);
+        function connectToDatabaseAsync(options, callback) {
+            var oldcallback = callback;
+            callback = function (err) {
+                _TOKEN = tokenWatcher();
+                reLaunchUsers();
+                oldcallback(err);
+            }; //we add tokenWatcher start at this point
+            options = options || {};
+            callback = callback || function () {
+                };
+            options.open = (options.open !== undefined || options.open !== null) ? options.open : false;
+            options.project = options.project || null;
+            if (_clientGlobal.db) {
+                //we have to close the current
+                closeOpenedProject(function () {
                 });
-          });
-        });
+                _clientGlobal.db.closeDatabase(function () {
+                });
+                _networkStatus = '';
+                changeBranchState(null);
+            }
+            _clientGlobal.db = newDatabase();
 
-      }
+            _clientGlobal.db.openDatabase(function (err) {
+                if (err) {
+                    logger.error('Cannot open database');
+                    callback(err);
+                    return;
+                }
 
-      //loading functions
-        function getStringHash(node) {
-        //TODO there is a memory issue with the huge strings so we have to replace it with something
-        if (node.parent && node.parent.data && node.parent.data[node.relid]) {
-            return node.parent.data[node.relid];
+                if (_networkWatcher) {
+                    _networkWatcher.stop();
+                }
+                _networkWatcher = networkWatcher();
+                serverEventer(_clientGlobal); //this starts the eventing service
+
+                //FIXME remove option open, and the possibility to open 'first' project
+                // should be clear if it is projectId or projectName
+                if (options.open) {
+                    if (options.project) {
+                        openProject(options.project, callback);
+                    } else {
+                        //default opening routine
+                        _clientGlobal.db.getProjectNames(function (err, names) {
+                            if (!err && names && names.length > 0) {
+                                openProject(names[0], callback);
+                            } else {
+                                logger.error('Cannot get project names / There is no project on the server');
+                                callback(err);
+                            }
+                        });
+                    }
+                } else {
+                    callback(null);
+                }
+            });
         }
-        return _gHash++;
-      }
+
+        //loading functions
+        function getStringHash(node) {
+            //TODO there is a memory issue with the huge strings so we have to replace it with something
+            if (node.parent && node.parent.data && node.parent.data[node.relid]) {
+                return node.parent.data[node.relid];
+            }
+            _gHash += 1;
+            return _gHash;
+        }
 
         //TODO this function will be used when diff based event generation will be reintroduced
         //function getInheritanceChain(node) {
         //    var ancestors = [];
-        //    node = _core.getBase(node);
+        //    node = _clientGlobal.core.getBase(node);
         //    while (node) {
-        //        ancestors.push(_core.getPath(node));
-        //        node = _core.getBase(node);
+        //        ancestors.push(_clientGlobal.core.getPath(node));
+        //        node = _clientGlobal.core.getBase(node);
         //    }
         //    return ancestors;
         //}
@@ -19183,11 +20790,11 @@ define('client/js/client',[
         //    pathArray.shift();
         //    if (pathArray.length === 0) {
         //        found = true;
-      //              }
+        //    }
         //
         //    if (!diffObj) {
         //        return false;
-      //          }
+        //    }
         //
         //    while (index < pathArray.length && !found) {
         //        if (diffObj[pathArray[index]]) {
@@ -19195,7 +20802,7 @@ define('client/js/client',[
         //            index += 1;
         //            if (index === pathArray.length) {
         //                found = true;
-      //      }
+        //            }
         //        } else {
         //            index = pathArray.length;
         //        }
@@ -19212,65 +20819,65 @@ define('client/js/client',[
         //    }
         //
         //    return false;
-      //}
+        //}
 
         function getModifiedNodes(newerNodes) {
             var modifiedNodes = [],
                 i;
 
-            for (i in _nodes) {
-                if (_nodes.hasOwnProperty(i)) {
-          if (newerNodes[i]) {
-                        if (newerNodes[i].hash !== _nodes[i].hash && _nodes[i].hash !== '') {
-              modifiedNodes.push(i);
+            for (i in _clientGlobal.nodes) {
+                if (_clientGlobal.nodes.hasOwnProperty(i)) {
+                    if (newerNodes[i]) {
+                        if (newerNodes[i].hash !== _clientGlobal.nodes[i].hash && _clientGlobal.nodes[i].hash !== '') {
+                            modifiedNodes.push(i);
+                        }
+                    }
+                }
             }
-          }
+            return modifiedNodes;
         }
-            }
-        return modifiedNodes;
-      }
 
 
-      //this is just a first brute implementation it needs serious optimization!!!
-      function fitsInPatternTypes(path, pattern) {
+        //this is just a first brute implementation it needs serious optimization!!!
+        function fitsInPatternTypes(path, pattern) {
             var i;
 
-        if (pattern.items && pattern.items.length > 0) {
+            if (pattern.items && pattern.items.length > 0) {
                 for (i = 0; i < pattern.items.length; i += 1) {
-            if (META.isTypeOf(path, pattern.items[i])) {
-              return true;
+                    if (_clientGlobal.META.isTypeOf(path, pattern.items[i])) {
+                        return true;
+                    }
+                }
+                return false;
+            } else {
+                return true;
             }
-          }
-          return false;
-        } else {
-          return true;
         }
-      }
 
-      function patternToPaths(patternId, pattern, pathsSoFar) {
+        function patternToPaths(patternId, pattern, pathsSoFar) {
             var children,
                 subPattern,
                 i;
 
-        if (_nodes[patternId]) {
-          pathsSoFar[patternId] = true;
-          if (pattern.children && pattern.children > 0) {
-                    children = _core.getChildrenPaths(_nodes[patternId].node);
+            if (_clientGlobal.nodes[patternId]) {
+                pathsSoFar[patternId] = true;
+                if (pattern.children && pattern.children > 0) {
+                    children = _clientGlobal.core.getChildrenPaths(_clientGlobal.nodes[patternId].node);
                     subPattern = COPY(pattern);
                     subPattern.children -= 1;
                     for (i = 0; i < children.length; i += 1) {
-              if (fitsInPatternTypes(children[i], pattern)) {
-                patternToPaths(children[i], subPattern, pathsSoFar);
-              }
+                        if (fitsInPatternTypes(children[i], pattern)) {
+                            patternToPaths(children[i], subPattern, pathsSoFar);
+                        }
+                    }
+                }
+            } else {
+                _loadError++;
             }
-          }
-        } else {
-          _loadError++;
+
         }
 
-      }
-
-      function userEvents(userId, modifiedNodes) {
+        function userEvents(userId, modifiedNodes) {
             var newPaths = {},
                 startErrorLevel = _loadError,
                 i,
@@ -19278,100 +20885,83 @@ define('client/js/client',[
 
             for (i in _users[userId].PATTERNS) {
                 if (_users[userId].PATTERNS.hasOwnProperty(i)) {
-          if (_nodes[i]) { //TODO we only check pattern if its root is there...
-            patternToPaths(i, _users[userId].PATTERNS[i], newPaths);
-          }
-        }
+                    if (_clientGlobal.nodes[i]) { //TODO we only check pattern if its root is there...
+                        patternToPaths(i, _users[userId].PATTERNS[i], newPaths);
+                    }
+                }
             }
 
-        if (startErrorLevel !== _loadError) {
-          return; //we send events only when everything is there correctly
+            if (startErrorLevel !== _loadError) {
+                return; //we send events only when everything is there correctly
+            }
+
+            //deleted items
+            for (i in _users[userId].PATHS) {
+                if (!newPaths[i]) {
+                    events.push({etype: 'unload', eid: i});
+                }
+            }
+
+            //added items
+            for (i in newPaths) {
+                if (!_users[userId].PATHS[i]) {
+                    events.push({etype: 'load', eid: i});
+                }
+            }
+
+            //updated items
+            for (i = 0; i < modifiedNodes.length; i++) {
+                if (newPaths[modifiedNodes[i]]) {
+                    events.push({etype: 'update', eid: modifiedNodes[i]});
+                }
+            }
+
+            _users[userId].PATHS = newPaths;
+
+            //this is how the events should go
+            if (events.length > 0) {
+                if (_loadError > startErrorLevel) {
+                    events.unshift({etype: 'incomplete', eid: null});
+                } else {
+                    events.unshift({etype: 'complete', eid: null});
+                }
+            } else {
+                events.unshift({etype: 'complete', eid: null});
+            }
+            _users[userId].FN(events);
         }
 
-        //deleted items
-        for (i in _users[userId].PATHS) {
-          if (!newPaths[i]) {
-            events.push({etype: 'unload', eid: i});
-          }
-        }
 
-        //added items
-        for (i in newPaths) {
-          if (!_users[userId].PATHS[i]) {
-            events.push({etype: 'load', eid: i});
-          }
-        }
-
-        //updated items
-        for (i = 0; i < modifiedNodes.length; i++) {
-          if (newPaths[modifiedNodes[i]]) {
-            events.push({etype: 'update', eid: modifiedNodes[i]});
-          }
-        }
-
-        _users[userId].PATHS = newPaths;
-
-        //this is how the events should go
-        if (events.length > 0) {
-          if (_loadError > startErrorLevel) {
-            events.unshift({etype: 'incomplete', eid: null});
-          } else {
-            events.unshift({etype: 'complete', eid: null});
-          }
-        } else {
-          events.unshift({etype: 'complete', eid: null});
-        }
-        _users[userId].FN(events);
-      }
-
-        function storeNode(node /*, basic */) {
-            var path;
-        //basic = basic || true;
-        if (node) {
-                path = _core.getPath(node);
-          _metaNodes[path] = node;
-          if (_nodes[path]) {
-            //TODO we try to avoid this
-          } else {
-                    _nodes[path] = {node: node, hash: ''/*,incomplete:true,basic:basic*/};
-                    //TODO this only needed when real eventing will be reintroduced
-                    //_inheritanceHash[path] = getInheritanceChain(node);
-          }
-          return path;
-        }
-        return null;
-      }
-
-      //partially optimized
-      function loadChildrenPattern(core, nodesSoFar, node, level, callback) {
-        var path = core.getPath(node),
-          childrenPaths = core.getChildrenPaths(node),
-          childrenRelids = core.getChildrenRelids(node),
-          missing = childrenPaths.length,
-          error = null,
+        //partially optimized
+        function loadChildrenPattern(core, nodesSoFar, node, level, callback) {
+            var path = core.getPath(node),
+                childrenPaths = core.getChildrenPaths(node),
+                childrenRelids = core.getChildrenRelids(node),
+                missing = childrenPaths.length,
+                error = null,
                 i,
                 childLoaded = function (err, child) {
-                  if (err || child === null) {
-                    error = error || err;
+                    if (err || child === null) {
+                        error = error || err;
                         missing -= 1;
                         if (missing === 0) {
-                      callback(error);
-                    }
-                  } else {
+                            callback(error);
+                        }
+                    } else {
                         loadChildrenPattern(core, nodesSoFar, child, level - 1, childrenPatternLoaded);
                     }
                 },
                 childrenPatternLoaded = function (err) {
-                      error = error || err;
+                    error = error || err;
                     missing -= 1;
                     if (missing === 0) {
                         callback(error);
-                      }
+                    }
                 };
             _metaNodes[path] = node;
             if (!nodesSoFar[path]) {
                 nodesSoFar[path] = {node: node, incomplete: true, basic: true, hash: getStringHash(node)};
-                  }
+            }
             if (level > 0) {
                 if (missing > 0) {
                     for (i = 0; i < childrenPaths.length; i++) {
@@ -19382,81 +20972,81 @@ define('client/js/client',[
                                 level - 1, childrenPatternLoaded);
                         } else {
                             core.loadChild(node, childrenRelids[i], childLoaded);
-              }
+                        }
+                    }
+                } else {
+                    callback(error);
+                }
+            } else {
+                callback(error);
             }
-          } else {
-            callback(error);
-          }
-        } else {
-          callback(error);
         }
-      }
 
-      function loadPattern(core, id, pattern, nodesSoFar, callback) {
+        function loadPattern(core, id, pattern, nodesSoFar, callback) {
             var base = null,
                 baseLoaded = function () {
-          if (pattern.children && pattern.children > 0) {
-            var level = pattern.children;
-            loadChildrenPattern(core, nodesSoFar, base, level, callback);
-          } else {
-            callback(null);
-          }
-        };
+                    if (pattern.children && pattern.children > 0) {
+                        var level = pattern.children;
+                        loadChildrenPattern(core, nodesSoFar, base, level, callback);
+                    } else {
+                        callback(null);
+                    }
+                };
 
-        if (nodesSoFar[id]) {
-          base = nodesSoFar[id].node;
-          baseLoaded();
-        } else {
-          base = null;
-          if (_loadNodes[ROOT_PATH]) {
-            base = _loadNodes[ROOT_PATH].node;
-          } else if (_nodes[ROOT_PATH]) {
-            base = _nodes[ROOT_PATH].node;
-          }
-          core.loadByPath(base, id, function (err, node) {
+            if (nodesSoFar[id]) {
+                base = nodesSoFar[id].node;
+                baseLoaded();
+            } else {
+                base = null;
+                if (_loadNodes[ROOT_PATH]) {
+                    base = _loadNodes[ROOT_PATH].node;
+                } else if (_clientGlobal.nodes[ROOT_PATH]) {
+                    base = _clientGlobal.nodes[ROOT_PATH].node;
+                }
+                core.loadByPath(base, id, function (err, node) {
                     var path;
-            if (!err && node && !core.isEmpty(node)) {
+                    if (!err && node && !core.isEmpty(node)) {
                         path = core.getPath(node);
-              _metaNodes[path] = node;
-              if (!nodesSoFar[path]) {
+                        _metaNodes[path] = node;
+                        if (!nodesSoFar[path]) {
                             nodesSoFar[path] = {
                                 node: node,
                                 incomplete: false,
                                 basic: true,
                                 hash: getStringHash(node)
                             };
-              }
-              base = node;
-              baseLoaded();
-            } else {
-              callback(err);
+                        }
+                        base = node;
+                        baseLoaded();
+                    } else {
+                        callback(err);
+                    }
+                });
             }
-          });
         }
-      }
 
-      function orderStringArrayByElementLength(strArray) {
-        var ordered = [],
-          i, j, index;
+        function orderStringArrayByElementLength(strArray) {
+            var ordered = [],
+                i, j, index;
 
-        for (i = 0; i < strArray.length; i++) {
-          index = -1;
-          j = 0;
-          while (index === -1 && j < ordered.length) {
-            if (ordered[j].length > strArray[i].length) {
-              index = j;
+            for (i = 0; i < strArray.length; i++) {
+                index = -1;
+                j = 0;
+                while (index === -1 && j < ordered.length) {
+                    if (ordered[j].length > strArray[i].length) {
+                        index = j;
+                    }
+                    j++;
+                }
+
+                if (index === -1) {
+                    ordered.push(strArray[i]);
+                } else {
+                    ordered.splice(index, 0, strArray[i]);
+                }
             }
-            j++;
-          }
-
-          if (index === -1) {
-            ordered.push(strArray[i]);
-          } else {
-            ordered.splice(index, 0, strArray[i]);
-          }
+            return ordered;
         }
-        return ordered;
-      }
 
         //TODO will be used when diff based event generation is reintroduced
         //function getEventTree(oldRootHash, newRootHash, callback) {
@@ -19464,7 +21054,7 @@ define('client/js/client',[
         //        sRoot = null,
         //        tRoot = null,
         //        loadRoot = function (hash /*, root */) {
-        //            _core.loadRoot(hash, function (err, r) {
+        //            _clientGlobal.core.loadRoot(hash, function (err, r) {
         //                error = error || err;
         //                if (sRoot === null && hash === oldRootHash) {
         //                    sRoot = r;
@@ -19482,7 +21072,7 @@ define('client/js/client',[
         //            if (error) {
         //                return callback(error);
         //            }
-        //            _core.generateLightTreeDiff(sRoot, tRoot, function (err, diff) {
+        //            _clientGlobal.core.generateLightTreeDiff(sRoot, tRoot, function (err, diff) {
         //                callback(err, diff);
         //            });
         //        },
@@ -19491,2151 +21081,407 @@ define('client/js/client',[
         //    loadRoot(newRootHash, tRoot);
         //}
 
-      function loadRoot(newRootHash, callback) {
+        function loadRoot(newRootHash, callback) {
             //with the newer approach we try to optimize a bit the mechanism of the loading and
             // try to get rid of the parallelism behind it
-        var patterns = {},
-          orderedPatternIds = [],
-          error = null,
+            var patterns = {},
+                orderedPatternIds = [],
+                error = null,
                 i,
                 j,
                 keysi,
                 keysj;
 
-        _loadNodes = {};
-        _loadError = 0;
+            _loadNodes = {};
+            _loadError = 0;
 
-        //gathering the patterns
-        keysi = Object.keys(_users);
-        for (i = 0; i < keysi.length; i++) {
-          keysj = Object.keys(_users[keysi[i]].PATTERNS);
-          for (j = 0; j < keysj.length; j++) {
-            if (patterns[keysj[j]]) {
-              //we check if the range is bigger for the new definition
-              if (patterns[keysj[j]].children < _users[keysi[i]].PATTERNS[keysj[j]].children) {
-                patterns[keysj[j]].children = _users[keysi[i]].PATTERNS[keysj[j]].children;
-              }
-            } else {
-              patterns[keysj[j]] = _users[keysi[i]].PATTERNS[keysj[j]];
+            //gathering the patterns
+            keysi = Object.keys(_users);
+            for (i = 0; i < keysi.length; i++) {
+                keysj = Object.keys(_users[keysi[i]].PATTERNS);
+                for (j = 0; j < keysj.length; j++) {
+                    if (patterns[keysj[j]]) {
+                        //we check if the range is bigger for the new definition
+                        if (patterns[keysj[j]].children < _users[keysi[i]].PATTERNS[keysj[j]].children) {
+                            patterns[keysj[j]].children = _users[keysi[i]].PATTERNS[keysj[j]].children;
+                        }
+                    } else {
+                        patterns[keysj[j]] = _users[keysi[i]].PATTERNS[keysj[j]];
+                    }
+                }
             }
-          }
-        }
-        //getting an ordered key list
-        orderedPatternIds = Object.keys(patterns);
-        orderedPatternIds = orderStringArrayByElementLength(orderedPatternIds);
+            //getting an ordered key list
+            orderedPatternIds = Object.keys(patterns);
+            orderedPatternIds = orderStringArrayByElementLength(orderedPatternIds);
 
 
-        //and now the one-by-one loading
-        _core.loadRoot(newRootHash, function (err, root) {
+            //and now the one-by-one loading
+            _clientGlobal.core.loadRoot(newRootHash, function (err, root) {
                 var fut,
                     _loadPattern;
 
-          ASSERT(err || root);
+                ASSERT(err || root);
 
-          _root = root;
-          error = error || err;
-          if (!err) {
-            updateRunningAddOns(root);
-                    _loadNodes[_core.getPath(root)] = {
+                _clientGlobal.root.object = root;
+                error = error || err;
+                if (!err) {
+                    _clientGlobal.addOn.updateRunningAddOns(root);
+                    _loadNodes[_clientGlobal.core.getPath(root)] = {
                         node: root,
                         incomplete: true,
                         basic: true,
                         hash: getStringHash(root)
                     };
-            _metaNodes[_core.getPath(root)] = root;
-            if (orderedPatternIds.length === 0 && Object.keys(_users) > 0) {
-              //we have user, but they do not interested in any object -> let's relaunch them :D
-              callback(null);
-              reLaunchUsers();
-            } else {
+                    _metaNodes[_clientGlobal.core.getPath(root)] = root;
+                    if (orderedPatternIds.length === 0 && Object.keys(_users) > 0) {
+                        //we have user, but they do not interested in any object -> let's relaunch them :D
+                        callback(null);
+                        reLaunchUsers();
+                    } else {
                         _loadPattern = TASYNC.throttle(TASYNC.wrap(loadPattern), 1);
                         fut = TASYNC.lift(
                             orderedPatternIds.map(function (pattern /*, index */) {
                                 return TASYNC.apply(_loadPattern,
-                                    [_core, pattern, patterns[pattern], _loadNodes],
+                                    [_clientGlobal.core, pattern, patterns[pattern], _loadNodes],
                                     this);
-                    }));
+                            }));
                         TASYNC.unwrap(function () {
                             return fut;
                         })(callback);
-            }
-          } else {
-            callback(err);
-          }
-        });
-      }
+                    }
+                } else {
+                    callback(err);
+                }
+            });
+        }
 
-      //this is just a first brute implementation it needs serious optimization!!!
-      function loading(newRootHash, callback) {
-        var finalEvents = function () {
+        //this is just a first brute implementation it needs serious optimization!!!
+        function loading(newRootHash, callback) {
+            var finalEvents = function () {
                 var modifiedPaths,
                     i;
 
-            modifiedPaths = getModifiedNodes(_loadNodes);
-            _nodes = _loadNodes;
-            _loadNodes = {};
+                modifiedPaths = getModifiedNodes(_loadNodes);
+                _clientGlobal.nodes = _loadNodes;
+                _loadNodes = {};
                 for (i in _users) {
                     if (_users.hasOwnProperty(i)) {
-              userEvents(i, modifiedPaths);
-            }
+                        userEvents(i, modifiedPaths);
+                    }
                 }
-          callback(null);
-        };
-
-            callback = callback || function (/*err*/) {
+                callback(null);
             };
 
-        _previousRootHash = _rootHash;
-        _rootHash = newRootHash;
-          loadRoot(newRootHash,function(err){
-              if(err){
-                  _rootHash = null;
-                  callback(err);
-        } else {
-            finalEvents();
-          }
-          });
-      }
-
-      function saveRoot(msg, callback) {
-            var newRootHash,
-                newCommitHash;
-
-        callback = callback || function () {
-        };
-        if (!_viewer && !_readOnlyProject) {
-          if (_msg) {
-                    _msg += '\n' + msg;
-          } else {
-            _msg += msg;
-          }
-          if (!_inTransaction) {
-            ASSERT(_project && _core && _branch);
-                    _core.persist(_nodes[ROOT_PATH].node, function (/*err*/) {
-            });
-                    newRootHash = _core.getHash(_nodes[ROOT_PATH].node);
-                    newCommitHash = _project.makeCommit([_recentCommits[0]], newRootHash, _msg, function (/*err*/) {
-              //TODO now what??? - could we end up here?
-            });
-                    _msg = '';
-            addCommit(newCommitHash);
-            _selfCommits[newCommitHash] = true;
-                    _redoer.addModification(newCommitHash, '');
-            _project.setBranchHash(_branch, _recentCommits[1], _recentCommits[0], function (err) {
-                //TODO now what??? - could we screw up
-                lock.lock(function () {
-                    loading(newRootHash, lock.unlock);
-                });
-                callback(err);
-            });
-            //loading(newRootHash);
-          }
-        } else {
-                _msg = '';
-                callback(null);
-        }
-      }
-
-      function getActiveProject() {
-        return _projectName;
-      }
-
-      function getAvailableProjectsAsync(callback) {
-        if (_database) {
-          _database.getProjectNames(callback);
-        } else {
-          callback(new Error('there is no open database connection!'));
-        }
-      }
-
-      function getViewableProjectsAsync(callback) {
-        if (_database) {
-          _database.getAllowedProjectNames(callback);
-        } else {
-          callback(new Error('there is no open database connection!'));
-        }
-      }
-
-      function getProjectAuthInfoAsync(projectname, callback) {
-        if (_database) {
-          _database.getAuthorizationInfo(projectname, callback);
-        } else {
-          callback(new Error('there is no open database connection!'));
-        }
-      }
-
-      function getFullProjectListAsync(callback) {
-        _database.getProjectNames(function (err, names) {
-                var wait,
-                    fullList = {},
-                    getProjectAuthInfo,
-                    i,
-                    projectAuthInfoResponse = function (/*err*/) {
-                        wait -= 1;
-                        if (wait === 0) {
-                            callback(null, fullList);
-                        }
-                    };
-
-          if (!err && names) {
-                    wait = names.length || 0;
-            if (wait > 0) {
-                        getProjectAuthInfo = function (name, cb) {
-                _database.getAuthorizationInfo(name, function (err, authObj) {
-                  if (!err && authObj) {
-                    fullList[name] = authObj;
-                  }
-                  cb(err);
-                });
-              };
-
-                        for (i = 0; i < names.length; i += 1) {
-                            getProjectAuthInfo(names[i], projectAuthInfoResponse);
-              }
-            } else {
-              callback(null, {});
-            }
-          } else {
-            callback(err, {});
-          }
-        });
-      }
-
-      function selectProjectAsync(projectname, callback) {
-        if (_database) {
-          if (projectname === _projectName) {
-            callback(null);
-          } else {
-                    closeOpenedProject(function (/*err*/) {
-              //TODO what can we do with the error??
-              openProject(projectname, function (err) {
-                //TODO is there a meaningful error which we should propagate towards user???
-                if(!err){
-                  reLaunchUsers();
-                }
-                callback(err);
-              });
-            });
-          }
-        } else {
-          callback(new Error('there is no open database connection!!!'));
-        }
-      }
-
-      function createProjectAsync(projectname, projectInfo, callback) {
-        if (_database) {
-          getAvailableProjectsAsync(function (err, names) {
-            if (!err && names) {
-              if (names.indexOf(projectname) === -1) {
-                _database.openProject(projectname, function (err, p) {
-                  if (!err && p) {
-                    createEmptyProject(p, function (err, commit) {
-                      if (!err && commit) {
-                        //TODO currently this is just a hack
-                        p.setInfo(projectInfo || {
-                          visibleName:projectname,
-                                                description: 'project in webGME',
-                          tags:{}
-                        },function(err){
-                          callback(err);
-                        });
-                      } else {
-                        callback(err);
-                      }
-                    });
-                  } else {
-                    callback(err);
-                  }
-                });
-              } else {
-                //TODO maybe the selectProjectAsync could be called :)
-                callback('the project already exists!');
-              }
-            } else {
-              callback(err);
-            }
-          });
-        } else {
-          callback(new Error('there is no open database connection!'));
-        }
-
-      }
-
-      function deleteProjectAsync(projectname, callback) {
-        if (_database) {
-          if (projectname === _projectName) {
-            closeOpenedProject();
-          }
-          _database.deleteProject(projectname, callback);
-
-        } else {
-          callback(new Error('there is no open database connection!'));
-        }
-      }
-
-      //branching functionality
-      function getBranchesAsync(callback) {
-        if (_database) {
-          if (_project) {
-            _project.getBranchNames(function (err, names) {
-                        var missing = 0,
-                            branchArray = [],
-                            error = null,
-                            getBranchValues,
-                            i,
-                            element;
-
-              if (!err && names) {
-                            getBranchValues = function (name) {
-                  _project.getBranchHash(name, '#hack', function (err, newhash, forked) {
-                    if (!err && newhash) {
-                                        element = {name: name, commitId: newhash};
-                      if (forked) {
-                        element.sync = false;
-                      } else {
-                        element.sync = true;
-                      }
-                      branchArray.push(element);
-                    } else {
-                      error = error || err;
-                    }
-
-                                    missing -= 1;
-                                    if (missing === 0) {
-                      callback(error, branchArray);
-                    }
-                  });
+            callback = callback || function (/*err*/) {
                 };
 
-                            for (i in names) {
-                                missing += 1;
-                }
-
-                if (missing > 0) {
-                  for (i in names) {
-                    getBranchValues(i);
-                  }
-                } else {
-                  callback(null, branchArray);
-                }
-              } else {
-                callback(err);
-              }
-            });
-          } else {
-            callback(new Error('there is no open project!'));
-          }
-        } else {
-          callback(new Error('there is no opened database connection!'));
-        }
-      }
-
-      function viewerCommit(hash, callback) {
-        //no project change
-        //we stop watching branch
-        //we create the core
-        //we use the existing territories
-        //we set viewer mode, so there will be no modification allowed to send to server...
-        _branch = null;
-        _viewer = true;
-        _recentCommits = [hash];
-        _self.dispatchEvent(_self.events.BRANCH_CHANGED, _branch);
-        _project.loadObject(hash, function (err, commitObj) {
-          if (!err && commitObj) {
-            loading(commitObj.root, callback);
-          } else {
-                    logger.error('Cannot view given ' + hash + ' commit as it\'s root cannot be loaded! [' +
-                    JSON.stringify(err) + ']');
-            callback(err || new Error('commit object cannot be found!'));
-          }
-        });
-      }
-
-      function selectCommitAsync(hash, callback) {
-        //this should proxy to branch selection and viewer functions
-        if (_database) {
-          if (_project) {
-            viewerCommit(hash, callback);
-          } else {
-            callback(new Error('there is no open project!'));
-          }
-        } else {
-          callback(new Error('there is no open database connection!'));
-        }
-      }
-
-      function selectBranchAsync(branch, callback) {
-        var waiting = 1,
-          error = null,
-          innerCallback = function (err) {
-            error = error || err;
-            if (--waiting === 0) {
-              callback(error);
-            }
-                };
-
-        if (_database) {
-          if (_project) {
-                stopRunningAddOns();
-                branchWatcher(branch, innerCallback);
-          } else {
-            callback(new Error('there is no open project!'));
-          }
-        } else {
-          callback(new Error('there is no open database connection!'));
-        }
-      }
-
-      function getCommitsAsync(commitHash, number, callback) {
-        if (_database) {
-          if (_project) {
-            ASSERT(_commitCache);
-            if (commitHash === undefined) {
-              commitHash = null;
-            }
-            _commitCache.getNCommitsFrom(commitHash, number, callback);
-          } else {
-            callback(new Error('there is no open project!'));
-          }
-        } else {
-          callback(new Error('there is no open database connection!'));
-        }
-      }
-
-      function getActualCommit() {
-        return _recentCommits[0];
-      }
-
-      function getActualBranch() {
-        return _branch;
-      }
-
-      function getActualNetworkStatus() {
-        return _networkStatus;
-      }
-
-      function getActualBranchStatus() {
-        return _branchState;
-      }
-
-      function createBranchAsync(branchName, commitHash, callback) {
-        //it doesn't changes anything, just creates the new branch
-        if (_database) {
-          if (_project) {
-            _project.setBranchHash(branchName, '', commitHash, callback);
-          } else {
-            callback(new Error('there is no open project!'));
-          }
-        } else {
-          callback(new Error('there is no open database connection!'));
-        }
-      }
-
-      function deleteBranchAsync(branchName, callback) {
-        if (_database) {
-          if (_project) {
-            _project.getBranchHash(branchName, '', function (err, newhash, forkedhash) {
-              if (!err && newhash) {
-                if (forkedhash) {
-                  _project.setBranchHash(branchName, newhash, forkedhash, function (err) {
-                    if (!err) {
-                      changeBranchState(_self.branchStates.SYNC);
-                    }
+            _clientGlobal.root.previous = _clientGlobal.root.current;
+            _clientGlobal.root.current = newRootHash;
+            loadRoot(newRootHash, function (err) {
+                if (err) {
+                    _clientGlobal.root.current = null;
                     callback(err);
-                  });
                 } else {
-                  _project.setBranchHash(branchName, newhash, '', callback);
+                    finalEvents();
                 }
-              } else {
-                callback(err);
-              }
             });
-          } else {
-            callback(new Error('there is no open project!'));
-          }
-        } else {
-          callback(new Error('there is no open database connection!'));
         }
-      }
 
-      function commitAsync(params, callback) {
+        function getActiveProject() {
+            return _clientGlobal.projectName;
+        }
+
+        function getActualCommit() {
+            return _recentCommits[0];
+        }
+
+        function getActualBranch() {
+            return _clientGlobal.branch;
+        }
+
+        function getActualNetworkStatus() {
+            return _networkStatus;
+        }
+
+        function getActualBranchStatus() {
+            return _clientGlobal.branchState;
+        }
+
+        function commitAsync(params, callback) {
             var msg;
 
-        if (_database) {
-          if (_project) {
+            if (_clientGlobal.db) {
+                if (_clientGlobal.project) {
                     msg = params.message || '';
-            saveRoot(msg, callback);
-          } else {
-            callback(new Error('there is no open project!'));
-          }
-        } else {
-          callback(new Error('there is no open database connection!'));
-        }
-      }
-
-      function connectToDatabaseAsync(options, callback) {
-        var oldcallback = callback;
-        callback = function (err) {
-          _TOKEN = tokenWatcher();
-          reLaunchUsers();
-          oldcallback(err);
-        }; //we add tokenWatcher start at this point
-        options = options || {};
-        callback = callback || function () {
-        };
-        options.open = (options.open !== undefined || options.open !== null) ? options.open : false;
-        options.project = options.project || null;
-        if (_database) {
-          //we have to close the current
-          closeOpenedProject(function () {
-          });
-          _database.closeDatabase(function () {
-          });
-                _networkStatus = '';
-          changeBranchState(null);
-        }
-        _database = newDatabase();
-
-        _database.openDatabase(function (err) {
-                if (err) {
-                    logger.error('Cannot open database');
-                    callback(err);
-                    return;
-                }
-
-            if (_networkWatcher) {
-              _networkWatcher.stop();
-            }
-            _networkWatcher = networkWatcher();
-            serverEventer();
-
-              //FIXME remove option open, and the possibility to open 'first' project
-              // should be clear if it is projectId or projectName
-            if (options.open) {
-              if (options.project) {
-                openProject(options.project, callback);
-              } else {
-                //default opening routine
-                _database.getProjectNames(function (err, names) {
-                  if (!err && names && names.length > 0) {
-                    openProject(names[0], callback);
-                  } else {
-                    logger.error('Cannot get project names / There is no project on the server');
-                    callback(err);
-                  }
-                });
-              }
-            } else {
-              callback(null);
-            }
-        });
-      }
-
-      //MGA
-      function copyMoreNodes(parameters, msg) {
-            var pathestocopy = [],
-                i,
-                j,
-                newNode;
-
-            if (typeof parameters.parentId === 'string' && _nodes[parameters.parentId] &&
-                typeof _nodes[parameters.parentId].node === 'object') {
-                for (i in parameters) {
-                    if (i !== 'parentId') {
-              pathestocopy.push(i);
-            }
-          }
-
-          msg = msg || 'copyMoreNodes(' + pathestocopy + ',' + parameters.parentId + ')';
-          if (pathestocopy.length < 1) {
-                    // empty on purpose
-          } else if (pathestocopy.length === 1) {
-                    newNode = _core.copyNode(_nodes[pathestocopy[0]].node, _nodes[parameters.parentId].node);
-            storeNode(newNode);
-            if (parameters[pathestocopy[0]]) {
-                        for (j in parameters[pathestocopy[0]].attributes) {
-                            if (parameters[pathestocopy[0]].attributes.hasOwnProperty(j)) {
-                _core.setAttribute(newNode, j, parameters[pathestocopy[0]].attributes[j]);
-              }
-                        }
-              for (j in parameters[pathestocopy[0]].registry) {
-                            if (parameters[pathestocopy[0]].registry.hasOwnProperty(j)) {
-                _core.setRegistry(newNode, j, parameters[pathestocopy[0]].registry[j]);
-              }
-            }
-                    }
-            saveRoot(msg);
-          } else {
-            copyMoreNodesAsync(pathestocopy, parameters.parentId, function (err, copyarr) {
-                        var i,
-                            j;
-              if (err) {
-                //rollBackModification();
-                            logger.error(err);
-                        } else {
-                            for (i in copyarr) {
-                                if (copyarr.hasOwnProperty(i) && parameters[i]) {
-                                    for (j in parameters[i].attributes) {
-                                        if (parameters[i].attributes.hasOwnProperty(j)) {
-                      _core.setAttribute(copyarr[i], j, parameters[i].attributes[j]);
-                    }
-                                    }
-                    for (j in parameters[i].registry) {
-                                        if (parameters[i].registry.hasOwnProperty(j)) {
-                      _core.setRegistry(copyarr[i], j, parameters[i].registry[j]);
-                    }
-                  }
-                }
-                            }
-                saveRoot(msg);
-              }
-            });
-          }
-        } else {
-                logger.error('wrong parameters for copy operation - denied -');
-        }
-      }
-
-
-      function copyMoreNodesAsync(nodePaths, parentPath, callback) {
-            var i,
-                tempFrom,
-                tempTo,
-                helpArray,
-                subPathArray,
-                parent,
-                returnArray,
-                checkPaths = function () {
-                    var i,
-                        result = true;
-
-                    for (i = 0; i < nodePaths.length; i += 1) {
-            result = result && (_nodes[nodePaths[i]] && typeof _nodes[nodePaths[i]].node === 'object');
-          }
-          return result;
-        };
-
-        if (_nodes[parentPath] && typeof _nodes[parentPath].node === 'object' && checkPaths()) {
-                helpArray = {};
-                subPathArray = {};
-                parent = _nodes[parentPath].node;
-            returnArray = {};
-
-          //creating the 'from' object
-                tempFrom = _core.createNode({
-                    parent: parent,
-                    base: _core.getTypeRoot(_nodes[nodePaths[0]].node)
-                });
-          //and moving every node under it
-                for (i = 0; i < nodePaths.length; i += 1) {
-            helpArray[nodePaths[i]] = {};
-            helpArray[nodePaths[i]].origparent = _core.getParent(_nodes[nodePaths[i]].node);
-            helpArray[nodePaths[i]].tempnode = _core.moveNode(_nodes[nodePaths[i]].node, tempFrom);
-            subPathArray[_core.getRelid(helpArray[nodePaths[i]].tempnode)] = nodePaths[i];
-            delete _nodes[nodePaths[i]];
-          }
-
-          //do the copy
-                tempTo = _core.copyNode(tempFrom, parent);
-
-          //moving back the temporary source
-                for (i = 0; i < nodePaths.length; i += 1) {
-                    helpArray[nodePaths[i]].node = _core.moveNode(helpArray[nodePaths[i]].tempnode,
-                        helpArray[nodePaths[i]].origparent);
-            storeNode(helpArray[nodePaths[i]].node);
-          }
-
-          //gathering the destination nodes
-          _core.loadChildren(tempTo, function (err, children) {
-                    var newNode;
-
-            if (!err && children && children.length > 0) {
-                        for (i = 0; i < children.length; i += 1) {
-                if (subPathArray[_core.getRelid(children[i])]) {
-                                newNode = _core.moveNode(children[i], parent);
-                  storeNode(newNode);
-                  returnArray[subPathArray[_core.getRelid(children[i])]] = newNode;
+                    saveRoot(msg, callback);
                 } else {
-                                logger.error('635 - should never happen!!!');
+                    callback(new Error('there is no open project!'));
                 }
-              }
-              _core.deleteNode(tempFrom);
-              _core.deleteNode(tempTo);
-              callback(null, returnArray);
             } else {
-              //clean up the mess and return
-              _core.deleteNode(tempFrom);
-              _core.deleteNode(tempTo);
-              callback(err, {});
+                callback(new Error('there is no open database connection!'));
             }
-          });
         }
-      }
 
-      function moveMoreNodes(parameters) {
-        var pathsToMove = [],
-                returnParams = {},
-                i,
-                j,
-                newNode;
 
-            for (i in parameters) {
-                if (parameters.hasOwnProperty(i)) {
-          if (i !== 'parentId') {
-            pathsToMove.push(i);
-          }
-        }
+        //constraint functions
+        function setConstraint(path, name, constraintObj) {
+            if (_clientGlobal.core && _clientGlobal.nodes[path] && typeof _clientGlobal.nodes[path].node === 'object') {
+                _clientGlobal.core.setConstraint(_clientGlobal.nodes[path].node, name, constraintObj);
+                saveRoot('setConstraint(' + path + ',' + name + ')');
             }
+        }
 
-            if (pathsToMove.length > 0 && typeof parameters.parentId === 'string' && _nodes[parameters.parentId] &&
-                typeof _nodes[parameters.parentId].node === 'object') {
-                for (i = 0; i < pathsToMove.length; i += 1) {
-            if (_nodes[pathsToMove[i]] && typeof _nodes[pathsToMove[i]].node === 'object') {
-                        newNode = _core.moveNode(_nodes[pathsToMove[i]].node, _nodes[parameters.parentId].node);
-              returnParams[pathsToMove[i]] = _core.getPath(newNode);
-              if (parameters[pathsToMove[i]].attributes) {
-                            for (j in parameters[pathsToMove[i]].attributes) {
-                                if (parameters[pathsToMove[i]].attributes.hasOwnProperty(j)) {
-                  _core.setAttribute(newNode, j, parameters[pathsToMove[i]].attributes[j]);
+        function delConstraint(path, name) {
+            if (_clientGlobal.core && _clientGlobal.nodes[path] && typeof _clientGlobal.nodes[path].node === 'object') {
+                _clientGlobal.core.delConstraint(_clientGlobal.nodes[path].node, name);
+                saveRoot('delConstraint(' + path + 'name' + ')');
+            }
+        }
+
+        //territory functions
+        function addUI(ui, fn, guid) {
+            ASSERT(fn);
+            ASSERT(typeof fn === 'function');
+            guid = guid || GUID();
+            _users[guid] = {type: 'notused', UI: ui, PATTERNS: {}, PATHS: {}, SENDEVENTS: true, FN: fn};
+            return guid;
+        }
+
+        function removeUI(guid) {
+            delete _users[guid];
+        }
+
+        function _updateTerritoryAllDone(guid, patterns, error) {
+            if (_users[guid]) {
+                _users[guid].PATTERNS = JSON.parse(JSON.stringify(patterns));
+                if (!error) {
+                    userEvents(guid, []);
                 }
-              }
-                        }
-              if (parameters[pathsToMove[i]].registry) {
-                            for (j in parameters[pathsToMove[i]].registry) {
-                                if (parameters[pathsToMove[i]].registry.hasOwnProperty(j)) {
-                  _core.setRegistry(newNode, j, parameters[pathsToMove[i]].registry[j]);
-                }
-              }
-                        }
-
-              delete _nodes[pathsToMove[i]];
-              storeNode(newNode, true);
             }
-          }
         }
 
-        return returnParams;
-      }
-
-      function createChildren(parameters, msg) {
-        //TODO we also have to check out what is happening with the sets!!!
-        var result = {},
-          paths = [],
-                nodes = [],
-                node,
-          parent = _nodes[parameters.parentId].node,
-                names, i, j, index, pointer,
-                newChildren = [],
-                relations = [];
-
-            //to allow 'meaningfull' instantiation of multiple objects
-            // we have to recreate the internal relations - except the base
-        paths = Object.keys(parameters);
-        paths.splice(paths.indexOf('parentId'), 1);
-        for (i = 0; i < paths.length; i++) {
-          node = _nodes[paths[i]].node;
-          nodes.push(node);
-          pointer = {};
-          names = _core.getPointerNames(node);
-          index = names.indexOf('base');
-          if (index !== -1) {
-            names.splice(index, 1);
-          }
-
-          for (j = 0; j < names.length; j++) {
-            index = paths.indexOf(_core.getPointerPath(node, names[j]));
-            if (index !== -1) {
-              pointer[names[j]] = index;
-            }
-          }
-          relations.push(pointer);
-        }
-
-        //now the instantiation
-        for (i = 0; i < nodes.length; i++) {
-          newChildren.push(_core.createNode({parent: parent, base: nodes[i]}));
-        }
-
-        //now for the storage and relation setting
-        for (i = 0; i < paths.length; i++) {
-          //attributes
-          names = Object.keys(parameters[paths[i]].attributes || {});
-          for (j = 0; j < names.length; j++) {
-            _core.setAttribute(newChildren[i], names[j], parameters[paths[i]].attributes[names[j]]);
-          }
-          //registry
-          names = Object.keys(parameters[paths[i]].registry || {});
-          for (j = 0; j < names.length; j++) {
-            _core.setRegistry(newChildren[i], names[j], parameters[paths[i]].registry[names[j]]);
-          }
-
-          //relations
-          names = Object.keys(relations[i]);
-          for (j = 0; j < names.length; j++) {
-            _core.setPointer(newChildren[i], names[j], newChildren[relations[i][names[j]]]);
-          }
-
-          //store
-          result[paths[i]] = storeNode(newChildren[i]);
-
-        }
-
-        msg = msg || 'createChildren(' + JSON.stringify(result) + ')';
-        saveRoot(msg);
-        return result;
-      }
-
-
-      function startTransaction(msg) {
-        if (_core) {
-          _inTransaction = true;
-          msg = msg || 'startTransaction()';
-          saveRoot(msg);
-        }
-      }
-
-      function completeTransaction(msg, callback) {
-        _inTransaction = false;
-        if (_core) {
-          msg = msg || 'completeTransaction()';
-          saveRoot(msg, callback);
-        }
-      }
-
-      function setAttributes(path, name, value, msg) {
-        if (_core && _nodes[path] && typeof _nodes[path].node === 'object') {
-          _core.setAttribute(_nodes[path].node, name, value);
-          msg = msg || 'setAttribute(' + path + ',' + name + ',' + value + ')';
-          saveRoot(msg);
-        }
-      }
-
-      function delAttributes(path, name, msg) {
-        if (_core && _nodes[path] && typeof _nodes[path].node === 'object') {
-          _core.delAttribute(_nodes[path].node, name);
-          msg = msg || 'delAttribute(' + path + ',' + name + ')';
-          saveRoot(msg);
-        }
-      }
-
-      function setRegistry(path, name, value, msg) {
-        if (_core && _nodes[path] && typeof _nodes[path].node === 'object') {
-          _core.setRegistry(_nodes[path].node, name, value);
-          msg = msg || 'setRegistry(' + path + ',' + ',' + name + ',' + value + ')';
-          saveRoot(msg);
-        }
-      }
-
-      function delRegistry(path, name, msg) {
-        if (_core && _nodes[path] && typeof _nodes[path].node === 'object') {
-          _core.delRegistry(_nodes[path].node, name);
-          msg = msg || 'delRegistry(' + path + ',' + ',' + name + ')';
-          saveRoot(msg);
-        }
-      }
-
-        //TODO should be removed as there is no user or public API related to this function
-      //function deleteNode(path, msg) {
-      //  if (_core && _nodes[path] && typeof _nodes[path].node === 'object') {
-      //    _core.deleteNode(_nodes[path].node);
-      //    //delete _nodes[path];
-      //    msg = msg || 'deleteNode(' + path + ')';
-      //    saveRoot(msg);
-      //  }
-      //}
-
-      function delMoreNodes(paths, msg) {
-        if (_core) {
-          for (var i = 0; i < paths.length; i++) {
-            if (_nodes[paths[i]] && typeof _nodes[paths[i]].node === 'object') {
-              _core.deleteNode(_nodes[paths[i]].node);
-              //delete _nodes[paths[i]];
-            }
-          }
-          msg = msg || 'delMoreNodes(' + paths + ')';
-          saveRoot(msg);
-        }
-      }
-
-      function createChild(parameters, msg) {
-        var newID;
-
-        if (_core) {
-                if (typeof parameters.parentId === 'string' && _nodes[parameters.parentId] &&
-                    typeof _nodes[parameters.parentId].node === 'object') {
-            var baseNode = null;
-            if (_nodes[parameters.baseId]) {
-              baseNode = _nodes[parameters.baseId].node || baseNode;
-            }
-                    var child = _core.createNode({
-                        parent: _nodes[parameters.parentId].node,
-                        base: baseNode,
-                        guid: parameters.guid,
-                        relid: parameters.relid
-                    });
-            if (parameters.position) {
-                        _core.setRegistry(child,
-                            'position',
-                            {
-                                x: parameters.position.x || 100,
-                                y: parameters.position.y || 100
-                            });
-            } else {
-                        _core.setRegistry(child, 'position', {x: 100, y: 100});
-            }
-            storeNode(child);
-            newID = _core.getPath(child);
-            msg = msg || 'createChild(' + parameters.parentId + ',' + parameters.baseId + ',' + newID + ')';
-            saveRoot(msg);
-          }
-        }
-
-        return newID;
-      }
-
-      function makePointer(id, name, to, msg) {
-        if (to === null) {
-          _core.setPointer(_nodes[id].node, name, to);
-        } else {
-
-
-          _core.setPointer(_nodes[id].node, name, _nodes[to].node);
-        }
-
-        msg = msg || 'makePointer(' + id + ',' + name + ',' + to + ')';
-        saveRoot(msg);
-      }
-
-      function delPointer(path, name, msg) {
-        if (_core && _nodes[path] && typeof _nodes[path].node === 'object') {
-          _core.deletePointer(_nodes[path].node, name);
-          msg = msg || 'delPointer(' + path + ',' + name + ')';
-          saveRoot(msg);
-        }
-      }
-
-
-      //MGAlike - set functions
-      function addMember(path, memberpath, setid, msg) {
-        if (_nodes[path] &&
-          _nodes[memberpath] &&
-          typeof _nodes[path].node === 'object' &&
-          typeof _nodes[memberpath].node === 'object') {
-          _core.addMember(_nodes[path].node, setid, _nodes[memberpath].node);
-          msg = msg || 'addMember(' + path + ',' + memberpath + ',' + setid + ')';
-          saveRoot(msg);
-        }
-      }
-
-      function removeMember(path, memberpath, setid, msg) {
-        if (_nodes[path] &&
-          typeof _nodes[path].node === 'object') {
-          _core.delMember(_nodes[path].node, setid, memberpath);
-          msg = msg || 'removeMember(' + path + ',' + memberpath + ',' + setid + ')';
-          saveRoot(msg);
-        }
-      }
-
-      function setMemberAttribute(path, memberpath, setid, name, value, msg) {
-        if (_nodes[path] && typeof _nodes[path].node === 'object') {
-          _core.setMemberAttribute(_nodes[path].node, setid, memberpath, name, value);
-                msg = msg ||
-                'setMemberAttribute(' + path + ',' + memberpath + ',' + setid + ',' + name + ',' + value +
-                ')';
-          saveRoot(msg);
-        }
-      }
-
-      function delMemberAttribute(path, memberpath, setid, name, msg) {
-        if (_nodes[path] && typeof _nodes[path].node === 'object') {
-          _core.delMemberAttribute(_nodes[path].node, setid, memberpath, name);
-                msg = msg || 'delMemberAttribute(' + path + ',' + memberpath + ',' + setid + ',' + name + ')';
-          saveRoot(msg);
-        }
-      }
-
-      function setMemberRegistry(path, memberpath, setid, name, value, msg) {
-        if (_nodes[path] && typeof _nodes[path].node === 'object') {
-          _core.setMemberRegistry(_nodes[path].node, setid, memberpath, name, value);
-                msg = msg ||
-                'setMemberRegistry(' + path + ',' + memberpath + ',' + setid + ',' + name + ',' + value + ')';
-          saveRoot(msg);
-        }
-      }
-
-      function delMemberRegistry(path, memberpath, setid, name, msg) {
-        if (_nodes[path] && typeof _nodes[path].node === 'object') {
-          _core.delMemberRegistry(_nodes[path].node, setid, memberpath, name);
-                msg = msg || 'delMemberRegistry(' + path + ',' + memberpath + ',' + setid + ',' + name + ')';
-          saveRoot(msg);
-        }
-      }
-
-      function createSet(path, setid, msg) {
-        if (_nodes[path] && typeof _nodes[path].node === 'object') {
-          _core.createSet(_nodes[path].node, setid);
-                msg = msg || 'createSet(' + path + ',' + setid + ')';
-          saveRoot(msg);
-        }
-      }
-
-      function deleteSet(path, setid, msg) {
-        if (_nodes[path] && typeof _nodes[path].node === 'object') {
-          _core.deleteSet(_nodes[path].node, setid);
-                msg = msg || 'deleteSet(' + path + ',' + setid + ')';
-          saveRoot(msg);
-        }
-      }
-
-
-      function setBase(path, basepath) {
-        /*if (_core && _nodes[path] && typeof _nodes[path].node === 'object') {
-         _core.setRegistry(_nodes[path].node,'base',basepath);
-         saveRoot('setBase('+path+','+basepath+')');
-         }*/
-            if (_core && _nodes[path] && typeof _nodes[path].node === 'object' && _nodes[basepath] &&
-                typeof _nodes[basepath].node === 'object') {
-          _core.setBase(_nodes[path].node, _nodes[basepath].node);
-          saveRoot('setBase(' + path + ',' + basepath + ')');
-        }
-      }
-
-      function delBase(path) {
-        /*if (_core && _nodes[path] && typeof _nodes[path].node === 'object') {
-         _core.delRegistry(_nodes[path].node,'base');
-         saveRoot('delBase('+path+')');
-         }*/
-        if (_core && _nodes[path] && typeof _nodes[path].node === 'object') {
-          _core.setBase(_nodes[path].node, null);
-          saveRoot('delBase(' + path + ')');
-        }
-      }
-
-
-      //constraint functions
-      function setConstraint(path, name, constraintObj) {
-        if (_core && _nodes[path] && typeof _nodes[path].node === 'object') {
-          _core.setConstraint(_nodes[path].node, name, constraintObj);
-          saveRoot('setConstraint(' + path + ',' + name + ')');
-        }
-      }
-
-      function delConstraint(path, name) {
-        if (_core && _nodes[path] && typeof _nodes[path].node === 'object') {
-          _core.delConstraint(_nodes[path].node, name);
-          saveRoot('delConstraint(' + path + 'name' + ')');
-        }
-      }
-
-      //territory functions
-      function addUI(ui, fn, guid) {
-        ASSERT(fn);
-        ASSERT(typeof fn === 'function');
-        guid = guid || GUID();
-        _users[guid] = {type: 'notused', UI: ui, PATTERNS: {}, PATHS: {}, SENDEVENTS: true, FN: fn};
-        return guid;
-      }
-
-      function removeUI(guid) {
-        delete _users[guid];
-      }
-
-      function _updateTerritoryAllDone(guid, patterns, error) {
-        if (_users[guid]) {
-          _users[guid].PATTERNS = JSON.parse(JSON.stringify(patterns));
-          if (!error) {
-            userEvents(guid, []);
-          }
-        }
-      }
-
-      function updateTerritory(guid, patterns) {
+        function updateTerritory(guid, patterns) {
             var missing,
                 error,
                 patternLoaded,
                 i;
 
-        if (_users[guid]) {
-          if (_project) {
-            if (_nodes[ROOT_PATH]) {
-              //TODO: this has to be optimized
+            if (_users[guid]) {
+                if (_clientGlobal.project) {
+                    if (_clientGlobal.nodes[ROOT_PATH]) {
+                        //TODO: this has to be optimized
                         missing = 0;
                         error = null;
 
                         patternLoaded = function (err) {
-                error = error || err;
+                            error = error || err;
                             missing -= 1;
                             if (missing === 0) {
-                  //allDone();
-                  _updateTerritoryAllDone(guid, patterns, error);
-                }
-              };
+                                //allDone();
+                                _updateTerritoryAllDone(guid, patterns, error);
+                            }
+                        };
 
                         for (i in patterns) {
                             missing += 1;
-              }
-              if (missing > 0) {
-                for (i in patterns) {
+                        }
+                        if (missing > 0) {
+                            for (i in patterns) {
                                 if (patterns.hasOwnProperty(i)) {
-                  loadPattern(_core, i, patterns[i], _nodes, patternLoaded);
-                }
+                                    loadPattern(_clientGlobal.core, i, patterns[i], _clientGlobal.nodes, patternLoaded);
+                                }
                             }
-              } else {
-                //allDone();
-                _updateTerritoryAllDone(guid, patterns, error);
-              }
-            } else {
-              //something funny is going on
-              if (_loadNodes[ROOT_PATH]) {
+                        } else {
+                            //allDone();
+                            _updateTerritoryAllDone(guid, patterns, error);
+                        }
+                    } else {
+                        //something funny is going on
+                        if (_loadNodes[ROOT_PATH]) {
                             //probably we are in the loading process,
                             // so we should redo this update when the loading finishes
-                //setTimeout(updateTerritory,100,guid,patterns);
-              } else {
-                //root is not in nodes and has not even started to load it yet...
-                _users[guid].PATTERNS = JSON.parse(JSON.stringify(patterns));
-              }
-            }
-          } else {
-            //we should update the patterns, but that is all
-            _users[guid].PATTERNS = JSON.parse(JSON.stringify(patterns));
-          }
-        }
-      }
-
-      //getNode
-      function getNode(_id) {
-
-            function getParentId() {
-          return storeNode(_core.getParent(_nodes[_id].node)); //just for sure, as it may missing from the cache
-            }
-
-            function getId() {
-          return _id;
-            }
-
-            function getGuid() {
-          return _core.getGuid(_nodes[_id].node);
-            }
-
-            function getChildrenIds() {
-          return _core.getChildrenPaths(_nodes[_id].node);
-            }
-
-            function getBaseId() {
-                var base = _core.getBase(_nodes[_id].node);
-                if (base) {
-                    return storeNode(base);
+                            //setTimeout(updateTerritory, 100, guid, patterns);
+                        } else {
+                            //root is not in nodes and has not even started to load it yet...
+                            _users[guid].PATTERNS = JSON.parse(JSON.stringify(patterns));
+                        }
+                    }
                 } else {
-                    return null;
+                    //we should update the patterns, but that is all
+                    _users[guid].PATTERNS = JSON.parse(JSON.stringify(patterns));
+                }
+            }
+        }
+
+        function getProjectObject() {
+            return _clientGlobal.project;
+        }
+
+        function getAvailableInterpreterNames() {
+            if (!AllPlugins) {
+                logger.error('AllPlugins were never uploaded!');
+                return [];
+            }
+            var names = [],
+                valids = _clientGlobal.nodes[ROOT_PATH] ? _clientGlobal.core.getRegistry(
+                    _clientGlobal.nodes[ROOT_PATH].node, 'validPlugins') || '' : '';
+            valids = valids.split(' ');
+            for (var i = 0; i < valids.length; i++) {
+                if (AllPlugins.indexOf(valids[i]) !== -1) {
+                    names.push(valids[i]);
+                }
+            }
+            return names;
+        }
+
+        function runServerPlugin(name, context, callback) {
+            _clientGlobal.db.simpleRequest({command: 'executePlugin', name: name, context: context}, callback);
+        }
+
+        function getAvailableDecoratorNames() {
+            if (!AllDecorators) {
+                logger.error('AllDecorators were never uploaded!');
+                return [];
+            }
+            return AllDecorators;
+        }
+
+        function getSeedInfoAsync(callback) {
+            _clientGlobal.db.simpleRequest({command: 'getSeedInfo'}, function (err, id) {
+                if (err) {
+                    return callback(err);
                 }
 
-            }
-
-            function getInheritorIds() {
-          return [];
-            }
-
-            function getAttribute(name) {
-          return _core.getAttribute(_nodes[_id].node, name);
-            }
-
-            function getOwnAttribute(name) {
-          return _core.getOwnAttribute(_nodes[_id].node, name);
-            }
-
-            function getEditableAttribute(name) {
-          var value = _core.getAttribute(_nodes[_id].node, name);
-          if (typeof value === 'object') {
-            return JSON.parse(JSON.stringify(value));
-          }
-          return value;
-            }
-
-            function getOwnEditableAttribute(name) {
-          var value = _core.getOwnAttribute(_nodes[_id].node, name);
-          if (typeof value === 'object') {
-            return JSON.parse(JSON.stringify(value));
-          }
-          return value;
-            }
-
-            function getRegistry(name) {
-          return _core.getRegistry(_nodes[_id].node, name);
-            }
-
-            function getOwnRegistry(name) {
-          return _core.getOwnRegistry(_nodes[_id].node, name);
-            }
-
-            function getEditableRegistry(name) {
-          var value = _core.getRegistry(_nodes[_id].node, name);
-          if (typeof value === 'object') {
-            return JSON.parse(JSON.stringify(value));
-          }
-          return value;
-            }
-
-            function getOwnEditableRegistry(name) {
-          var value = _core.getOwnRegistry(_nodes[_id].node, name);
-          if (typeof value === 'object') {
-            return JSON.parse(JSON.stringify(value));
-          }
-          return value;
-            }
-
-            function getPointer(name) {
-          //return _core.getPointerPath(_nodes[_id].node,name);
-          if (name === 'base') {
-            //base is a special case as it complicates with inherited children
-            return {to: _core.getPath(_core.getBase(_nodes[_id].node)), from: []};
-          }
-          return {to: _core.getPointerPath(_nodes[_id].node, name), from: []};
-            }
-
-            function getOwnPointer(name) {
-          return {to: _core.getOwnPointerPath(_nodes[_id].node, name), from: []};
-            }
-
-            function getPointerNames() {
-          return _core.getPointerNames(_nodes[_id].node);
-            }
-
-            function getOwnPointerNames() {
-          return _core.getOwnPointerNames(_nodes[_id].node);
-            }
-
-            function getAttributeNames() {
-          return _core.getAttributeNames(_nodes[_id].node);
-            }
-
-            function getOwnAttributeNames() {
-                return _core.getOwnAttributeNames(_nodes[_id].node);
-            }
-
-            function getRegistryNames() {
-          return _core.getRegistryNames(_nodes[_id].node);
-            }
-
-            function getOwnRegistryNames() {
-          return _core.getOwnRegistryNames(_nodes[_id].node);
-            }
-
-        //SET
-            function getMemberIds(setid) {
-          return _core.getMemberPaths(_nodes[_id].node, setid);
-            }
-
-            function getSetNames() {
-          return _core.getSetNames(_nodes[_id].node);
-            }
-
-            function getMemberAttributeNames(setid, memberid) {
-          return _core.getMemberAttributeNames(_nodes[_id].node, setid, memberid);
-            }
-
-            function getMemberAttribute(setid, memberid, name) {
-          return _core.getMemberAttribute(_nodes[_id].node, setid, memberid, name);
-            }
-
-            function getEditableMemberAttribute(setid, memberid, name) {
-          var attr = _core.getMemberAttribute(_nodes[_id].node, setid, memberid, name);
-          if (attr !== null && attr !== undefined) {
-            return JSON.parse(JSON.stringify(attr));
-          }
-          return null;
-            }
-
-            function getMemberRegistryNames(setid, memberid) {
-          return _core.getMemberRegistryNames(_nodes[_id].node, setid, memberid);
-            }
-
-            function getMemberRegistry(setid, memberid, name) {
-          return _core.getMemberRegistry(_nodes[_id].node, setid, memberid, name);
-            }
-
-            function getEditableMemberRegistry(setid, memberid, name) {
-          var attr = _core.getMemberRegistry(_nodes[_id].node, setid, memberid, name);
-          if (attr !== null && attr !== undefined) {
-            return JSON.parse(JSON.stringify(attr));
-          }
-          return null;
-            }
-
-        //META
-            function getValidChildrenTypes() {
-          //return getMemberIds('ValidChildren');
-          return META.getValidChildrenTypes(_id);
-            }
-
-        //constraint functions
-            function getConstraintNames() {
-          return _core.getConstraintNames(_nodes[_id].node);
-            }
-
-            function getOwnConstraintNames() {
-          return _core.getOwnConstraintNames(_nodes[_id].node);
-            }
-
-            function getConstraint(name) {
-          return _core.getConstraint(_nodes[_id].node, name);
-            }
-
-            function printData() {
-                //probably we will still use it for test purposes, but now it goes officially
-                // into printing the node's json representation
-                toJson(_core, _nodes[_id].node, '', 'guid', function (err, jNode) {
-                    logger.debug('node in JSON format[status = ', err, ']:', jNode);
-          });
-            }
-
-            function toString() {
-          return _core.getAttribute(_nodes[_id].node, 'name') + ' (' + _id + ')';
-            }
-
-            function getCollectionPaths(name) {
-          return _core.getCollectionPaths(_nodes[_id].node, name);
-            }
-
-        if (_nodes[_id]) {
-          return {
-            getParentId: getParentId,
-            getId: getId,
-            getGuid: getGuid,
-            getChildrenIds: getChildrenIds,
-            getBaseId: getBaseId,
-            getInheritorIds: getInheritorIds,
-            getAttribute: getAttribute,
-            getEditableAttribute: getEditableAttribute,
-            getRegistry: getRegistry,
-            getEditableRegistry: getEditableRegistry,
-            getOwnAttribute: getOwnAttribute,
-            getOwnEditableAttribute: getOwnEditableAttribute,
-            getOwnRegistry: getOwnRegistry,
-            getOwnEditableRegistry: getOwnEditableRegistry,
-            getPointer: getPointer,
-            getPointerNames: getPointerNames,
-            getAttributeNames: getAttributeNames,
-            getRegistryNames: getRegistryNames,
-            getOwnAttributeNames: getOwnAttributeNames,
-            getOwnRegistryNames: getOwnRegistryNames,
-            getOwnPointer: getOwnPointer,
-            getOwnPointerNames: getOwnPointerNames,
-
-            //SetFunctions
-            getMemberIds: getMemberIds,
-            getSetNames: getSetNames,
-            getMemberAttributeNames: getMemberAttributeNames,
-            getMemberAttribute: getMemberAttribute,
-            getEditableMemberAttribute: getEditableMemberAttribute,
-            getMemberRegistryNames: getMemberRegistryNames,
-            getMemberRegistry: getMemberRegistry,
-            getEditableMemberRegistry: getEditableMemberRegistry,
-
-            //META functions
-            getValidChildrenTypes: getValidChildrenTypes,
-
-            //constraint functions
-            getConstraintNames: getConstraintNames,
-            getOwnConstraintNames: getOwnConstraintNames,
-            getConstraint: getConstraint,
-
-            printData: printData,
-            toString: toString,
-
-            getCollectionPaths: getCollectionPaths
-
-          };
-        }
-
-        return null;
-
-      }
-
-      //export and import functions
-      function exportItems(paths, callback) {
-        var nodes = [];
-        for (var i = 0; i < paths.length; i++) {
-          if (_nodes[paths[i]]) {
-            nodes.push(_nodes[paths[i]].node);
-          } else {
-            callback('invalid node');
-            return;
-          }
-        }
-
-            _database.simpleRequest({
-                    command: 'dumpMoreNodes',
-                    name: _projectName,
-                    hash: _rootHash || _core.getHash(_nodes[ROOT_PATH].node),
-                    nodes: paths
-                },
-                function (err, resId) {
-          if (err) {
-            callback(err);
-          } else {
-            _database.simpleResult(resId, callback);
-          }
-        });
-      }
-
-
-      function getExportItemsUrlAsync(paths, filename, callback) {
-            _database.simpleRequest({
-                    command: 'dumpMoreNodes',
-                    name: _projectName,
-                    hash: _rootHash || _core.getHash(_nodes[ROOT_PATH].node),
-                    nodes: paths
-                },
-                function (err, resId) {
-          if (err) {
-            callback(err);
-          } else {
-                        callback(null,
-                            window.location.protocol + '//' + window.location.host + '/worker/simpleResult/' +
-                            resId + '/' + filename);
-          }
-        });
-      }
-
-      function getExportLibraryUrlAsync(libraryRootPath, filename, callback) {
-        var command = {};
-        command.command = 'exportLibrary';
-        command.name = _projectName;
-        command.hash = _rootHash || _core.getHash(_nodes[ROOT_PATH].node);
-        command.path = libraryRootPath;
-        if (command.name && command.hash) {
-          _database.simpleRequest(command, function (err, resId) {
-            if (err) {
-              callback(err);
-            } else {
-                        callback(null,
-                            window.location.protocol + '//' + window.location.host + '/worker/simpleResult/' +
-                            resId + '/' + filename);
-            }
-          });
-        } else {
-          callback(new Error('there is no open project!'));
-        }
-      }
-
-      function updateLibraryAsync(libraryRootPath, newLibrary, callback) {
-        Serialization.import(_core, _nodes[libraryRootPath].node, newLibrary, function (err, log) {
-          if (err) {
-            return callback(err);
-          }
-
-                saveRoot('library update done\nlogs:\n' + log, callback);
-        });
-      }
-
-      function addLibraryAsync(libraryParentPath, newLibrary, callback) {
-            startTransaction('creating library as a child of ' + libraryParentPath);
-            var libraryRoot = createChild({parentId: libraryParentPath, baseId: null}, 'library placeholder');
-        Serialization.import(_core, _nodes[libraryRoot].node, newLibrary, function (err, log) {
-          if (err) {
-            return callback(err);
-          }
-
-                completeTransaction('library update done\nlogs:\n' + log, callback);
-        });
-      }
-
-      function dumpNodeAsync(path, callback) {
-        if (_nodes[path]) {
-                dump(_core, _nodes[path].node, '', 'guid', callback);
-        } else {
-          callback('unknown object', null);
-        }
-      }
-
-      function importNodeAsync(parentPath, jNode, callback) {
-        var node = null;
-        if (_nodes[parentPath]) {
-          node = _nodes[parentPath].node;
-        }
-            importing(_core, _nodes[parentPath].node, jNode, function (err) {
-          if (err) {
-            callback(err);
-          } else {
-            saveRoot('importNode under ' + parentPath, callback);
-          }
-        });
-      }
-
-      function mergeNodeAsync(parentPath, jNode, callback) {
-        var node = null;
-        if (_nodes[parentPath]) {
-          node = _nodes[parentPath].node;
-        }
-            mergeImport(_core, _nodes[parentPath].node, jNode, function (err) {
-          if (err) {
-            callback(err);
-          } else {
-            saveRoot('importNode under ' + parentPath, callback);
-          }
-        });
-      }
-
-      function createProjectFromFileAsync(projectname, jProject, callback) {
-            //TODO somehow the export / import should contain the INFO field
-            // so the tags and description could come from it
-            createProjectAsync(projectname, {}, function (/*err*/) {
-                selectProjectAsync(projectname, function (/*err*/) {
-            Serialization.import(_core, _root, jProject, function (err) {
-              if (err) {
-                return callback(err);
-              }
-
-                        saveRoot('library has been updated...', callback);
+                _clientGlobal.db.simpleResult(id, callback);
             });
-          });
-        });
-      }
-
-      function plainUrl(parameters) {
-        //setting the default values
-        parameters.command = parameters.command || 'etf';
-            parameters.path = parameters.path || '';
-        parameters.project = parameters.project || _projectName;
-
-        if (!parameters.root && !parameters.branch && !parameters.commit) {
-          if (_rootHash) {
-            parameters.root = _rootHash;
-          } else if (_nodes && _nodes[ROOT_PATH]) {
-            parameters.root = _core.getHash(_nodes[ROOT_PATH].node);
-          } else {
-            parameters.branch = _branch || 'master';
-          }
         }
 
-        //now we compose the URL
-        if (window && window.location) {
-                var address = window.location.protocol + '//' + window.location.host + '/rest/' +
-                    parameters.command + '?';
-                address += '&project=' + URL.addSpecialChars(parameters.project);
-          if (parameters.root) {
-                    address += '&root=' + URL.addSpecialChars(parameters.root);
-          } else {
-            if (parameters.commit) {
-                        address += '&commit=' + URL.addSpecialChars(parameters.commit);
-            } else {
-                        address += '&branch=' + URL.addSpecialChars(parameters.branch);
-            }
-          }
+        function seedProjectAsync(parameters, callback) {
+            parameters.command = 'seedProject';
+            _clientGlobal.db.simpleRequest(parameters, function (err, id) {
+                if (err) {
+                    return callback(err);
+                }
 
-                address += '&path=' + URL.addSpecialChars(parameters.path);
-
-          if (parameters.output) {
-                    address += '&output=' + URL.addSpecialChars(parameters.output);
-          }
-
-          return address;
-        }
-
-        return null;
-
-      }
-
-      function getDumpURL(parameters) {
-            parameters.output = parameters.output || 'dump_url.out';
-        return plainUrl(parameters);
-      }
-
-      function getProjectObject() {
-        return _project;
-      }
-
-      function getAvailableInterpreterNames() {
-          if (!AllPlugins) {
-              logger.error('AllPlugins were never uploaded!');
-              return [];
-          }
-        var names = [];
-            var valids = _nodes[ROOT_PATH] ? _core.getRegistry(_nodes[ROOT_PATH].node, 'validPlugins') || '' : '';
-            valids = valids.split(' ');
-        for (var i = 0; i < valids.length; i++) {
-          if (AllPlugins.indexOf(valids[i]) !== -1) {
-            names.push(valids[i]);
-          }
-        }
-        return names;
-      }
-
-      function runServerPlugin(name, context, callback) {
-        _database.simpleRequest({command: 'executePlugin', name: name, context: context}, callback);
-      }
-
-      function getAvailableDecoratorNames() {
-          if (!AllDecorators) {
-              logger.error('AllDecorators were never uploaded!');
-              return [];
-          }
-        return AllDecorators;
-      }
-
-      function getFullProjectsInfoAsync(callback) {
-        _database.simpleRequest({command: 'getAllProjectsInfo'}, function (err, id) {
-          if (err) {
-            return callback(err);
-          }
-          _database.simpleResult(id, callback);
-        });
-      }
-
-      function setProjectInfoAsync(projectId,info,callback){
-            _database.simpleRequest({
-                    command: 'setProjectInfo',
-                    projectId: projectId,
-                    info: info
-                },
-                function (err, rId) {
-          if(err){
-            return callback(err);
-          }
-          _database.simpleResult(rId,callback);
-                });
-      }
-
-      function getProjectInfoAsync(projectId,callback){
-        _database.simpleRequest({command:'getProjectInfo',projectId:projectId},function(err,rId){
-          if(err){
-            return callback(err);
-          }
-          _database.simpleResult(rId,callback);
+                _clientGlobal.db.simpleResult(id, callback);
             });
-      }
+        }
 
-      function getAllInfoTagsAsync(callback){
-        _database.simpleRequest({command:'getAllInfoTags'},function(err,rId){
-          if(err){
-            return callback(err);
-          }
-          _database.simpleResult(rId,callback);
-            });
-      }
 
-      function createGenericBranchAsync(project, branch, commit, callback) {
-            _database.simpleRequest({
-                    command: 'setBranch',
-                    project: project,
-                    branch: branch,
-                    old: '',
-                    new: commit
-                },
-                function (err, id) {
-          if (err) {
-            return callback(err);
-          }
-          _database.simpleResult(id, callback);
-        });
-      }
-
-      function deleteGenericBranchAsync(project, branch, commit, callback) {
-            _database.simpleRequest({
-                    command: 'setBranch',
-                    project: project,
-                    branch: branch,
-                    old: commit,
-                    new: ''
-                },
-                function (err, id) {
-          if (err) {
-            return callback(err);
-          }
-          _database.simpleResult(id, callback);
-        });
-      }
-
-      function getSeedInfoAsync(callback) {
-        _database.simpleRequest({command: 'getSeedInfo'}, function (err, id) {
-          if (err) {
-            return callback(err);
-          }
-
-          _database.simpleResult(id, callback);
-        });
-      }
-
-      function seedProjectAsync(parameters, callback) {
-        parameters.command = 'seedProject';
-        _database.simpleRequest(parameters, function (err, id) {
-          if (err) {
-            return callback(err);
-          }
-
-          _database.simpleResult(id, callback);
-        });
-      }
-
-        //TODO these functions or some successors will be needed when the UI will handle merge tasks!!!
-      //TODO probably it would be a good idea to put this functionality to server
-      //function getBaseOfCommits(one,other,callback){
-      //  _project.getCommonAncestorCommit(one,other,callback);
-      //}
-      //TODO probably this would also beneficial if this would work on server as well
-      //function getDiffTree(from,to,callback){
-      //  var needed = 2,error = null,
-      //    core = getNewCore(_project, gmeConfig),
-      //    fromRoot={root:{},commit:from},
-      //    toRoot={root:{},commit:to},
-      //    rootsLoaded = function(){
-      //      if(error){
-      //        return callback(error,{});
-      //      }
-      //      _core.generateTreeDiff(fromRoot.root,toRoot.root,callback);
-      //    },
-      //    loadRoot = function(root){
-      //      _project.loadObject(root.commit,function(err,c){
-      //        error = error || ( err || c ? null : new Error('no commit object was found'));
-      //        if(!err && c){
-      //          core.loadRoot(c.root,function(err,r){
-      //            error = error || ( err || r ? null : new Error('no root was found'));
-      //            root.root = r;
-      //            if(--needed === 0){
-      //              rootsLoaded();
-      //            }
-      //          });
-      //        } else {
-      //          if(--needed === 0){
-      //            rootsLoaded();
-      //          }
-      //        }
-      //      });
-      //    };
-      //  loadRoot(fromRoot);
-      //  loadRoot(toRoot);
-      //
-      //}
-
-      //function getConflictOfDiffs(base,extension){
-      //  return _core.tryToConcatChanges(base,extension);
-      //}
-      //function getResolve(resolveObject){
-      //  return _core.applyResolution(resolveObject);
-      //}
-      //TODO move to server
-      //function applyDiff(branch,baseCommitHash,branchCommitHash,parents,diff,callback){
-      //  _project.loadObject(baseCommitHash,function(err,cObject){
-      //    var core = getNewCore(_project, gmeConfig);
-      //    if(!err && cObject){
-      //      core.loadRoot(cObject.root,function(err,root){
-      //        if(!err && root){
-      //          core.applyTreeDiff(root,diff,function(err){
-      //            if(err){
-      //              return callback(err);
-      //            }
-      //
-      //            core.persist(root,function(err){
-      //              if(err){
-      //                return callback(err);
-      //              }
-      //
-        //              var newHash = _project.makeCommit(parents,core.getHash(root),'merging',function(err){
-      //                if(err){
-      //                  return callback(err);
-      //                }
-      //                _project.setBranchHash(branch,branchCommitHash,newHash,callback);
-      //              });
-      //            });
-      //          });
-      //        } else {
-      //          callback(err || new Error('no root was found'));
-      //        }
-      //      });
-      //    } else {
-      //      callback(err || new Error('no commit object was found'));
-      //    }
-      //  });
-      //}
-
-      //function merge(whereBranch,whatCommit,whereCommit,callback){
-        //  ASSERT(_project &&
-        // typeof whatCommit === 'string' &&
-        // typeof whereCommit === 'string' &&
-        // typeof callback === 'function');
-      //  _project.getCommonAncestorCommit(whatCommit,whereCommit,function(err,baseCommit){
-      //    if(!err && baseCommit){
-      //      var base,what,where,baseToWhat,baseToWhere,rootNeeds = 3,error = null,
-      //      rootsLoaded = function(){
-      //          var needed = 2,error = null;
-      //          _core.generateTreeDiff(base,what,function(err,diff){
-      //            error = error || err;
-      //            baseToWhat = diff;
-      //            if(--needed===0){
-      //              if(!error){
-      //                diffsGenerated();
-      //              } else {
-      //                callback(error);
-      //              }
-      //            }
-      //          });
-      //          _core.generateTreeDiff(base,where,function(err,diff){
-      //            error = error || err;
-      //            baseToWhere = diff;
-      //            if(--needed===0){
-      //              if(!error){
-      //                diffsGenerated();
-      //              } else {
-      //                callback(error);
-      //              }
-      //            }
-      //          });
-      //        },
-      //        diffsGenerated = function(){
-      //          var conflict = _core.tryToConcatChanges(baseToWhere,baseToWhat);
-      //          console.log('conflict object',conflict);
-      //          if(conflict.items.length === 0){
-      //            //no conflict
-      //            callback(null,conflict);
-      //            /*
-      //            _core.applyTreeDiff(base,conflict.merge,function(err){
-      //              if(err){
-      //                return callback(err);
-      //              }
-      //              _core.persist(base,function(err){
-      //                if(err){
-      //                  callback(err);
-      //                } else {
-        //                  var newHash = _project.makeCommit([whatCommit,whereCommit],
-        //                    _core.getHash(base), 'merging', function(err){
-      //                    if(err){
-      //                      callback(err);
-      //                    } else {
-      //                      _project.setBranchHash(whereBranch,whereCommit,newHash,callback);
-      //                    }
-      //                  });
-      //                }
-      //              });
-      //            });*/
-      //          } else {
-      //            callback(null,conflict);
-      //          }
-      //          /*var endingWhatDiff = _core.concatTreeDiff(baseToWhere,baseToWhat),
-      //            endingWhereDiff = _core.concatTreeDiff(baseToWhat,baseToWhere);
-      //          console.log('kecso endingwhatdiff',endingWhatDiff);
-      //          console.log('kecso endingwherediff',endingWhereDiff);
-      //          if(_core.isEqualDifferences(endingWhereDiff,endingWhatDiff)){
-      //            _core.applyTreeDiff(base,endingWhatDiff,function(err){
-      //              if(err){
-      //                callback(err);
-      //              } else {
-      //                _core.persist(base,function(err){
-      //                  if(err){
-      //                    callback(err);
-      //                  } else {
-        //                    var newHash = _project.makeCommit([whatCommit,whereCommit],
-        //                      _core.getHash(base), 'merging', function(err){
-      //                      if(err){
-      //                        callback(err);
-      //                      } else {
-      //                        console.log('setting branch hash after merge');
-      //                        _project.setBranchHash(whereBranch,whereCommit,newHash,callback);
-      //                      }
-      //                    });
-      //                  }
-      //                });
-      //              }
-      //
-      //            });
-      //          } else {
-      //            callback(new Error('there is a conflict...'),{
-      //              baseObject:base,
-      //              baseCommit:baseCommit,
-      //              branch: whereBranch,
-      //              mine:endingWhereDiff,
-      //              mineCommit: whereCommit,
-      //              theirs:endingWhatDiff,
-      //              theirsCommit:whatCommit,
-      //              conflictItems:_core.getConflictItems(endingWhereDiff,endingWhatDiff)});
-      //          }*/
-      //        };
-      //
-      //        _project.loadObject(baseCommit,function(err,baseCommitObject){
-      //          error = error || err;
-      //          if(!error && baseCommitObject){
-      //            _core.loadRoot(baseCommitObject.root,function(err,r){
-      //              error = error || err;
-      //              base = r;
-      //              if(--rootNeeds === 0){
-      //                if(!error){
-      //                  rootsLoaded();
-      //                } else {
-      //                  callback(error);
-      //                }
-      //              }
-      //            });
-      //          } else {
-      //            error = error || new Error('cannot load common ancestor commit');
-      //            if(--rootNeeds === 0){
-      //              callback(error);
-      //            }
-      //          }
-      //        });
-      //        _project.loadObject(whatCommit,function(err,whatCommitObject){
-      //          error = error || err;
-      //          if(!error && whatCommitObject){
-      //            _core.loadRoot(whatCommitObject.root,function(err,r){
-      //              error = error || err;
-      //              what = r;
-      //              if(--rootNeeds === 0){
-      //                if(!error){
-      //                  rootsLoaded();
-      //                } else {
-      //                  callback(error);
-      //                }
-      //              }
-      //            });
-      //          } else {
-      //            error = error || new Error('cannot load the commit to merge');
-      //            if(--rootNeeds === 0){
-      //              callback(error);
-      //            }
-      //          }
-      //        });
-      //        _project.loadObject(whereCommit,function(err,whereCommitObject){
-      //          error = error || err;
-      //          if(!error && whereCommitObject){
-      //            _core.loadRoot(whereCommitObject.root,function(err,r){
-      //              error = error || err;
-      //              where = r;
-      //              if(--rootNeeds === 0){
-      //                if(!error){
-      //                  rootsLoaded();
-      //                } else {
-      //                  callback(error);
-      //                }
-      //              }
-      //            });
-      //          } else {
-      //            error = error || new Error('cannot load the commit to merge into');
-      //            if(--rootNeeds === 0){
-      //              callback(error);
-      //            }
-      //          }
-      //        });
-      //    } else {
-      //      callback(err || new Error('we cannot locate common ancestor commit!!!'));
-      //    }
-      //  });
-      //}
-
-      //function resolve(baseObject,mineDiff,branch,mineCommit,theirsCommit,resolvedConflictItems,callback){
-      //  mineDiff = _core.applyResolution(mineDiff,resolvedConflictItems);
-      //  _core.applyTreeDiff(baseObject,mineDiff,function(err){
-      //    if(err){
-      //      callback(err);
-      //    } else {
-      //      _core.persist(baseObject,function(err){
-      //        if(err){
-      //          callback(err);
-      //        } else {
-        //                    var newHash = _project.makeCommit([theirsCommit, mineCommit],
-        //                        _core.getHash(baseObject),
-        //                        'merging',
-        //                        function (err) {
-      //            if(err){
-      //              callback(err);
-      //            } else {
-      //              console.log('setting branch hash after merge');
-      //              _project.setBranchHash(branch,mineCommit,newHash,callback);
-      //            }
-      //            }
-        //                    );
-      //        }
-      //      });
-      //    }
-      //  });
-      //}
-
-      _redoer = new UndoRedo({
-          //eventer
-          events: _self.events,
-          networkStates: _self.networkStates,
-          branchStates: _self.branchStates,
-          _eventList: _self._eventList,
-          _getEvent: _self._getEvent,
-          addEventListener: _self.addEventListener,
-          removeEventListener: _self.removeEventListener,
-          removeAllEventListeners: _self.removeAllEventListeners,
-          dispatchEvent: _self.dispatchEvent,
+        _redoer = new UndoRedo({
+            //eventer
+            events: _self.events,
+            networkStates: _self.networkStates,
+            branchStates: _self.branchStates,
+            _eventList: _self._eventList,
+            _getEvent: _self._getEvent,
+            addEventListener: _self.addEventListener,
+            removeEventListener: _self.removeEventListener,
+            removeAllEventListeners: _self.removeAllEventListeners,
+            dispatchEvent: _self.dispatchEvent,
             getProjectObject: getProjectObject
         });
 
-      return {
-        //eventer
-        events: _self.events,
-        networkStates: _self.networkStates,
-        branchStates: _self.branchStates,
-        _eventList: _self._eventList,
-        _getEvent: _self._getEvent,
-        addEventListener: _self.addEventListener,
-        removeEventListener: _self.removeEventListener,
-        removeAllEventListeners: _self.removeAllEventListeners,
-        dispatchEvent: _self.dispatchEvent,
-        connect: connect,
 
-        getUserId: getUserId,
+        _clientAPI = {
+            //eventer
+            events: _self.events,
+            networkStates: _self.networkStates,
+            branchStates: _self.branchStates,
+            _eventList: _self._eventList,
+            _getEvent: _self._getEvent,
+            addEventListener: _self.addEventListener,
+            removeEventListener: _self.removeEventListener,
+            removeAllEventListeners: _self.removeAllEventListeners,
+            dispatchEvent: _self.dispatchEvent,
+            connect: connect,
 
-        //projects, branch, etc.
-        getActiveProjectName: getActiveProject,
-        getAvailableProjectsAsync: getAvailableProjectsAsync,
-        getViewableProjectsAsync: getViewableProjectsAsync,
-        getFullProjectListAsync: getFullProjectListAsync,
-        getProjectAuthInfoAsync: getProjectAuthInfoAsync,
-        connectToDatabaseAsync: connectToDatabaseAsync,
-        selectProjectAsync: selectProjectAsync,
-        createProjectAsync: createProjectAsync,
-        deleteProjectAsync: deleteProjectAsync,
-        getBranchesAsync: getBranchesAsync,
-        selectCommitAsync: selectCommitAsync,
-        getCommitsAsync: getCommitsAsync,
-        getActualCommit: getActualCommit,
-        getActualBranch: getActualBranch,
-        getActualNetworkStatus: getActualNetworkStatus,
-        getActualBranchStatus: getActualBranchStatus,
-        createBranchAsync: createBranchAsync,
-        deleteBranchAsync: deleteBranchAsync,
-        selectBranchAsync: selectBranchAsync,
-        commitAsync: commitAsync,
-        goOffline: goOffline,
-        goOnline: goOnline,
-        isProjectReadOnly: function () {
-          return _readOnlyProject;
-        },
-        isCommitReadOnly: function () {
-          return _viewer;
-        },
+            getUserId: getUserId,
 
-        //MGA
-        startTransaction: startTransaction,
-        completeTransaction: completeTransaction,
-        setAttributes: setAttributes,
-        delAttributes: delAttributes,
-        setRegistry: setRegistry,
-        delRegistry: delRegistry,
-        copyMoreNodes: copyMoreNodes,
-        moveMoreNodes: moveMoreNodes,
-        delMoreNodes: delMoreNodes,
-        createChild: createChild,
-        createChildren: createChildren,
-        makePointer: makePointer,
-        delPointer: delPointer,
-        addMember: addMember,
-        removeMember: removeMember,
-        setMemberAttribute: setMemberAttribute,
-        delMemberAttribute: delMemberAttribute,
-        setMemberRegistry: setMemberRegistry,
-        delMemberRegistry: delMemberRegistry,
-        createSet: createSet,
-        deleteSet: deleteSet,
+            //projects, branch, etc.
+            connectToDatabaseAsync: connectToDatabaseAsync,
+            getActiveProjectName: getActiveProject,
+            getActualCommit: getActualCommit,
+            getActualBranch: getActualBranch,
+            getActualNetworkStatus: getActualNetworkStatus,
+            getActualBranchStatus: getActualBranchStatus,
+            commitAsync: commitAsync,
+            goOffline: goOffline,
+            goOnline: goOnline,
+            isProjectReadOnly: function () {
+                return _readOnlyProject;
+            },
+            isCommitReadOnly: function () {
+                return _viewer;
+            },
 
-        setBase: setBase,
-        delBase: delBase,
+            startTransaction: startTransaction,
+            completeTransaction: completeTransaction,
 
-        //we simply propagate the functions of META
-        getMeta: META.getMeta,
-        setMeta: META.setMeta,
-        getChildrenMeta: META.getChildrenMeta,
-        setChildrenMeta: META.setChildrenMeta,
-        getChildrenMetaAttribute: META.getChildrenMetaAttribute,
-        setChildrenMetaAttribute: META.setChildrenMetaAttribute,
-        getValidChildrenItems: META.getValidChildrenItems,
-        updateValidChildrenItem: META.updateValidChildrenItem,
-        removeValidChildrenItem: META.removeValidChildrenItem,
-        getAttributeSchema: META.getAttributeSchema,
-        setAttributeSchema: META.setAttributeSchema,
-        removeAttributeSchema: META.removeAttributeSchema,
-        getPointerMeta: META.getPointerMeta,
-        setPointerMeta: META.setPointerMeta,
-        getValidTargetItems: META.getValidTargetItems,
-        updateValidTargetItem: META.updateValidTargetItem,
-        removeValidTargetItem: META.removeValidTargetItem,
-        deleteMetaPointer: META.deleteMetaPointer,
-        getOwnValidChildrenTypes: META.getOwnValidChildrenTypes,
-        getOwnValidTargetTypes: META.getOwnValidTargetTypes,
-        isValidChild: META.isValidChild,
-        isValidTarget: META.isValidTarget,
-        isValidAttribute: META.isValidAttribute,
-        getValidChildrenTypes: META.getValidChildrenTypes,
-        getValidTargetTypes: META.getValidTargetTypes,
-        hasOwnMetaRules: META.hasOwnMetaRules,
-        filterValidTarget: META.filterValidTarget,
-        isTypeOf: META.isTypeOf,
-        getValidAttributeNames: META.getValidAttributeNames,
-        getOwnValidAttributeNames: META.getOwnValidAttributeNames,
-        getMetaAspectNames: META.getMetaAspectNames,
-        getOwnMetaAspectNames: META.getOwnMetaAspectNames,
-        getMetaAspect: META.getMetaAspect,
-        setMetaAspect: META.setMetaAspect,
-        deleteMetaAspect: META.deleteMetaAspect,
-        getAspectTerritoryPattern: META.getAspectTerritoryPattern,
+            //decorators
+            getAvailableDecoratorNames: getAvailableDecoratorNames,
+            //interpreters
+            getAvailableInterpreterNames: getAvailableInterpreterNames,
+            getProjectObject: getProjectObject,
+            runServerPlugin: runServerPlugin,
 
-        //end of META functions
+            //constraint
+            setConstraint: setConstraint,
+            delConstraint: delConstraint,
 
-        //decorators
-        getAvailableDecoratorNames: getAvailableDecoratorNames,
-        //interpreters
-        getAvailableInterpreterNames: getAvailableInterpreterNames,
-        getProjectObject: getProjectObject,
-        runServerPlugin: runServerPlugin,
+            //territory functions for the UI
+            addUI: addUI,
+            removeUI: removeUI,
+            updateTerritory: updateTerritory,
+            getNode: function (_id) {
+                return getNode(_id,
+                    _clientGlobal);
+            },
 
-        //JSON functions
-        exportItems: exportItems,
-        getExportItemsUrlAsync: getExportItemsUrlAsync,
-        //getExternalInterpreterConfigUrlAsync: getExternalInterpreterConfigUrlAsync,
-        dumpNodeAsync: dumpNodeAsync,
-        importNodeAsync: importNodeAsync,
-        mergeNodeAsync: mergeNodeAsync,
-        createProjectFromFileAsync: createProjectFromFileAsync,
-        getDumpURL: getDumpURL,
-        getExportLibraryUrlAsync: getExportLibraryUrlAsync,
-        updateLibraryAsync: updateLibraryAsync,
-        addLibraryAsync: addLibraryAsync,
-        getFullProjectsInfoAsync: getFullProjectsInfoAsync,
-        createGenericBranchAsync: createGenericBranchAsync,
-        deleteGenericBranchAsync: deleteGenericBranchAsync,
-        setProjectInfoAsync: setProjectInfoAsync,
-        getProjectInfoAsync: getProjectInfoAsync,
-        getAllInfoTagsAsync: getAllInfoTagsAsync,
+            //undo - redo
+            undo: _redoer.undo,
+            redo: _redoer.redo,
 
-        //constraint
-        setConstraint: setConstraint,
-        delConstraint: delConstraint,
+            //clone services
+            getSeedInfoAsync: getSeedInfoAsync,
+            seedProjectAsync: seedProjectAsync
 
-        //coreAddOn functions
-        validateProjectAsync: validateProjectAsync,
-        validateModelAsync: validateModelAsync,
-        validateNodeAsync: validateNodeAsync,
-        setValidationCallback: setValidationCallback,
-        getDetailedHistoryAsync: getDetailedHistoryAsync,
-        getRunningAddOnNames: getRunningAddOnNames,
-          addOnsAllowed: gmeConfig.addOn.enable === true,
+        };
 
-        //territory functions for the UI
-        addUI: addUI,
-        removeUI: removeUI,
-        updateTerritory: updateTerritory,
-        getNode: getNode,
+        for (i in _clientGlobal.META) {
+            _clientAPI[i] = _clientGlobal.META[i];
+        }
 
-        //undo - redo
-        undo: _redoer.undo,
-        redo: _redoer.redo,
+        for (i in _clientGlobal.nodeSetter) {
+            _clientAPI[i] = _clientGlobal.nodeSetter[i];
+        }
 
-        //clone services
-        getSeedInfoAsync: getSeedInfoAsync,
-        seedProjectAsync: seedProjectAsync
+        for (i in _requests) {
+            _clientAPI[i] = _requests[i];
+        }
 
-        //merge
-        //getBaseOfCommits: getBaseOfCommits,
-        //getDiffTree: getDiffTree,
-        //getConflictOfDiffs: getConflictOfDiffs,
-        //applyDiff: applyDiff,
-        //merge: merge,
-        //getResolve: getResolve,
-        //resolve: resolve
-      };
+        //addOn
+        _clientAPI.validateProjectAsync = _clientGlobal.addOn.validateProjectAsync;
+        _clientAPI.validateModelAsync = _clientGlobal.addOn.validateModelAsync;
+        _clientAPI.validateNodeAsync = _clientGlobal.addOn.validateNodeAsync;
+        _clientAPI.setValidationCallback = _clientGlobal.addOn.setValidationCallback;
+        _clientAPI.getDetailedHistoryAsync = _clientGlobal.addOn.getDetailedHistoryAsync;
+        _clientAPI.getRunningAddOnNames = _clientGlobal.addOn.getRunningAddOnNames;
+        _clientAPI.addOnsAllowed = gmeConfig.addOn.enable === true;
+
+        return _clientAPI;
     }
 
+    return Client;
+});
+
+/*globals define*/
+/*jshint browser: true*/
+/**
+ * @author kecso / https://github.com/kecso
+ */
+define('client/js/client',['./client/index'], function (Client) {
+    
     return Client;
   });
 

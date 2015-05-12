@@ -19486,11 +19486,6 @@ define('client/js/client/requests',['common/util/assert',
                 });
         }
 
-        function getDumpURL(parameters) {
-            parameters.output = parameters.output || 'dump_url.out';
-            return plainUrl(parameters);
-        }
-
         function createEmptyProject(project, callback) {
             var core = _clientGlobal.functions.getNewCore(project,
                     _clientGlobal.gmeConfig, _clientGlobal.logger.fork('createEmptyProject')),
@@ -19571,6 +19566,27 @@ define('client/js/client/requests',['common/util/assert',
                 });
             } else {
                 callback(new Error('there is no open project!'));
+            }
+        }
+
+        function getExportProjectBranchUrlAsync(projectName, branchName, rootPath, fileName, callback) {
+            var command = {};
+            command.command = 'exportLibrary';
+            command.name = projectName;
+            command.branch = branchName;
+            command.path = rootPath;
+            if (command.name && command.branch) {
+                _clientGlobal.db.simpleRequest(command, function (err, resId) {
+                    if (err) {
+                        callback(err);
+                    } else {
+                        callback(null,
+                            window.location.protocol + '//' + window.location.host + '/worker/simpleResult/' +
+                            resId + '/' + fileName);
+                    }
+                });
+            } else {
+                callback(new Error('invalid parameters!'));
             }
         }
 
@@ -19941,7 +19957,8 @@ define('client/js/client/requests',['common/util/assert',
             importNodeAsync: importNodeAsync,
             mergeNodeAsync: mergeNodeAsync,
             createProjectFromFileAsync: createProjectFromFileAsync,
-            getDumpURL: getDumpURL,
+            //getDumpURL: getDumpURL,
+            getExportProjectBranchUrlAsync: getExportProjectBranchUrlAsync,
             getExportLibraryUrlAsync: getExportLibraryUrlAsync,
             updateLibraryAsync: updateLibraryAsync,
             addLibraryAsync: addLibraryAsync,

@@ -20,6 +20,8 @@ define(['blob/Artifact', 'blob/BlobMetadata', 'superagent'], function (Artifact,
             this.httpsecure = (parameters.httpsecure !== undefined) ? parameters.httpsecure : this.httpsecure;
             this.webgmeclientsession = parameters.webgmeclientsession;
             this.keepaliveAgentOptions = parameters.keepaliveAgentOptions || { /* use defaults */ };
+        } else {
+            this.keepaliveAgentOptions = { /* use defaults */ };
         }
         this.blobUrl = '';
         if (this.httpsecure !== undefined && this.server && this.serverPort) {
@@ -36,6 +38,9 @@ define(['blob/Artifact', 'blob/BlobMetadata', 'superagent'], function (Artifact,
                 this.Agent = require('agentkeepalive').HttpsAgent;
             } else {
                 this.Agent = require('agentkeepalive');
+            }
+            if (this.keepaliveAgentOptions.hasOwnProperty('ca') === false) {
+                this.keepaliveAgentOptions.ca = require('https').globalAgent.options.ca;
             }
             this.keepaliveAgent = new this.Agent(this.keepaliveAgentOptions);
         }
@@ -108,8 +113,10 @@ define(['blob/Artifact', 'blob/BlobMetadata', 'superagent'], function (Artifact,
         if (this.webgmeclientsession) {
             req.set('webgmeclientsession', this.webgmeclientsession);
         }
+        if (typeof data !== 'string' && !(data instanceof String)) {
+            req.set('Content-Length', contentLength)
+        }
         req.set('Content-Type', 'application/octet-stream')
-            .set('Content-Length', contentLength)
             .send(data)
             .end(function (err, res) {
                 if (err || res.status > 399) {

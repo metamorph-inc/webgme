@@ -134,6 +134,7 @@ function validateConfig (configOrFileName) {
     assertObject('config.plugin', config.plugin);
     assertBoolean('config.plugin.allowServerExecution', config.plugin.allowServerExecution);
     assertArray('config.plugin.basePaths', config.plugin.basePaths);
+    assertBoolean('config.plugin.displayAll', config.plugin.displayAll);
 
     // requirejsPaths
     expectedKeys.push('requirejsPaths');
@@ -181,11 +182,11 @@ function validateConfig (configOrFileName) {
     expectedKeys.push('storage');
     assertObject('config.storage', config.storage);
     assertBoolean('config.storage.autoPersist', config.storage.autoPersist);
+    assertBoolean('config.storage.broadcastProjectEvents', config.storage.broadcastProjectEvents);
     assertNumber('config.storage.cache', config.storage.cache);
-    assertNumber('config.storage.failSafeFrequency', config.storage.failSafeFrequency);
-    assertNumber('config.storage.timeout', config.storage.timeout);
+    assertNumber('config.storage.loadBucketSize', config.storage.loadBucketSize);
+    assertNumber('config.storage.loadBucketTimer', config.storage.loadBucketTimer);
     assertString('config.storage.keyType', config.storage.keyType);
-    assertString('config.storage.failSafe', config.storage.failSafe);
 
     //visualization
     expectedKeys.push('visualization');

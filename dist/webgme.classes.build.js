@@ -2093,6 +2093,1055 @@ var requirejs, require, define;
 
 define("../node_modules/requirejs/require", function(){});
 
+(function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
+
+/**
+ * This is the web browser implementation of `debug()`.
+ *
+ * Expose `debug()` as the module.
+ */
+
+window.debug = exports = module.exports = require('./debug');
+exports.log = log;
+exports.formatArgs = formatArgs;
+exports.save = save;
+exports.load = load;
+exports.useColors = useColors;
+
+/**
+ * Use chrome.storage.local if we are in an app
+ */
+
+var storage;
+
+if (typeof chrome !== 'undefined' && typeof chrome.storage !== 'undefined')
+  storage = chrome.storage.local;
+else
+  storage = localstorage();
+
+/**
+ * Colors.
+ */
+
+exports.colors = [
+  'lightseagreen',
+  'forestgreen',
+  'goldenrod',
+  'dodgerblue',
+  'darkorchid',
+  'crimson'
+];
+
+/**
+ * Currently only WebKit-based Web Inspectors, Firefox >= v31,
+ * and the Firebug extension (any Firefox version) are known
+ * to support "%c" CSS customizations.
+ *
+ * TODO: add a `localStorage` variable to explicitly enable/disable colors
+ */
+
+function useColors() {
+  // is webkit? http://stackoverflow.com/a/16459606/376773
+  return ('WebkitAppearance' in document.documentElement.style) ||
+    // is firebug? http://stackoverflow.com/a/398120/376773
+    (window.console && (console.firebug || (console.exception && console.table))) ||
+    // is firefox >= v31?
+    // https://developer.mozilla.org/en-US/docs/Tools/Web_Console#Styling_messages
+    (navigator.userAgent.toLowerCase().match(/firefox\/(\d+)/) && parseInt(RegExp.$1, 10) >= 31);
+}
+
+/**
+ * Map %j to `JSON.stringify()`, since no Web Inspectors do that by default.
+ */
+
+exports.formatters.j = function(v) {
+  return JSON.stringify(v);
+};
+
+
+/**
+ * Colorize log arguments if enabled.
+ *
+ * @api public
+ */
+
+function formatArgs() {
+  var args = arguments;
+  var useColors = this.useColors;
+
+  args[0] = (useColors ? '%c' : '')
+    + this.namespace
+    + (useColors ? ' %c' : ' ')
+    + args[0]
+    + (useColors ? '%c ' : ' ')
+    + '+' + exports.humanize(this.diff);
+
+  if (!useColors) return args;
+
+  var c = 'color: ' + this.color;
+  args = [args[0], c, 'color: inherit'].concat(Array.prototype.slice.call(args, 1));
+
+  // the final "%c" is somewhat tricky, because there could be other
+  // arguments passed either before or after the %c, so we need to
+  // figure out the correct index to insert the CSS into
+  var index = 0;
+  var lastC = 0;
+  args[0].replace(/%[a-z%]/g, function(match) {
+    if ('%%' === match) return;
+    index++;
+    if ('%c' === match) {
+      // we only are interested in the *last* %c
+      // (the user may have provided their own)
+      lastC = index;
+    }
+  });
+
+  args.splice(lastC, 0, c);
+  return args;
+}
+
+/**
+ * Invokes `console.log()` when available.
+ * No-op when `console.log` is not a "function".
+ *
+ * @api public
+ */
+
+function log() {
+  // this hackery is required for IE8/9, where
+  // the `console.log` function doesn't have 'apply'
+  return 'object' === typeof console
+    && console.log
+    && Function.prototype.apply.call(console.log, console, arguments);
+}
+
+/**
+ * Save `namespaces`.
+ *
+ * @param {String} namespaces
+ * @api private
+ */
+
+function save(namespaces) {
+  try {
+    if (null == namespaces) {
+      storage.removeItem('debug');
+    } else {
+      storage.debug = namespaces;
+    }
+  } catch(e) {}
+}
+
+/**
+ * Load `namespaces`.
+ *
+ * @return {String} returns the previously persisted debug modes
+ * @api private
+ */
+
+function load() {
+  var r;
+  try {
+    r = storage.debug;
+  } catch(e) {}
+  return r;
+}
+
+/**
+ * Enable namespaces listed in `localStorage.debug` initially.
+ */
+
+exports.enable(load());
+
+/**
+ * Localstorage attempts to return the localstorage.
+ *
+ * This is necessary because safari throws
+ * when a user disables cookies/localstorage
+ * and you attempt to access it.
+ *
+ * @return {LocalStorage}
+ * @api private
+ */
+
+function localstorage(){
+  try {
+    return window.localStorage;
+  } catch (e) {}
+}
+
+},{"./debug":2}],2:[function(require,module,exports){
+
+/**
+ * This is the common logic for both the Node.js and web browser
+ * implementations of `debug()`.
+ *
+ * Expose `debug()` as the module.
+ */
+
+exports = module.exports = debug;
+exports.coerce = coerce;
+exports.disable = disable;
+exports.enable = enable;
+exports.enabled = enabled;
+exports.humanize = require('ms');
+
+/**
+ * The currently active debug mode names, and names to skip.
+ */
+
+exports.names = [];
+exports.skips = [];
+
+/**
+ * Map of special "%n" handling functions, for the debug "format" argument.
+ *
+ * Valid key names are a single, lowercased letter, i.e. "n".
+ */
+
+exports.formatters = {};
+
+/**
+ * Previously assigned color.
+ */
+
+var prevColor = 0;
+
+/**
+ * Previous log timestamp.
+ */
+
+var prevTime;
+
+/**
+ * Select a color.
+ *
+ * @return {Number}
+ * @api private
+ */
+
+function selectColor() {
+  return exports.colors[prevColor++ % exports.colors.length];
+}
+
+/**
+ * Create a debugger with the given `namespace`.
+ *
+ * @param {String} namespace
+ * @return {Function}
+ * @api public
+ */
+
+function debug(namespace) {
+
+  // define the `disabled` version
+  function disabled() {
+  }
+  disabled.enabled = false;
+
+  // define the `enabled` version
+  function enabled() {
+
+    var self = enabled;
+
+    // set `diff` timestamp
+    var curr = +new Date();
+    var ms = curr - (prevTime || curr);
+    self.diff = ms;
+    self.prev = prevTime;
+    self.curr = curr;
+    prevTime = curr;
+
+    // add the `color` if not set
+    if (null == self.useColors) self.useColors = exports.useColors();
+    if (null == self.color && self.useColors) self.color = selectColor();
+
+    var args = Array.prototype.slice.call(arguments);
+
+    args[0] = exports.coerce(args[0]);
+
+    if ('string' !== typeof args[0]) {
+      // anything else let's inspect with %o
+      args = ['%o'].concat(args);
+    }
+
+    // apply any `formatters` transformations
+    var index = 0;
+    args[0] = args[0].replace(/%([a-z%])/g, function(match, format) {
+      // if we encounter an escaped % then don't increase the array index
+      if (match === '%%') return match;
+      index++;
+      var formatter = exports.formatters[format];
+      if ('function' === typeof formatter) {
+        var val = args[index];
+        match = formatter.call(self, val);
+
+        // now we need to remove `args[index]` since it's inlined in the `format`
+        args.splice(index, 1);
+        index--;
+      }
+      return match;
+    });
+
+    if ('function' === typeof exports.formatArgs) {
+      args = exports.formatArgs.apply(self, args);
+    }
+    var logFn = enabled.log || exports.log || console.log.bind(console);
+    logFn.apply(self, args);
+  }
+  enabled.enabled = true;
+
+  var fn = exports.enabled(namespace) ? enabled : disabled;
+
+  fn.namespace = namespace;
+
+  return fn;
+}
+
+/**
+ * Enables a debug mode by namespaces. This can include modes
+ * separated by a colon and wildcards.
+ *
+ * @param {String} namespaces
+ * @api public
+ */
+
+function enable(namespaces) {
+  exports.save(namespaces);
+
+  var split = (namespaces || '').split(/[\s,]+/);
+  var len = split.length;
+
+  for (var i = 0; i < len; i++) {
+    if (!split[i]) continue; // ignore empty strings
+    namespaces = split[i].replace(/\*/g, '.*?');
+    if (namespaces[0] === '-') {
+      exports.skips.push(new RegExp('^' + namespaces.substr(1) + '$'));
+    } else {
+      exports.names.push(new RegExp('^' + namespaces + '$'));
+    }
+  }
+}
+
+/**
+ * Disable debug output.
+ *
+ * @api public
+ */
+
+function disable() {
+  exports.enable('');
+}
+
+/**
+ * Returns true if the given mode name is enabled, false otherwise.
+ *
+ * @param {String} name
+ * @return {Boolean}
+ * @api public
+ */
+
+function enabled(name) {
+  var i, len;
+  for (i = 0, len = exports.skips.length; i < len; i++) {
+    if (exports.skips[i].test(name)) {
+      return false;
+    }
+  }
+  for (i = 0, len = exports.names.length; i < len; i++) {
+    if (exports.names[i].test(name)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Coerce `val`.
+ *
+ * @param {Mixed} val
+ * @return {Mixed}
+ * @api private
+ */
+
+function coerce(val) {
+  if (val instanceof Error) return val.stack || val.message;
+  return val;
+}
+
+},{"ms":3}],3:[function(require,module,exports){
+/**
+ * Helpers.
+ */
+
+var s = 1000;
+var m = s * 60;
+var h = m * 60;
+var d = h * 24;
+var y = d * 365.25;
+
+/**
+ * Parse or format the given `val`.
+ *
+ * Options:
+ *
+ *  - `long` verbose formatting [false]
+ *
+ * @param {String|Number} val
+ * @param {Object} options
+ * @return {String|Number}
+ * @api public
+ */
+
+module.exports = function(val, options){
+  options = options || {};
+  if ('string' == typeof val) return parse(val);
+  return options.long
+    ? long(val)
+    : short(val);
+};
+
+/**
+ * Parse the given `str` and return milliseconds.
+ *
+ * @param {String} str
+ * @return {Number}
+ * @api private
+ */
+
+function parse(str) {
+  var match = /^((?:\d+)?\.?\d+) *(milliseconds?|msecs?|ms|seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h|days?|d|years?|yrs?|y)?$/i.exec(str);
+  if (!match) return;
+  var n = parseFloat(match[1]);
+  var type = (match[2] || 'ms').toLowerCase();
+  switch (type) {
+    case 'years':
+    case 'year':
+    case 'yrs':
+    case 'yr':
+    case 'y':
+      return n * y;
+    case 'days':
+    case 'day':
+    case 'd':
+      return n * d;
+    case 'hours':
+    case 'hour':
+    case 'hrs':
+    case 'hr':
+    case 'h':
+      return n * h;
+    case 'minutes':
+    case 'minute':
+    case 'mins':
+    case 'min':
+    case 'm':
+      return n * m;
+    case 'seconds':
+    case 'second':
+    case 'secs':
+    case 'sec':
+    case 's':
+      return n * s;
+    case 'milliseconds':
+    case 'millisecond':
+    case 'msecs':
+    case 'msec':
+    case 'ms':
+      return n;
+  }
+}
+
+/**
+ * Short format for `ms`.
+ *
+ * @param {Number} ms
+ * @return {String}
+ * @api private
+ */
+
+function short(ms) {
+  if (ms >= d) return Math.round(ms / d) + 'd';
+  if (ms >= h) return Math.round(ms / h) + 'h';
+  if (ms >= m) return Math.round(ms / m) + 'm';
+  if (ms >= s) return Math.round(ms / s) + 's';
+  return ms + 'ms';
+}
+
+/**
+ * Long format for `ms`.
+ *
+ * @param {Number} ms
+ * @return {String}
+ * @api private
+ */
+
+function long(ms) {
+  return plural(ms, d, 'day')
+    || plural(ms, h, 'hour')
+    || plural(ms, m, 'minute')
+    || plural(ms, s, 'second')
+    || ms + ' ms';
+}
+
+/**
+ * Pluralization helper.
+ */
+
+function plural(ms, n, name) {
+  if (ms < n) return;
+  if (ms < n * 1.5) return Math.floor(ms / n) + ' ' + name;
+  return Math.ceil(ms / n) + ' ' + name + 's';
+}
+
+},{}]},{},[1]);
+
+define("debug", function(){});
+
+/*globals define, debug*/
+/*jshint node:true*/
+/**
+ * @author pmeijer / https://github.com/pmeijer
+ */
+
+define('js/logger',['debug'], function (_debug) {
+
+    // Separate namespaces using ',' a leading '-' will disable the namespace.
+    // Each part takes a regex.
+    //      ex: localStorage.debug = '*,-socket\.io*,-engine\.io*'
+    //      will log all but socket.io and engine.io
+    function createLogger(name, options) {
+        var log = typeof debug === 'undefined' ? _debug(name) : debug(name),
+            level,
+            levels = {
+                silly: 0,
+                input: 1,
+                verbose: 2,
+                prompt: 3,
+                debug: 4,
+                info: 5,
+                data: 6,
+                help: 7,
+                warn: 8,
+                error: 9
+            };
+        if (!options) {
+            throw new Error('options required in logger');
+        }
+        if (options.hasOwnProperty('level') === false) {
+            throw new Error('options.level required in logger');
+        }
+        level = levels[options.level];
+        if (typeof level === 'undefined') {
+            level = levels.info;
+        }
+
+        log.debug = function () {
+            if (log.enabled && level <= levels.debug) {
+                if (console.debug) {
+                    log.log = console.debug.bind(console);
+                } else {
+                    log.log = console.log.bind(console);
+                }
+                log.apply(this, arguments);
+            }
+        };
+        log.info = function () {
+            if (log.enabled && level <= levels.info) {
+                log.log = console.info.bind(console);
+                log.apply(this, arguments);
+            }
+        };
+        log.warn = function () {
+            if (log.enabled && level <= levels.warn) {
+                log.log = console.warn.bind(console);
+                log.apply(this, arguments);
+            }
+        };
+        log.error = function () {
+            if (log.enabled && level <= levels.error) {
+                log.log = console.error.bind(console);
+                log.apply(this, arguments);
+            } else {
+                console.error.apply(console, arguments);
+            }
+        };
+
+        log.fork = function (forkName, useForkName) {
+            forkName = useForkName ? forkName : name + ':' + forkName;
+            return createLogger(forkName, options);
+        };
+
+        log.forkWithOptions = function (_name, _options) {
+            return createLogger(_name, _options);
+        };
+
+        return log;
+    }
+
+    function createWithGmeConfig(name, gmeConfig) {
+        return createLogger(name, gmeConfig.client.log);
+    }
+
+    return {
+        create: createLogger,
+        createWithGmeConfig: createWithGmeConfig
+    };
+});
+/*globals define*/
+/*jshint node:true, browser: true*/
+/**
+ * @author pmeijer / https://github.com/pmeijer
+ */
+
+define('common/storage/constants',[], function () {
+
+    return {
+
+        // Database related
+        MONGO_ID: '_id',
+        PROJECT_INFO_ID: '*info*',
+        EMPTY_PROJECT_DATA: 'empty',
+
+        // Socket IO
+        DATABASE_ROOM: 'database',
+        ROOM_DIVIDER: '%',
+        CONNECTED: 'CONNECTED',
+        DISCONNECTED: 'DISCONNECTED',
+        RECONNECTED: 'RECONNECTED',
+
+        // Branch status
+        SYNCH: 'SYNCH',
+        FORKED: 'FORKED',
+        MERGED: 'MERGED',
+
+        // Events
+        PROJECT_DELETED: 'PROJECT_DELETED',
+        PROJECT_CREATED: 'PROJECT_CREATED',
+
+        BRANCH_DELETED: 'BRANCH_DELETED',
+        BRANCH_CREATED: 'BRANCH_CREATED',
+        BRANCH_HASH_UPDATED: 'BRANCH_HASH_UPDATED',
+
+        BRANCH_UPDATED: 'BRANCH_UPDATED'
+    };
+});
+
+/*globals define*/
+/*jshint browser: true, node:true*/
+/**
+ * Provides watching-functionality of the database and specific projects.
+ * Keeps a state of the registered watchers.
+ *
+ * @author pmeijer / https://github.com/pmeijer
+ */
+
+define('common/storage/storageclasses/watchers',['common/storage/constants'], function (CONSTANTS) {
+
+
+    function StorageWatcher(webSocket, logger, gmeConfig) {
+        // watcher counters determining when to join/leave a room on the sever
+        this.watchers = {
+            database: 0,
+            projects: {}
+        };
+        this.webSocket = webSocket;
+        this.logger = this.logger || logger.fork('storage');
+        this.gmeConfig = gmeConfig;
+        this.logger.debug('StorageWatcher ctor');
+        this.connected = false;
+    }
+
+    StorageWatcher.prototype.watchDatabase = function (eventHandler, callback) {
+        this.logger.debug('watchDatabase - handler added');
+        this.webSocket.addEventListener(CONSTANTS.PROJECT_DELETED, eventHandler);
+        this.webSocket.addEventListener(CONSTANTS.PROJECT_CREATED, eventHandler);
+        this.watchers.database += 1;
+        this.logger.debug('Nbr of database watchers:', this.watchers.database);
+        if (this.watchers.database === 1) {
+            this.logger.debug('First watcher will enter database room.');
+            this.webSocket.watchDatabase({join: true}, callback);
+        } else {
+            callback(null);
+        }
+    };
+
+    StorageWatcher.prototype.unwatchDatabase = function (eventHandler, callback) {
+        this.logger.debug('unwatchDatabase - handler will be removed');
+        this.logger.debug('Nbr of database watchers (before removal):', this.watchers.database);
+        this.webSocket.removeEventListener(CONSTANTS.PROJECT_DELETED, eventHandler);
+        this.webSocket.removeEventListener(CONSTANTS.PROJECT_CREATED, eventHandler);
+        this.watchers.database -= 1;
+        if (this.watchers.database === 0) {
+            this.logger.debug('No more watchers will exit database room.');
+            if (this.connected) {
+                this.webSocket.watchDatabase({join: false}, callback);
+            } else {
+                callback(null);
+            }
+        } else if (this.watchers.database < 0) {
+            this.logger.error('Number of database watchers became negative!');
+            callback('Number of database watchers became negative!');
+        } else {
+            callback(null);
+        }
+    };
+
+    StorageWatcher.prototype.watchProject = function (projectName, eventHandler, callback) {
+        this.logger.debug('watchProject - handler added for project', projectName);
+        this.webSocket.addEventListener(CONSTANTS.BRANCH_DELETED + projectName, eventHandler);
+        this.webSocket.addEventListener(CONSTANTS.BRANCH_CREATED + projectName, eventHandler);
+        this.webSocket.addEventListener(CONSTANTS.BRANCH_HASH_UPDATED + projectName, eventHandler);
+
+        this.watchers.projects[projectName] = this.watchers.projects.hasOwnProperty(projectName) ?
+        this.watchers.projects[projectName] + 1 : 1;
+        this.logger.debug('Nbr of watchers for project:', projectName, this.watchers.projects[projectName]);
+        if (this.watchers.projects[projectName] === 1) {
+            this.logger.debug('First watcher will enter project room:', projectName);
+            this.webSocket.watchProject({projectName: projectName, join: true}, callback);
+        } else {
+            callback(null);
+        }
+    };
+
+    StorageWatcher.prototype.unwatchProject = function (projectName, eventHandler, callback) {
+        this.logger.debug('unwatchProject - handler will be removed', projectName);
+        this.logger.debug('Nbr of database watchers (before removal):', projectName,
+            this.watchers.projects[projectName]);
+        this.webSocket.removeEventListener(CONSTANTS.BRANCH_DELETED + projectName, eventHandler);
+        this.webSocket.removeEventListener(CONSTANTS.BRANCH_CREATED + projectName, eventHandler);
+        this.webSocket.removeEventListener(CONSTANTS.BRANCH_HASH_UPDATED + projectName, eventHandler);
+
+        this.watchers.projects[projectName] = this.watchers.projects.hasOwnProperty(projectName) ?
+        this.watchers.projects[projectName] - 1 : -1;
+        if (this.watchers.projects[projectName] === 0) {
+            this.logger.debug('No more watchers will exit project room:', projectName);
+            delete this.watchers.projects[projectName];
+            if (this.connected) {
+                this.webSocket.watchProject({projectName: projectName, join: false}, callback);
+            } else {
+                callback(null);
+            }
+        } else if (this.watchers.database < 0) {
+            this.logger.error('Number of project watchers became negative!:', projectName);
+            callback('Number of project watchers became negative!');
+        } else {
+            callback(null);
+        }
+    };
+
+    StorageWatcher.prototype._rejoinWatcherRooms = function () {
+        var self = this,
+            projectName,
+            callback = function (err) {
+                //TODO: Add a callback here too.
+                if (err) {
+                    self.logger.error('problems rejoining watcher rooms', err);
+                }
+            };
+        this.logger.debug('rejoinWatcherRooms');
+        if (this.watchers.database > 0) {
+            this.logger.debug('Rejoining database room.');
+            this.webSocket.watchDatabase({join: true}, callback);
+        }
+        for (projectName in this.watchers.projects) {
+            if (this.watchers.projects.hasOwnProperty(projectName) && this.watchers.projects[projectName] > 0) {
+                this.logger.debug('Rejoining project room', projectName, this.watchers.projects[projectName]);
+                this.webSocket.watchProject({projectName: projectName, join: true}, callback);
+            }
+        }
+    };
+
+    return StorageWatcher;
+});
+/*globals define*/
+/*jshint browser: true, node:true*/
+/**
+ * TODO: Come up with an appropriate name for this.
+ * TODO: Proper implementation needed, e.g. error handling.
+ *
+ * Provides REST-like functionality of the database.
+ *
+ * @author pmeijer / https://github.com/pmeijer
+ */
+
+define('common/storage/storageclasses/simpleapi',['common/storage/storageclasses/watchers'], function (StorageWatcher) {
+
+
+    /**
+     *
+     * @param webSocket
+     * @param logger
+     * @param gmeConfig
+     * @constructor
+     * @class
+     */
+    function StorageSimpleAPI(webSocket, logger, gmeConfig) {
+        // watcher counters determining when to join/leave a room on the sever
+        this.logger = this.logger || logger.fork('storage');
+        StorageWatcher.call(this, webSocket, logger, gmeConfig);
+        this.webSocket = webSocket;
+        this.gmeConfig = gmeConfig;
+        this.logger.debug('StorageSimpleAPI ctor');
+    }
+
+    StorageSimpleAPI.prototype = Object.create(StorageWatcher.prototype);
+    StorageSimpleAPI.prototype.constructor = StorageSimpleAPI;
+
+    /**
+     * Callback for getProjectNames.
+     *
+     * @callback StorageSimpleAPI~getProjectNamesCallback
+     * @param {string} err - error string.
+     * @param {string[]} projectNames - Names of all projects the user has at least read-access to.
+     */
+
+    /**
+     * Retrieves all the project names where the user has at least read access.
+     *
+     * @param {StorageSimpleAPI~getProjectNamesCallback} callback
+     */
+    StorageSimpleAPI.prototype.getProjectNames = function (callback) {
+        var data = {};
+        this.logger.debug('invoking getProjectNames', data);
+        this.webSocket.getProjectNames(data, callback);
+    };
+
+    /**
+     * Callback for getProjects.
+     *
+     * @callback StorageSimpleAPI~getProjectsCallback
+     * @param {string} err - error string.
+     * @param {{object[]} projects - All projects in the database.
+     * @example
+     * // projects is of the form
+     * // [{ name: 'ProjectName', read: true, write: false, delete: false} ]
+     */
+
+    /**
+     * Retrieves all the access info for all projects.
+     *
+     * @param {StorageSimpleAPI~getProjectsCallback} callback
+     */
+    StorageSimpleAPI.prototype.getProjects = function (callback) {
+        var data = {};
+        this.logger.debug('invoking getProjects', data);
+        this.webSocket.getProjects(data, callback);
+    };
+
+    /**
+     * Callback for getProjectsAndBranches.
+     *
+     * @callback StorageSimpleAPI~getProjectsAndBranches
+     * @param {string} err - error string.
+     * @param {{object[]} projectsWithBranches - Projects the user has at least read-access to.
+     * @example
+     * // projectsWithBranches is of the form
+     * // [{
+     * //    name: 'ProjectName',
+     * //    read: true, //will always be true
+     * //    write: false,
+     * //    delete: false
+     * //    branches: {
+     * //      master: '#validHash',
+     * //      b1: '#validHashtoo'
+     * //    }
+     * // }]
+     */
+
+    /**
+     * Retrieves all the access info for all projects.
+     *
+     * @param {StorageSimpleAPI~getProjectsAndBranches} callback
+     */
+    StorageSimpleAPI.prototype.getProjectsAndBranches = function (callback) {
+        var data = {};
+        this.logger.debug('invoking getProjectsAndBranches', data);
+        this.webSocket.getProjectsAndBranches(data, callback);
+    };
+
+
+    StorageSimpleAPI.prototype.getBranches = function (projectName, callback) {
+        var data = {
+            projectName: projectName
+        };
+        this.logger.debug('invoking getBranches', data);
+        this.webSocket.getBranches(data, callback);
+    };
+
+    StorageSimpleAPI.prototype.getCommits = function (projectName, before, number, callback) {
+        var data = {
+            projectName: projectName,
+            before: before,
+            number: number
+        };
+        this.logger.debug('invoking getCommits', data);
+        this.webSocket.getCommits(data, callback);
+    };
+
+    StorageSimpleAPI.prototype.getLatestCommitData = function (projectName, branchName, callback) {
+        var data = {
+            projectName: projectName,
+            branchName: branchName
+        };
+        this.logger.debug('invoking getLatestCommitData', data);
+        this.webSocket.getLatestCommitData(data, callback);
+    };
+
+    // Setters
+    //StorageSimpleAPI.prototype.createProject = function (projectName, parameters, callback) {
+    //    var data = {
+    //        projectName: projectName,
+    //        parameters: parameters
+    //    };
+    //
+    //    this.logger.debug('invoking createProject');
+    //    this.webSocket.createProject(data, callback);
+    //};
+
+    StorageSimpleAPI.prototype.deleteProject = function (projectName, callback) {
+        var data = {
+            projectName: projectName
+        };
+        this.logger.debug('invoking deleteProject', data);
+        this.webSocket.deleteProject(data, callback);
+    };
+
+    StorageSimpleAPI.prototype.createBranch = function (projectName, branchName, newHash, callback) {
+        var data = {
+            projectName: projectName,
+            branchName: branchName,
+            newHash: newHash,
+            oldHash: ''
+        };
+        this.logger.debug('invoking createBranch', data);
+        this.webSocket.setBranchHash(data, callback);
+    };
+
+    StorageSimpleAPI.prototype.deleteBranch = function (projectName, branchName, oldHash, callback) {
+        var data = {
+            projectName: projectName,
+            branchName: branchName,
+            newHash: '',
+            oldHash: oldHash
+        };
+        this.logger.debug('invoking deleteBranch', data);
+        this.webSocket.setBranchHash(data, callback);
+    };
+
+    //temporary simple request and result functions
+    StorageSimpleAPI.prototype.simpleRequest = function (parameters, callback) {
+        this.logger.debug('invoking simpleRequest', parameters);
+        this.webSocket.simpleRequest(parameters, callback);
+    };
+
+    StorageSimpleAPI.prototype.simpleResult = function (resultId, callback) {
+        this.logger.debug('invoking simpleResult', resultId);
+        this.webSocket.simpleResult(resultId, callback);
+    };
+
+    StorageSimpleAPI.prototype.simpleQuery = function (workerId, parameters, callback) {
+        this.logger.debug('invoking simpleQuery; workerId, parameters', workerId, parameters);
+        this.webSocket.simpleQuery(workerId, parameters, callback);
+    };
+
+    return StorageSimpleAPI;
+});
+/*globals define*/
+/*jshint browser: true, node:true*/
+/**
+ * Provides functionality (used by the project-cache) for loading objects.
+ *
+ * To avoid multiple round-trips to the server the loadObject requests are put in a bucket
+ * that is loaded when the bucket is full (gmeConfig.storage.loadBucketSize) or when a
+ * timeout is triggered (gmeConfig.storage.loadBucketTimer).
+ *
+ * @author pmeijer / https://github.com/pmeijer
+ */
+
+define('common/storage/storageclasses/objectloaders',['common/storage/storageclasses/simpleapi'], function (SimpleAPI) {
+
+
+    function StorageObjectLoaders(webSocket, logger, gmeConfig) {
+        // watcher counters determining when to join/leave a room on the sever
+        this.logger = this.logger || logger.fork('storage');
+        SimpleAPI.call(this, webSocket, logger, gmeConfig);
+        this.webSocket = webSocket;
+        this.gmeConfig = gmeConfig;
+        // Bucket for loading objects
+        this.loadBucket = [];
+        this.loadBucketSize = 0;
+        this.loadBucketTimer = null;
+        this.logger.debug('StorageObjectLoaders ctor');
+    }
+
+    StorageObjectLoaders.prototype = Object.create(SimpleAPI.prototype);
+    StorageObjectLoaders.prototype.constructor = StorageObjectLoaders;
+
+    // Getters
+    StorageObjectLoaders.prototype.loadObject = function (projectName, hash, callback) {
+        var self = this;
+        this.logger.debug('loadObject', projectName, hash);
+
+        self.loadBucket.push({projectName: projectName, hash: hash, cb: callback});
+        self.loadBucketSize += 1;
+
+        function resetBucketAndLoadObjects() {
+            var myBucket = self.loadBucket;
+            self.loadBucket = [];
+            self.loadBucketTimer = null;
+            self.loadBucketSize = 0;
+            self.loadObjects(projectName, myBucket);
+        }
+
+        if (self.loadBucketSize === 1) {
+            self.logger.debug('loadBucket was empty starting timer [ms]', self.gmeConfig.storage.loadBucketTimer);
+            self.loadBucketTimer = setTimeout(function () {
+                self.logger.debug('loadBucketTimer triggered, bucketSize:', self.loadBucketSize);
+                resetBucketAndLoadObjects();
+            }, self.gmeConfig.storage.loadBucketTimer);
+        }
+
+        if (self.loadBucketSize === self.gmeConfig.storage.loadBucketSize) {
+            self.logger.debug('loadBuckSize reached will loadObjects, bucketSize:', self.loadBucketSize);
+            clearTimeout(self.loadBucketTimer);
+            resetBucketAndLoadObjects();
+        }
+    };
+
+    StorageObjectLoaders.prototype.loadObjects = function (projectName, hashedObjects) {
+        var self = this,
+            hashes = {},
+            data,
+            i;
+        for (i = 0; i < hashedObjects.length; i++) {
+            hashes[hashedObjects[i].hash] = true;
+        }
+        hashes = Object.keys(hashes);
+        data = {
+            hashes: hashes,
+            projectName: projectName
+        };
+
+        this.webSocket.loadObjects(data, function (err, result) {
+            if (err) {
+                throw new Error(err);
+            }
+            self.logger.debug('loadObjects returned', result);
+            for (i = 0; i < hashedObjects.length; i++) {
+                if (typeof result[hashedObjects[i].hash] === 'string') {
+                    self.logger.error(result[hashedObjects[i].hash]);
+                    hashedObjects[i].cb(result[hashedObjects[i].hash]);
+                } else {
+                    hashedObjects[i].cb(err, result[hashedObjects[i].hash]);
+                }
+            }
+        });
+    };
+
+    return StorageObjectLoaders;
+});
+
 /*globals define*/
 /*jshint node: true, browser: true*/
 
@@ -2102,7 +3151,7 @@ define("../node_modules/requirejs/require", function(){});
 
 
 define('common/util/assert',[],function () {
-    
+
 
     var assert = function (cond, msg) {
         if (!cond) {
@@ -2121,133 +3170,353 @@ define('common/util/assert',[],function () {
 });
 
 /*globals define*/
-/*jshint node: true, browser: true*/
-
+/*jshint browser: true, node:true*/
 /**
- * @author rkereskenyi / https://github.com/rkereskenyi
+ * This class (extracted functionality from cache implemented by mmaroti) caches objects associated
+ * with a project.
+ *
+ * @author pmeijer / https://github.com/pmeijer
+ * @author mmaroti / https://github.com/mmaroti
  */
 
-define('common/EventDispatcher',[], function () {
-    
+define('common/storage/project/cache',['common/util/assert', 'common/storage/constants'], function (ASSERT, CONSTANTS) {
 
-    var EventDispatcher = function () {
-        this._eventList = {};
-    };
+    function ProjectCache(storage, projectName, mainLogger, gmeConfig) {
+        var missing = {},
+            backup = {},
+            cache = {},
+            logger = mainLogger.fork('ProjectCache'),
+            cacheSize = 0;
 
-    EventDispatcher.prototype = {
-        _eventList: null,
-        _getEvent: function (eventName, create) {
-            // Check if Array of Event Handlers has been created
-            if (!this._eventList[eventName]) {
+        logger.debug('ctor');
+        function cacheInsert(key, obj) {
+            ASSERT(typeof cache[key] === 'undefined' && obj[CONSTANTS.MONGO_ID] === key);
+            logger.debug('cacheInsert', key);
 
-                // Check if the calling method wants to create the Array
-                // if not created. This reduces unneeded memory usage.
-                if (!create) {
-                    return null;
-                }
+            //deepFreeze(obj);
+            cache[key] = obj;
 
-                // Create the Array of Event Handlers
-                this._eventList[eventName] = [];
-                // new Array
+            if (++cacheSize >= gmeConfig.storage.cache) {
+                backup = cache;
+                cache = {};
+                cacheSize = 0;
             }
-
-            // return the Array of Event Handlers already added
-            return this._eventList[eventName];
-        },
-        addEventListener: function (eventName, handler) {
-            // Get the Array of Event Handlers
-            var evt = this._getEvent(eventName, true);
-
-            // Add the new Event Handler to the Array
-            evt.push(handler);
-        },
-        removeEventListener: function (eventName, handler) {
-            // Get the Array of Event Handlers
-            var evt = this._getEvent(eventName);
-
-            if (!evt) {
-                return;
-            }
-
-            // Helper Method - an Array.indexOf equivalent
-            var getArrayIndex = function (array, item) {
-                for (var i = 0; i < array.length; i++) {
-                    if (array[i] === item) {
-                        return i;
-                    }
-                }
-                return -1;
-            };
-
-            // Get the Array index of the Event Handler
-            var index = getArrayIndex(evt, handler);
-
-            if (index > -1) {
-                // Remove Event Handler from Array
-                evt.splice(index, 1);
-            }
-        },
-        removeAllEventListeners: function (eventName) {
-            // Get the Array of Event Handlers
-            var evt = this._getEvent(eventName);
-
-            if (!evt) {
-                return;
-            }
-
-            evt.splice(0, evt.length);
-        },
-        dispatchEvent: function (eventName, eventArgs) {
-            // Get a function that will call all the Event Handlers internally
-            var handler = this._getEventHandler(eventName);
-            if (handler) {
-                // call the handler function
-                // Pass in "sender" and "eventArgs" parameters
-                handler(this, eventArgs);
-            }
-        },
-        _getEventHandler: function (eventName) {
-            // Get Event Handler Array for this Event
-            var evt = this._getEvent(eventName, false);
-            if (!evt || evt.length === 0) {
-                return null;
-            }
-
-            // Create the Handler method that will use currying to
-            // call all the Events Handlers internally
-            var h = function (sender, args) {
-                for (var i = 0; i < evt.length; i++) {
-                    evt[i](sender, args);
-                }
-            };
-
-            // Return this new Handler method
-            return h;
         }
-    };
 
-    return EventDispatcher;
-});
-/*globals define*/
-/*jshint node: true, browser: true, bitwise: false*/
+        this.loadObject = function (key, callback) {
+            ASSERT(typeof key === 'string' && typeof callback === 'function');
+            logger.debug('loadObject', {metadata: key});
 
-/**
- * @author kecso / https://github.com/kecso
- */
+            var obj = cache[key];
+            if (typeof obj === 'undefined') {
+                obj = backup[key];
+                if (typeof obj === 'undefined') {
+                    obj = missing[key];
+                    if (typeof obj === 'undefined') {
+                        obj = [callback];
+                        missing[key] = obj;
+                        logger.debug('object set to be loaded from storage');
+                        storage.loadObject(projectName, key, function (err, obj2) {
+                            ASSERT(typeof obj2 === 'object' || typeof obj2 === 'undefined');
 
-define('common/util/guid',[],function () {
-    
+                            if (obj.length !== 0) {
+                                ASSERT(missing[key] === obj);
 
-    var guid = function () {
-        var S4 = function () {
-            return (((1 + Math.random()) * 0x10000) | 0).toString(16).substring(1);
+                                delete missing[key];
+                                if (!err && obj2) {
+                                    cacheInsert(key, obj2);
+                                }
+
+                                var cb;
+                                while ((cb = obj.pop())) {
+                                    cb(err, obj2);
+                                }
+                            }
+                        });
+                    } else {
+                        logger.debug('object was already queued to be loaded');
+                        obj.push(callback);
+                    }
+                    return;
+                } else {
+                    logger.debug('object was in backup');
+                    cacheInsert(key, obj);
+                }
+            } else {
+                logger.debug('object was in cache');
+            }
+
+            ASSERT(typeof obj === 'object' && obj !== null && obj[CONSTANTS.MONGO_ID] === key);
+            callback(null, obj);
         };
 
-        //return GUID
-        return (S4() + S4() + '-' + S4() + '-' + S4() + '-' + S4() + '-' + S4() + S4() + S4());
-    };
+        this.insertObject = function (obj, stackedObjects) {
+            ASSERT(typeof obj === 'object' && obj !== null);
 
-    return guid;
+            var key = obj[CONSTANTS.MONGO_ID];
+            logger.debug('insertObject', {metadata: key});
+            ASSERT(typeof key === 'string');
+
+            if (typeof cache[key] !== 'undefined') {
+                logger.warn('object inserted was already in cache');
+            } else {
+                var item = backup[key];
+                cacheInsert(key, obj);
+
+                if (typeof item !== 'undefined') {
+                    logger.warn('object inserted was already in back-up');
+                } else {
+                    item = missing[key];
+                    if (typeof item !== 'undefined') {
+                        delete missing[key];
+
+                        var cb;
+                        while ((cb = item.pop())) {
+                            cb(null, obj);
+                        }
+                    }
+                }
+            }
+            if (stackedObjects) {
+                stackedObjects[key] = obj;
+            }
+        };
+    }
+
+    return ProjectCache;
+});
+/*globals define*/
+/*jshint browser: true, node:true*/
+/**
+ * @author pmeijer / https://github.com/pmeijer
+ */
+
+define('common/storage/project/branch',['common/storage/constants'], function (CONSTANTS) {
+
+
+    function Branch(name, mainLogger) {
+        var self = this,
+            logger = mainLogger.fork('Branch:' + name),
+            originHash = '',
+            localHash = '',
+            commitQueue = [],
+            updateQueue = [];
+
+        logger.debug('ctor');
+        this.name = name;
+        this.isOpen = true;
+
+        this.updateHandler = null;
+        this.commitHandler = null;
+
+        this.localUpdateHandler = null;
+
+        this.cleanUp = function () {
+            self.isOpen = false;
+            self.updateHandler = null;
+            self.commitHandler = null;
+            self.localUpdateHandler = null;
+
+            commitQueue = [];
+            updateQueue = [];
+        };
+
+        this.getLocalHash = function () {
+            return localHash;
+        };
+
+        this.getOriginHash = function () {
+            return originHash;
+        };
+
+        this.updateHashes = function (newLocal, newOrigin) {
+            logger.debug('updatingHashes');
+            if (newLocal !== null) {
+                logger.debug('localHash: old, new', localHash, newLocal);
+                localHash = newLocal;
+            }
+            if (newOrigin !== null) {
+                logger.debug('originHash: old, new', originHash, newOrigin);
+                originHash = newOrigin;
+            }
+        };
+
+        this.queueCommit = function (commitData) {
+            commitQueue.push(commitData);
+            logger.debug('Adding new commit to queue', commitQueue.length);
+        };
+
+        this.getFirstCommit = function (shift) {
+            var commitData;
+            if (shift) {
+                commitData = commitQueue.shift();
+                logger.debug('Removed commit from queue', commitQueue.length);
+            } else {
+                commitData = commitQueue[0];
+            }
+
+            return commitData;
+        };
+
+        this.getCommitQueue = function () {
+            return commitQueue;
+        };
+
+        this.getCommitsForNewFork = function (upTillCommitHash) {
+            var i,
+                commitData,
+                commitHash,
+                commitHashExisted = false,
+                subQueue = [];
+
+            logger.debug('getCommitsForNewFork', upTillCommitHash);
+
+            if (commitQueue.length === 0) {
+                commitHash = localHash;
+
+                logger.debug('No commits queued will fork from', commitHash);
+                upTillCommitHash = upTillCommitHash || commitHash;
+                commitHashExisted = upTillCommitHash === commitHash;
+            } else {
+                upTillCommitHash = upTillCommitHash ||
+                    commitQueue[commitQueue.length - 1].commitObject[CONSTANTS.MONGO_ID];
+            }
+
+            logger.debug('Will fork up to commitHash', upTillCommitHash);
+
+            // Move over all commit-data up till the chosen commitHash to the fork's queue,
+            // except the commit that caused the fork (all its objects are already in the database).
+            for (i = 0; i < commitQueue.length; i += 1) {
+                commitData = commitQueue[i];
+                commitHash = commitData.commitObject[CONSTANTS.MONGO_ID];
+                // remove the branchName of the commitData
+                delete commitData.branchName;
+                if (i !== 0) {
+                    subQueue.push(commitData);
+                }
+                if (commitData.commitObject[CONSTANTS.MONGO_ID] === upTillCommitHash) {
+                    // The commitHash from where to fork has been reached.
+                    // If any, the rest of the 'pending' commits will not be used.
+                    commitHashExisted = true;
+                    break;
+                }
+            }
+
+            if (commitHashExisted === false) {
+                logger.error('Could not find the specified commitHash', upTillCommitHash);
+                return false;
+            }
+
+            return {commitHash: commitHash, queue: subQueue};
+        };
+
+        this.queueUpdate = function (updateData) {
+            updateQueue.push(updateData);
+            logger.debug('Adding new update to queue', updateQueue.length);
+        };
+
+        this.getUpdateQueue = function () {
+            return updateQueue;
+        };
+
+        this.getFirstUpdate = function (shift) {
+            var updateData;
+            if (shift) {
+                updateData = updateQueue.shift();
+                logger.debug('Removed update from queue', updateQueue.length);
+            } else {
+                updateData = updateQueue[0];
+            }
+
+            return updateData;
+        };
+    }
+
+    return Branch;
+});
+/*globals define*/
+/*jshint browser: true, node:true*/
+/**
+ * @author pmeijer / https://github.com/pmeijer
+ */
+
+define('common/storage/project/project',[
+    'common/storage/project/cache',
+    'common/storage/project/branch',
+    'common/storage/constants',
+    'common/util/assert'
+], function (ProjectCache, Branch, CONSTANTS, ASSERT) {
+
+
+    function Project(name, storage, mainLogger, gmeConfig) {
+        this.name = name;
+        this.branches = {};
+        this.ID_NAME = CONSTANTS.MONGO_ID;
+
+        var self = this,
+            logger = mainLogger.fork('Project:' + self.name),
+            projectCache = new ProjectCache(storage, self.name, logger, gmeConfig);
+
+        logger.debug('ctor');
+        this.getBranch = function (branchName, shouldExist) {
+
+            if (shouldExist === true) {
+                ASSERT(this.branches.hasOwnProperty(branchName), 'branch does not exist ' + branchName);
+            } else if (shouldExist === false) {
+                ASSERT(this.branches.hasOwnProperty(branchName) === false, 'branch already existed ' + branchName);
+            }
+
+            if (this.branches.hasOwnProperty(branchName) === false) {
+                this.branches[branchName] = new Branch(branchName, logger);
+            }
+
+            return this.branches[branchName];
+        };
+
+        this.removeBranch = function (branchName) {
+            var existed = this.branches.hasOwnProperty(branchName);
+            if (existed) {
+                delete this.branches[branchName];
+            }
+            return existed;
+        };
+
+        // Functions forwarded to storage.
+        this.setBranchHash = function (branchName, newHash, oldHash, callback) {
+            storage.setBranchHash(self.name, branchName, newHash, oldHash, callback);
+        };
+
+        this.createBranch = function (branchName, newHash, callback) {
+            storage.createBranch(self.name, branchName, newHash, callback);
+        };
+
+        this.makeCommit = function (branchName, parents, rootHash, coreObjects, msg, callback) {
+            return storage.makeCommit(self.name, branchName, parents, rootHash, coreObjects, msg, callback);
+        };
+
+        this.getBranches = function (callback) {
+            storage.getBranches(self.name, callback);
+        };
+
+        this.getCommits = function (before, number, callback) {
+            storage.getCommits(self.name, before, number, callback);
+        };
+
+        this.getCommonAncestorCommit = function (commitA, commitB, callback) {
+            storage.getCommonAncestorCommit(self.name, commitA, commitB, callback);
+        };
+
+        // Functions forwarded to project cache.
+        this.insertObject = function (obj, stageBucket) {
+            projectCache.insertObject(obj, stageBucket);
+        };
+
+        this.loadObject = function (key, callback) {
+            projectCache.loadObject(key, callback);
+        };
+    }
+
+    return Project;
 });
 //jshint ignore: start
 //SHA1 in Javascript 862 bytes, MIT License, http://antimatter15.com/
@@ -2451,7 +3720,7 @@ define('common/util/key',[
     'common/util/assert',
     'common/util/canon'
 ], function (SHA1, ZS, ASSERT, CANON) {
-    
+
 
     var keyType = null,
         ZSSHA = new ZS();
@@ -2482,6 +3751,869 @@ define('common/util/key',[
     };
 });
 /*globals define*/
+/*jshint node:true*/
+/**
+ * This class implements the functionality needed to edit a model in a specific project and branch in a
+ * collaborative fashion.
+ *
+ * It keeps a state of the open projects which in turn keeps track of the open branches.
+ *
+ * Each project is associated with a project-cache which is shared amongst the branches. So switching
+ * between branches is (potentially) an operation that does not require lots of server round-trips.
+ *
+ * It is possible to have multiple projects open and multiple branches within each project. However
+ * one instance of a storage can only hold a single instance of a project (or branch within a project).
+ *
+ * @author pmeijer / https://github.com/pmeijer
+ */
+
+define('common/storage/storageclasses/editorstorage',[
+    'common/storage/storageclasses/objectloaders',
+    'common/storage/constants',
+    'common/storage/project/project',
+    'common/util/assert',
+    'common/util/key'
+], function (StorageObjectLoaders, CONSTANTS, Project, ASSERT, GENKEY) {
+
+
+    function EditorStorage(webSocket, mainLogger, gmeConfig) {
+        var self = this,
+            logger = mainLogger.fork('storage'),
+            projects = {};
+
+        self.logger = logger;
+        self.userId = null;
+
+        StorageObjectLoaders.call(this, webSocket, mainLogger, gmeConfig);
+
+        this.open = function (networkHandler) {
+            webSocket.connect(function (err, connectionState) {
+                if (err) {
+                    logger.error(err);
+                    networkHandler(CONSTANTS.ERROR);
+                } else if (connectionState === CONSTANTS.CONNECTED) {
+                    self.connected = true;
+                    self.userId = webSocket.userId;
+                    networkHandler(connectionState);
+                } else if (connectionState === CONSTANTS.RECONNECTED) {
+                    self._rejoinWatcherRooms();
+                    self._rejoinBranchRooms();
+                    self.connected = true;
+                    networkHandler(connectionState);
+                } else if (connectionState === CONSTANTS.DISCONNECTED) {
+                    self.connected = false;
+                    networkHandler(connectionState);
+                } else {
+                    logger.error('unexpected connection state');
+                    networkHandler(CONSTANTS.ERROR);
+                }
+            });
+        };
+
+        this.close = function (callback) {
+            var error = '',
+                openProjects = Object.keys(projects),
+                projectCnt = openProjects.length;
+
+            logger.debug('Closing storage, openProjects', openProjects);
+
+            function afterProjectClosed(err) {
+                if (err) {
+                    logger.error(err);
+                    error += err;
+                }
+                logger.debug('inside afterProjectClosed projectCnt', projectCnt);
+                if (projectCnt === 0) {
+                    // Remove the handler for the socket.io events 'connect' and 'disconnect'.
+                    webSocket.socket.removeAllListeners('connect');
+                    webSocket.socket.removeAllListeners('disconnect');
+                    // Disconnect from the server.
+                    webSocket.disconnect();
+                    self.connected = false;
+                    // Remove all local event-listeners.
+                    webSocket.removeAllEventListeners();
+                    callback(error || null);
+                }
+            }
+
+            if (projectCnt > 0) {
+                while (projectCnt) {
+                    projectCnt -= 1;
+                    this.closeProject(openProjects[projectCnt], afterProjectClosed);
+                }
+            } else {
+                logger.debug('No projects were open, will disconnect directly');
+                afterProjectClosed(null);
+            }
+        };
+
+        /**
+         * Callback for openProject.
+         *
+         * @callback EditorStorage~openProjectCallback
+         * @param {string} err - error string.
+         * @param {Project} project - the newly opened project.
+         * @param {object} branches - the newly opened project.
+         * @example
+         * // branches is of the form
+         * // { master: '#somevalidhash', b1: '#someothervalidhash' }
+         */
+
+        /**
+         *
+         * @param {string} projectName - name of project to open.
+         * @param {EditorStorage~openProjectCallback} - callback
+         */
+        this.openProject = function (projectName, callback) {
+            var data = {
+                projectName: projectName
+            };
+            if (projects[projectName]) {
+                logger.error('project is already open', projectName);
+                callback('project is already open');
+            }
+            webSocket.openProject(data, function (err, branches, access) {
+                if (err) {
+                    callback(err);
+                    return;
+                }
+                var project = new Project(projectName, self, logger, gmeConfig);
+                projects[projectName] = project;
+                callback(err, project, branches, access);
+            });
+        };
+
+        this.createProject = function (projectName, callback) {
+            var data = {
+                projectName: projectName
+            };
+            if (projects[projectName]) {
+                logger.error('project already exists', projectName);
+                callback('project already exists');
+                return;
+            }
+            webSocket.createProject(data, function (err) {
+                if (err) {
+                    logger.error('cannot create project ', projectName, err);
+                    callback(err);
+                    return;
+                }
+
+                var project = new Project(projectName, self, logger, gmeConfig);
+                projects[projectName] = project;
+                callback(err, project);
+            });
+        };
+
+        this.closeProject = function (projectName, callback) {
+            var project = projects[projectName],
+                error = '',
+                branchCnt,
+                branchNames;
+            logger.debug('closeProject', projectName);
+
+            function closeAndDelete(err) {
+                if (err) {
+                    logger.error(err);
+                    error += err;
+                }
+                logger.debug('inside closeAndDelete branchCnt', branchCnt);
+                if (branchCnt === 0) {
+                    delete projects[projectName];
+                    logger.debug('project reference deleted, sending close to server.');
+                    webSocket.closeProject({projectName: projectName}, function (err) {
+                        logger.debug('project closed on server.');
+                        callback(err || error);
+                    });
+                }
+            }
+
+            if (project) {
+                branchNames = Object.keys(project.branches);
+                branchCnt = branchNames.length;
+                if (branchCnt > 0) {
+                    logger.warn('Branches still open for project, will be closed.', projectName, branchNames);
+                    while (branchCnt) {
+                        branchCnt -= 1;
+                        this.closeBranch(projectName, branchNames[branchCnt], closeAndDelete);
+                    }
+                } else {
+                    closeAndDelete(null);
+                }
+            } else {
+                logger.warn('Project is not open ', projectName);
+                callback(null);
+            }
+
+        };
+
+        this.openBranch = function (projectName, branchName, updateHandler, commitHandler, callback) {
+            ASSERT(projects.hasOwnProperty(projectName), 'Project not opened: ' + projectName);
+            var self = this,
+                project = projects[projectName],
+                data = {
+                    projectName: projectName,
+                    branchName: branchName
+                };
+
+            webSocket.openBranch(data, function (err, latestCommit) {
+                if (err) {
+                    callback(err);
+                    return;
+                }
+                var i,
+                    branchHash = latestCommit.commitObject[CONSTANTS.MONGO_ID],
+                    branch = project.getBranch(branchName, false);
+
+                branch.updateHashes(branchHash, branchHash);
+
+                branch.commitHandler = commitHandler;
+                branch.localUpdateHandler = updateHandler;
+
+                branch.updateHandler = function (_ws, updateData) {
+                    var j,
+                        originHash = updateData.commitObject[CONSTANTS.MONGO_ID];
+                    logger.debug('updateHandler invoked for project, branch', projectName, branchName);
+                    for (j = 0; j < updateData.coreObjects.length; j += 1) {
+                        project.insertObject(updateData.coreObjects[j]);
+                    }
+
+                    branch.queueUpdate(updateData);
+                    branch.updateHashes(null, originHash);
+
+                    if (branch.getCommitQueue().length === 0) {
+                        if (branch.getUpdateQueue().length === 1) {
+                            self._pullNextQueuedCommit(projectName, branchName);
+                        }
+                    } else {
+                        logger.debug('commitQueue is not empty, only updating originHash.');
+                    }
+                };
+
+                webSocket.addEventListener(webSocket.getBranchUpdateEventName(projectName, branchName),
+                    branch.updateHandler);
+
+                // Insert the objects from the latest commit into the project cache.
+                for (i = 0; i < latestCommit.coreObjects.length; i += 1) {
+                    project.insertObject(latestCommit.coreObjects[i]);
+                }
+
+                callback(err, latestCommit);
+            });
+        };
+
+        this.closeBranch = function (projectName, branchName, callback) {
+            ASSERT(projects.hasOwnProperty(projectName), 'Project not opened: ' + projectName);
+            logger.debug('closeBranch', projectName, branchName);
+
+            var project = projects[projectName],
+                branch = project.branches[branchName];
+
+            if (branch) {
+                // This will prevent memory leaks and expose if a commit is being
+                // processed at the server this time (see last error in _pushNextQueuedCommit).
+                branch.cleanUp();
+
+                // Stop listening to events from the sever
+                webSocket.removeEventListener(webSocket.getBranchUpdateEventName(projectName, branchName),
+                    branch.updateHandler);
+            } else {
+                logger.warn('Branch is not open', projectName, branchName);
+                callback(null);
+                return;
+            }
+
+            project.removeBranch(branchName);
+            webSocket.closeBranch({projectName: projectName, branchName: branchName}, callback);
+        };
+
+        this.forkBranch = function (projectName, branchName, forkName, commitHash, callback) {
+            ASSERT(projects.hasOwnProperty(projectName), 'Project not opened: ' + projectName);
+            this.logger.debug('forkBranch', projectName, branchName, forkName, commitHash);
+            var self = this,
+                project = projects[projectName],
+                branch = project.getBranch(branchName, true),
+                forkData;
+
+            forkData = branch.getCommitsForNewFork(commitHash, forkName); // commitHash = null defaults to latest commit
+            self.logger.debug('forkBranch - forkData', forkData);
+            if (forkData === false) {
+                callback('Could not find specified commitHash');
+                return;
+            }
+
+            function commitNext() {
+                var currentCommitData = forkData.queue.shift();
+                logger.debug('forkBranch - commitNext, currentCommitData', currentCommitData);
+                if (currentCommitData) {
+                    webSocket.makeCommit(currentCommitData, function (err, result) {
+                        if (err) {
+                            logger.error('forkBranch - failed committing', err);
+                            callback(err);
+                            return;
+                        }
+                        logger.debug('forkBranch - commit successful, hash', result);
+                        commitNext();
+                    });
+                } else {
+                    self.createBranch(projectName, forkName, forkData.commitHash, function (err) {
+                        if (err) {
+                            logger.error('forkBranch - failed creating new branch', err);
+                            callback(err);
+                            return;
+                        }
+                        callback(null, forkData.commitHash);
+                    });
+                }
+            }
+
+            commitNext();
+        };
+
+        this.setBranchHash = function (projectName, branchName, newHash, oldHash, callback) {
+            var setBranchHashData = {
+                projectName: projectName,
+                branchName: branchName,
+                newHash: newHash,
+                oldHash: oldHash
+            };
+            webSocket.setBranchHash(setBranchHashData, callback);
+        };
+
+        this.makeCommit = function (projectName, branchName, parents, rootHash, coreObjects, msg, callback) {
+            ASSERT(projects.hasOwnProperty(projectName), 'Project not opened: ' + projectName);
+            var project = projects[projectName],
+                branch,
+                commitData = {
+                    projectName: projectName
+                };
+
+            commitData.commitObject = self._getCommitObject(projectName, parents, rootHash, msg);
+            commitData.coreObjects = coreObjects;
+            if (typeof branchName === 'string') {
+                commitData.branchName = branchName;
+                branch = project.getBranch(branchName, true);
+                branch.updateHashes(commitData.commitObject[CONSTANTS.MONGO_ID], null);
+                branch.queueCommit(commitData);
+                if (branch.getCommitQueue().length === 1) {
+                    self._pushNextQueuedCommit(projectName, branchName, callback);
+                }
+            } else {
+                ASSERT(typeof callback === 'function', 'Making commit without updating branch requires a callback.');
+                webSocket.makeCommit(commitData, callback);
+            }
+
+            return commitData.commitObject; //commitHash
+        };
+
+        this.getCommonAncestorCommit = function (projectName, commitA, commitB, callback) {
+            var parameters = {
+                commitA: commitA,
+                commitB: commitB,
+                projectName: projectName
+            };
+
+            return webSocket.getCommonAncestorCommit(parameters, callback);
+        };
+
+        this._pushNextQueuedCommit = function (projectName, branchName, callback) {
+            ASSERT(projects.hasOwnProperty(projectName), 'Project not opened: ' + projectName);
+            var project = projects[projectName],
+                branch = project.getBranch(branchName, true),
+                commitData;
+            logger.debug('_pushNextQueuedCommit', branch.getCommitQueue());
+            if (branch.getCommitQueue().length === 0) {
+                return;
+            }
+
+            commitData = branch.getFirstCommit(false);
+            webSocket.makeCommit(commitData, function (err, result) {
+                if (err) {
+                    logger.error('makeCommit failed', err);
+                }
+
+                // This is for when e.g. a plugin makes a commit to the same branch as the
+                // client and waits for the callback before proceeding.
+                // (If it is a forking commit, the plugin can proceed knowing that and the client will get notified of
+                // the fork through the commitHandler.
+                if (typeof callback === 'function') {
+                    callback(err, result);
+                }
+
+                if (branch.isOpen) {
+                    branch.commitHandler(branch.getCommitQueue(), result, function (push) {
+                        if (push) {
+                            branch.getFirstCommit(true); // Remove the commit from the queue.
+                            branch.updateHashes(null, commitData.commitObject[CONSTANTS.MONGO_ID]);
+                            self._pushNextQueuedCommit(projectName, branchName);
+                        }
+                    });
+                } else {
+                    logger.error('_pushNextQueuedCommit returned from server but the branch was closed, ' +
+                        'the branch has probably been closed while waiting for the response.', projectName, branchName);
+                }
+            });
+        };
+
+        this._getCommitObject = function (projectName, parents, rootHash, msg) {
+            msg = msg || 'n/a';
+            var commitObj = {
+                    root: rootHash,
+                    parents: parents,
+                    updater: [self.userId],
+                    time: (new Date()).getTime(),
+                    message: msg,
+                    type: 'commit'
+                },
+                commitHash = '#' + GENKEY(commitObj, gmeConfig);
+
+            commitObj[CONSTANTS.MONGO_ID] = commitHash;
+
+            return commitObj;
+        };
+
+        this._pullNextQueuedCommit = function (projectName, branchName) {
+            ASSERT(projects.hasOwnProperty(projectName), 'Project not opened: ' + projectName);
+            var self = this,
+                project = projects[projectName],
+                branch = project.getBranch(branchName, true),
+                updateData;
+
+            logger.debug('About to update, updateQueue', branch.getUpdateQueue());
+            if (branch.getUpdateQueue().length === 0) {
+                logger.debug('No queued updates, returns');
+                return;
+            }
+
+            updateData = branch.getFirstUpdate();
+            if (branch.isOpen) {
+                branch.localUpdateHandler(branch.getUpdateQueue(), updateData, function (aborted) {
+                    var originHash = updateData.commitObject[CONSTANTS.MONGO_ID];
+                    if (aborted === false) {
+                        logger.debug('New commit was successfully loaded, updating localHash.');
+                        branch.updateHashes(originHash, null);
+                        branch.getFirstUpdate(true);
+                        self._pullNextQueuedCommit(projectName, branchName);
+                    } else {
+                        logger.warn('Loading of update commit was aborted or failed.', updateData);
+                    }
+                });
+            } else {
+                logger.error('_pullNextQueuedCommit returned from server but the branch was closed.',
+                    projectName, branchName);
+            }
+        };
+
+        this._rejoinBranchRooms = function () {
+            var projectName,
+                project,
+                branchName;
+            logger.debug('_rejoinBranchRooms');
+            for (projectName in projects) {
+                if (projects.hasOwnProperty(projectName)) {
+                    project = projects[projectName];
+                    logger.debug('_rejoinBranchRooms found project', projectName);
+                    for (branchName in project.branches) {
+                        if (project.branches.hasOwnProperty(branchName)) {
+                            logger.debug('_rejoinBranchRooms joining branch', projectName, branchName);
+                            webSocket.watchBranch({
+                                projectName: projectName,
+                                branchName: branchName,
+                                join: true
+                            });
+                        }
+                    }
+                }
+            }
+        };
+    }
+
+    EditorStorage.prototype = Object.create(StorageObjectLoaders.prototype);
+    EditorStorage.prototype.constructor = EditorStorage;
+
+    return EditorStorage;
+});
+/*globals define, require*/
+/*jshint browser:true*/
+/**
+ * @author pmeijer / https://github.com/pmeijer
+ */
+
+define('common/storage/socketio/browserclient',[], function () {
+
+
+    function IoClient (gmeConfig) {
+        this.connect = function (callback) {
+            var hostAddress = window.location.protocol + '//' + window.location.host;
+
+            if (window.__karma__) {
+                // TRICKY: karma uses web sockets too, we need to use the gme server's port
+                hostAddress = window.location.protocol + '//localhost:' + gmeConfig.server.port;
+            }
+
+            require([hostAddress + '/socket.io/socket.io.js'], function (io_) {
+                var io = io_ || window.io,
+                    socket = io.connect(hostAddress, gmeConfig.socketIO);
+                callback(null, socket);
+            });
+        };
+    }
+
+    return IoClient;
+});
+/*globals define*/
+/*jshint node: true, browser: true*/
+
+/**
+ * @author rkereskenyi / https://github.com/rkereskenyi
+ */
+
+define('common/EventDispatcher',[], function () {
+
+
+    var EventDispatcher = function () {
+        this._eventList = {};
+    };
+
+    EventDispatcher.prototype = {
+        _eventList: null,
+        _getEvent: function (eventName, create) {
+            // Check if Array of Event Handlers has been created
+            if (!this._eventList[eventName]) {
+
+                // Check if the calling method wants to create the Array
+                // if not created. This reduces unneeded memory usage.
+                if (!create) {
+                    return null;
+                }
+
+                // Create the Array of Event Handlers
+                this._eventList[eventName] = [];
+                // new Array
+            }
+
+            // return the Array of Event Handlers already added
+            return this._eventList[eventName];
+        },
+        addEventListener: function (eventName, handler) {
+            // Get the Array of Event Handlers
+            var evt = this._getEvent(eventName, true);
+
+            // Add the new Event Handler to the Array
+            evt.push(handler);
+        },
+        removeEventListener: function (eventName, handler) {
+            // Get the Array of Event Handlers
+            var evt = this._getEvent(eventName);
+
+            if (!evt) {
+                return;
+            }
+
+            // Helper Method - an Array.indexOf equivalent
+            var getArrayIndex = function (array, item) {
+                for (var i = 0; i < array.length; i++) {
+                    if (array[i] === item) {
+                        return i;
+                    }
+                }
+                return -1;
+            };
+
+            // Get the Array index of the Event Handler
+            var index = getArrayIndex(evt, handler);
+
+            if (index > -1) {
+                // Remove Event Handler from Array
+                evt.splice(index, 1);
+            }
+        },
+        removeAllEventListeners: function (eventName) {
+            // Get the Array of Event Handlers
+            var evt = this._getEvent(eventName);
+
+            if (!evt) {
+                return;
+            }
+
+            evt.splice(0, evt.length);
+        },
+        dispatchEvent: function (eventName, eventArgs) {
+            // Get a function that will call all the Event Handlers internally
+            var handler = this._getEventHandler(eventName);
+            if (handler) {
+                // call the handler function
+                // Pass in "sender" and "eventArgs" parameters
+                handler(this, eventArgs);
+            }
+        },
+        _getEventHandler: function (eventName) {
+            // Get Event Handler Array for this Event
+            var evt = this._getEvent(eventName, false);
+            if (!evt || evt.length === 0) {
+                return null;
+            }
+
+            // Create the Handler method that will use currying to
+            // call all the Events Handlers internally
+            var h = function (sender, args) {
+                for (var i = 0; i < evt.length; i++) {
+                    evt[i](sender, args);
+                }
+            };
+
+            // Return this new Handler method
+            return h;
+        }
+    };
+
+    return EventDispatcher;
+});
+/*globals define*/
+/*jshint browser: true, node:true*/
+/**
+ * @author pmeijer / https://github.com/pmeijer
+ */
+
+// socket.io-client
+//
+define('common/storage/socketio/websocket',[
+    'common/EventDispatcher',
+    'common/storage/constants'
+], function (EventDispatcher, CONSTANTS) {
+
+
+
+    function WebSocket(ioClient, mainLogger, gmeConfig) {
+        var self = this,
+            logger = mainLogger.fork('WebSocket'),
+            beenConnected = false;
+
+        self.socket = null;
+        self.userId = null;
+
+        logger.debug('ctor');
+        EventDispatcher.call(this);
+
+        this.connect = function (networkHandler) {
+            logger.debug('Connecting via ioClient.');
+            ioClient.connect(function (err, socket_) {
+                if (err) {
+                    networkHandler(err);
+                    return;
+                }
+                self.socket = socket_;
+
+                self.socket.on('connect', function () {
+                    if (beenConnected) {
+                        logger.debug('Socket got reconnected.');
+                        networkHandler(null, CONSTANTS.RECONNECTED);
+                    } else {
+                        logger.debug('Socket got connected for the first time.');
+                        beenConnected = true;
+                        self.socket.emit('getUserId', function (err, userId) {
+                            if (err) {
+                                self.userId = gmeConfig.authentication.guestAccount;
+                                logger.error('Error getting user id setting to default', err, self.userId);
+                            } else {
+                                self.userId = userId;
+                            }
+                            networkHandler(null, CONSTANTS.CONNECTED);
+                        });
+                    }
+                });
+
+                self.socket.on('disconnect', function () {
+                    logger.debug('Socket got disconnected!');
+                    networkHandler(null, CONSTANTS.DISCONNECTED);
+                });
+
+                self.socket.on(CONSTANTS.PROJECT_DELETED, function (data) {
+                    data.etype = CONSTANTS.PROJECT_DELETED;
+                    self.dispatchEvent(CONSTANTS.PROJECT_DELETED, data);
+                });
+
+                self.socket.on(CONSTANTS.PROJECT_CREATED, function (data) {
+                    data.etype = CONSTANTS.PROJECT_CREATED;
+                    self.dispatchEvent(CONSTANTS.PROJECT_CREATED, data);
+                });
+
+                self.socket.on(CONSTANTS.BRANCH_CREATED, function (data) {
+                    data.etype = CONSTANTS.BRANCH_CREATED;
+                    self.dispatchEvent(CONSTANTS.BRANCH_CREATED + data.projectName, data);
+                });
+
+                self.socket.on(CONSTANTS.BRANCH_DELETED, function (data) {
+                    data.etype = CONSTANTS.BRANCH_DELETED;
+                    self.dispatchEvent(CONSTANTS.BRANCH_DELETED + data.projectName, data);
+                });
+
+                self.socket.on(CONSTANTS.BRANCH_HASH_UPDATED, function (data) {
+                    data.etype = CONSTANTS.BRANCH_HASH_UPDATED;
+                    self.dispatchEvent(CONSTANTS.BRANCH_HASH_UPDATED + data.projectName, data);
+                });
+
+                self.socket.on(CONSTANTS.BRANCH_UPDATED, function (data) {
+                    self.dispatchEvent(self.getBranchUpdateEventName(data.projectName, data.branchName), data);
+                });
+            });
+        };
+
+        this.disconnect = function () {
+            self.socket.disconnect();
+            beenConnected = false; //This is a forced disconnect from the storage and all listeners are removed
+        };
+
+        // watcher functions
+        this.watchDatabase = function (data, callback) {
+            self.socket.emit('watchDatabase', data, callback);
+        };
+
+        this.watchProject = function (data, callback) {
+            self.socket.emit('watchProject', data, callback);
+        };
+
+        this.watchBranch = function (data, callback) {
+            self.socket.emit('watchBranch', data, callback);
+        };
+
+        // model editing functions
+        this.openProject = function (data, callback) {
+            self.socket.emit('openProject', data, callback);
+        };
+
+        this.closeProject = function (data, callback) {
+            self.socket.emit('closeProject', data, callback);
+        };
+
+        this.openBranch = function (data, callback) {
+            self.socket.emit('openBranch', data, callback);
+        };
+
+        this.closeBranch = function (data, callback) {
+            self.socket.emit('closeBranch', data, callback);
+        };
+
+        this.makeCommit = function (data, callback) {
+            self.socket.emit('makeCommit', data, callback);
+        };
+
+        this.loadObjects = function (data, callback) {
+            self.socket.emit('loadObjects', data, callback);
+        };
+
+        this.setBranchHash = function (data, callback) {
+            self.socket.emit('setBranchHash', data, callback);
+        };
+
+        // REST like functions
+        this.getProjectNames = function (data, callback) {
+            self.socket.emit('getProjectNames', data, callback);
+        };
+
+        this.getProjects = function (data, callback) {
+            self.socket.emit('getProjects', data, callback);
+        };
+
+        this.getProjectsAndBranches = function (data, callback) {
+            self.socket.emit('getProjectsAndBranches', data, callback);
+        };
+
+        this.deleteProject = function (data, callback) {
+            self.socket.emit('deleteProject', data, callback);
+        };
+
+        this.createProject = function (data, callback) {
+            self.socket.emit('createProject', data, callback);
+        };
+
+        this.getBranches = function (data, callback) {
+            self.socket.emit('getBranches', data, callback);
+        };
+
+        this.getCommits = function (data, callback) {
+            self.socket.emit('getCommits', data, callback);
+        };
+
+        this.getLatestCommitData = function (data, callback) {
+            self.socket.emit('getLatestCommitData', data, callback);
+        };
+
+        //temporary simple request / result functions
+        this.simpleRequest = function (data, callback) {
+            self.socket.emit('simpleRequest', data, callback);
+        };
+
+        this.simpleResult = function (data, callback) {
+            self.socket.emit('simpleResult', data, callback);
+        };
+
+        this.simpleQuery = function (workerId, data, callback) {
+            self.socket.emit('simpleQuery', workerId, data, callback);
+        };
+
+        this.getCommonAncestorCommit = function (data, callback) {
+            self.socket.emit('getCommonAncestorCommit', data, callback);
+        };
+
+        // Helper functions
+        this.getBranchUpdateEventName = function (projectName, branchName) {
+            return CONSTANTS.BRANCH_UPDATED + projectName + CONSTANTS.ROOM_DIVIDER + branchName;
+        };
+    }
+
+    WebSocket.prototype = Object.create(EventDispatcher.prototype);
+    WebSocket.prototype.constructor = WebSocket;
+
+    return WebSocket;
+});
+/*globals define*/
+/*jshint browser:true*/
+/**
+ *
+ * @author pmeijer / https://github.com/pmeijer
+ */
+
+define('common/storage/browserstorage',[
+    'common/storage/storageclasses/editorstorage',
+    'common/storage/socketio/browserclient',
+    'common/storage/socketio/websocket',
+], function (EditorStorage, BrowserIoClient, WebSocket) {
+
+
+    var _storage;
+
+    function _createStorage(logger, gmeConfig) {
+        var ioClient = new BrowserIoClient(gmeConfig),
+            webSocket = new WebSocket(ioClient, logger, gmeConfig),
+            storage = new EditorStorage(webSocket, logger, gmeConfig);
+
+        return storage;
+    }
+
+    function getStorage (logger, gmeConfig, forceNew) {
+        logger.debug('getStorage');
+
+        if (!_storage) {
+            logger.debug('No storage existed, will create new one..');
+            _storage = _createStorage(logger, gmeConfig);
+        } else {
+            logger.debug('Storage existed...');
+
+            if (forceNew === true) {
+                logger.debug('Force new set to true, will create new one.');
+                _storage = _createStorage(logger, gmeConfig);
+            }
+        }
+
+        return _storage;
+    }
+
+    return {
+        getStorage: getStorage
+    };
+});
+/*globals define*/
 /*jshint node: true, browser: true*/
 
 /**
@@ -2489,7 +4621,7 @@ define('common/util/key',[
  */
 
 define('common/core/future',[], function () {
-    
+
 
     var maxDepth = 5;
 
@@ -2885,7 +5017,7 @@ define('common/core/future',[], function () {
  */
 
 (function () {
-    
+
 
     // ------- assert -------
 
@@ -3645,135 +5777,131 @@ define('common/core/coretree',[
     'common/core/tasync'
 ], function (ASSERT, GENKEY, FUTURE, TASYNC) {
 
-    
+
 
     var HASH_REGEXP = new RegExp('#[0-9a-f]{40}');
-	var isValidHash = function (key) {
+    var isValidHash = function (key) {
         return typeof key === 'string' && key.length === 41 && HASH_REGEXP.test(key);
-	};
+    };
 
-	var MAX_RELID = Math.pow(2, 31);
-	var createRelid = function (data) {
+    var MAX_RELID = Math.pow(2, 31);
+    var createRelid = function (data) {
         ASSERT(data && typeof data === 'object');
 
-		var relid;
-		do {
-			relid = Math.floor(Math.random() * MAX_RELID);
-			// relid = relid.toString();
-		} while (data[relid] !== undefined);
+        var relid;
+        do {
+            relid = Math.floor(Math.random() * MAX_RELID);
+            // relid = relid.toString();
+        } while (data[relid] !== undefined);
 
         return '' + relid;
-	};
+    };
 
-	// make relids deterministic
-	if (false) {
-		var nextRelid = 0;
-		createRelid = function (data) {
+    // make relids deterministic
+    if (false) {
+        var nextRelid = 0;
+        createRelid = function (data) {
             ASSERT(data && typeof data === 'object');
 
-			var relid;
-			do {
-				relid = (nextRelid += -1);
-			} while (data[relid] !== undefined);
+            var relid;
+            do {
+                relid = (nextRelid += -1);
+            } while (data[relid] !== undefined);
 
             return '' + relid;
-		};
-	}
+        };
+    }
 
-	var rootCounter = 0;
+    var rootCounter = 0;
 
-	return function (storage, options) {
+    return function (storage, options) {
         ASSERT(typeof options === 'object');
         ASSERT(typeof options.globConf === 'object');
         ASSERT(typeof options.logger !== 'undefined');
 
-        var gmeConfig = options.globConf;
-        //var logger = options.logger.fork('coretree');
+        var gmeConfig = options.globConf,
+            logger = options.logger.fork('coretree'),
+            MAX_AGE = 3, // MAGIC NUMBER
+            MAX_TICKS = 2000, // MAGIC NUMBER
+            MAX_MUTATE = 30000, // MAGIC NUMBER
 
-		var MAX_AGE = 3; // MAGIC NUMBER
-		var MAX_TICKS = 2000; // MAGIC NUMBER
-		var MAX_MUTATE = 30000; // MAGIC NUMBER
+            ID_NAME = storage.ID_NAME,
+            __getEmptyData = function () {
+                return {};
+            },
+            roots = [],
+            ticks = 0,
+            stackedObjects = {};
 
-		var ID_NAME = storage.ID_NAME;
-        //var EMPTY_DATA = {};
-        var __getEmptyData = function () {
-            return {};
-        };
+        storage.loadObject = TASYNC.wrap(storage.loadObject);
 
-		var roots = [];
-		var ticks = 0;
+        // ------- static methods
 
-		storage.loadObject = TASYNC.wrap(storage.loadObject);
-		storage.insertObject = FUTURE.adapt(storage.insertObject);
-		storage.fsyncDatabase = FUTURE.adapt(storage.fsyncDatabase);
-
-		// ------- static methods
-
-		var getParent = function (node) {
+        var getParent = function (node) {
             ASSERT(typeof node.parent === 'object');
 
-			return node.parent;
-		};
+            return node.parent;
+        };
 
-		var getRelid = function (node) {
+        var getRelid = function (node) {
             ASSERT(node.relid === null || typeof node.relid === 'string');
 
-			return node.relid;
-		};
+            return node.relid;
+        };
 
-		var getLevel = function (node) {
-			var level = 0;
-			while (node.parent !== null) {
-				++level;
-				node = node.parent;
-			}
-			return level;
-		};
+        var getLevel = function (node) {
+            var level = 0;
+            while (node.parent !== null) {
+                ++level;
+                node = node.parent;
+            }
+            return level;
+        };
 
-		var getRoot = function (node) {
-			while (node.parent !== null) {
-				node = node.parent;
-			}
-			return node;
-		};
+        var getRoot = function (node) {
+            while (node.parent !== null) {
+                node = node.parent;
+            }
+            return node;
+        };
 
-		var getPath = function (node, base) {
-			if (node === null) {
-				return null;
-			}
+        var getPath = function (node, base) {
+            if (node === null) {
+                return null;
+            }
 
             var path = '';
-			while (node.relid !== null && node !== base) {
+            while (node.relid !== null && node !== base) {
                 path = '/' + node.relid + path;
-				node = node.parent;
-			}
-			return path;
-		};
+                node = node.parent;
+            }
+            return path;
+        };
 
-		var isValidPath = function (path) {
+        var isValidPath = function (path) {
             return typeof path === 'string' && (path === '' || path.charAt(0) === '/');
-		};
+        };
 
-		var splitPath = function (path) {
-			ASSERT(isValidPath(path));
+        var splitPath = function (path) {
+            ASSERT(isValidPath(path));
 
             path = path.split('/');
-			path.splice(0, 1);
+            path.splice(0, 1);
 
-			return path;
-		};
+            return path;
+        };
 
-		var buildPath = function (path) {
-			ASSERT(path instanceof Array);
+        var buildPath = function (path) {
+            ASSERT(path instanceof Array);
 
             return path.length === 0 ? '' : '/' + path.join('/');
-		};
+        };
 
-		var joinPaths = function (first, second) {
-			ASSERT(isValidPath(first) && isValidPath(second));
+        var joinPaths = function (first, second) {
+            ASSERT(isValidPath(first) && isValidPath(second));
 
-			return first + second;
-		};
+            return first + second;
+        };
 
         var getCommonPathPrefixData = function (first, second) {
             ASSERT(typeof first === 'string' && typeof second === 'string');
@@ -3795,504 +5923,505 @@ define('common/core/coretree',[
             };
         };
 
-		// ------- memory management
+        // ------- memory management
 
-		var __detachChildren = function (node) {
-			ASSERT(node.children instanceof Array && node.age >= MAX_AGE - 1);
+        var __detachChildren = function (node) {
+            ASSERT(node.children instanceof Array && node.age >= MAX_AGE - 1);
 
-			var children = node.children;
-			node.children = null;
-			node.age = MAX_AGE;
+            var children = node.children;
+            node.children = null;
+            node.age = MAX_AGE;
 
-			for (var i = 0; i < children.length; ++i) {
-				__detachChildren(children[i]);
-			}
-		};
+            for (var i = 0; i < children.length; ++i) {
+                __detachChildren(children[i]);
+            }
+        };
 
-		var __ageNodes = function (nodes) {
-			ASSERT(nodes instanceof Array);
+        var __ageNodes = function (nodes) {
+            ASSERT(nodes instanceof Array);
 
-			var i = nodes.length;
-			while (--i >= 0) {
-				var node = nodes[i];
+            var i = nodes.length;
+            while (--i >= 0) {
+                var node = nodes[i];
 
-				ASSERT(node.age < MAX_AGE);
-				if (++node.age >= MAX_AGE) {
-					nodes.splice(i, 1);
-					__detachChildren(node);
-				} else {
-					__ageNodes(node.children);
-				}
-			}
-		};
+                ASSERT(node.age < MAX_AGE);
+                if (++node.age >= MAX_AGE) {
+                    nodes.splice(i, 1);
+                    __detachChildren(node);
+                } else {
+                    __ageNodes(node.children);
+                }
+            }
+        };
 
-		var __ageRoots = function () {
-			if (++ticks >= MAX_TICKS) {
-				ticks = 0;
-				__ageNodes(roots);
-			}
-		};
+        var __ageRoots = function () {
+            if (++ticks >= MAX_TICKS) {
+                ticks = 0;
+                __ageNodes(roots);
+            }
+        };
 
-		var __getChildNode = function (children, relid) {
+        var __getChildNode = function (children, relid) {
             ASSERT(children instanceof Array && typeof relid === 'string');
 
-			for (var i = 0; i < children.length; ++i) {
-				var child = children[i];
-				if (child.relid === relid) {
-					ASSERT(child.parent.age === 0);
+            for (var i = 0; i < children.length; ++i) {
+                var child = children[i];
+                if (child.relid === relid) {
+                    ASSERT(child.parent.age === 0);
 
-					child.age = 0;
-					return child;
-				}
-			}
+                    child.age = 0;
+                    return child;
+                }
+            }
 
-			return null;
-		};
+            return null;
+        };
 
-		var __getChildData = function (data, relid) {
+        var __getChildData = function (data, relid) {
             ASSERT(typeof relid === 'string');
 
             if (typeof data === 'object' && data !== null) {
-				data = data[relid];
+                data = data[relid];
                 return typeof data === 'undefined' ? __getEmptyData() : data;
-			} else {
-				return null;
-			}
-		};
+            } else {
+                return null;
+            }
+        };
 
-		var normalize = function (node) {
-			ASSERT(isValidNode(node));
+        var normalize = function (node) {
+            ASSERT(isValidNode(node));
             // console.log('normalize start', printNode(getRoot(node)));
 
-			var parent;
+            var parent;
 
-			if (node.children === null) {
-				ASSERT(node.age === MAX_AGE);
+            if (node.children === null) {
+                ASSERT(node.age === MAX_AGE);
 
-				if (node.parent !== null) {
-					parent = normalize(node.parent);
+                if (node.parent !== null) {
+                    parent = normalize(node.parent);
 
-					var temp = __getChildNode(parent.children, node.relid);
-					if (temp !== null) {
-						// TODO: make the current node close to the returned one
+                    var temp = __getChildNode(parent.children, node.relid);
+                    if (temp !== null) {
+                        // TODO: make the current node close to the returned one
 
                         // console.log('normalize end1',
-						// printNode(getRoot(temp)));
-						return temp;
-					}
+                        // printNode(getRoot(temp)));
+                        return temp;
+                    }
 
-					ASSERT(node.parent.children === null || __getChildNode(node.parent.children, node.relid) === null);
-					ASSERT(__getChildNode(parent.children, node.relid) === null);
+                    ASSERT(node.parent.children === null || __getChildNode(node.parent.children, node.relid) === null);
+                    ASSERT(__getChildNode(parent.children, node.relid) === null);
 
-					node.parent = parent;
-					parent.children.push(node);
+                    node.parent = parent;
+                    parent.children.push(node);
 
-					temp = __getChildData(parent.data, node.relid);
-					if (!isValidHash(temp) || temp !== __getChildData(node.data, ID_NAME)) {
-						node.data = temp;
-					}
-				} else {
-					roots.push(node);
-				}
+                    temp = __getChildData(parent.data, node.relid);
+                    if (!isValidHash(temp) || temp !== __getChildData(node.data, ID_NAME)) {
+                        node.data = temp;
+                    }
+                } else {
+                    roots.push(node);
+                }
 
-				node.age = 0;
-				node.children = [];
-			} else if (node.age !== 0) {
-				parent = node;
-				do {
-					parent.age = 0;
-					parent = parent.parent;
-				} while (parent !== null && parent.age !== 0);
-			}
+                node.age = 0;
+                node.children = [];
+            } else if (node.age !== 0) {
+                parent = node;
+                do {
+                    parent.age = 0;
+                    parent = parent.parent;
+                } while (parent !== null && parent.age !== 0);
+            }
 
             // console.log('normalize end2', printNode(getRoot(node)));
-			return node;
-		};
+            return node;
+        };
 
-		// ------- hierarchy
+        // ------- hierarchy
 
-		var getAncestor = function (first, second) {
-			ASSERT(getRoot(first) === getRoot(second));
+        var getAncestor = function (first, second) {
+            ASSERT(getRoot(first) === getRoot(second));
 
-			first = normalize(first);
-			second = normalize(second);
+            first = normalize(first);
+            second = normalize(second);
 
-			var a = [];
-			do {
-				a.push(first);
-				first = first.parent;
-			} while (first !== null);
+            var a = [];
+            do {
+                a.push(first);
+                first = first.parent;
+            } while (first !== null);
 
-			var b = [];
-			do {
-				b.push(second);
-				second = second.parent;
-			} while (second !== null);
+            var b = [];
+            do {
+                b.push(second);
+                second = second.parent;
+            } while (second !== null);
 
-			var i = a.length - 1;
-			var j = b.length - 1;
-			while (i !== 0 && j !== 0 && a[i - 1] === b[j - 1]) {
-				--i;
-				--j;
-			}
+            var i = a.length - 1;
+            var j = b.length - 1;
+            while (i !== 0 && j !== 0 && a[i - 1] === b[j - 1]) {
+                --i;
+                --j;
+            }
 
-			ASSERT(a[i] === b[j]);
-			return a[i];
-		};
+            ASSERT(a[i] === b[j]);
+            return a[i];
+        };
 
-		var isAncestor = function (node, ancestor) {
-			ASSERT(getRoot(node) === getRoot(ancestor));
+        var isAncestor = function (node, ancestor) {
+            ASSERT(getRoot(node) === getRoot(ancestor));
 
-			node = normalize(node);
-			ancestor = normalize(ancestor);
+            node = normalize(node);
+            ancestor = normalize(ancestor);
 
-			do {
-				if (node === ancestor) {
-					return true;
-				}
+            do {
+                if (node === ancestor) {
+                    return true;
+                }
 
-				node = node.parent;
-			} while (node !== null);
+                node = node.parent;
+            } while (node !== null);
 
-			return false;
-		};
+            return false;
+        };
 
-		var createRoot = function () {
-			var root = {
-				parent: null,
-				relid: null,
-				age: 0,
-				children: [],
-				data: {
-					_mutable: true
-				},
-				rootid: ++rootCounter
-			};
+        var createRoot = function () {
+            var root = {
+                parent: null,
+                relid: null,
+                age: 0,
+                children: [],
+                data: {
+                    _mutable: true
+                },
+                rootid: ++rootCounter
+            };
             root.data[ID_NAME] = '';
-			roots.push(root);
+            roots.push(root);
 
-			__ageRoots();
-			return root;
-		};
+            __ageRoots();
+            return root;
+        };
 
-		var getChild = function (node, relid) {
+        var getChild = function (node, relid) {
             ASSERT(typeof relid === 'string' && relid !== ID_NAME);
 
-			node = normalize(node);
+            node = normalize(node);
 
-			var child = __getChildNode(node.children, relid);
-			if (child !== null) {
-				return child;
-			}
+            var child = __getChildNode(node.children, relid);
+            if (child !== null) {
+                return child;
+            }
 
-			child = {
-				parent: node,
-				relid: relid,
-				age: 0,
-				children: [],
-				data: __getChildData(node.data, relid)
-			};
-			node.children.push(child);
+            child = {
+                parent: node,
+                relid: relid,
+                age: 0,
+                children: [],
+                data: __getChildData(node.data, relid)
+            };
+            node.children.push(child);
 
-			__ageRoots();
-			return child;
-		};
+            __ageRoots();
+            return child;
+        };
 
-		var createChild = function (node) {
-			node = normalize(node);
+        var createChild = function (node) {
+            node = normalize(node);
 
             if (typeof node.data !== 'object' || node.data === null) {
                 throw new Error('invalid node data');
-			}
+            }
 
-			var relid = createRelid(node.data);
-			var child = {
-				parent: node,
-				relid: relid,
-				age: 0,
-				children: [],
+            var relid = createRelid(node.data);
+            var child = {
+                parent: node,
+                relid: relid,
+                age: 0,
+                children: [],
                 data: __getEmptyData()
-			};
+            };
 
-			// TODO: make sure that it is not on the list
-			node.children.push(child);
+            // TODO: make sure that it is not on the list
+            node.children.push(child);
 
-			__ageRoots();
-			return child;
-		};
+            __ageRoots();
+            return child;
+        };
 
-		var getDescendant = function (node, head, base) {
+        var getDescendant = function (node, head, base) {
             ASSERT(typeof base === 'undefined' || isAncestor(head, base));
 
-			node = normalize(node);
-			head = normalize(head);
+            node = normalize(node);
+            head = normalize(head);
             base = typeof base === 'undefined' ? null : normalize(base.parent);
 
-			var path = [];
-			while (head.parent !== base) {
-				path.push(head.relid);
-				head = head.parent;
-			}
+            var path = [];
+            while (head.parent !== base) {
+                path.push(head.relid);
+                head = head.parent;
+            }
 
-			var i = path.length;
-			while (--i >= 0) {
-				node = getChild(node, path[i]);
-			}
+            var i = path.length;
+            while (--i >= 0) {
+                node = getChild(node, path[i]);
+            }
 
-			return node;
-		};
+            return node;
+        };
 
-		var getDescendantByPath = function (node, path) {
+        var getDescendantByPath = function (node, path) {
             ASSERT(path === '' || path.charAt(0) === '/');
 
             path = path.split('/');
 
-			for (var i = 1; i < path.length; ++i) {
-				node = getChild(node, path[i]);
-			}
+            for (var i = 1; i < path.length; ++i) {
+                node = getChild(node, path[i]);
+            }
 
-			return node;
-		};
+            return node;
+        };
 
-		// ------- data manipulation
+        // ------- data manipulation
 
-		var __isMutableData = function (data) {
+        var __isMutableData = function (data) {
             return typeof data === 'object' && data !== null && data._mutable === true;
-		};
+        };
 
-		var isMutable = function (node) {
-			node = normalize(node);
-			return __isMutableData(node.data);
-		};
+        var isMutable = function (node) {
+            node = normalize(node);
+            return __isMutableData(node.data);
+        };
 
-		var isObject = function (node) {
-			node = normalize(node);
+        var isObject = function (node) {
+            node = normalize(node);
             return typeof node.data === 'object' && node.data !== null;
-		};
+        };
 
-		var isEmpty = function (node) {
-			node = normalize(node);
+        var isEmpty = function (node) {
+            node = normalize(node);
             if (typeof node.data !== 'object' || node.data === null) {
-				return false;
+                return false;
             } else if (node.data === __getEmptyData()) {
-				return true;
-			}
+                return true;
+            }
 
-			return __isEmptyData(node.data);
-		};
+            return __isEmptyData(node.data);
+        };
 
-		var __isEmptyData = function (data) {
+        var __isEmptyData = function (data) {
             // TODO: better way to check if object has keys?
-			for (var keys in data) {
-				return false;
-			}
-			return true;
-		};
+            for (var keys in data) {
+                return false;
+            }
+            return true;
+        };
 
-		var __areEquivalent = function (data1, data2) {
+        var __areEquivalent = function (data1, data2) {
             return data1 === data2 || (typeof data1 === 'string' && data1 === __getChildData(data2, ID_NAME)) ||
                 (__isEmptyData(data1) && __isEmptyData(data2));
-		};
+        };
 
-		var mutateCount = 0;
-		var mutate = function (node) {
-			ASSERT(isValidNode(node));
+        var mutateCount = 0;
+        var mutate = function (node) {
+            ASSERT(isValidNode(node));
 
-			node = normalize(node);
-			var data = node.data;
+            node = normalize(node);
+            var data = node.data;
 
             if (typeof data !== 'object' || data === null) {
-				return false;
-			} else if (data._mutable === true) {
-				return true;
-			}
+                return false;
+            } else if (data._mutable === true) {
+                return true;
+            }
 
-			// TODO: infinite cycle if MAX_MUTATE is smaller than depth!
-			if (gmeConfig.storage.autoPersist && ++mutateCount > MAX_MUTATE) {
-				mutateCount = 0;
+            // TODO: infinite cycle if MAX_MUTATE is smaller than depth!
+            if (gmeConfig.storage.autoPersist && ++mutateCount > MAX_MUTATE) {
+                mutateCount = 0;
 
-				for (var i = 0; i < roots.length; ++i) {
-					if (__isMutableData(roots[i].data)) {
-						__saveData(roots[i].data);
-					}
-				}
-			}
+                for (var i = 0; i < roots.length; ++i) {
+                    if (__isMutableData(roots[i].data)) {
+                        __saveData(roots[i].data);
+                    }
+                }
+            }
 
-			if (node.parent !== null && !mutate(node.parent)) {
-				// this should never happen
-				return false;
-			}
+            if (node.parent !== null && !mutate(node.parent)) {
+                // this should never happen
+                return false;
+            }
 
-			var copy = {
-			};
+            var copy = {
+                _mutable: true
+            };
 
-			for (var key in data) {
-				copy[key] = data[key];
-			}
+            for (var key in data) {
+                copy[key] = data[key];
+            }
 
-            copy._mutable = true;
+            ASSERT(copy._mutable === true);
 
             if (typeof data[ID_NAME] === 'string') {
                 copy[ID_NAME] = '';
-			}
+            }
 
-			if (node.parent !== null) {
+            if (node.parent !== null) {
                 ASSERT(__areEquivalent(__getChildData(node.parent.data, node.relid), node.data));
-				node.parent.data[node.relid] = copy;
-			}
+                node.parent.data[node.relid] = copy;
+            }
 
-			node.data = copy;
-			return true;
-		};
+            node.data = copy;
+            return true;
+        };
 
-		var getData = function (node) {
-			node = normalize(node);
+        var getData = function (node) {
+            node = normalize(node);
 
-			ASSERT(!__isMutableData(node.data));
-			return node.data;
-		};
+            ASSERT(!__isMutableData(node.data));
+            return node.data;
+        };
 
-		var __reloadChildrenData = function (node) {
-			for (var i = 0; i < node.children.length; ++i) {
-				var child = node.children[i];
+        var __reloadChildrenData = function (node) {
+            for (var i = 0; i < node.children.length; ++i) {
+                var child = node.children[i];
 
-				var data = __getChildData(node.data, child.relid);
-				if (!isValidHash(data) || data !== __getChildData(child.data, ID_NAME)) {
-					child.data = data;
-					__reloadChildrenData(child);
-				}
-			}
-		};
+                var data = __getChildData(node.data, child.relid);
+                if (!isValidHash(data) || data !== __getChildData(child.data, ID_NAME)) {
+                    child.data = data;
+                    __reloadChildrenData(child);
+                }
+            }
+        };
 
-		var setData = function (node, data) {
+        var setData = function (node, data) {
             ASSERT(data !== null && typeof data !== 'undefined');
 
-			node = normalize(node);
-			if (node.parent !== null) {
-				if (!mutate(node.parent)) {
+            node = normalize(node);
+            if (node.parent !== null) {
+                if (!mutate(node.parent)) {
                     throw new Error('incorrect node data');
-				}
+                }
 
-				node.parent.data[node.relid] = data;
-			}
+                node.parent.data[node.relid] = data;
+            }
 
-			node.data = data;
-			__reloadChildrenData(node);
-		};
+            node.data = data;
+            __reloadChildrenData(node);
+        };
 
-		var deleteData = function (node) {
-			node = normalize(node);
+        var deleteData = function (node) {
+            node = normalize(node);
 
-			if (node.parent !== null) {
-				if (!mutate(node.parent)) {
+            if (node.parent !== null) {
+                if (!mutate(node.parent)) {
                     throw new Error('incorrect node data');
-				}
+                }
 
-				delete node.parent.data[node.relid];
-			}
+                delete node.parent.data[node.relid];
+            }
 
-			var data = node.data;
+            var data = node.data;
 
             node.data = __getEmptyData();
-			__reloadChildrenData(node);
+            __reloadChildrenData(node);
 
-			return data;
-		};
+            return data;
+        };
 
-		var copyData = function (node) {
-			node = normalize(node);
+        var copyData = function (node) {
+            node = normalize(node);
 
             if (typeof node.data !== 'object' || node.data === null) {
-				return node.data;
-			}
+                return node.data;
+            }
 
-			// TODO: return immutable data without coping
-			return JSON.parse(JSON.stringify(node.data));
-		};
+            // TODO: return immutable data without coping
+            return JSON.parse(JSON.stringify(node.data));
+        };
 
-		var getProperty = function (node, name) {
+        var getProperty = function (node, name) {
             ASSERT(typeof name === 'string' && name !== ID_NAME);
 
-			var data;
-			node = normalize(node);
+            var data;
+            node = normalize(node);
 
             if (typeof node.data === 'object' && node.data !== null) {
-				data = node.data[name];
-			}
+                data = node.data[name];
+            }
 
-			// TODO: corerel uses getProperty to get the overlay content which can get mutable
-			// ASSERT(!__isMutableData(data));
-			return data;
-		};
+            // TODO: corerel uses getProperty to get the overlay content which can get mutable
+            // ASSERT(!__isMutableData(data));
+            return data;
+        };
 
-		var setProperty = function (node, name, data) {
+        var setProperty = function (node, name, data) {
             ASSERT(typeof name === 'string' && name !== ID_NAME);
             ASSERT(!__isMutableData(data) /*&& data !== null*/ && data !== undefined);
             //TODO is the 'null' really can be a value of a property???
 
-			node = normalize(node);
-			if (!mutate(node)) {
+            node = normalize(node);
+            if (!mutate(node)) {
                 throw new Error('incorrect node data');
-			}
+            }
 
-			node.data[name] = data;
+            node.data[name] = data;
 
-			var child = __getChildNode(node.children, name);
-			if (child !== null) {
-				child.data = data;
-				__reloadChildrenData(child);
-			}
-		};
+            var child = __getChildNode(node.children, name);
+            if (child !== null) {
+                child.data = data;
+                __reloadChildrenData(child);
+            }
+        };
 
-		var deleteProperty = function (node, name) {
+        var deleteProperty = function (node, name) {
             ASSERT(typeof name === 'string' && name !== ID_NAME);
 
-			node = normalize(node);
-			if (!mutate(node)) {
+            node = normalize(node);
+            if (!mutate(node)) {
                 throw new Error('incorrect node data');
-			}
+            }
 
-			delete node.data[name];
+            delete node.data[name];
 
-			var child = __getChildNode(node.children, name);
-			if (child !== null) {
+            var child = __getChildNode(node.children, name);
+            if (child !== null) {
                 child.data = __getEmptyData();
-				__reloadChildrenData(child);
-			}
-		};
+                __reloadChildrenData(child);
+            }
+        };
 
-		var noUnderscore = function (relid) {
+        var noUnderscore = function (relid) {
             ASSERT(typeof relid === 'string');
             return relid.charAt(0) !== '_';
-		};
+        };
 
-		var getKeys = function (node, predicate) {
+        var getKeys = function (node, predicate) {
             ASSERT(typeof predicate === 'undefined' || typeof predicate === 'function');
 
-			node = normalize(node);
-			predicate = predicate || noUnderscore;
+            node = normalize(node);
+            predicate = predicate || noUnderscore;
 
             if (typeof node.data !== 'object' || node.data === null) {
-				return null;
-			}
+                return null;
+            }
 
-			var keys = Object.keys(node.data);
+            var keys = Object.keys(node.data);
 
-			var i = keys.length;
-			while (--i >= 0 && !predicate(keys[i])) {
-				keys.pop();
-			}
+            var i = keys.length;
+            while (--i >= 0 && !predicate(keys[i])) {
+                keys.pop();
+            }
 
-			while (--i >= 0) {
-				if (!predicate(keys[i])) {
-					keys[i] = keys.pop();
-				}
-			}
+            while (--i >= 0) {
+                if (!predicate(keys[i])) {
+                    keys[i] = keys.pop();
+                }
+            }
 
-			return keys;
-		};
+            return keys;
+        };
 
-        var getRawKeys = function(object,predicate){
+        var getRawKeys = function (object, predicate) {
             ASSERT(typeof predicate === 'undefined' || typeof predicate === 'function');
             predicate = predicate || noUnderscore;
 
@@ -4312,232 +6441,250 @@ define('common/core/coretree',[
             return keys;
         };
 
-		// ------- persistence
+        // ------- persistence
 
-		var getHash = function (node) {
-			if (node === null) {
-				return null;
-			}
+        var getHash = function (node) {
+            if (node === null) {
+                return null;
+            }
 
-			var hash;
-			node = normalize(node);
+            var hash;
+            node = normalize(node);
             if (typeof node.data === 'object' && node.data !== null) {
-				hash = node.data[ID_NAME];
-			}
+                hash = node.data[ID_NAME];
+            }
 
             ASSERT(typeof hash === 'string' || typeof hash === 'undefined');
-			return hash;
-		};
+            return hash;
+        };
 
-		var isHashed = function (node) {
-			node = normalize(node);
+        var isHashed = function (node) {
+            node = normalize(node);
             return typeof node.data === 'object' && node.data !== null && typeof node.data[ID_NAME] === 'string';
-		};
+        };
 
-		var setHashed = function (node, hashed, noMutate) {
+        var setHashed = function (node, hashed, noMutate) {
             ASSERT(typeof hashed === 'boolean');
 
-			node = normalize(node);
-            if(!noMutate){
+            node = normalize(node);
+            if (!noMutate) {
                 if (!mutate(node)) {
                     throw new Error('incorrect node data');
                 }
             }
 
-			if (hashed) {
+            if (hashed) {
                 node.data[ID_NAME] = '';
-			} else {
-				delete node.data[ID_NAME];
-			}
+            } else {
+                delete node.data[ID_NAME];
+            }
 
             ASSERT(typeof node.children[ID_NAME] === 'undefined');
-		};
+        };
 
-		var __saveData = function (data) {
-			ASSERT(__isMutableData(data));
+        var __saveData = function (data) {
+            ASSERT(__isMutableData(data));
 
-            var done = __getEmptyData();
-			delete data._mutable;
+            var done = __getEmptyData(),
+                keys = Object.keys(data),
+                i, child, sub, hash;
 
-			for (var relid in data) {
-				var child = data[relid];
-				if (__isMutableData(child)) {
-					var sub = __saveData(child);
+            delete data._mutable;
+
+            for (i = 0; i < keys.length; i++) {
+                child = data[keys[i]];
+                if (__isMutableData(child)) {
+                    sub = __saveData(child);
                     if (sub === __getEmptyData()) {
-						delete data[relid];
-					} else {
-						done = FUTURE.join(done, sub);
+                        delete data[keys[i]];
+                    } else {
+                        done = sub;
                         if (typeof child[ID_NAME] === 'string') {
-							data[relid] = child[ID_NAME];
-						}
-					}
-				} else {
-					done = undefined;
-				}
-			}
+                            data[keys[i]] = child[ID_NAME];
+                        }
+                    }
+                } else {
+                    done = undefined;
+                }
+            }
+
 
             if (done !== __getEmptyData()) {
-				var hash = data[ID_NAME];
+                hash = data[ID_NAME];
                 ASSERT(hash === '' || typeof hash === 'undefined');
 
                 if (hash === '') {
                     hash = '#' + GENKEY(data, gmeConfig);
-					data[ID_NAME] = hash;
+                    data[ID_NAME] = hash;
 
-					done = FUTURE.join(done, storage.insertObject(data));
-				}
-			}
+                    done = data;
+                    storage.insertObject(data, stackedObjects);
+                    //stackedObjects[hash] = data;
+                }
+            }
 
-			return done;
-		};
+            return done;
+        };
 
-		var persist = function (node) {
-			node = normalize(node);
+        var persist = function (node) {
+            var updated = false,
+                result;
 
-			if (!__isMutableData(node.data)) {
-				return false;
-			}
+            node = normalize(node);
 
-			var done = __saveData(node.data);
-			return FUTURE.join(done, storage.fsyncDatabase());
-		};
+            if (!__isMutableData(node.data)) {
+                return {rootHash: node.data[ID_NAME], objects: {}};
+            }
 
-		var loadRoot = function (hash) {
-			ASSERT(isValidHash(hash));
+            updated = __saveData(node.data);
+            if (updated !== __getEmptyData()) {
+                result = {};
+                result.objects = stackedObjects;
+                stackedObjects = {};
+                result.rootHash = node.data[ID_NAME];
+            } else {
+                result = {rootHash: node.data[ID_NAME], objects: {}};
+            }
 
-			return TASYNC.call(__loadRoot2, storage.loadObject(hash));
-		};
+            return result;
+        };
 
-		var __loadRoot2 = function (data) {
-			var root = {
-				parent: null,
-				relid: null,
-				age: 0,
-				children: [],
-				data: data,
-				rootid: ++rootCounter
-			};
-			roots.push(root);
+        var loadRoot = function (hash) {
+            ASSERT(isValidHash(hash));
 
-			__ageRoots();
-			return root;
-		};
+            return TASYNC.call(__loadRoot2, storage.loadObject(hash));
+        };
 
-		var loadChild = function (node, relid) {
-			ASSERT(isValidNode(node));
+        var __loadRoot2 = function (data) {
+            var root = {
+                parent: null,
+                relid: null,
+                age: 0,
+                children: [],
+                data: data,
+                rootid: ++rootCounter
+            };
+            roots.push(root);
 
-			node = getChild(node, relid);
+            __ageRoots();
+            return root;
+        };
 
-			if (isValidHash(node.data)) {
-				// TODO: this is a hack, we should avoid loading it multiple
-				// times
-				return TASYNC.call(__loadChild2, node, storage.loadObject(node.data));
-			} else {
+        var loadChild = function (node, relid) {
+            ASSERT(isValidNode(node));
+
+            node = getChild(node, relid);
+
+            if (isValidHash(node.data)) {
+                // TODO: this is a hack, we should avoid loading it multiple
+                // times
+                return TASYNC.call(__loadChild2, node, storage.loadObject(node.data));
+            } else {
                 return typeof node.data === 'object' && node.data !== null ? node : null;
-			}
-		};
+            }
+        };
 
-		var getChildHash = function(node,relid){
-			ASSERT(isValidNode(node));
+        var getChildHash = function (node, relid) {
+            ASSERT(isValidNode(node));
 
-			node = getChild(node, relid);
+            node = getChild(node, relid);
 
-			if (isValidHash(node.data)) {
-				// TODO: this is a hack, we should avoid loading it multiple
-				// times
-				return node.data;
-			} else {
+            if (isValidHash(node.data)) {
+                // TODO: this is a hack, we should avoid loading it multiple
+                // times
+                return node.data;
+            } else {
                 return typeof node.data === 'object' && node.data !== null ? getHash(node) : null;
-			}
-		};
+            }
+        };
 
 
-		var __loadChild2 = function (node, newdata) {
-			node = normalize(node);
+        var __loadChild2 = function (node, newdata) {
+            node = normalize(node);
 
-			// TODO: this is a hack, we should avoid loading it multiple times
-			if (isValidHash(node.data)) {
-				ASSERT(node.data === newdata[ID_NAME]);
+            // TODO: this is a hack, we should avoid loading it multiple times
+            if (isValidHash(node.data)) {
+                ASSERT(node.data === newdata[ID_NAME]);
 
-				node.data = newdata;
-				__reloadChildrenData(node);
-			} else {
-				// TODO: if this bites you, use the Cache
+                node.data = newdata;
+                __reloadChildrenData(node);
+            } else {
+                // TODO: if this bites you, use the Cache
                 /*if(node.data !== newdata){
                  console.log('kecso',node);
-                }
-				ASSERT(node.data === newdata);*/
-			}
+                 }
+                 ASSERT(node.data === newdata);*/
+            }
 
-			return node;
-		};
+            return node;
+        };
 
-		var loadByPath = function (node, path) {
-			ASSERT(isValidNode(node));
+        var loadByPath = function (node, path) {
+            ASSERT(isValidNode(node));
             ASSERT(path === '' || path.charAt(0) === '/');
 
             path = path.split('/');
-			return __loadDescendantByPath2(node, path, 1);
-		};
+            return __loadDescendantByPath2(node, path, 1);
+        };
 
-		var __loadDescendantByPath2 = function (node, path, index) {
-			if (node === null || index === path.length) {
-				return node;
-			}
+        var __loadDescendantByPath2 = function (node, path, index) {
+            if (node === null || index === path.length) {
+                return node;
+            }
 
-			var child = loadChild(node, path[index]);
-			return TASYNC.call(__loadDescendantByPath2, child, path, index + 1);
-		};
+            var child = loadChild(node, path[index]);
+            return TASYNC.call(__loadDescendantByPath2, child, path, index + 1);
+        };
 
-		// ------- valid -------
+        // ------- valid -------
 
-		var printNode = function (node) {
+        var printNode = function (node) {
             var str = '{';
             str += 'age:' + node.age;
 
             if (typeof node.relid === 'string') {
                 str += ', relid: "' + node.relid + '"';
-			}
+            }
 
             str += ', children:';
-			if (node.children === null) {
+            if (node.children === null) {
                 str += 'null';
-			} else {
+            } else {
                 str += '[';
-				for (var i = 0; i < node.children.length; ++i) {
-					if (i !== 0) {
+                for (var i = 0; i < node.children.length; ++i) {
+                    if (i !== 0) {
                         str += ', ';
-					}
-					str += printNode(node.children[i]);
-				}
+                    }
+                    str += printNode(node.children[i]);
+                }
                 str += ']';
-			}
+            }
 
             str += '}';
-			return str;
-		};
+            return str;
+        };
 
-		var __test = function (text, cond) {
-			if (!cond) {
-				throw new Error(text);
-			}
-		};
+        var __test = function (text, cond) {
+            if (!cond) {
+                throw new Error(text);
+            }
+        };
 
-		var checkValidTree = function (node) {
-			if (isValidNode(node)) {
-				if (node.children instanceof Array) {
-					for (var i = 0; i < node.children.length; ++i) {
-						checkValidTree(node.children[i]);
-					}
-				}
-			}
-		};
+        var checkValidTree = function (node) {
+            if (isValidNode(node)) {
+                if (node.children instanceof Array) {
+                    for (var i = 0; i < node.children.length; ++i) {
+                        checkValidTree(node.children[i]);
+                    }
+                }
+            }
+        };
 
-		// disable checking for now
-		var checkValidTreeRunning = true;
+        // disable checking for now
+        var checkValidTreeRunning = true;
 
-		var isValidNode = function (node) {
-			try {
+        var isValidNode = function (node) {
+            try {
                 __test('object', typeof node === 'object' && node !== null);
                 __test('object 2', node.hasOwnProperty('parent') && node.hasOwnProperty('relid'));
                 __test('parent', typeof node.parent === 'object');
@@ -4547,74 +6694,74 @@ define('common/core/coretree',[
                 __test('children', node.children === null || node.children instanceof Array);
                 __test('children 2', (node.age === MAX_AGE) === (node.children === null));
                 __test('data', typeof node.data === 'object' || typeof node.data === 'string' ||
-                typeof node.data === 'number');
+                    typeof node.data === 'number');
 
-				if (node.parent !== null) {
+                if (node.parent !== null) {
                     __test('age 2', node.age >= node.parent.age);
                     __test('mutable', !__isMutableData(node.data) || __isMutableData(node.parent.data));
-				}
+                }
 
-				if (!checkValidTreeRunning) {
-					checkValidTreeRunning = true;
-					checkValidTree(getRoot(node));
-					checkValidTreeRunning = false;
-				}
+                if (!checkValidTreeRunning) {
+                    checkValidTreeRunning = true;
+                    checkValidTree(getRoot(node));
+                    checkValidTreeRunning = false;
+                }
 
-				return true;
-			} catch (error) {
+                return true;
+            } catch (error) {
                 console.log('Wrong node', error.stack);
-				return false;
-			}
-		};
+                return false;
+            }
+        };
 
-		return {
-			getParent: getParent,
-			getRelid: getRelid,
-			getLevel: getLevel,
-			getRoot: getRoot,
-			getPath: getPath,
-			isValidPath: isValidPath,
-			splitPath: splitPath,
-			buildPath: buildPath,
-			joinPaths: joinPaths,
-			getCommonPathPrefixData: getCommonPathPrefixData,
+        return {
+            getParent: getParent,
+            getRelid: getRelid,
+            getLevel: getLevel,
+            getRoot: getRoot,
+            getPath: getPath,
+            isValidPath: isValidPath,
+            splitPath: splitPath,
+            buildPath: buildPath,
+            joinPaths: joinPaths,
+            getCommonPathPrefixData: getCommonPathPrefixData,
 
-			normalize: normalize,
-			getAncestor: getAncestor,
-			isAncestor: isAncestor,
-			createRoot: createRoot,
-			createChild: createChild,
-			getChild: getChild,
-			getDescendant: getDescendant,
-			getDescendantByPath: getDescendantByPath,
+            normalize: normalize,
+            getAncestor: getAncestor,
+            isAncestor: isAncestor,
+            createRoot: createRoot,
+            createChild: createChild,
+            getChild: getChild,
+            getDescendant: getDescendant,
+            getDescendantByPath: getDescendantByPath,
 
-			isMutable: isMutable,
-			isObject: isObject,
-			isEmpty: isEmpty,
-			mutate: mutate,
-			getData: getData,
-			setData: setData,
-			deleteData: deleteData,
-			copyData: copyData,
-			getProperty: getProperty,
-			setProperty: setProperty,
-			deleteProperty: deleteProperty,
-			getKeys: getKeys,
+            isMutable: isMutable,
+            isObject: isObject,
+            isEmpty: isEmpty,
+            mutate: mutate,
+            getData: getData,
+            setData: setData,
+            deleteData: deleteData,
+            copyData: copyData,
+            getProperty: getProperty,
+            setProperty: setProperty,
+            deleteProperty: deleteProperty,
+            getKeys: getKeys,
             getRawKeys: getRawKeys,
 
-			isHashed: isHashed,
-			setHashed: setHashed,
-			getHash: getHash,
-			persist: TASYNC.wrap(FUTURE.unadapt(persist)),
-			loadRoot: loadRoot,
-			loadChild: loadChild,
-			loadByPath: loadByPath,
+            isHashed: isHashed,
+            setHashed: setHashed,
+            getHash: getHash,
+            persist: persist,
+            loadRoot: loadRoot,
+            loadChild: loadChild,
+            loadByPath: loadByPath,
 
-			isValidNode: isValidNode,
+            isValidNode: isValidNode,
 
-			getChildHash: getChildHash
-		};
-	};
+            getChildHash: getChildHash
+        };
+    };
 });
 
 /*globals define*/
@@ -4626,7 +6773,7 @@ define('common/core/coretree',[
 
 define('common/core/corerel',['common/util/assert', 'common/core/coretree', 'common/core/tasync'], function (ASSERT, CoreTree, TASYNC) {
 
-    
+
 
     // ----------------- RELID -----------------
 
@@ -4816,7 +6963,7 @@ define('common/core/corerel',['common/util/assert', 'common/core/coretree', 'com
                 if (path === prefix || path.substr(0, prefix2.length) === prefix2) {
                     var node = coretree.getChild(overlays, path);
                     var names = coretree.getKeys(node);
-                    
+
                     for (var j = 0; j < names.length; ++j) {
                         var name = names[j];
                         if (isPointerName(name)) {
@@ -5475,7 +7622,7 @@ define('common/core/corerel',['common/util/assert', 'common/core/coretree', 'com
  */
 
 define('common/core/setcore',['common/util/assert'], function (ASSERT) {
-    
+
 
     var SETS_ID = '_sets';
     var REL_ID = 'member';
@@ -5872,13 +8019,34 @@ define('common/core/setcore',['common/util/assert'], function (ASSERT) {
 
 
 /*globals define*/
+/*jshint node: true, browser: true, bitwise: false*/
+
+/**
+ * @author kecso / https://github.com/kecso
+ */
+
+define('common/util/guid',[],function () {
+
+
+    var guid = function () {
+        var S4 = function () {
+            return (((1 + Math.random()) * 0x10000) | 0).toString(16).substring(1);
+        };
+
+        //return GUID
+        return (S4() + S4() + '-' + S4() + '-' + S4() + '-' + S4() + '-' + S4() + S4() + S4());
+    };
+
+    return guid;
+});
+/*globals define*/
 /*jshint node:true, browser: true*/
 /**
  * @author pmeijer / https://github.com/pmeijer
  */
 
 define('common/regexp',[], function () {
-    
+
     var HASH = new RegExp('^#[0-9a-zA-Z_]*$'),
         BRANCH = new RegExp('^[0-9a-zA-Z_]*$'),
         RAW_BRANCH = new RegExp('^\\*[0-9a-zA-Z_]*$'),// This is how it's stored in mongodb, i.e. with a prefixed *.
@@ -5908,7 +8076,7 @@ define('common/core/guidcore',[
     'common/regexp'
 ], function (ASSERT, GUID, TASYNC, REGEXP) {
 
-    
+
 
     var OWN_GUID = '_relguid';
 
@@ -6093,7 +8261,7 @@ define('common/core/guidcore',[
  */
 
 define('common/core/nullpointercore',['common/util/assert'], function (ASSERT) {
-    
+
 
     var NULLPTR_NAME = '_null_pointer';
     var NULLPTR_RELID = '_nullptr';
@@ -6155,7 +8323,7 @@ define('common/core/nullpointercore',['common/util/assert'], function (ASSERT) {
  */
 
 define('common/core/coreunwrap',['common/util/assert', 'common/core/tasync'], function (ASSERT, TASYNC) {
-    
+
 
     // ----------------- CoreUnwrap -----------------
 
@@ -6193,7 +8361,7 @@ define('common/core/coreunwrap',['common/util/assert', 'common/core/tasync'], fu
         }
         logger.debug('initialized');
         core.loadRoot = TASYNC.unwrap(oldcore.loadRoot);
-        core.persist = TASYNC.unwrap(oldcore.persist);
+        //core.persist = TASYNC.unwrap(oldcore.persist);
 
         // core.loadChild = TASYNC.unwrap(oldcore.loadChild);
         core.loadChild = TASYNC.unwrap(function (node, relid) {
@@ -6243,7 +8411,7 @@ define('common/core/coreunwrap',['common/util/assert', 'common/core/tasync'], fu
  */
 
 define('common/core/coretype',['common/util/assert', 'common/core/core', 'common/core/tasync'], function (ASSERT, Core, TASYNC) {
-    
+
 
     // ----------------- CoreType -----------------
 
@@ -6343,8 +8511,6 @@ define('common/core/coretype',['common/util/assert', 'common/core/core', 'common
                             child = core.getChild(n, r);
                             core.setHashed(child, true, true);
                             child.base = b;
-                            n.children.push(child);
-                            n.data[r] = child.data; //FIXME there should be a proper way to do this
                             return child;
                         }
                     }, basechild, child, node, relid);
@@ -6372,6 +8538,12 @@ define('common/core/coretype',['common/util/assert', 'common/core/core', 'common
         //TODO the pointer loading is totally based upon the loadByPath...
         core.loadPointer = function (node, name) {
             var pointerPath = core.getPointerPath(node, name);
+            if (pointerPath === undefined) {
+                return undefined;
+            }
+            if (pointerPath === null) {
+                return null;
+            }
             return TASYNC.call(core.loadByPath, core.getRoot(node), pointerPath);
         };
 
@@ -7055,7 +9227,7 @@ define('common/core/coretype',['common/util/assert', 'common/core/core', 'common
  */
 
 define('common/core/constraintcore',['common/util/assert'], function (ASSERT) {
-    
+
     var CONSTRAINTS_RELID = '_constraints';
     var C_DEF_PRIORITY = 1;
 
@@ -7895,7 +10067,7 @@ define('common/core/metacore',[
     'common/util/jjv',
     'common/util/canon'
 ], function (ASSERT, Core, TASYNC, JsonValidator, CANON) {
-    
+
 
     // ----------------- CoreType -----------------
 
@@ -8401,7 +10573,7 @@ define('common/core/metacore',[
  */
 
 define('common/core/coretreeloader',['common/util/assert', 'common/core/core', 'common/core/tasync'], function (ASSERT, Core, TASYNC) {
-    
+
 
     // ----------------- CoreTreeLoader -----------------
 
@@ -8460,7 +10632,7 @@ define('common/core/coretreeloader',['common/util/assert', 'common/core/core', '
  */
 
 define('common/core/corediff',['common/util/canon', 'common/core/tasync', 'common/util/assert'], function (CANON, TASYNC, ASSERT) {
-    
+
 
     function diffCore(_innerCore, options) {
         ASSERT(typeof options === 'object');
@@ -10752,7 +12924,7 @@ define('common/core/core',[
     'common/core/coretreeloader',
     'common/core/corediff'
 ], function (CoreRel, Set, Guid, NullPtr, UnWrap, Type, Constraint, CoreTree, MetaCore, TreeLoader, CoreDiff) {
-    
+
 
     function Core(storage, options) {
         var core,
@@ -10782,2578 +12954,38 @@ define('common/core/core',[
 });
 
 /*globals define*/
-/*jshint node: true, browser: true*/
+/*jshint browser:true*/
 
-/**
- * @author kecso / https://github.com/kecso
- */
-
-define('common/storage/client',['common/util/assert', 'common/util/guid'], function (ASSERT, GUID) {
-    
-
-    function Database(options) {
-        ASSERT(typeof options === 'object');
-        ASSERT(typeof options.logger !== 'undefined');
-        ASSERT(typeof options.globConf === 'object');
-        var gmeConfig = options.globConf,
-            logger = options.logger.fork('client');
-
-        options.type = options.type || 'browser';
-
-        var _hostAddress = null;
-        if (options.type === 'browser') {
-            if (window.__karma__) {
-                // TRICKY: karma uses web sockets too, we need to use the gme server's port
-                _hostAddress = window.location.protocol + '//localhost:' + gmeConfig.server.port;
-            } else {
-                _hostAddress = options.host || window.location.protocol + '//' + window.location.host;
-            }
-        } else {
-            _hostAddress = options.host + ':' + gmeConfig.server.port;
-        }
-
-        logger.debug('hostAddress:', _hostAddress);
-
-        var socketConnected = false,
-            socket = null,
-            status = null,
-            reconnect = false,
-            getDbStatusCallbacks = {},
-            callbacks = {},
-            getBranchHashCallbacks = {},
-            IO = null,
-            projects = {},
-            references = {},
-            ERROR_DISCONNECTED = 'The socket.io is disconnected',
-            ERROR_TIMEOUT = 'no valid response arrived in time',
-            STATUS_NETWORK_DISCONNECTED = 'socket.io is disconnected';
-
-        function clearDbCallbacks() {
-            var myCallbacks = [];
-            for (var i in getDbStatusCallbacks) {
-                myCallbacks.push(getDbStatusCallbacks[i]);
-                clearTimeout(getDbStatusCallbacks[i].to);
-            }
-            getDbStatusCallbacks = {};
-            for (i = 0; i < myCallbacks.length; i++) {
-                myCallbacks[i].cb(null, status);
-            }
-        }
-
-        function clearCallbacks() {
-            var myCallbacks = [];
-            for (var i in callbacks) {
-                myCallbacks.push(callbacks[i]);
-                clearTimeout(callbacks[i].to);
-            }
-            callbacks = {};
-            for (i = 0; i < myCallbacks.length; i++) {
-                myCallbacks[i].cb(ERROR_DISCONNECTED);
-            }
-        }
-
-        function reSendGetBranches() {
-            //this function should be called after reconnecting
-            for (var i in getBranchHashCallbacks) {
-                projects[getBranchHashCallbacks[i].project].getBranchHash(i, getBranchHashCallbacks[i].oldhash,
-                    getBranchHashCallbacks[i].cb);
-            }
-        }
-
-        function callbackTimeout(guid) {
-            var cb = null,
-                oldhash = '';
-            if (callbacks[guid]) {
-                cb = callbacks[guid].cb;
-                delete callbacks[guid];
-                cb(new Error(ERROR_TIMEOUT));
-            } else if (getDbStatusCallbacks[guid]) {
-                cb = getDbStatusCallbacks[guid].cb;
-                delete getDbStatusCallbacks[guid];
-                cb(null, status);
-            } else if (getBranchHashCallbacks[guid]) {
-                cb = getBranchHashCallbacks[guid].cb;
-                oldhash = getBranchHashCallbacks[guid].oldhash;
-                delete getBranchHashCallbacks[guid];
-                cb(new Error(ERROR_TIMEOUT), null, null);
-            }
-        }
-
-        function registerProject(id, name) {
-            if (!references[name]) {
-                references[name] = [];
-            }
-            if (references[name].indexOf(id) === -1) {
-                references[name].push(id);
-            }
-        }
-
-        function unRegisterProject(id, name) {
-            // var result = false; TODO: use one return statement here
-            if (references[name]) {
-                var index = references[name].indexOf(id);
-                if (index > -1) {
-                    references[name].splice(index, 1);
-                    if (references[name].length === 0) {
-                        delete references[name];
-                        return true;
-                    } else {
-                        return false;
-                    }
-                } else {
-                    return false;
-                }
-            } else {
-                return false;
-            }
-        }
-
-        function openDatabase(callback) {
-            ASSERT(typeof callback === 'function');
-
-            if (socket) {
-                if (socketConnected) {
-                    callback(null);
-                } else {
-                    //we should try to reconnect
-                    callback(null);
-                    //socket.socket.reconnect();
-                }
-            } else {
-                var guid = GUID(),
-                    firstConnection = true;
-                callbacks[guid] = {
-                    cb: callback,
-                    to: setTimeout(callbackTimeout, gmeConfig.storage.timeout, guid)
-                };
-
-                var ioReady = function () {
-                    var socketIoOpts = JSON.parse(JSON.stringify(gmeConfig.socketIO)); // Copy these values.
-                    if (options.webGMESessionId) {
-                        socketIoOpts.query = 'webGMESessionId=' + options.webGMESessionId;
-                        //FIXME: options.webGMESessionId will be undefined in some cases
-                    }
-                    socket = IO.connect(_hostAddress, socketIoOpts);
-
-                    socket.on('connect', function () {
-                        socketConnected = true;
-                        if (firstConnection) {
-                            firstConnection = false;
-                            socket.emit('openDatabase', function (err) {
-                                if (!err) {
-                                    socket.emit('getDatabaseStatus', null, function (err, newstatus) {
-                                        if (!err && newstatus) {
-                                            status = newstatus;
-                                        }
-                                        if (callbacks[guid]) {
-                                            clearTimeout(callbacks[guid].to);
-                                            delete callbacks[guid];
-                                            callback(err);
-                                        }
-                                    });
-                                } else {
-                                    socket.emit('disconnect');
-                                    socket = null;
-                                    if (callbacks[guid]) {
-                                        clearTimeout(callbacks[guid].to);
-                                        delete callbacks[guid];
-                                        callback(err);
-                                    }
-                                }
-                            });
-                        } else {
-                            socket.emit('getDatabaseStatus', status, function (err, newstatus) {
-                                if (!err && newstatus) {
-                                    status = newstatus;
-                                    clearDbCallbacks();
-                                    reSendGetBranches();
-                                }
-                            });
-                        }
-                    });
-
-                    socket.on('error', function (err) {
-                        callback(err);
-                    });
-
-                    socket.on('disconnect', function () {
-                        status = STATUS_NETWORK_DISCONNECTED;
-                        socketConnected = false;
-                        clearDbCallbacks();
-                        clearCallbacks();
-                        //socket.socket.reconnect();
-                    });
-                };
-
-                if (options.type === 'browser') {
-                    require([_hostAddress + '/socket.io/socket.io.js'], function (io) {
-                        IO = io || window.io;
-                        ioReady();
-                    });
-                } else {
-                    require(['socket.io-client'], function (io) {
-                        IO = io;
-                        ioReady();
-                    });
-                }
-            }
-        }
-
-        function closeDatabase(callback) {
-            callback = callback || function () {
-            };
-            if (socketConnected) {
-                var guid = GUID();
-                callbacks[guid] = {
-                    cb: callback,
-                    to: setTimeout(callbackTimeout, gmeConfig.storage.timeout, guid)
-                };
-                socket.emit('closeDatabase', function (err) {
-                    if (callbacks[guid]) {
-                        clearTimeout(callbacks[guid].to);
-                        delete callbacks[guid];
-                        callback(err);
-                    }
-
-                    // FIXME: how to disconnect properly ???
-                    //if (socketConnected && Object.keys(references).length === 0) {
-                    //    socketConnected = false;
-                    //    socket.disconnect();
-                    //}
-                });
-            } else {
-                callback(new Error(ERROR_DISCONNECTED));
-            }
-        }
-
-        function fsyncDatabase(callback, projectName) {
-            ASSERT(typeof callback === 'function');
-            if (socketConnected) {
-                var guid = GUID();
-                callbacks[guid] = {
-                    cb: callback,
-                    to: setTimeout(callbackTimeout, gmeConfig.storage.timeout, guid)
-                };
-                socket.emit('fsyncDatabase', projectName, function (err) {
-                    if (callbacks[guid]) {
-                        clearTimeout(callbacks[guid].to);
-                        delete callbacks[guid];
-                        callback(err);
-                    }
-                });
-            } else {
-                callback(new Error(ERROR_DISCONNECTED));
-            }
-        }
-
-        function getDatabaseStatus(oldstatus, callback) {
-            ASSERT(typeof callback === 'function');
-            if (status !== oldstatus) {
-                callback(null, status);
-            } else {
-                var guid = GUID();
-                getDbStatusCallbacks[guid] = {
-                    cb: callback,
-                    to: setTimeout(callbackTimeout, gmeConfig.storage.timeout, guid)
-                };
-                if (status !== STATUS_NETWORK_DISCONNECTED) {
-                    socket.emit('getDatabaseStatus', oldstatus, function (err, newstatus) {
-                        if (!err && newstatus) {
-                            status = newstatus;
-                        }
-                        if (callbacks[guid]) {
-                            clearTimeout(getDbStatusCallbacks[guid].to);
-                            delete getDbStatusCallbacks[guid];
-                            callback(err, newstatus);
-                            //TODO why this common error check is missing and what was redo meant???
-                            /*commonErrorCheck(err, function (err2, needRedo) {
-                             if (needRedo) {
-                             getDatabaseStatus(oldstatus, callback);
-                             } else {
-                             callback(err2, newstatus);
-                             }
-                             });*/
-                        }
-                    });
-                }
-            }
-        }
-
-        function getProjectNames(callback) {
-            ASSERT(typeof callback === 'function');
-            if (socketConnected) {
-                var guid = GUID();
-                callbacks[guid] = {
-                    cb: callback,
-                    to: setTimeout(callbackTimeout, gmeConfig.storage.timeout, guid)
-                };
-                socket.emit('getProjectNames', function (err, names) {
-                    if (callbacks[guid]) {
-                        clearTimeout(callbacks[guid].to);
-                        delete callbacks[guid];
-                        callback(err, names);
-                    }
-                });
-            } else {
-                callback(new Error(ERROR_DISCONNECTED));
-            }
-        }
-
-        function getAllowedProjectNames(callback) {
-            ASSERT(typeof callback === 'function');
-            if (socketConnected) {
-                var guid = GUID();
-                callbacks[guid] = {
-                    cb: callback,
-                    to: setTimeout(callbackTimeout, gmeConfig.storage.timeout, guid)
-                };
-                socket.emit('getAllowedProjectNames', function (err, names) {
-                    if (callbacks[guid]) {
-                        clearTimeout(callbacks[guid].to);
-                        delete callbacks[guid];
-                        callback(err, names);
-                    }
-                });
-            } else {
-                callback(new Error(ERROR_DISCONNECTED));
-            }
-        }
-
-        function getAuthorizationInfo(name, callback) {
-            ASSERT(typeof callback === 'function');
-            if (socketConnected) {
-                var guid = GUID();
-                callbacks[guid] = {
-                    cb: callback,
-                    to: setTimeout(callbackTimeout, gmeConfig.storage.timeout, guid)
-                };
-                socket.emit('getAuthorizationInfo', name, function (err, authInfo) {
-                    if (callbacks[guid]) {
-                        clearTimeout(callbacks[guid].to);
-                        delete callbacks[guid];
-                        callback(err, authInfo);
-                    }
-                });
-            } else {
-                callback(new Error(ERROR_DISCONNECTED));
-            }
-        }
-
-        function deleteProject(project, callback) {
-            ASSERT(typeof callback === 'function');
-            if (socketConnected) {
-                var guid = GUID();
-                callbacks[guid] = {
-                    cb: callback,
-                    to: setTimeout(callbackTimeout, gmeConfig.storage.timeout, guid)
-                };
-                socket.emit('deleteProject', project, function (err) {
-                    if (callbacks[guid]) {
-                        clearTimeout(callbacks[guid].to);
-                        delete callbacks[guid];
-                        callback(err);
-                    }
-                });
-            } else {
-                callback(new Error(ERROR_DISCONNECTED));
-            }
-        }
-
-        function getNextServerEvent(latestGuid, callback) {
-            if (socketConnected) {
-                var guid = GUID();
-                callbacks[guid] = {
-                    cb: callback,
-                    to: setTimeout(callbackTimeout, gmeConfig.storage.timeout, guid)
-                };
-                socket.emit('getNextServerEvent', latestGuid, function (err, newGuid, eventParams) {
-                    if (callbacks[guid]) {
-                        clearTimeout(callbacks[guid].to);
-                        delete callbacks[guid];
-                        callback(err, newGuid, eventParams);
-                    }
-                });
-            }
-        }
-
-        function openProject(project, callback) {
-            ASSERT(typeof callback === 'function');
-            var ownId = GUID();
-            if (projects[project]) {
-                registerProject(ownId, project);
-                callback(null, projects[project]);
-            } else {
-                if (socketConnected) {
-                    var guid = GUID();
-                    callbacks[guid] = {
-                        cb: callback,
-                        to: setTimeout(callbackTimeout, gmeConfig.storage.timeout, guid)
-                    };
-                    socket.emit('openProject', project, function (err) {
-                        if (!err) {
-                            registerProject(ownId, project);
-                            if (callbacks[guid]) {
-                                clearTimeout(callbacks[guid].to);
-                                delete callbacks[guid];
-                                projects[project] = {
-                                    fsyncDatabase: fsync,
-                                    getDatabaseStatus: getDatabaseStatus,
-                                    closeProject: closeProject,
-                                    loadObject: loadObject,
-                                    insertObject: insertObject,
-                                    getInfo: getInfo,
-                                    setInfo: setInfo,
-                                    findHash: findHash,
-                                    dumpObjects: dumpObjects,
-                                    getBranchNames: getBranchNames,
-                                    getBranchHash: getBranchHash,
-                                    setBranchHash: setBranchHash,
-                                    getCommits: getCommits,
-                                    makeCommit: makeCommit,
-                                    getCommonAncestorCommit: getCommonAncestorCommit,
-                                    ID_NAME: '_id'
-                                };
-                                callback(null, projects[project]);
-                            }
-                        } else {
-                            callback(err, null);
-                        }
-                    });
-                } else {
-                    callback(new Error(ERROR_DISCONNECTED));
-                }
-            }
-
-            //functions
-            function fsync(callback) {
-                ASSERT(typeof callback === 'function');
-                if (socketConnected) {
-                    var guid = GUID();
-                    callbacks[guid] = {
-                        cb: callback,
-                        to: setTimeout(callbackTimeout, gmeConfig.storage.timeout, guid)
-                    };
-                    flushSaveBucket();
-                    socket.emit('fsyncDatabase', project, function (err) {
-                        if (callbacks[guid]) {
-                            clearTimeout(callbacks[guid].to);
-                            delete callbacks[guid];
-                            callback(err);
-                        }
-                    });
-                } else {
-                    callback(new Error(ERROR_DISCONNECTED));
-                }
-            }
-
-            function getDatabaseStatus(oldstatus, callback) {
-                ASSERT(typeof callback === 'function');
-                if (status !== oldstatus) {
-                    callback(null, status);
-                } else {
-                    var guid = GUID();
-                    getDbStatusCallbacks[guid] = {
-                        cb: callback,
-                        to: setTimeout(callbackTimeout, gmeConfig.storage.timeout, guid)
-                    };
-                    if (socketConnected) {
-                        socket.emit('getDatabaseStatus', oldstatus, function (err, newstatus) {
-                            if (getDbStatusCallbacks[guid]) {
-                                clearTimeout(getDbStatusCallbacks[guid].to);
-                                delete getDbStatusCallbacks[guid];
-                                if (!err && newstatus) {
-                                    status = newstatus;
-                                }
-                                callback(err, newstatus);
-                            }
-                        });
-                    }
-                }
-            }
-
-            function closeProject(callback) {
-                callback = callback || function () {
-                };
-                if (unRegisterProject(ownId, project)) {
-                    var guid = GUID();
-                    callbacks[guid] = {
-                        cb: callback,
-                        to: setTimeout(callbackTimeout, gmeConfig.storage.timeout, guid)
-                    };
-                    socket.emit('closeProject', project, function (err) {
-                        if (callbacks[guid]) {
-                            clearTimeout(callbacks[guid].to);
-                            delete callbacks[guid];
-                            callback(err);
-                        }
-                    });
-                } else {
-                    callback(null);
-                }
-            }
-
-            function _loadObject(hash, callback) {
-                socket.emit('loadObject', project, hash, callback);
-            }
-
-            function loadObject(hash, callback) {
-                ASSERT(typeof callback === 'function');
-                if (socketConnected) {
-                    if (loadBucketSize === 0) {
-                        ++loadBucketSize;
-                        loadBucket.push({hash: hash, cb: callback});
-                        loadBucketTimer = setTimeout(function () {
-                            var myBucket = loadBucket;
-                            loadBucket = [];
-                            loadBucketTimer = null;
-                            loadBucketSize = 0;
-                            loadObjects(myBucket);
-                        }, 10);
-                    } else if (loadBucketSize === 99) {
-                        loadBucket.push({hash: hash, cb: callback});
-                        var myBucket = loadBucket;
-                        loadBucket = [];
-                        clearTimeout(loadBucketTimer);
-                        loadBucketTimer = null;
-                        loadBucketSize = 0;
-                        loadObjects(myBucket);
-                    } else {
-                        loadBucket.push({hash: hash, cb: callback});
-                        ++loadBucketSize;
-                    }
-                } else {
-                    callback(new Error(ERROR_DISCONNECTED));
-                }
-            }
-
-            var loadBucket = [],
-                loadBucketSize = 0,
-                loadBucketTimer;
-
-            function loadObjects(hashedObjects) {
-                var hashes = {},
-                    i;
-                for (i = 0; i < hashedObjects.length; i++) {
-                    hashes[hashedObjects[i].hash] = true;
-                }
-                hashes = Object.keys(hashes);
-                socket.emit('loadObjects', project, hashes, function (err, results) {
-                    for (i = 0; i < hashedObjects.length; i++) {
-                        hashedObjects[i].cb(err, results[hashedObjects[i].hash]);
-                    }
-                });
-
-            }
-
-            function insertObject(object, callback) {
-                ASSERT(typeof callback === 'function');
-                if (socketConnected) {
-                    if (saveBucket.length === 0) {
-                        saveBucket.push({object: object, cb: callback});
-                        saveBucketTimer = setTimeout(function () {
-                            flushSaveBucket();
-                        }, 10);
-                    } else if (saveBucket.length === 99) {
-                        saveBucket.push({object: object, cb: callback});
-                        flushSaveBucket();
-                    } else {
-                        saveBucket.push({object: object, cb: callback});
-                    }
-                } else {
-                    callback(new Error(ERROR_DISCONNECTED));
-                }
-            }
-
-            var saveBucket = [],
-                saveBucketTimer;
-
-            function flushSaveBucket() {
-                var myBucket = saveBucket;
-                saveBucket = [];
-                try {
-                    clearTimeout(saveBucketTimer);
-                } catch (e) {
-                    //TODO there is no task to do here
-                }
-                saveBucketTimer = null;
-                if (myBucket.length > 0) {
-                    insertObjects(myBucket);
-                }
-            }
-
-            function insertObjects(objects) {
-                var storeObjects = [],
-                    i;
-                for (i = 0; i < objects.length; i++) {
-                    storeObjects.push(objects[i].object);
-                }
-                socket.emit('insertObjects', project, storeObjects, function (err) {
-                    for (i = 0; i < objects.length; i++) {
-                        objects[i].cb(err);
-                    }
-                });
-            }
-
-            function _insertObject(object, callback) {
-                ASSERT(typeof callback === 'function');
-                if (socketConnected) {
-                    var guid = GUID();
-                    callbacks[guid] = {
-                        cb: callback,
-                        to: setTimeout(callbackTimeout, gmeConfig.storage.timeout, guid)
-                    };
-                    socket.emit('insertObject', project, object, function (err) {
-                        if (callbacks[guid]) {
-                            clearTimeout(callbacks[guid].to);
-                            delete callbacks[guid];
-                            callback(err);
-                        }
-                    });
-                } else {
-                    callback(new Error(ERROR_DISCONNECTED));
-                }
-            }
-
-            function getInfo(callback) {
-                ASSERT(typeof callback === 'function');
-                if (socketConnected) {
-                    var guid = GUID();
-                    callbacks[guid] = {
-                        cb: callback,
-                        to: setTimeout(callbackTimeout, gmeConfig.storage.timeout, guid)
-                    };
-                    socket.emit('getInfo', project, function (err, info) {
-                        if (callbacks[guid]) {
-                            clearTimeout(callbacks[guid].to);
-                            delete callbacks[guid];
-                            callback(err, info);
-                        }
-                    });
-                } else {
-                    callback(new Error(ERROR_DISCONNECTED));
-                }
-            }
-
-            function setInfo(info, callback) {
-                ASSERT(typeof info === 'object' && typeof callback === 'function');
-                if (socketConnected) {
-                    var guid = GUID();
-                    callbacks[guid] = {
-                        cb: callback,
-                        to: setTimeout(callbackTimeout, gmeConfig.storage.timeout, guid)
-                    };
-                    socket.emit('setInfo', project, info, function (err) {
-                        if (callbacks[guid]) {
-                            clearTimeout(callbacks[guid].to);
-                            delete callbacks[guid];
-                            callback(err);
-                        }
-                    });
-                } else {
-                    callback(new Error(ERROR_DISCONNECTED));
-                }
-            }
-
-            function findHash(beginning, callback) {
-                ASSERT(typeof callback === 'function');
-                if (socketConnected) {
-                    var guid = GUID();
-                    callbacks[guid] = {
-                        cb: callback,
-                        to: setTimeout(callbackTimeout, gmeConfig.storage.timeout, guid)
-                    };
-                    socket.emit('findHash', project, beginning, function (err) {
-                        if (callbacks[guid]) {
-                            clearTimeout(callbacks[guid].to);
-                            delete callbacks[guid];
-                            callback(err);
-                        }
-                    });
-                } else {
-                    callback(new Error(ERROR_DISCONNECTED));
-                }
-            }
-
-            function dumpObjects(callback) {
-                ASSERT(typeof callback === 'function');
-                if (socketConnected) {
-                    var guid = GUID();
-                    callbacks[guid] = {
-                        cb: callback,
-                        to: setTimeout(callbackTimeout, gmeConfig.storage.timeout, guid)
-                    };
-                    socket.emit('dumpObjects', project, function (err) {
-                        if (callbacks[guid]) {
-                            clearTimeout(callbacks[guid].to);
-                            delete callbacks[guid];
-                            callback(err);
-                        }
-                    });
-                } else {
-                    callback(new Error(ERROR_DISCONNECTED));
-                }
-            }
-
-            function getBranchNames(callback) {
-                ASSERT(typeof callback === 'function');
-                if (socketConnected) {
-                    var guid = GUID();
-                    callbacks[guid] = {
-                        cb: callback,
-                        to: setTimeout(callbackTimeout, gmeConfig.storage.timeout, guid)
-                    };
-                    socket.emit('getBranchNames', project, function (err, names) {
-                        if (callbacks[guid]) {
-                            clearTimeout(callbacks[guid].to);
-                            delete callbacks[guid];
-                            callback(err, names);
-                        }
-                    });
-                } else {
-                    callback(new Error(ERROR_DISCONNECTED));
-                }
-            }
-
-            function getBranchHash(branch, oldhash, callback) {
-                ASSERT(typeof callback === 'function');
-                var guid = GUID();
-                if (getBranchHashCallbacks[branch]) {
-                    //internal hack for recalling
-                    guid = branch;
-                    branch = getBranchHashCallbacks[guid].branch;
-                } else {
-                    getBranchHashCallbacks[guid] = {
-                        cb: callback,
-                        to: setTimeout(callbackTimeout, gmeConfig.storage.timeout, guid),
-                        branch: branch,
-                        oldhash: oldhash,
-                        project: project
-                    };
-                }
-
-                if (socketConnected) {
-                    socket.emit('getBranchHash', project, branch, oldhash, function (err, newhash, forkedhash) {
-                        if (getBranchHashCallbacks[guid]) {
-                            clearTimeout(getBranchHashCallbacks[guid].to);
-                            delete getBranchHashCallbacks[guid];
-                            callback(err, newhash, forkedhash);
-                        }
-                    });
-                }
-
-            }
-
-            function setBranchHash(branch, oldhash, newhash, callback) {
-                ASSERT(typeof callback === 'function');
-                if (socketConnected) {
-                    var guid = GUID();
-                    callbacks[guid] = {
-                        cb: callback,
-                        to: setTimeout(callbackTimeout, gmeConfig.storage.timeout, guid)
-                    };
-                    flushSaveBucket();
-                    socket.emit('setBranchHash', project, branch, oldhash, newhash, function (err) {
-                        if (callbacks[guid]) {
-                            clearTimeout(callbacks[guid].to);
-                            delete callbacks[guid];
-                            callback(err);
-                        }
-                    });
-                } else {
-                    callback(new Error(ERROR_DISCONNECTED));
-                }
-            }
-
-            function getCommits(before, number, callback) {
-                ASSERT(typeof callback === 'function');
-                if (socketConnected) {
-                    var guid = GUID();
-                    callbacks[guid] = {
-                        cb: callback,
-                        to: setTimeout(callbackTimeout, gmeConfig.storage.timeout, guid)
-                    };
-                    socket.emit('getCommits', project, before, number, function (err, commits) {
-                        if (callbacks[guid]) {
-                            clearTimeout(callbacks[guid].to);
-                            delete callbacks[guid];
-                            callback(err, commits);
-                        }
-                    });
-                } else {
-                    callback(new Error(ERROR_DISCONNECTED));
-                }
-            }
-
-            function makeCommit(parents, roothash, msg, callback) {
-                ASSERT(typeof callback === 'function');
-                if (socketConnected) {
-                    var guid = GUID();
-                    callbacks[guid] = {
-                        cb: callback,
-                        to: setTimeout(callbackTimeout, gmeConfig.storage.timeout, guid)
-                    };
-                    socket.emit('makeCommit', project, parents, roothash, msg, function (err) {
-                        if (callbacks[guid]) {
-                            clearTimeout(callbacks[guid].to);
-                            delete callbacks[guid];
-                            callback(err);
-                        }
-                    });
-                } else {
-                    callback(new Error(ERROR_DISCONNECTED));
-                }
-            }
-
-            function getCommonAncestorCommit(commitA, commitB, callback) {
-                ASSERT(typeof callback === 'function');
-                if (socketConnected) {
-                    var guid = GUID();
-                    callbacks[guid] = {
-                        cb: callback,
-                        to: setTimeout(callbackTimeout, gmeConfig.storage.timeout, guid)
-                    };
-                    socket.emit('getCommonAncestorCommit', project, commitA, commitB, function (err, commit) {
-                        if (callbacks[guid]) {
-                            clearTimeout(callbacks[guid].to);
-                            delete callbacks[guid];
-                            callback(err, commit);
-                        }
-                    });
-                } else {
-                    callback(new Error(ERROR_DISCONNECTED));
-                }
-            }
-        }
-
-        function simpleRequest(parameters, callback) {
-            ASSERT(typeof callback === 'function');
-            if (socketConnected) {
-                var guid = GUID();
-                callbacks[guid] = {
-                    cb: callback,
-                    to: setTimeout(callbackTimeout, 100 * gmeConfig.storage.timeout, guid)
-                };
-                socket.emit('simpleRequest', parameters, function (err, resId) {
-                    if (callbacks[guid]) {
-                        clearTimeout(callbacks[guid].to);
-                        delete callbacks[guid];
-                        callback(err, resId);
-                    }
-                });
-            } else {
-                callback(new Error(ERROR_DISCONNECTED));
-            }
-        }
-
-        function simpleResult(resultId, callback) {
-            ASSERT(typeof callback === 'function');
-            if (socketConnected) {
-                var guid = GUID();
-                callbacks[guid] = {
-                    cb: callback,
-                    to: setTimeout(callbackTimeout, 100 * gmeConfig.storage.timeout, guid)
-                };
-                socket.emit('simpleResult', resultId, function (err, result) {
-                    if (callbacks[guid]) {
-                        clearTimeout(callbacks[guid].to);
-                        delete callbacks[guid];
-                        callback(err, result);
-                    }
-                });
-            } else {
-                callback(new Error(ERROR_DISCONNECTED));
-            }
-        }
-
-        function simpleQuery(workerId, parameters, callback) {
-            ASSERT(typeof callback === 'function');
-            if (socketConnected) {
-                var guid = GUID();
-                callbacks[guid] = {
-                    cb: callback,
-                    to: setTimeout(callbackTimeout, 100 * gmeConfig.storage.timeout, guid)
-                };
-                socket.emit('simpleQuery', workerId, parameters, function (err, result) {
-                    if (callbacks[guid]) {
-                        clearTimeout(callbacks[guid].to);
-                        delete callbacks[guid];
-                        callback(err, result);
-                    }
-                });
-            } else {
-                callback(new Error(ERROR_DISCONNECTED));
-            }
-        }
-
-        function getToken(callback) {
-            ASSERT(typeof callback === 'function');
-            if (socketConnected) {
-                var guid = GUID();
-                callbacks[guid] = {
-                    cb: callback,
-                    to: setTimeout(callbackTimeout, 100 * gmeConfig.storage.timeout, guid)
-                };
-                socket.emit('getToken', function (err, result) {
-                    if (callbacks[guid]) {
-                        clearTimeout(callbacks[guid].to);
-                        delete callbacks[guid];
-                        callback(err, result);
-                    }
-                });
-            } else {
-                callback(new Error(ERROR_DISCONNECTED));
-            }
-        }
-
-        return {
-            openDatabase: openDatabase,
-            closeDatabase: closeDatabase,
-            fsyncDatabase: fsyncDatabase,
-            getDatabaseStatus: getDatabaseStatus,
-            getProjectNames: getProjectNames,
-            getAllowedProjectNames: getAllowedProjectNames,
-            getAuthorizationInfo: getAuthorizationInfo,
-            deleteProject: deleteProject,
-            openProject: openProject,
-            simpleRequest: simpleRequest,
-            simpleResult: simpleResult,
-            simpleQuery: simpleQuery,
-            getNextServerEvent: getNextServerEvent,
-            getToken: getToken
-        };
-    }
-
-    return Database;
-});
-
-/*globals define*/
-/*jshint node: true, browser: true*/
-
-/**
- * @author kecso / https://github.com/kecso
- */
-
-define('common/storage/failsafe',['common/util/assert'], function (ASSERT) {
-    
-    var BRANCH_OBJ_ID = '*branch*'; // MAGIC CONSTANT
-    var BRANCH_STATES = {  // MAGIC CONSTANT
-        SYNC: 'sync',
-        FORKED: 'forked',
-        DISCONNECTED: 'disconnected',
-        AHEAD: 'ahead'
-    };
-
-    function Database(_database, options) {
-        ASSERT(typeof _database === 'object');
-        ASSERT(typeof options === 'object');
-        ASSERT(typeof options.logger !== 'undefined');
-        ASSERT(typeof options.globConf === 'object');
-        var gmeConfig = options.globConf;
-        //logger = options.logger.fork('failsafe');
-
-        var exceptionErrors = [],
-            fsId = 'FS', // MAGIC CONSTANT
-            dbId = 'noID', // MAGIC CONSTANT
-            SEPARATOR = '$', // MAGIC CONSTANT
-            STATUS_CONNECTED = 'connected', // MAGIC CONSTANT
-            pendingStorage = {},
-            storage = null;
-
-        function loadPending() {
-            for (var i = 0; i < storage.length; i++) {
-                if (storage.key(i).indexOf(fsId) === 0) {
-                    var keyArray = storage.key(i).split(SEPARATOR);
-                    ASSERT(keyArray.length === 4);
-                    if (keyArray[1] === dbId) {
-                        var object = JSON.parse(storage.getItem(storage.key(i)));
-                        pendingStorage[keyArray[2]] = object;
-                    }
-                }
-            }
-            for (i in pendingStorage) {
-                if (!pendingStorage[i][BRANCH_OBJ_ID]) {
-                    pendingStorage[i][BRANCH_OBJ_ID] = {};
-                }
-            }
-        }
-
-        function savePending() {
-            //TODO maybe some check would be good, but not necessarily
-            for (var i in pendingStorage) {
-                storage.setItem(fsId + SEPARATOR + dbId + SEPARATOR + i, JSON.stringify(pendingStorage[i]));
-            }
-        }
-
-        function openDatabase(callback) {
-            if (gmeConfig.storage.failSafe === 'local' && localStorage) {
-                storage = localStorage;
-            } else if (gmeConfig.storage.failSafe === 'session' && sessionStorage) {
-                storage = sessionStorage;
-            } else if (gmeConfig.storage.failSafe === 'memory') {
-                storage = {
-                    length: 0,
-                    keys: [],
-                    data: {},
-                    getItem: function (key) {
-                        ASSERT(typeof key === 'string');
-                        return this.data[key];
-                    },
-                    setItem: function (key, object) {
-                        ASSERT(typeof key === 'string' && typeof object === 'string');
-                        this.data[key] = object;
-                        this.keys.push(key);
-                        this.length++;
-                    },
-                    key: function (index) {
-                        return this.keys[index];
-                    }
-                };
-            }
-
-            if (storage) {
-                loadPending();
-                setInterval(savePending, gmeConfig.storage.failSafeFrequency);
-                _database.openDatabase(callback);
-            } else {
-                callback(new Error('cannot initialize fail safe storage'));
-            }
-        }
-
-        function openProject(projectName, callback) {
-            var project = null;
-            var inSync = true;
-            _database.openProject(projectName, function (err, proj) {
-                if (!err && proj) {
-                    project = proj;
-                    if (!pendingStorage[projectName]) {
-                        pendingStorage[projectName] = {};
-                        pendingStorage[projectName][BRANCH_OBJ_ID] = {};
-                    }
-                    callback(null, {
-                        fsyncDatabase: project.fsyncDatabase,
-                        getDatabaseStatus: project.getDatabaseStatus,
-                        closeProject: project.closeProject,
-                        loadObject: loadObject,
-                        insertObject: insertObject,
-                        getInfo: project.getInfo,
-                        setInfo: project.setInfo,
-                        findHash: project.findHash,
-                        dumpObjects: project.dumpObjects,
-                        getBranchNames: getBranchNames,
-                        getBranchHash: getBranchHash,
-                        setBranchHash: setBranchHash,
-                        getCommits: project.getCommits,
-                        makeCommit: project.makeCommit,
-                        getCommonAncestorCommit: project.getCommonAncestorCommit,
-                        ID_NAME: project.ID_NAME
-                    });
-                } else {
-                    callback(err, project);
-                }
-            });
-
-            function synchronise(callback) {
-                if (pendingStorage[projectName]) {
-                    var objects = [];
-                    var count = 0;
-                    var savingObject = function (object, cb) {
-                        project.insertObject(object, function (err) {
-                            if (err) {
-                                if (!pendingStorage[projectName]) {
-                                    pendingStorage[projectName] = {};
-                                }
-                                pendingStorage[projectName][object._id] = object;
-                            }
-                            cb();
-                        });
-                    };
-                    var objectProcessed = function () {
-                        if (--count === 0) {
-                            callback();
-                        }
-                    };
-
-                    for (var i in pendingStorage[projectName]) {
-                        if (i !== BRANCH_OBJ_ID) {
-                            objects.push(pendingStorage[projectName][i]);
-                        }
-                    }
-                    var branchObj = pendingStorage[projectName][BRANCH_OBJ_ID];
-                    pendingStorage[projectName] = {};
-                    pendingStorage[projectName][BRANCH_OBJ_ID] = branchObj;
-
-                    //synchronizing the branches
-                    var aheadBranches = [];
-                    for (i in pendingStorage[projectName][BRANCH_OBJ_ID]) {
-                        if (pendingStorage[projectName][BRANCH_OBJ_ID][i].state === BRANCH_STATES.DISCONNECTED) {
-                            if (pendingStorage[projectName][BRANCH_OBJ_ID][i].local.length > 0) {
-                                pendingStorage[projectName][BRANCH_OBJ_ID][i].state = BRANCH_STATES.AHEAD;
-                                //we try to save our local head
-                                aheadBranches.push(i);
-                            } else {
-                                pendingStorage[projectName][BRANCH_OBJ_ID][i].state = BRANCH_STATES.SYNC;
-                            }
-                        }
-                    }
-
-                    count = objects.length + aheadBranches.length;
-                    for (i = 0; i < aheadBranches.length; i++) {
-                        synchroniseBranch(aheadBranches[i], objectProcessed);
-                    }
-                    for (i = 0; i < objects.length; i++) {
-                        savingObject(objects[i], objectProcessed);
-                    }
-                    if (objects.length === 0) {
-                        callback();
-                    }
-                } else {
-                    callback();
-                }
-            }
-
-            function synchroniseBranch(branchname, callback) {
-                var branchObj = pendingStorage[projectName][BRANCH_OBJ_ID][branchname];
-                project.getBranchHash(branchname, branchObj.local[0], function (err, newhash /*, forked*/) {
-                    if (!err && newhash) {
-                        var index = branchObj.unackedSentHashes.indexOf(newhash);
-                        if (index !== -1) {
-                            // the server will catch up eventually...
-                        } else if (branchObj.local.indexOf(newhash) !== -1) {
-                            project.setBranchHash(branchname, newhash, branchObj.local[0], callback);
-                        } else {
-                            //we forked
-                            branchObj.state = BRANCH_STATES.FORKED;
-                            branchObj.fork = newhash;
-                            callback(null);
-                        }
-                    } else {
-                        callback(err);
-                    }
-                });
-            }
-
-            function errorMode() {
-                if (inSync) {
-                    inSync = false;
-                    for (var i in pendingStorage[projectName][BRANCH_OBJ_ID]) {
-                        if (pendingStorage[projectName][BRANCH_OBJ_ID][i].state !== BRANCH_STATES.FORKED) {
-                            pendingStorage[projectName][BRANCH_OBJ_ID][i].state = BRANCH_STATES.DISCONNECTED;
-                        }
-                    }
-                    var checkIfAvailable = function (err, newstate) {
-                        if (newstate === STATUS_CONNECTED) {
-                            synchronise(function () {
-                                inSync = true;
-                            });
-                        } else {
-                            project.getDatabaseStatus(newstate, checkIfAvailable);
-                        }
-                    };
-                    project.getDatabaseStatus(null, checkIfAvailable);
-                }
-            }
-
-            function loadObject(hash, callback) {
-                project.loadObject(hash, function (err, object) {
-                    if (!err && object) {
-                        callback(null, object);
-                    } else {
-                        errorMode();
-                        if (exceptionErrors.indexOf(err) !== -1) {
-                            callback(err, object);
-                        } else {
-                            if (pendingStorage[projectName] && pendingStorage[projectName][hash]) {
-                                callback(null, pendingStorage[projectName][hash]);
-                            } else {
-                                callback(err, object);
-                            }
-                        }
-                    }
-                });
-            }
-
-            function insertObject(object, callback) {
-                project.insertObject(object, function (err) {
-                    if (err) {
-                        errorMode();
-                        if (exceptionErrors.indexOf(err) !== -1) {
-                            callback(err);
-                        } else {
-                            //TODO have to check if the id is already taken...
-                            if (!pendingStorage[projectName]) {
-                                pendingStorage[projectName] = {};
-                            }
-                            pendingStorage[projectName][object._id] = object;
-                            callback(null);
-                        }
-                    } else {
-                        callback(err);
-                    }
-                });
-            }
-
-            function getBranchNames(callback) {
-                project.getBranchNames(function (err, names) {
-                    //we need the locally stored names either way
-                    var locals = {};
-                    for (var i in pendingStorage[projectName][BRANCH_OBJ_ID]) {
-                        if (pendingStorage[projectName][BRANCH_OBJ_ID][i].local.length > 0) {
-                            locals[i] = pendingStorage[projectName][BRANCH_OBJ_ID][i].local[0];
-                        } else if (pendingStorage[projectName][BRANCH_OBJ_ID][i].fork === null &&
-                            pendingStorage[projectName][BRANCH_OBJ_ID][i].remote !== null) {
-
-                            locals[i] = pendingStorage[projectName][BRANCH_OBJ_ID][i].remote;
-                        }
-                    }
-
-                    if (err) {
-                        errorMode();
-                        if (exceptionErrors.indexOf(err) !== -1) {
-                            callback(err);
-                        } else {
-                            callback(null, locals);
-                        }
-                    } else {
-                        for (i in names) {
-                            if (!locals[i]) {
-                                locals[i] = names[i];
-                            } else if (locals[i] === pendingStorage[projectName][BRANCH_OBJ_ID][i].remote) {
-                                locals[i] = names[i];
-                            }
-                        }
-                        callback(err, locals);
-                    }
-                });
-            }
-
-            function getBranchHash(branch, oldhash, callback) {
-                if (!pendingStorage[projectName][BRANCH_OBJ_ID][branch]) {
-                    pendingStorage[projectName][BRANCH_OBJ_ID][branch] = {
-                        local: [],
-                        fork: null,
-                        state: BRANCH_STATES.SYNC,
-                        remote: null
-                    };
-                }
-                var branchObj = pendingStorage[projectName][BRANCH_OBJ_ID][branch];
-
-                if (branchObj.state === BRANCH_STATES.SYNC || branchObj.state === BRANCH_STATES.AHEAD) {
-                    project.getBranchHash(branch, oldhash, function (err, newhash, forkedhash) {
-                        if (!err && newhash) {
-                            branchObj.remote = newhash;
-                        }
-                        switch (branchObj.state) {
-                            case BRANCH_STATES.SYNC:
-                                callback(err, newhash, forkedhash);
-                                break;
-                            case BRANCH_STATES.AHEAD:
-                                if (err) {
-                                    callback(err, newhash, forkedhash);
-                                } else {
-                                    var index = branchObj.unackedSentHashes.indexOf(newhash);
-                                    if (newhash && index !== -1) {
-                                        callback(err, newhash, forkedhash);
-                                    } else {
-                                        //we forked!!!
-                                        branchObj.state = BRANCH_STATES.FORKED;
-                                        branchObj.fork = newhash;
-                                        callback(null, branchObj.local[0], branchObj.fork);
-                                    }
-                                }
-                                break;
-                            case BRANCH_STATES.DISCONNECTED:
-                                callback(null, branchObj.local[0], branchObj.fork);
-                                break;
-                            default://forked
-                                callback(null, branchObj.local[0], branchObj.fork);
-                                break;
-                        }
-                    });
-                } else {
-                    //served locally
-                    ASSERT((branchObj.local[0] && branchObj.local[0] !== '') || branchObj.remote);
-                    var myhash = null;
-                    if (branchObj.local[0]) {
-                        myhash = branchObj.local[0];
-                    } else {
-                        myhash = branchObj.remote;
-                    }
-
-                    if (myhash === oldhash) {
-                        setTimeout(function () {
-                            callback(null, oldhash, branchObj.fork);
-                        }, gmeConfig.storage.timeout);
-                    } else {
-                        callback(null, myhash, branchObj.fork);
-                    }
-
-                }
-            }
-
-            function setBranchHash(branch, oldhash, newhash, callback) {
-                ASSERT(typeof oldhash === 'string' && typeof newhash === 'string');
-                if (!pendingStorage[projectName][BRANCH_OBJ_ID][branch]) {
-                    pendingStorage[projectName][BRANCH_OBJ_ID][branch] = {
-                        local: [],
-                        fork: null,
-                        state: BRANCH_STATES.SYNC
-                    };
-                }
-                var branchObj = pendingStorage[projectName][BRANCH_OBJ_ID][branch];
-
-                var returnFunction = function (err) {
-                    if (!err) {
-                        var index = branchObj.local.indexOf(newhash);
-                        // setBranchHash may return out of order, so this will not hold:
-                        // ASSERT(index !== -1 || branchObj.state === BRANCH_STATES.SYNC);
-                        if (index !== -1) {
-                            branchObj.local.splice(index, branchObj.local.length - index);
-                        }
-                        index = branchObj.unackedSentHashes.indexOf(newhash);
-                        if (index !== -1) {
-                            branchObj.unackedSentHashes.splice(index + 1, branchObj.unackedSentHashes.length);
-                        }
-                        if (branchObj.local.length === 0) {
-                            branchObj.state = BRANCH_STATES.SYNC;
-                        }
-                    } else {
-                        /*//we go to disconnected state
-                         ASSERT(branchObj.local.length > 0);
-                         if(branchObj.state !== BRANCH_STATES.DISCONNECTED){
-                         branchObj.state = BRANCH_STATES.DISCONNECTED;
-                         var reSyncBranch = function(err,newhash,forkedhash){
-                         if(!err && newhash){
-                         if(branchObj.local.indexOf(newhash) === -1){
-                         //we forked
-                         branchObj.fork = newhash;
-                         branchObj.state = BRANCH_STATES.FORKED;
-                         } else {
-                         setBranchHash(branch,newhash,branchObj.local[0],function(){});
-                         }
-                         } else {
-                         //timeout or something not correct, so we should retry
-                         project.getBranchHash(branch,branchObj.local[0],reSyncBranch);
-                         }
-                         };
-                         project.getBranchHash(branch,branchObj.local[0],reSyncBranch);
-                         }*/
-                        //we have ancountered an error
-                        errorMode();
-                    }
-                };
-
-                switch (branchObj.state) {
-                    case BRANCH_STATES.SYNC:
-                        ASSERT(branchObj.local.length === 0);
-                        branchObj.state = BRANCH_STATES.AHEAD;
-                        branchObj.local = [newhash, oldhash];
-                        branchObj.unackedSentHashes = [newhash, oldhash];
-                        project.setBranchHash(branch, oldhash, newhash, returnFunction);
-                        callback(null);
-                        return;
-                    case BRANCH_STATES.AHEAD:
-                        ASSERT(branchObj.local.length > 0);
-                        if (oldhash === branchObj.local[0]) {
-                            branchObj.local.unshift(newhash);
-                            branchObj.unackedSentHashes.unshift(newhash);
-                            project.setBranchHash(branch, oldhash, newhash, returnFunction);
-                            callback(null);
-                        } else {
-                            callback(new Error('branch hash mismatch'));
-                        }
-                        return;
-                    case BRANCH_STATES.DISCONNECTED:
-                        /*ASSERT(branchObj.local.length > 0 || branchObj.remote);
-                         if(oldhash === branchObj.local[0] || oldhash === branchObj.remote){
-                         if(branchObj.local.length === 0){
-                         branchObj.local = [newhash,oldhash];
-                         } else {
-                         branchObj.local.unshift(newhash);
-                         }
-                         callback(null);
-                         } else {
-                         callback(new Error('branch hash mismatch'));
-                         }*/
-                        if (branchObj.local.length === 0) {
-                            branchObj.local = [newhash, oldhash];
-                            callback(null);
-                        } else {
-                            if (oldhash === branchObj.local[0]) {
-                                branchObj.local.unshift(newhash);
-                                callback(null);
-                            } else {
-                                callback(new Error('branch hash mismatch'));
-                            }
-                        }
-                        return;
-                    default: //BRANCH_STATES.FORKED
-                        ASSERT(branchObj.local.length > 0 && branchObj.fork);
-                        if (oldhash === branchObj.local[0]) {
-                            if (branchObj.fork === newhash) {
-                                //clearing the forked leg
-                                branchObj.fork = null;
-                                branchObj.state = BRANCH_STATES.SYNC;
-                                branchObj.local = [];
-                            } else {
-                                branchObj.local.unshift(newhash);
-                            }
-                            callback(null);
-                        } else {
-                            callback(new Error('branch hash mismatch'));
-                        }
-                        return;
-                }
-            }
-        }
-
-        return {
-            openDatabase: openDatabase,
-            closeDatabase: _database.closeDatabase,
-            fsyncDatabase: _database.fsyncDatabase,
-            getProjectNames: _database.getProjectNames,
-            getAllowedProjectNames: _database.getAllowedProjectNames,
-            getAuthorizationInfo: _database.getAuthorizationInfo,
-            getDatabaseStatus: _database.getDatabaseStatus,
-            openProject: openProject,
-            deleteProject: _database.deleteProject,
-            simpleRequest: _database.simpleRequest,
-            simpleResult: _database.simpleResult,
-            simpleQuery: _database.simpleQuery,
-            getNextServerEvent: _database.getNextServerEvent,
-            getToken: _database.getToken
-        };
-    }
-
-    return Database;
-});
-
-/*globals define*/
-/*jshint node: true, browser: true*/
-
-/**
- * @author mmaroti / https://github.com/mmaroti
- */
-
-define('common/storage/cache',['common/util/assert'], function (ASSERT) {
-    
-
-    var Lock = function () {
-        var waiters = [];
-
-        return {
-            lock: function (func) {
-                waiters.push(func);
-                if (waiters.length === 1) {
-                    func();
-                }
-            },
-
-            unlock: function () {
-                waiters.shift();
-                if (waiters.length >= 1) {
-                    var func = waiters[0];
-                    func();
-                }
-            }
-        };
-    };
-
-    var Database = function (database, options) {
-        ASSERT(typeof options === 'object');
-        ASSERT(typeof options.logger !== 'undefined');
-        ASSERT(typeof options.globConf === 'object');
-        var gmeConfig = options.globConf,
-            logger = options.logger.fork('cache');
-        logger.debug('Initializing');
-        ASSERT(typeof database === 'object' && typeof gmeConfig === 'object');
-
-        var projects = {};
-        var dlock = new Lock();
-
-        function openProject(name, callback) {
-            ASSERT(typeof name === 'string' && typeof callback === 'function');
-
-            logger.debug('openProject', {metadata: {name: name}});
-
-            dlock.lock(function () {
-                if (typeof projects[name] !== 'undefined') {
-                    projects[name].reopenProject(callback);
-                    dlock.unlock();
-                } else {
-                    database.openProject(name, function (err, project) {
-                        if (err) {
-                            callback(err);
-                        } else {
-                            project = wrapProject(name, project);
-                            projects[name] = project;
-                            project.reopenProject(callback);
-                        }
-                        dlock.unlock();
-                    });
-                }
-            });
-        }
-
-        function closeDatabase(callback) {
-            logger.debug('closeDatabase');
-
-            dlock.lock(function () {
-                var n;
-                for (n in projects) {
-                    projects[n].abortProject();
-                }
-                projects = {};
-                database.closeDatabase(callback);
-                dlock.unlock();
-            });
-        }
-
-        function deleteProject(name, callback) {
-            logger.debug('deleteProject', {metadata: {name: name}});
-
-            if (typeof projects[name] !== 'undefined') {
-                projects[name].deleteProject();
-            }
-
-            database.deleteProject(name, callback);
-        }
-
-        function wrapProject(name, project) {
-            var ID_NAME = project.ID_NAME;
-
-            var refcount = 0;
-            var missing = {};
-            var backup = {};
-            var cache = {};
-            var cacheSize = 0;
-
-            var wrapLogger = logger.fork('wrapProject:' + name);
-            wrapLogger.debug('Initializing');
-
-            function tryFreeze(o) {
-                try {
-                    Object.freeze(o);
-                }
-                catch (e) {
-                    //TODO find the proper answer why this can occur
-                    return;
-                }
-            }
-
-            function maybeFreeze(o) {
-                if (o !== null && typeof o === 'object') {
-                    deepFreeze(o);
-                }
-            }
-
-            var deepFreeze = function (obj) {
-                ASSERT(typeof obj === 'object');
-
-                tryFreeze(obj);
-
-                var key;
-                for (key in obj) {
-                    maybeFreeze(obj[key]);
-                }
-            };
-            if (gmeConfig.debug === false) {
-                deepFreeze = function () {
-                };
-            }
-
-            function cacheInsert(key, obj) {
-                ASSERT(typeof cache[key] === 'undefined' && obj[ID_NAME] === key);
-                wrapLogger.debug('cacheInsert', {metadata: key});
-
-                deepFreeze(obj);
-                cache[key] = obj;
-
-                if (++cacheSize >= gmeConfig.storage.cache) {
-                    backup = cache;
-                    cache = {};
-                    cacheSize = 0;
-                }
-            }
-
-            function loadObject(key, callback) {
-                ASSERT(typeof key === 'string' && typeof callback === 'function');
-                ASSERT(project !== null);
-                wrapLogger.debug('loadObject', {metadata: key});
-
-                var obj = cache[key];
-                if (typeof obj === 'undefined') {
-                    obj = backup[key];
-                    if (typeof obj === 'undefined') {
-                        obj = missing[key];
-                        if (typeof obj === 'undefined') {
-                            obj = [callback];
-                            missing[key] = obj;
-                            project.loadObject(key, function (err, obj2) {
-                                ASSERT(typeof obj2 === 'object' || typeof obj2 === 'undefined');
-
-                                if (obj.length !== 0) {
-                                    ASSERT(missing[key] === obj);
-
-                                    delete missing[key];
-                                    if (!err && obj2) {
-                                        cacheInsert(key, obj2);
-                                    }
-
-                                    var cb;
-                                    while ((cb = obj.pop())) {
-                                        cb(err, obj2);
-                                    }
-                                }
-                            });
-                        } else {
-                            obj.push(callback);
-                        }
-                        return;
-                    } else {
-                        cacheInsert(key, obj);
-                    }
-                }
-
-                ASSERT(typeof obj === 'object' && obj !== null && obj[ID_NAME] === key);
-                callback(null, obj);
-            }
-
-            function insertObject(obj, callback) {
-                ASSERT(typeof obj === 'object' && obj !== null && typeof callback === 'function');
-                wrapLogger.debug('insertObject');
-
-                var key = obj[ID_NAME];
-                ASSERT(typeof key === 'string');
-
-                if (typeof cache[key] !== 'undefined') {
-                    callback(null);
-                    return;
-                } else {
-                    var item = backup[key];
-                    cacheInsert(key, obj);
-
-                    if (typeof item !== 'undefined') {
-                        callback(null);
-                        return;
-                    } else {
-                        item = missing[key];
-                        if (typeof item !== 'undefined') {
-                            delete missing[key];
-
-                            var cb;
-                            while ((cb = item.pop())) {
-                                cb(null, obj);
-                            }
-                        }
-                    }
-                }
-
-                project.insertObject(obj, callback);
-            }
-
-            function abortProject(callback) {
-                wrapLogger.debug('abortProject');
-
-                if (project !== null) {
-                    var p = project;
-                    project = null;
-                    delete projects[name];
-                    deleteProject();
-                    p.closeProject(callback);
-                } else if (typeof callback === 'function') {
-                    callback(null);
-                }
-            }
-
-            function closeProject(callback) {
-                wrapLogger.debug('closeProject', {metadata: {refcount: refcount}});
-
-                if (refcount >= 1) {
-                    if (--refcount === 0) {
-                        abortProject(callback);
-                    } else if (typeof callback === 'function') {
-                        callback(null);
-                    }
-                } else {
-                    wrapLogger.warn('closeProject was called more times than open project');
-                    // nothing to close
-                    callback(null);
-                }
-            }
-
-            function deleteProject() {
-                var key, callbacks, cb, err = new Error('cache closed');
-                wrapLogger.debug('deleteProject');
-
-                for (key in missing) {
-                    callbacks = missing[key];
-                    while ((cb = callbacks.pop())) {
-                        cb(err);
-                    }
-                }
-
-                missing = {};
-                backup = {};
-                cache = {};
-                cacheSize = 0;
-            }
-
-            function reopenProject(callback) {
-                ASSERT(project !== null && refcount >= 0 && typeof callback === 'function');
-                wrapLogger.debug('reopenProject');
-
-                var cacheProject = {};
-                for (var key in project) {
-                    if (project.hasOwnProperty(key)) {
-                        cacheProject[key] = project[key];
-                    }
-                }
-                if (gmeConfig.storage.cache !== 0) {
-                    cacheProject.loadObject = loadObject;
-                    cacheProject.insertObject = insertObject;
-                }
-                cacheProject.closeProject = closeProject;
-
-                ++refcount;
-                callback(null, cacheProject);
-            }
-
-            return {
-                reopenProject: reopenProject,
-                abortProject: abortProject,
-                deleteProject: deleteProject
-            };
-        }
-
-        logger.debug('Ready');
-        return {
-            openDatabase: database.openDatabase,
-            closeDatabase: closeDatabase,
-            fsyncDatabase: database.fsyncDatabase,
-            getDatabaseStatus: database.getDatabaseStatus,
-            getProjectNames: database.getProjectNames,
-            getAllowedProjectNames: database.getAllowedProjectNames,
-            getAuthorizationInfo: database.getAuthorizationInfo,
-            openProject: openProject,
-            deleteProject: deleteProject,
-            simpleRequest: database.simpleRequest,
-            simpleResult: database.simpleResult,
-            simpleQuery: database.simpleQuery,
-            getNextServerEvent: database.getNextServerEvent,
-            getToken: database.getToken
-        };
-    };
-
-    return Database;
-});
-
-/*globals define*/
-/*jshint node: true, browser: true*/
-
-/**
- * @author kecso / https://github.com/kecso
- */
-
-define('common/storage/commit',[
-    'common/util/assert',
-    'common/util/key',
-    'common/regexp'
-], function (ASSERT, GENKEY, REGEXP) {
-    
-
-    function Database(_database, _options) {
-        ASSERT(typeof _database === 'object');
-        ASSERT(typeof _options === 'object');
-        ASSERT(typeof _options.globConf === 'object');
-        ASSERT(typeof _options.logger !== 'undefined');
-
-        var gmeConfig = _options.globConf,
-            logger = _options.logger.fork('commit');
-
-        logger.debug('Initializing');
-
-        function openProject(projectName, callback) {
-
-            var _project = null,
-                projectLogger = logger.fork('project:' + projectName);
-            projectLogger.debug('Initializing');
-
-            _database.openProject(projectName, function (err, proj) {
-                if (!err && proj) {
-                    _project = proj;
-                    callback(null, {
-                        fsyncDatabase: _project.fsyncDatabase,
-                        closeProject: _project.closeProject,
-                        loadObject: _project.loadObject,
-                        insertObject: _project.insertObject,
-                        getInfo: _project.getInfo,
-                        setInfo: _project.setInfo,
-                        findHash: _project.findHash,
-                        dumpObjects: _project.dumpObjects,
-                        getBranchNames: _project.getBranchNames,
-                        getBranchHash: _project.getBranchHash,
-                        setBranchHash: _project.setBranchHash,
-                        getCommits: _project.getCommits,
-                        getCommonAncestorCommit: _project.getCommonAncestorCommit,
-                        makeCommit: makeCommit,
-                        setUser: setUser,
-                        ID_NAME: _project.ID_NAME
-                    });
-                } else {
-                    callback(err, proj);
-                }
-            });
-
-            function makeCommit(parents, roothash, msg, callback) {
-                projectLogger.debug('makeCommit', {metadata: arguments});
-                ASSERT(REGEXP.HASH.test(roothash));
-                ASSERT(typeof callback === 'function');
-
-                parents = parents || [];
-                msg = msg || 'n/a';
-
-                var commitObj = {
-                    root: roothash,
-                    parents: parents,
-                    updater: [_options.user],
-                    time: (new Date()).getTime(),
-                    message: msg,
-                    type: 'commit'
-                };
-
-                var id = '#' + GENKEY(commitObj, gmeConfig);
-                commitObj[_project.ID_NAME] = id;
-
-                _project.insertObject(commitObj, function (err) {
-                    if (err) {
-                        callback(err);
-                    } else {
-                        callback(null, id);
-                    }
-                });
-
-                return id;
-            }
-
-            function setUser(userId) {
-                projectLogger.debug('setUser', {metadata: arguments});
-
-                if (typeof userId === 'string') {
-                    _options.user = userId;
-                }
-            }
-
-            projectLogger.debug('Ready');
-        }
-
-        logger.debug('Ready');
-
-        return {
-            openDatabase: _database.openDatabase,
-            closeDatabase: _database.closeDatabase,
-            fsyncDatabase: _database.fsyncDatabase,
-            getProjectNames: _database.getProjectNames,
-            getAllowedProjectNames: _database.getAllowedProjectNames,
-            getAuthorizationInfo: _database.getAuthorizationInfo,
-            getDatabaseStatus: _database.getDatabaseStatus,
-            openProject: openProject,
-            deleteProject: _database.deleteProject,
-            simpleRequest: _database.simpleRequest,
-            simpleResult: _database.simpleResult,
-            simpleQuery: _database.simpleQuery,
-            getNextServerEvent: _database.getNextServerEvent,
-            getToken: _database.getToken
-        };
-    }
-
-    return Database;
-});
-
-/*globals define*/
-/*jshint node: true, browser: true*/
-
-/**
- * @author kecso / https://github.com/kecso
- */
-
-define('common/storage/clientstorage',[
-    'common/storage/client',
-    'common/storage/failsafe',
-    'common/storage/cache',
-    'common/storage/commit'
-], function (Client, Failsafe, Cache, Commit) {
-
-    
-
-    function client(options) {
-        //return  new Log(new Commit(new Cache(new Failsafe(new Client(options),options),options),options),options);
-        return new Commit(new Cache(new Failsafe(new Client(options), options), options), options);
-    }
-
-    return client;
-});
-
-
-
-(function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
-
-/**
- * This is the web browser implementation of `debug()`.
- *
- * Expose `debug()` as the module.
- */
-
-window.debug = exports = module.exports = require('./debug');
-exports.log = log;
-exports.formatArgs = formatArgs;
-exports.save = save;
-exports.load = load;
-exports.useColors = useColors;
-
-/**
- * Use chrome.storage.local if we are in an app
- */
-
-var storage;
-
-if (typeof chrome !== 'undefined' && typeof chrome.storage !== 'undefined')
-  storage = chrome.storage.local;
-else
-  storage = localstorage();
-
-/**
- * Colors.
- */
-
-exports.colors = [
-  'lightseagreen',
-  'forestgreen',
-  'goldenrod',
-  'dodgerblue',
-  'darkorchid',
-  'crimson'
-];
-
-/**
- * Currently only WebKit-based Web Inspectors, Firefox >= v31,
- * and the Firebug extension (any Firefox version) are known
- * to support "%c" CSS customizations.
- *
- * TODO: add a `localStorage` variable to explicitly enable/disable colors
- */
-
-function useColors() {
-  // is webkit? http://stackoverflow.com/a/16459606/376773
-  return ('WebkitAppearance' in document.documentElement.style) ||
-    // is firebug? http://stackoverflow.com/a/398120/376773
-    (window.console && (console.firebug || (console.exception && console.table))) ||
-    // is firefox >= v31?
-    // https://developer.mozilla.org/en-US/docs/Tools/Web_Console#Styling_messages
-    (navigator.userAgent.toLowerCase().match(/firefox\/(\d+)/) && parseInt(RegExp.$1, 10) >= 31);
-}
-
-/**
- * Map %j to `JSON.stringify()`, since no Web Inspectors do that by default.
- */
-
-exports.formatters.j = function(v) {
-  return JSON.stringify(v);
-};
-
-
-/**
- * Colorize log arguments if enabled.
- *
- * @api public
- */
-
-function formatArgs() {
-  var args = arguments;
-  var useColors = this.useColors;
-
-  args[0] = (useColors ? '%c' : '')
-    + this.namespace
-    + (useColors ? ' %c' : ' ')
-    + args[0]
-    + (useColors ? '%c ' : ' ')
-    + '+' + exports.humanize(this.diff);
-
-  if (!useColors) return args;
-
-  var c = 'color: ' + this.color;
-  args = [args[0], c, 'color: inherit'].concat(Array.prototype.slice.call(args, 1));
-
-  // the final "%c" is somewhat tricky, because there could be other
-  // arguments passed either before or after the %c, so we need to
-  // figure out the correct index to insert the CSS into
-  var index = 0;
-  var lastC = 0;
-  args[0].replace(/%[a-z%]/g, function(match) {
-    if ('%%' === match) return;
-    index++;
-    if ('%c' === match) {
-      // we only are interested in the *last* %c
-      // (the user may have provided their own)
-      lastC = index;
-    }
-  });
-
-  args.splice(lastC, 0, c);
-  return args;
-}
-
-/**
- * Invokes `console.log()` when available.
- * No-op when `console.log` is not a "function".
- *
- * @api public
- */
-
-function log() {
-  // this hackery is required for IE8/9, where
-  // the `console.log` function doesn't have 'apply'
-  return 'object' === typeof console
-    && console.log
-    && Function.prototype.apply.call(console.log, console, arguments);
-}
-
-/**
- * Save `namespaces`.
- *
- * @param {String} namespaces
- * @api private
- */
-
-function save(namespaces) {
-  try {
-    if (null == namespaces) {
-      storage.removeItem('debug');
-    } else {
-      storage.debug = namespaces;
-    }
-  } catch(e) {}
-}
-
-/**
- * Load `namespaces`.
- *
- * @return {String} returns the previously persisted debug modes
- * @api private
- */
-
-function load() {
-  var r;
-  try {
-    r = storage.debug;
-  } catch(e) {}
-  return r;
-}
-
-/**
- * Enable namespaces listed in `localStorage.debug` initially.
- */
-
-exports.enable(load());
-
-/**
- * Localstorage attempts to return the localstorage.
- *
- * This is necessary because safari throws
- * when a user disables cookies/localstorage
- * and you attempt to access it.
- *
- * @return {LocalStorage}
- * @api private
- */
-
-function localstorage(){
-  try {
-    return window.localStorage;
-  } catch (e) {}
-}
-
-},{"./debug":2}],2:[function(require,module,exports){
-
-/**
- * This is the common logic for both the Node.js and web browser
- * implementations of `debug()`.
- *
- * Expose `debug()` as the module.
- */
-
-exports = module.exports = debug;
-exports.coerce = coerce;
-exports.disable = disable;
-exports.enable = enable;
-exports.enabled = enabled;
-exports.humanize = require('ms');
-
-/**
- * The currently active debug mode names, and names to skip.
- */
-
-exports.names = [];
-exports.skips = [];
-
-/**
- * Map of special "%n" handling functions, for the debug "format" argument.
- *
- * Valid key names are a single, lowercased letter, i.e. "n".
- */
-
-exports.formatters = {};
-
-/**
- * Previously assigned color.
- */
-
-var prevColor = 0;
-
-/**
- * Previous log timestamp.
- */
-
-var prevTime;
-
-/**
- * Select a color.
- *
- * @return {Number}
- * @api private
- */
-
-function selectColor() {
-  return exports.colors[prevColor++ % exports.colors.length];
-}
-
-/**
- * Create a debugger with the given `namespace`.
- *
- * @param {String} namespace
- * @return {Function}
- * @api public
- */
-
-function debug(namespace) {
-
-  // define the `disabled` version
-  function disabled() {
-  }
-  disabled.enabled = false;
-
-  // define the `enabled` version
-  function enabled() {
-
-    var self = enabled;
-
-    // set `diff` timestamp
-    var curr = +new Date();
-    var ms = curr - (prevTime || curr);
-    self.diff = ms;
-    self.prev = prevTime;
-    self.curr = curr;
-    prevTime = curr;
-
-    // add the `color` if not set
-    if (null == self.useColors) self.useColors = exports.useColors();
-    if (null == self.color && self.useColors) self.color = selectColor();
-
-    var args = Array.prototype.slice.call(arguments);
-
-    args[0] = exports.coerce(args[0]);
-
-    if ('string' !== typeof args[0]) {
-      // anything else let's inspect with %o
-      args = ['%o'].concat(args);
-    }
-
-    // apply any `formatters` transformations
-    var index = 0;
-    args[0] = args[0].replace(/%([a-z%])/g, function(match, format) {
-      // if we encounter an escaped % then don't increase the array index
-      if (match === '%%') return match;
-      index++;
-      var formatter = exports.formatters[format];
-      if ('function' === typeof formatter) {
-        var val = args[index];
-        match = formatter.call(self, val);
-
-        // now we need to remove `args[index]` since it's inlined in the `format`
-        args.splice(index, 1);
-        index--;
-      }
-      return match;
-    });
-
-    if ('function' === typeof exports.formatArgs) {
-      args = exports.formatArgs.apply(self, args);
-    }
-    var logFn = enabled.log || exports.log || console.log.bind(console);
-    logFn.apply(self, args);
-  }
-  enabled.enabled = true;
-
-  var fn = exports.enabled(namespace) ? enabled : disabled;
-
-  fn.namespace = namespace;
-
-  return fn;
-}
-
-/**
- * Enables a debug mode by namespaces. This can include modes
- * separated by a colon and wildcards.
- *
- * @param {String} namespaces
- * @api public
- */
-
-function enable(namespaces) {
-  exports.save(namespaces);
-
-  var split = (namespaces || '').split(/[\s,]+/);
-  var len = split.length;
-
-  for (var i = 0; i < len; i++) {
-    if (!split[i]) continue; // ignore empty strings
-    namespaces = split[i].replace(/\*/g, '.*?');
-    if (namespaces[0] === '-') {
-      exports.skips.push(new RegExp('^' + namespaces.substr(1) + '$'));
-    } else {
-      exports.names.push(new RegExp('^' + namespaces + '$'));
-    }
-  }
-}
-
-/**
- * Disable debug output.
- *
- * @api public
- */
-
-function disable() {
-  exports.enable('');
-}
-
-/**
- * Returns true if the given mode name is enabled, false otherwise.
- *
- * @param {String} name
- * @return {Boolean}
- * @api public
- */
-
-function enabled(name) {
-  var i, len;
-  for (i = 0, len = exports.skips.length; i < len; i++) {
-    if (exports.skips[i].test(name)) {
-      return false;
-    }
-  }
-  for (i = 0, len = exports.names.length; i < len; i++) {
-    if (exports.names[i].test(name)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-/**
- * Coerce `val`.
- *
- * @param {Mixed} val
- * @return {Mixed}
- * @api private
- */
-
-function coerce(val) {
-  if (val instanceof Error) return val.stack || val.message;
-  return val;
-}
-
-},{"ms":3}],3:[function(require,module,exports){
-/**
- * Helpers.
- */
-
-var s = 1000;
-var m = s * 60;
-var h = m * 60;
-var d = h * 24;
-var y = d * 365.25;
-
-/**
- * Parse or format the given `val`.
- *
- * Options:
- *
- *  - `long` verbose formatting [false]
- *
- * @param {String|Number} val
- * @param {Object} options
- * @return {String|Number}
- * @api public
- */
-
-module.exports = function(val, options){
-  options = options || {};
-  if ('string' == typeof val) return parse(val);
-  return options.long
-    ? long(val)
-    : short(val);
-};
-
-/**
- * Parse the given `str` and return milliseconds.
- *
- * @param {String} str
- * @return {Number}
- * @api private
- */
-
-function parse(str) {
-  var match = /^((?:\d+)?\.?\d+) *(milliseconds?|msecs?|ms|seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h|days?|d|years?|yrs?|y)?$/i.exec(str);
-  if (!match) return;
-  var n = parseFloat(match[1]);
-  var type = (match[2] || 'ms').toLowerCase();
-  switch (type) {
-    case 'years':
-    case 'year':
-    case 'yrs':
-    case 'yr':
-    case 'y':
-      return n * y;
-    case 'days':
-    case 'day':
-    case 'd':
-      return n * d;
-    case 'hours':
-    case 'hour':
-    case 'hrs':
-    case 'hr':
-    case 'h':
-      return n * h;
-    case 'minutes':
-    case 'minute':
-    case 'mins':
-    case 'min':
-    case 'm':
-      return n * m;
-    case 'seconds':
-    case 'second':
-    case 'secs':
-    case 'sec':
-    case 's':
-      return n * s;
-    case 'milliseconds':
-    case 'millisecond':
-    case 'msecs':
-    case 'msec':
-    case 'ms':
-      return n;
-  }
-}
-
-/**
- * Short format for `ms`.
- *
- * @param {Number} ms
- * @return {String}
- * @api private
- */
-
-function short(ms) {
-  if (ms >= d) return Math.round(ms / d) + 'd';
-  if (ms >= h) return Math.round(ms / h) + 'h';
-  if (ms >= m) return Math.round(ms / m) + 'm';
-  if (ms >= s) return Math.round(ms / s) + 's';
-  return ms + 'ms';
-}
-
-/**
- * Long format for `ms`.
- *
- * @param {Number} ms
- * @return {String}
- * @api private
- */
-
-function long(ms) {
-  return plural(ms, d, 'day')
-    || plural(ms, h, 'hour')
-    || plural(ms, m, 'minute')
-    || plural(ms, s, 'second')
-    || ms + ' ms';
-}
-
-/**
- * Pluralization helper.
- */
-
-function plural(ms, n, name) {
-  if (ms < n) return;
-  if (ms < n * 1.5) return Math.floor(ms / n) + ' ' + name;
-  return Math.ceil(ms / n) + ' ' + name + 's';
-}
-
-},{}]},{},[1]);
-
-define("debug", function(){});
-
-/*globals define, debug*/
-/*jshint node:true*/
 /**
  * @author pmeijer / https://github.com/pmeijer
  */
 
-define('js/logger',['debug'], function (_debug) {
-    
-    // Separate namespaces using ',' a leading '-' will disable the namespace.
-    // Each part takes a regex.
-    //      ex: localStorage.debug = '*,-socket\.io*,-engine\.io*'
-    //      will log all but socket.io and engine.io
-    function createLogger(name, options) {
-        var log = typeof debug === 'undefined' ? _debug(name) : debug(name),
-            level,
-            levels = {
-                silly: 0,
-                input: 1,
-                verbose: 2,
-                prompt: 3,
-                debug: 4,
-                info: 5,
-                data: 6,
-                help: 7,
-                warn: 8,
-                error: 9
-            };
-        if (!options) {
-            throw new Error('options required in logger');
-        }
-        if (options.hasOwnProperty('level') === false) {
-            throw new Error('options.level required in logger');
-        }
-        level = levels[options.level];
-        if (typeof level === 'undefined') {
-            level = levels.info;
-        }
+define('js/client/constants',['common/storage/constants'], function (STORAGE_CONSTANTS) {
 
-        log.debug = function () {
-            if (log.enabled && level <= levels.debug) {
-                if (console.debug) {
-                    log.log = console.debug.bind(console);
-                } else {
-                    log.log = console.log.bind(console);
-                }
-                log.apply(this, arguments);
-            }
-        };
-        log.info = function () {
-            if (log.enabled && level <= levels.info) {
-                log.log = console.info.bind(console);
-                log.apply(this, arguments);
-            }
-        };
-        log.warn = function () {
-            if (log.enabled && level <= levels.warn) {
-                log.log = console.warn.bind(console);
-                log.apply(this, arguments);
-            }
-        };
-        log.error = function () {
-            if (log.enabled && level <= levels.error) {
-                log.log = console.error.bind(console);
-                log.apply(this, arguments);
-            } else {
-                console.error.apply(console, arguments);
-            }
-        };
-
-        log.fork = function (forkName, useForkName) {
-            forkName = useForkName ? forkName : name + ':' + forkName;
-            return createLogger(forkName, options);
-        };
-
-        log.forkWithOptions = function (_name, _options) {
-            return createLogger(_name, _options);
-        };
-
-        return log;
-    }
-
-    function createWithGmeConfig(name, gmeConfig) {
-        return createLogger(name, gmeConfig.client.log);
-    }
 
     return {
-        create: createLogger,
-        createWithGmeConfig: createWithGmeConfig
+
+        STORAGE: STORAGE_CONSTANTS,
+
+        BRANCH_STATUS: {
+            SYNC: 'SYNC',
+            AHEAD_SYNC: 'AHEAD_SYNC',
+            AHEAD_NOT_SYNC: 'AHEAD_NOT_SYNC',
+            PULLING: 'PULLING'
+        },
+
+        // Events
+        NETWORK_STATUS_CHANGED: 'NETWORK_STATUS_CHANGED',
+        BRANCH_STATUS_CHANGED: 'BRANCH_STATUS_CHANGED',
+
+        BRANCH_CHANGED: 'BRANCH_CHANGED',
+        PROJECT_CLOSED: 'PROJECT_CLOSED',
+        PROJECT_OPENED: 'PROJECT_OPENED',
+
+        UNDO_AVAILABLE: 'UNDO_AVAILABLE',
+        REDO_AVAILABLE: 'REDO_AVAILABLE'
     };
 });
-/*globals define*/
-/*jshint browser: true, node:true*/
-
-/**
- * @author kecso / https://github.com/kecso
- */
-
-define('common/util/url',[],function () {
-    
-
-    function decodeUrl(url) {
-        var start = url.indexOf('%');
-        while (start > -1) {
-            var char = String.fromCharCode(parseInt(url.substr(start + 1, 2), 16));
-            url = url.replace(url.substr(start, 3), char);
-            start = url.indexOf('%');
-        }
-        return url;
-    }
-
-    function parseCookie(cookie) {
-        cookie = decodeUrl(cookie);
-        var parsed = {};
-        var elements = cookie.split(/[;,] */);
-        for (var i = 0; i < elements.length; i++) {
-            var pair = elements[i].split('=');
-            parsed[pair[0]] = pair[1];
-        }
-        return parsed;
-    }
-
-    function removeSpecialChars(text) {
-        text = text.replace(/%23/g, '#');
-        text = text.replace(/%26/g, '&');
-        text = text.replace(/%2f/g, '/');
-        text = text.replace(/%2F/g, '/');
-        return text;
-    }
-
-    function addSpecialChars(text) {
-        if (text === undefined) {
-            return text;
-        }
-        text = text.replace(/#/g, '%23');
-        text = text.replace(/&/g, '%26');
-        text = text.replace(/\//g, '%2F');
-        return text;
-    }
-
-    function urlToRefObject(url) {
-        return {
-            $ref: url
-        };
-    }
-
-    return {
-        decodeUrl: decodeUrl,
-        parseCookie: parseCookie,
-        removeSpecialChars: removeSpecialChars,
-        addSpecialChars: addSpecialChars,
-        urlToRefObject: urlToRefObject
-    };
-});
-
 /*globals define*/
 /*jshint node: true, browser: true*/
 
@@ -13362,7 +12994,7 @@ define('common/util/url',[],function () {
  */
 
 define('common/core/users/meta',[], function () {
-    
+
 
     function metaStorage() {
         var _core = null,
@@ -14182,6 +13814,70 @@ define('common/core/users/meta',[], function () {
 });
 
 /*globals define*/
+/*jshint browser: true, node:true*/
+
+/**
+ * @author kecso / https://github.com/kecso
+ */
+
+define('common/util/url',[],function () {
+
+
+    function decodeUrl(url) {
+        var start = url.indexOf('%');
+        while (start > -1) {
+            var char = String.fromCharCode(parseInt(url.substr(start + 1, 2), 16));
+            url = url.replace(url.substr(start, 3), char);
+            start = url.indexOf('%');
+        }
+        return url;
+    }
+
+    function parseCookie(cookie) {
+        cookie = decodeUrl(cookie);
+        var parsed = {};
+        var elements = cookie.split(/[;,] */);
+        for (var i = 0; i < elements.length; i++) {
+            var pair = elements[i].split('=');
+            parsed[pair[0]] = pair[1];
+        }
+        return parsed;
+    }
+
+    function removeSpecialChars(text) {
+        text = text.replace(/%23/g, '#');
+        text = text.replace(/%26/g, '&');
+        text = text.replace(/%2f/g, '/');
+        text = text.replace(/%2F/g, '/');
+        return text;
+    }
+
+    function addSpecialChars(text) {
+        if (text === undefined) {
+            return text;
+        }
+        text = text.replace(/#/g, '%23');
+        text = text.replace(/&/g, '%26');
+        text = text.replace(/\//g, '%2F');
+        return text;
+    }
+
+    function urlToRefObject(url) {
+        return {
+            $ref: url
+        };
+    }
+
+    return {
+        decodeUrl: decodeUrl,
+        parseCookie: parseCookie,
+        removeSpecialChars: removeSpecialChars,
+        addSpecialChars: addSpecialChars,
+        urlToRefObject: urlToRefObject
+    };
+});
+
+/*globals define*/
 /*jshint node: true, browser: true*/
 
 /**
@@ -14189,7 +13885,7 @@ define('common/core/users/meta',[], function () {
  */
 
 define('common/core/users/tojson',['common/core/users/meta', 'common/util/url'], function (BaseMeta, URL) {
-    
+
 
     var META = new BaseMeta(),
         _refTypes = {
@@ -14716,1418 +14412,20 @@ define('common/core/users/tojson',['common/core/users/meta', 'common/util/url'],
     return getJsonNode;
 });
 
-!function(e){if("object"==typeof exports&&"undefined"!=typeof module)module.exports=e();else if("function"==typeof define&&define.amd)define('superagent',[],e);else{var f;"undefined"!=typeof window?f=window:"undefined"!=typeof global?f=global:"undefined"!=typeof self&&(f=self),f.superagent=e()}}(function(){var define,module,exports;return (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
-/**
- * Module dependencies.
- */
-
-var Emitter = require('emitter');
-var reduce = require('reduce');
-
-/**
- * Root reference for iframes.
- */
-
-var root = 'undefined' == typeof window
-  ? this
-  : window;
-
-/**
- * Noop.
- */
-
-function noop(){};
-
-/**
- * Check if `obj` is a host object,
- * we don't want to serialize these :)
- *
- * TODO: future proof, move to compoent land
- *
- * @param {Object} obj
- * @return {Boolean}
- * @api private
- */
-
-function isHost(obj) {
-  var str = {}.toString.call(obj);
-
-  switch (str) {
-    case '[object File]':
-    case '[object Blob]':
-    case '[object FormData]':
-      return true;
-    default:
-      return false;
-  }
-}
-
-/**
- * Determine XHR.
- */
-
-request.getXHR = function () {
-  if (root.XMLHttpRequest
-    && ('file:' != root.location.protocol || !root.ActiveXObject)) {
-    return new XMLHttpRequest;
-  } else {
-    try { return new ActiveXObject('Microsoft.XMLHTTP'); } catch(e) {}
-    try { return new ActiveXObject('Msxml2.XMLHTTP.6.0'); } catch(e) {}
-    try { return new ActiveXObject('Msxml2.XMLHTTP.3.0'); } catch(e) {}
-    try { return new ActiveXObject('Msxml2.XMLHTTP'); } catch(e) {}
-  }
-  return false;
-};
-
-/**
- * Removes leading and trailing whitespace, added to support IE.
- *
- * @param {String} s
- * @return {String}
- * @api private
- */
-
-var trim = ''.trim
-  ? function(s) { return s.trim(); }
-  : function(s) { return s.replace(/(^\s*|\s*$)/g, ''); };
-
-/**
- * Check if `obj` is an object.
- *
- * @param {Object} obj
- * @return {Boolean}
- * @api private
- */
-
-function isObject(obj) {
-  return obj === Object(obj);
-}
-
-/**
- * Serialize the given `obj`.
- *
- * @param {Object} obj
- * @return {String}
- * @api private
- */
-
-function serialize(obj) {
-  if (!isObject(obj)) return obj;
-  var pairs = [];
-  for (var key in obj) {
-    if (null != obj[key]) {
-      pairs.push(encodeURIComponent(key)
-        + '=' + encodeURIComponent(obj[key]));
-    }
-  }
-  return pairs.join('&');
-}
-
-/**
- * Expose serialization method.
- */
-
- request.serializeObject = serialize;
-
- /**
-  * Parse the given x-www-form-urlencoded `str`.
-  *
-  * @param {String} str
-  * @return {Object}
-  * @api private
-  */
-
-function parseString(str) {
-  var obj = {};
-  var pairs = str.split('&');
-  var parts;
-  var pair;
-
-  for (var i = 0, len = pairs.length; i < len; ++i) {
-    pair = pairs[i];
-    parts = pair.split('=');
-    obj[decodeURIComponent(parts[0])] = decodeURIComponent(parts[1]);
-  }
-
-  return obj;
-}
-
-/**
- * Expose parser.
- */
-
-request.parseString = parseString;
-
-/**
- * Default MIME type map.
- *
- *     superagent.types.xml = 'application/xml';
- *
- */
-
-request.types = {
-  html: 'text/html',
-  json: 'application/json',
-  xml: 'application/xml',
-  urlencoded: 'application/x-www-form-urlencoded',
-  'form': 'application/x-www-form-urlencoded',
-  'form-data': 'application/x-www-form-urlencoded'
-};
-
-/**
- * Default serialization map.
- *
- *     superagent.serialize['application/xml'] = function(obj){
- *       return 'generated xml here';
- *     };
- *
- */
-
- request.serialize = {
-   'application/x-www-form-urlencoded': serialize,
-   'application/json': JSON.stringify
- };
-
- /**
-  * Default parsers.
-  *
-  *     superagent.parse['application/xml'] = function(str){
-  *       return { object parsed from str };
-  *     };
-  *
-  */
-
-request.parse = {
-  'application/x-www-form-urlencoded': parseString,
-  'application/json': JSON.parse
-};
-
-/**
- * Parse the given header `str` into
- * an object containing the mapped fields.
- *
- * @param {String} str
- * @return {Object}
- * @api private
- */
-
-function parseHeader(str) {
-  var lines = str.split(/\r?\n/);
-  var fields = {};
-  var index;
-  var line;
-  var field;
-  var val;
-
-  lines.pop(); // trailing CRLF
-
-  for (var i = 0, len = lines.length; i < len; ++i) {
-    line = lines[i];
-    index = line.indexOf(':');
-    field = line.slice(0, index).toLowerCase();
-    val = trim(line.slice(index + 1));
-    fields[field] = val;
-  }
-
-  return fields;
-}
-
-/**
- * Return the mime type for the given `str`.
- *
- * @param {String} str
- * @return {String}
- * @api private
- */
-
-function type(str){
-  return str.split(/ *; */).shift();
-};
-
-/**
- * Return header field parameters.
- *
- * @param {String} str
- * @return {Object}
- * @api private
- */
-
-function params(str){
-  return reduce(str.split(/ *; */), function(obj, str){
-    var parts = str.split(/ *= */)
-      , key = parts.shift()
-      , val = parts.shift();
-
-    if (key && val) obj[key] = val;
-    return obj;
-  }, {});
-};
-
-/**
- * Initialize a new `Response` with the given `xhr`.
- *
- *  - set flags (.ok, .error, etc)
- *  - parse header
- *
- * Examples:
- *
- *  Aliasing `superagent` as `request` is nice:
- *
- *      request = superagent;
- *
- *  We can use the promise-like API, or pass callbacks:
- *
- *      request.get('/').end(function(res){});
- *      request.get('/', function(res){});
- *
- *  Sending data can be chained:
- *
- *      request
- *        .post('/user')
- *        .send({ name: 'tj' })
- *        .end(function(res){});
- *
- *  Or passed to `.send()`:
- *
- *      request
- *        .post('/user')
- *        .send({ name: 'tj' }, function(res){});
- *
- *  Or passed to `.post()`:
- *
- *      request
- *        .post('/user', { name: 'tj' })
- *        .end(function(res){});
- *
- * Or further reduced to a single call for simple cases:
- *
- *      request
- *        .post('/user', { name: 'tj' }, function(res){});
- *
- * @param {XMLHTTPRequest} xhr
- * @param {Object} options
- * @api private
- */
-
-function Response(req, options) {
-  options = options || {};
-  this.req = req;
-  this.xhr = this.req.xhr;
-  // responseText is accessible only if responseType is '' or 'text' and on older browsers
-  this.text = ((this.req.method !='HEAD' && (this.xhr.responseType === '' || this.xhr.responseType === 'text')) || typeof this.xhr.responseType === 'undefined')
-     ? this.xhr.responseText
-     : null;
-  this.statusText = this.req.xhr.statusText;
-  this.setStatusProperties(this.xhr.status);
-  this.header = this.headers = parseHeader(this.xhr.getAllResponseHeaders());
-  // getAllResponseHeaders sometimes falsely returns "" for CORS requests, but
-  // getResponseHeader still works. so we get content-type even if getting
-  // other headers fails.
-  this.header['content-type'] = this.xhr.getResponseHeader('content-type');
-  this.setHeaderProperties(this.header);
-  this.body = this.req.method != 'HEAD'
-    ? this.parseBody(this.text ? this.text : this.xhr.response)
-    : null;
-}
-
-/**
- * Get case-insensitive `field` value.
- *
- * @param {String} field
- * @return {String}
- * @api public
- */
-
-Response.prototype.get = function(field){
-  return this.header[field.toLowerCase()];
-};
-
-/**
- * Set header related properties:
- *
- *   - `.type` the content type without params
- *
- * A response of "Content-Type: text/plain; charset=utf-8"
- * will provide you with a `.type` of "text/plain".
- *
- * @param {Object} header
- * @api private
- */
-
-Response.prototype.setHeaderProperties = function(header){
-  // content-type
-  var ct = this.header['content-type'] || '';
-  this.type = type(ct);
-
-  // params
-  var obj = params(ct);
-  for (var key in obj) this[key] = obj[key];
-};
-
-/**
- * Parse the given body `str`.
- *
- * Used for auto-parsing of bodies. Parsers
- * are defined on the `superagent.parse` object.
- *
- * @param {String} str
- * @return {Mixed}
- * @api private
- */
-
-Response.prototype.parseBody = function(str){
-  var parse = request.parse[this.type];
-  return parse && str && (str.length || str instanceof Object)
-    ? parse(str)
-    : null;
-};
-
-/**
- * Set flags such as `.ok` based on `status`.
- *
- * For example a 2xx response will give you a `.ok` of __true__
- * whereas 5xx will be __false__ and `.error` will be __true__. The
- * `.clientError` and `.serverError` are also available to be more
- * specific, and `.statusType` is the class of error ranging from 1..5
- * sometimes useful for mapping respond colors etc.
- *
- * "sugar" properties are also defined for common cases. Currently providing:
- *
- *   - .noContent
- *   - .badRequest
- *   - .unauthorized
- *   - .notAcceptable
- *   - .notFound
- *
- * @param {Number} status
- * @api private
- */
-
-Response.prototype.setStatusProperties = function(status){
-  var type = status / 100 | 0;
-
-  // status / class
-  this.status = status;
-  this.statusType = type;
-
-  // basics
-  this.info = 1 == type;
-  this.ok = 2 == type;
-  this.clientError = 4 == type;
-  this.serverError = 5 == type;
-  this.error = (4 == type || 5 == type)
-    ? this.toError()
-    : false;
-
-  // sugar
-  this.accepted = 202 == status;
-  this.noContent = 204 == status || 1223 == status;
-  this.badRequest = 400 == status;
-  this.unauthorized = 401 == status;
-  this.notAcceptable = 406 == status;
-  this.notFound = 404 == status;
-  this.forbidden = 403 == status;
-};
-
-/**
- * Return an `Error` representative of this response.
- *
- * @return {Error}
- * @api public
- */
-
-Response.prototype.toError = function(){
-  var req = this.req;
-  var method = req.method;
-  var url = req.url;
-
-  var msg = 'cannot ' + method + ' ' + url + ' (' + this.status + ')';
-  var err = new Error(msg);
-  err.status = this.status;
-  err.method = method;
-  err.url = url;
-
-  return err;
-};
-
-/**
- * Expose `Response`.
- */
-
-request.Response = Response;
-
-/**
- * Initialize a new `Request` with the given `method` and `url`.
- *
- * @param {String} method
- * @param {String} url
- * @api public
- */
-
-function Request(method, url) {
-  var self = this;
-  Emitter.call(this);
-  this._query = this._query || [];
-  this.method = method;
-  this.url = url;
-  this.header = {};
-  this._header = {};
-  this.on('end', function(){
-    var err = null;
-    var res = null;
-
-    try {
-      res = new Response(self);
-    } catch(e) {
-      err = new Error('Parser is unable to parse the response');
-      err.parse = true;
-      err.original = e;
-      return self.callback(err);
-    }
-
-    self.emit('response', res);
-
-    if (err) {
-      return self.callback(err, res);
-    }
-
-    if (res.status >= 200 && res.status < 300) {
-      return self.callback(err, res);
-    }
-
-    var new_err = new Error(res.statusText || 'Unsuccessful HTTP response');
-    new_err.original = err;
-    new_err.response = res;
-    new_err.status = res.status;
-
-    self.callback(err || new_err, res);
-  });
-}
-
-/**
- * Mixin `Emitter`.
- */
-
-Emitter(Request.prototype);
-
-/**
- * Allow for extension
- */
-
-Request.prototype.use = function(fn) {
-  fn(this);
-  return this;
-}
-
-/**
- * Set timeout to `ms`.
- *
- * @param {Number} ms
- * @return {Request} for chaining
- * @api public
- */
-
-Request.prototype.timeout = function(ms){
-  this._timeout = ms;
-  return this;
-};
-
-/**
- * Clear previous timeout.
- *
- * @return {Request} for chaining
- * @api public
- */
-
-Request.prototype.clearTimeout = function(){
-  this._timeout = 0;
-  clearTimeout(this._timer);
-  return this;
-};
-
-/**
- * Abort the request, and clear potential timeout.
- *
- * @return {Request}
- * @api public
- */
-
-Request.prototype.abort = function(){
-  if (this.aborted) return;
-  this.aborted = true;
-  this.xhr.abort();
-  this.clearTimeout();
-  this.emit('abort');
-  return this;
-};
-
-/**
- * Set header `field` to `val`, or multiple fields with one object.
- *
- * Examples:
- *
- *      req.get('/')
- *        .set('Accept', 'application/json')
- *        .set('X-API-Key', 'foobar')
- *        .end(callback);
- *
- *      req.get('/')
- *        .set({ Accept: 'application/json', 'X-API-Key': 'foobar' })
- *        .end(callback);
- *
- * @param {String|Object} field
- * @param {String} val
- * @return {Request} for chaining
- * @api public
- */
-
-Request.prototype.set = function(field, val){
-  if (isObject(field)) {
-    for (var key in field) {
-      this.set(key, field[key]);
-    }
-    return this;
-  }
-  this._header[field.toLowerCase()] = val;
-  this.header[field] = val;
-  return this;
-};
-
-/**
- * Remove header `field`.
- *
- * Example:
- *
- *      req.get('/')
- *        .unset('User-Agent')
- *        .end(callback);
- *
- * @param {String} field
- * @return {Request} for chaining
- * @api public
- */
-
-Request.prototype.unset = function(field){
-  delete this._header[field.toLowerCase()];
-  delete this.header[field];
-  return this;
-};
-
-/**
- * Get case-insensitive header `field` value.
- *
- * @param {String} field
- * @return {String}
- * @api private
- */
-
-Request.prototype.getHeader = function(field){
-  return this._header[field.toLowerCase()];
-};
-
-/**
- * Set Content-Type to `type`, mapping values from `request.types`.
- *
- * Examples:
- *
- *      superagent.types.xml = 'application/xml';
- *
- *      request.post('/')
- *        .type('xml')
- *        .send(xmlstring)
- *        .end(callback);
- *
- *      request.post('/')
- *        .type('application/xml')
- *        .send(xmlstring)
- *        .end(callback);
- *
- * @param {String} type
- * @return {Request} for chaining
- * @api public
- */
-
-Request.prototype.type = function(type){
-  this.set('Content-Type', request.types[type] || type);
-  return this;
-};
-
-/**
- * Set Accept to `type`, mapping values from `request.types`.
- *
- * Examples:
- *
- *      superagent.types.json = 'application/json';
- *
- *      request.get('/agent')
- *        .accept('json')
- *        .end(callback);
- *
- *      request.get('/agent')
- *        .accept('application/json')
- *        .end(callback);
- *
- * @param {String} accept
- * @return {Request} for chaining
- * @api public
- */
-
-Request.prototype.accept = function(type){
-  this.set('Accept', request.types[type] || type);
-  return this;
-};
-
-/**
- * Set Authorization field value with `user` and `pass`.
- *
- * @param {String} user
- * @param {String} pass
- * @return {Request} for chaining
- * @api public
- */
-
-Request.prototype.auth = function(user, pass){
-  var str = btoa(user + ':' + pass);
-  this.set('Authorization', 'Basic ' + str);
-  return this;
-};
-
-/**
-* Add query-string `val`.
-*
-* Examples:
-*
-*   request.get('/shoes')
-*     .query('size=10')
-*     .query({ color: 'blue' })
-*
-* @param {Object|String} val
-* @return {Request} for chaining
-* @api public
-*/
-
-Request.prototype.query = function(val){
-  if ('string' != typeof val) val = serialize(val);
-  if (val) this._query.push(val);
-  return this;
-};
-
-/**
- * Write the field `name` and `val` for "multipart/form-data"
- * request bodies.
- *
- * ``` js
- * request.post('/upload')
- *   .field('foo', 'bar')
- *   .end(callback);
- * ```
- *
- * @param {String} name
- * @param {String|Blob|File} val
- * @return {Request} for chaining
- * @api public
- */
-
-Request.prototype.field = function(name, val){
-  if (!this._formData) this._formData = new root.FormData();
-  this._formData.append(name, val);
-  return this;
-};
-
-/**
- * Queue the given `file` as an attachment to the specified `field`,
- * with optional `filename`.
- *
- * ``` js
- * request.post('/upload')
- *   .attach(new Blob(['<a id="a"><b id="b">hey!</b></a>'], { type: "text/html"}))
- *   .end(callback);
- * ```
- *
- * @param {String} field
- * @param {Blob|File} file
- * @param {String} filename
- * @return {Request} for chaining
- * @api public
- */
-
-Request.prototype.attach = function(field, file, filename){
-  if (!this._formData) this._formData = new root.FormData();
-  this._formData.append(field, file, filename);
-  return this;
-};
-
-/**
- * Send `data`, defaulting the `.type()` to "json" when
- * an object is given.
- *
- * Examples:
- *
- *       // querystring
- *       request.get('/search')
- *         .end(callback)
- *
- *       // multiple data "writes"
- *       request.get('/search')
- *         .send({ search: 'query' })
- *         .send({ range: '1..5' })
- *         .send({ order: 'desc' })
- *         .end(callback)
- *
- *       // manual json
- *       request.post('/user')
- *         .type('json')
- *         .send('{"name":"tj"})
- *         .end(callback)
- *
- *       // auto json
- *       request.post('/user')
- *         .send({ name: 'tj' })
- *         .end(callback)
- *
- *       // manual x-www-form-urlencoded
- *       request.post('/user')
- *         .type('form')
- *         .send('name=tj')
- *         .end(callback)
- *
- *       // auto x-www-form-urlencoded
- *       request.post('/user')
- *         .type('form')
- *         .send({ name: 'tj' })
- *         .end(callback)
- *
- *       // defaults to x-www-form-urlencoded
-  *      request.post('/user')
-  *        .send('name=tobi')
-  *        .send('species=ferret')
-  *        .end(callback)
- *
- * @param {String|Object} data
- * @return {Request} for chaining
- * @api public
- */
-
-Request.prototype.send = function(data){
-  var obj = isObject(data);
-  var type = this.getHeader('Content-Type');
-
-  // merge
-  if (obj && isObject(this._data)) {
-    for (var key in data) {
-      this._data[key] = data[key];
-    }
-  } else if ('string' == typeof data) {
-    if (!type) this.type('form');
-    type = this.getHeader('Content-Type');
-    if ('application/x-www-form-urlencoded' == type) {
-      this._data = this._data
-        ? this._data + '&' + data
-        : data;
-    } else {
-      this._data = (this._data || '') + data;
-    }
-  } else {
-    this._data = data;
-  }
-
-  if (!obj || isHost(data)) return this;
-  if (!type) this.type('json');
-  return this;
-};
-
-/**
- * Invoke the callback with `err` and `res`
- * and handle arity check.
- *
- * @param {Error} err
- * @param {Response} res
- * @api private
- */
-
-Request.prototype.callback = function(err, res){
-  var fn = this._callback;
-  this.clearTimeout();
-  fn(err, res);
-};
-
-/**
- * Invoke callback with x-domain error.
- *
- * @api private
- */
-
-Request.prototype.crossDomainError = function(){
-  var err = new Error('Origin is not allowed by Access-Control-Allow-Origin');
-  err.crossDomain = true;
-  this.callback(err);
-};
-
-/**
- * Invoke callback with timeout error.
- *
- * @api private
- */
-
-Request.prototype.timeoutError = function(){
-  var timeout = this._timeout;
-  var err = new Error('timeout of ' + timeout + 'ms exceeded');
-  err.timeout = timeout;
-  this.callback(err);
-};
-
-/**
- * Enable transmission of cookies with x-domain requests.
- *
- * Note that for this to work the origin must not be
- * using "Access-Control-Allow-Origin" with a wildcard,
- * and also must set "Access-Control-Allow-Credentials"
- * to "true".
- *
- * @api public
- */
-
-Request.prototype.withCredentials = function(){
-  this._withCredentials = true;
-  return this;
-};
-
-/**
- * Initiate request, invoking callback `fn(res)`
- * with an instanceof `Response`.
- *
- * @param {Function} fn
- * @return {Request} for chaining
- * @api public
- */
-
-Request.prototype.end = function(fn){
-  var self = this;
-  var xhr = this.xhr = request.getXHR();
-  var query = this._query.join('&');
-  var timeout = this._timeout;
-  var data = this._formData || this._data;
-
-  // store callback
-  this._callback = fn || noop;
-
-  // state change
-  xhr.onreadystatechange = function(){
-    if (4 != xhr.readyState) return;
-
-    // In IE9, reads to any property (e.g. status) off of an aborted XHR will
-    // result in the error "Could not complete the operation due to error c00c023f"
-    var status;
-    try { status = xhr.status } catch(e) { status = 0; }
-
-    if (0 == status) {
-      if (self.timedout) return self.timeoutError();
-      if (self.aborted) return;
-      return self.crossDomainError();
-    }
-    self.emit('end');
-  };
-
-  // progress
-  try {
-    if (xhr.upload && this.hasListeners('progress')) {
-      xhr.upload.onprogress = function(e){
-        e.percent = e.loaded / e.total * 100;
-        self.emit('progress', e);
-      };
-    }
-  } catch(e) {
-    // Accessing xhr.upload fails in IE from a web worker, so just pretend it doesn't exist.
-    // Reported here:
-    // https://connect.microsoft.com/IE/feedback/details/837245/xmlhttprequest-upload-throws-invalid-argument-when-used-from-web-worker-context
-  }
-
-  // timeout
-  if (timeout && !this._timer) {
-    this._timer = setTimeout(function(){
-      self.timedout = true;
-      self.abort();
-    }, timeout);
-  }
-
-  // querystring
-  if (query) {
-    query = request.serializeObject(query);
-    this.url += ~this.url.indexOf('?')
-      ? '&' + query
-      : '?' + query;
-  }
-
-  // initiate request
-  xhr.open(this.method, this.url, true);
-
-  // CORS
-  if (this._withCredentials) xhr.withCredentials = true;
-
-  // body
-  if ('GET' != this.method && 'HEAD' != this.method && 'string' != typeof data && !isHost(data)) {
-    // serialize stuff
-    var serialize = request.serialize[this.getHeader('Content-Type')];
-    if (serialize) data = serialize(data);
-  }
-
-  // set header fields
-  for (var field in this.header) {
-    if (null == this.header[field]) continue;
-    xhr.setRequestHeader(field, this.header[field]);
-  }
-
-  // send stuff
-  this.emit('request', this);
-  xhr.send(data);
-  return this;
-};
-
-/**
- * Expose `Request`.
- */
-
-request.Request = Request;
-
-/**
- * Issue a request:
- *
- * Examples:
- *
- *    request('GET', '/users').end(callback)
- *    request('/users').end(callback)
- *    request('/users', callback)
- *
- * @param {String} method
- * @param {String|Function} url or callback
- * @return {Request}
- * @api public
- */
-
-function request(method, url) {
-  // callback
-  if ('function' == typeof url) {
-    return new Request('GET', method).end(url);
-  }
-
-  // url first
-  if (1 == arguments.length) {
-    return new Request('GET', method);
-  }
-
-  return new Request(method, url);
-}
-
-/**
- * GET `url` with optional callback `fn(res)`.
- *
- * @param {String} url
- * @param {Mixed|Function} data or fn
- * @param {Function} fn
- * @return {Request}
- * @api public
- */
-
-request.get = function(url, data, fn){
-  var req = request('GET', url);
-  if ('function' == typeof data) fn = data, data = null;
-  if (data) req.query(data);
-  if (fn) req.end(fn);
-  return req;
-};
-
-/**
- * HEAD `url` with optional callback `fn(res)`.
- *
- * @param {String} url
- * @param {Mixed|Function} data or fn
- * @param {Function} fn
- * @return {Request}
- * @api public
- */
-
-request.head = function(url, data, fn){
-  var req = request('HEAD', url);
-  if ('function' == typeof data) fn = data, data = null;
-  if (data) req.send(data);
-  if (fn) req.end(fn);
-  return req;
-};
-
-/**
- * DELETE `url` with optional callback `fn(res)`.
- *
- * @param {String} url
- * @param {Function} fn
- * @return {Request}
- * @api public
- */
-
-request.del = function(url, fn){
-  var req = request('DELETE', url);
-  if (fn) req.end(fn);
-  return req;
-};
-
-/**
- * PATCH `url` with optional `data` and callback `fn(res)`.
- *
- * @param {String} url
- * @param {Mixed} data
- * @param {Function} fn
- * @return {Request}
- * @api public
- */
-
-request.patch = function(url, data, fn){
-  var req = request('PATCH', url);
-  if ('function' == typeof data) fn = data, data = null;
-  if (data) req.send(data);
-  if (fn) req.end(fn);
-  return req;
-};
-
-/**
- * POST `url` with optional `data` and callback `fn(res)`.
- *
- * @param {String} url
- * @param {Mixed} data
- * @param {Function} fn
- * @return {Request}
- * @api public
- */
-
-request.post = function(url, data, fn){
-  var req = request('POST', url);
-  if ('function' == typeof data) fn = data, data = null;
-  if (data) req.send(data);
-  if (fn) req.end(fn);
-  return req;
-};
-
-/**
- * PUT `url` with optional `data` and callback `fn(res)`.
- *
- * @param {String} url
- * @param {Mixed|Function} data or fn
- * @param {Function} fn
- * @return {Request}
- * @api public
- */
-
-request.put = function(url, data, fn){
-  var req = request('PUT', url);
-  if ('function' == typeof data) fn = data, data = null;
-  if (data) req.send(data);
-  if (fn) req.end(fn);
-  return req;
-};
-
-/**
- * Expose `request`.
- */
-
-module.exports = request;
-
-},{"emitter":2,"reduce":3}],2:[function(require,module,exports){
-
-/**
- * Expose `Emitter`.
- */
-
-module.exports = Emitter;
-
-/**
- * Initialize a new `Emitter`.
- *
- * @api public
- */
-
-function Emitter(obj) {
-  if (obj) return mixin(obj);
-};
-
-/**
- * Mixin the emitter properties.
- *
- * @param {Object} obj
- * @return {Object}
- * @api private
- */
-
-function mixin(obj) {
-  for (var key in Emitter.prototype) {
-    obj[key] = Emitter.prototype[key];
-  }
-  return obj;
-}
-
-/**
- * Listen on the given `event` with `fn`.
- *
- * @param {String} event
- * @param {Function} fn
- * @return {Emitter}
- * @api public
- */
-
-Emitter.prototype.on =
-Emitter.prototype.addEventListener = function(event, fn){
-  this._callbacks = this._callbacks || {};
-  (this._callbacks[event] = this._callbacks[event] || [])
-    .push(fn);
-  return this;
-};
-
-/**
- * Adds an `event` listener that will be invoked a single
- * time then automatically removed.
- *
- * @param {String} event
- * @param {Function} fn
- * @return {Emitter}
- * @api public
- */
-
-Emitter.prototype.once = function(event, fn){
-  var self = this;
-  this._callbacks = this._callbacks || {};
-
-  function on() {
-    self.off(event, on);
-    fn.apply(this, arguments);
-  }
-
-  on.fn = fn;
-  this.on(event, on);
-  return this;
-};
-
-/**
- * Remove the given callback for `event` or all
- * registered callbacks.
- *
- * @param {String} event
- * @param {Function} fn
- * @return {Emitter}
- * @api public
- */
-
-Emitter.prototype.off =
-Emitter.prototype.removeListener =
-Emitter.prototype.removeAllListeners =
-Emitter.prototype.removeEventListener = function(event, fn){
-  this._callbacks = this._callbacks || {};
-
-  // all
-  if (0 == arguments.length) {
-    this._callbacks = {};
-    return this;
-  }
-
-  // specific event
-  var callbacks = this._callbacks[event];
-  if (!callbacks) return this;
-
-  // remove all handlers
-  if (1 == arguments.length) {
-    delete this._callbacks[event];
-    return this;
-  }
-
-  // remove specific handler
-  var cb;
-  for (var i = 0; i < callbacks.length; i++) {
-    cb = callbacks[i];
-    if (cb === fn || cb.fn === fn) {
-      callbacks.splice(i, 1);
-      break;
-    }
-  }
-  return this;
-};
-
-/**
- * Emit `event` with the given args.
- *
- * @param {String} event
- * @param {Mixed} ...
- * @return {Emitter}
- */
-
-Emitter.prototype.emit = function(event){
-  this._callbacks = this._callbacks || {};
-  var args = [].slice.call(arguments, 1)
-    , callbacks = this._callbacks[event];
-
-  if (callbacks) {
-    callbacks = callbacks.slice(0);
-    for (var i = 0, len = callbacks.length; i < len; ++i) {
-      callbacks[i].apply(this, args);
-    }
-  }
-
-  return this;
-};
-
-/**
- * Return array of callbacks for `event`.
- *
- * @param {String} event
- * @return {Array}
- * @api public
- */
-
-Emitter.prototype.listeners = function(event){
-  this._callbacks = this._callbacks || {};
-  return this._callbacks[event] || [];
-};
-
-/**
- * Check if this emitter has `event` handlers.
- *
- * @param {String} event
- * @return {Boolean}
- * @api public
- */
-
-Emitter.prototype.hasListeners = function(event){
-  return !! this.listeners(event).length;
-};
-
-},{}],3:[function(require,module,exports){
-
-/**
- * Reduce `arr` with `fn`.
- *
- * @param {Array} arr
- * @param {Function} fn
- * @param {Mixed} initial
- *
- * TODO: combatible error handling?
- */
-
-module.exports = function(arr, fn, initial){  
-  var idx = 0;
-  var len = arr.length;
-  var curr = arguments.length == 3
-    ? initial
-    : arr[idx++];
-
-  while (idx < len) {
-    curr = fn.call(null, curr, arr[idx], ++idx, arr);
-  }
-  
-  return curr;
-};
-},{}]},{},[1])(1)
-});
 /*globals define*/
 /*jshint browser: true*/
 /**
  * @author kecso / https://github.com/kecso
  */
-define('client/js/client/undoredo',[], function () {
-    
-    function UndoRedo(_client) {
-        var
-            currentModification = null,
-            canDoUndo = false,
-            canDoRedo = false,
-            currentTarget = null,
-            addModification = function (commitHash, info) {
-                var newElement = {
-                    previous: currentModification,
-                    commit: commitHash,
-                    info: info,
-                    next: null
-                };
-                if (currentModification) {
-                    currentModification.next = newElement;
-                }
-                currentModification = newElement;
-            },
-            undo = function (branch, callback) {
-                var from, to, project;
-                if (canDoUndo && currentModification && currentModification.previous) {
-                    project = _client.getProjectObject();
-                    from = currentModification.commit;
-                    to = currentModification.previous.commit;
-                    currentModification = currentModification.previous;
-                    currentTarget = to;
-                    project.setBranchHash(branch, from, to, callback);
-                } else {
-                    callback(new Error('unable to execute undo'));
-                }
-            },
-            redo = function (branch, callback) {
-                var from, to, project;
-                if (canDoRedo && currentModification && currentModification.next) {
-                    project = _client.getProjectObject();
-                    from = currentModification.commit;
-                    to = currentModification.next.commit;
-                    currentModification = currentModification.next;
-                    currentTarget = to;
-                    project.setBranchHash(branch, from, to, callback);
-                } else {
-                    callback(new Error('unable to execute redo'));
-                }
-            },
-            clean = function () {
-                currentModification = null;
-                canDoUndo = false;
-                canDoRedo = false;
-            },
-            checkStatus = function () {
-                return {
-                    undo: currentModification ? currentModification.previous !== null &&
-                    currentModification.previous !== undefined : false,
-                    redo: currentModification ? currentModification.next !== null &&
-                    currentModification.next !== undefined : false
-                };
-            },
-            isCurrentTarget = function (commitHash) {
-                if (currentTarget === commitHash) {
-                    currentTarget = null;
-                    return true;
-                }
-                return false;
-            };
+define('js/client/gmeNodeGetter',['common/core/users/tojson'], function (toJson) {
 
-        _client.addEventListener(_client.events.UNDO_AVAILABLE, function (client, parameters) {
-            canDoUndo = parameters === true;
-        });
-        _client.addEventListener(_client.events.REDO_AVAILABLE, function (client, parameters) {
-            canDoRedo = parameters === true;
-        });
-        return {
-            undo: undo,
-            redo: redo,
-            addModification: addModification,
-            clean: clean,
-            checkStatus: checkStatus,
-            isCurrentTarget: isCurrentTarget
-        };
-
-    }
-
-    return UndoRedo;
-});
-/*globals define*/
-/*jshint browser: true*/
-/**
- * @author kecso / https://github.com/kecso
- */
-define('client/js/client/gmeNodeGetter',['common/core/users/tojson'], function (toJson) {
-    
 
     //getNode
-    function getNode(_id, _clientGlobal) {
-
+    function getNode(_id, logger, state, meta, storeNode) {
 
         function getParentId() {
             //just for sure, as it may missing from the cache
-            return _clientGlobal.functions.storeNode(_clientGlobal.core.getParent(_clientGlobal.nodes[_id].node));
+            return storeNode(state.core.getParent(state.nodes[_id].node));
         }
 
         function getId() {
@@ -16135,17 +14433,17 @@ define('client/js/client/gmeNodeGetter',['common/core/users/tojson'], function (
         }
 
         function getGuid() {
-            return _clientGlobal.core.getGuid(_clientGlobal.nodes[_id].node);
+            return state.core.getGuid(state.nodes[_id].node);
         }
 
         function getChildrenIds() {
-            return _clientGlobal.core.getChildrenPaths(_clientGlobal.nodes[_id].node);
+            return state.core.getChildrenPaths(state.nodes[_id].node);
         }
 
         function getBaseId() {
-            var base = _clientGlobal.core.getBase(_clientGlobal.nodes[_id].node);
+            var base = state.core.getBase(state.nodes[_id].node);
             if (base) {
-                return _clientGlobal.functions.storeNode(base);
+                return storeNode(base);
             } else {
                 return null;
             }
@@ -16157,15 +14455,15 @@ define('client/js/client/gmeNodeGetter',['common/core/users/tojson'], function (
         }
 
         function getAttribute(name) {
-            return _clientGlobal.core.getAttribute(_clientGlobal.nodes[_id].node, name);
+            return state.core.getAttribute(state.nodes[_id].node, name);
         }
 
         function getOwnAttribute(name) {
-            return _clientGlobal.core.getOwnAttribute(_clientGlobal.nodes[_id].node, name);
+            return state.core.getOwnAttribute(state.nodes[_id].node, name);
         }
 
         function getEditableAttribute(name) {
-            var value = _clientGlobal.core.getAttribute(_clientGlobal.nodes[_id].node, name);
+            var value = state.core.getAttribute(state.nodes[_id].node, name);
             if (typeof value === 'object') {
                 return JSON.parse(JSON.stringify(value));
             }
@@ -16173,7 +14471,7 @@ define('client/js/client/gmeNodeGetter',['common/core/users/tojson'], function (
         }
 
         function getOwnEditableAttribute(name) {
-            var value = _clientGlobal.core.getOwnAttribute(_clientGlobal.nodes[_id].node, name);
+            var value = state.core.getOwnAttribute(state.nodes[_id].node, name);
             if (typeof value === 'object') {
                 return JSON.parse(JSON.stringify(value));
             }
@@ -16181,15 +14479,15 @@ define('client/js/client/gmeNodeGetter',['common/core/users/tojson'], function (
         }
 
         function getRegistry(name) {
-            return _clientGlobal.core.getRegistry(_clientGlobal.nodes[_id].node, name);
+            return state.core.getRegistry(state.nodes[_id].node, name);
         }
 
         function getOwnRegistry(name) {
-            return _clientGlobal.core.getOwnRegistry(_clientGlobal.nodes[_id].node, name);
+            return state.core.getOwnRegistry(state.nodes[_id].node, name);
         }
 
         function getEditableRegistry(name) {
-            var value = _clientGlobal.core.getRegistry(_clientGlobal.nodes[_id].node, name);
+            var value = state.core.getRegistry(state.nodes[_id].node, name);
             if (typeof value === 'object') {
                 return JSON.parse(JSON.stringify(value));
             }
@@ -16197,7 +14495,7 @@ define('client/js/client/gmeNodeGetter',['common/core/users/tojson'], function (
         }
 
         function getOwnEditableRegistry(name) {
-            var value = _clientGlobal.core.getOwnRegistry(_clientGlobal.nodes[_id].node, name);
+            var value = state.core.getOwnRegistry(state.nodes[_id].node, name);
             if (typeof value === 'object') {
                 return JSON.parse(JSON.stringify(value));
             }
@@ -16208,59 +14506,59 @@ define('client/js/client/gmeNodeGetter',['common/core/users/tojson'], function (
             //return _core.getPointerPath(_nodes[_id].node,name);
             if (name === 'base') {
                 //base is a special case as it complicates with inherited children
-                return {to: _clientGlobal.core.getPath(_clientGlobal.core.getBase(_clientGlobal.nodes[_id].node)),
+                return {to: state.core.getPath(state.core.getBase(state.nodes[_id].node)),
                     from: []};
             }
-            return {to: _clientGlobal.core.getPointerPath(_clientGlobal.nodes[_id].node, name), from: []};
+            return {to: state.core.getPointerPath(state.nodes[_id].node, name), from: []};
         }
 
         function getOwnPointer(name) {
-            return {to: _clientGlobal.core.getOwnPointerPath(_clientGlobal.nodes[_id].node, name), from: []};
+            return {to: state.core.getOwnPointerPath(state.nodes[_id].node, name), from: []};
         }
 
         function getPointerNames() {
-            return _clientGlobal.core.getPointerNames(_clientGlobal.nodes[_id].node);
+            return state.core.getPointerNames(state.nodes[_id].node);
         }
 
         function getOwnPointerNames() {
-            return _clientGlobal.core.getOwnPointerNames(_clientGlobal.nodes[_id].node);
+            return state.core.getOwnPointerNames(state.nodes[_id].node);
         }
 
         function getAttributeNames() {
-            return _clientGlobal.core.getAttributeNames(_clientGlobal.nodes[_id].node);
+            return state.core.getAttributeNames(state.nodes[_id].node);
         }
 
         function getOwnAttributeNames() {
-            return _clientGlobal.core.getOwnAttributeNames(_clientGlobal.nodes[_id].node);
+            return state.core.getOwnAttributeNames(state.nodes[_id].node);
         }
 
         function getRegistryNames() {
-            return _clientGlobal.core.getRegistryNames(_clientGlobal.nodes[_id].node);
+            return state.core.getRegistryNames(state.nodes[_id].node);
         }
 
         function getOwnRegistryNames() {
-            return _clientGlobal.core.getOwnRegistryNames(_clientGlobal.nodes[_id].node);
+            return state.core.getOwnRegistryNames(state.nodes[_id].node);
         }
 
         //SET
         function getMemberIds(setid) {
-            return _clientGlobal.core.getMemberPaths(_clientGlobal.nodes[_id].node, setid);
+            return state.core.getMemberPaths(state.nodes[_id].node, setid);
         }
 
         function getSetNames() {
-            return _clientGlobal.core.getSetNames(_clientGlobal.nodes[_id].node);
+            return state.core.getSetNames(state.nodes[_id].node);
         }
 
         function getMemberAttributeNames(setid, memberid) {
-            return _clientGlobal.core.getMemberAttributeNames(_clientGlobal.nodes[_id].node, setid, memberid);
+            return state.core.getMemberAttributeNames(state.nodes[_id].node, setid, memberid);
         }
 
         function getMemberAttribute(setid, memberid, name) {
-            return _clientGlobal.core.getMemberAttribute(_clientGlobal.nodes[_id].node, setid, memberid, name);
+            return state.core.getMemberAttribute(state.nodes[_id].node, setid, memberid, name);
         }
 
         function getEditableMemberAttribute(setid, memberid, name) {
-            var attr = _clientGlobal.core.getMemberAttribute(_clientGlobal.nodes[_id].node, setid, memberid, name);
+            var attr = state.core.getMemberAttribute(state.nodes[_id].node, setid, memberid, name);
             if (attr !== null && attr !== undefined) {
                 return JSON.parse(JSON.stringify(attr));
             }
@@ -16268,15 +14566,15 @@ define('client/js/client/gmeNodeGetter',['common/core/users/tojson'], function (
         }
 
         function getMemberRegistryNames(setid, memberid) {
-            return _clientGlobal.core.getMemberRegistryNames(_clientGlobal.nodes[_id].node, setid, memberid);
+            return state.core.getMemberRegistryNames(state.nodes[_id].node, setid, memberid);
         }
 
         function getMemberRegistry(setid, memberid, name) {
-            return _clientGlobal.core.getMemberRegistry(_clientGlobal.nodes[_id].node, setid, memberid, name);
+            return state.core.getMemberRegistry(state.nodes[_id].node, setid, memberid, name);
         }
 
         function getEditableMemberRegistry(setid, memberid, name) {
-            var attr = _clientGlobal.core.getMemberRegistry(_clientGlobal.nodes[_id].node, setid, memberid, name);
+            var attr = state.core.getMemberRegistry(state.nodes[_id].node, setid, memberid, name);
             if (attr !== null && attr !== undefined) {
                 return JSON.parse(JSON.stringify(attr));
             }
@@ -16286,39 +14584,39 @@ define('client/js/client/gmeNodeGetter',['common/core/users/tojson'], function (
         //META
         function getValidChildrenTypes() {
             //return getMemberIds('ValidChildren');
-            return _clientGlobal.META.getValidChildrenTypes(_id);
+            return meta.getValidChildrenTypes(_id);
         }
 
         //constraint functions
         function getConstraintNames() {
-            return _clientGlobal.core.getConstraintNames(_clientGlobal.nodes[_id].node);
+            return state.core.getConstraintNames(state.nodes[_id].node);
         }
 
         function getOwnConstraintNames() {
-            return _clientGlobal.core.getOwnConstraintNames(_clientGlobal.nodes[_id].node);
+            return state.core.getOwnConstraintNames(state.nodes[_id].node);
         }
 
         function getConstraint(name) {
-            return _clientGlobal.core.getConstraint(_clientGlobal.nodes[_id].node, name);
+            return state.core.getConstraint(state.nodes[_id].node, name);
         }
 
         function printData() {
             //probably we will still use it for test purposes, but now it goes officially
             // into printing the node's json representation
-            toJson(_clientGlobal.core, _clientGlobal.nodes[_id].node, '', 'guid', function (err, jNode) {
-                _clientGlobal.logger.debug('node in JSON format[status = ', err, ']:', jNode);
+            toJson(state.core, state.nodes[_id].node, '', 'guid', function (err, jNode) {
+                state.logger.debug('node in JSON format[status = ', err, ']:', jNode);
             });
         }
 
         function toString() {
-            return _clientGlobal.core.getAttribute(_clientGlobal.nodes[_id].node, 'name') + ' (' + _id + ')';
+            return state.core.getAttribute(state.nodes[_id].node, 'name') + ' (' + _id + ')';
         }
 
         function getCollectionPaths(name) {
-            return _clientGlobal.core.getCollectionPaths(_clientGlobal.nodes[_id].node, name);
+            return state.core.getCollectionPaths(state.nodes[_id].node, name);
         }
 
-        if (_clientGlobal.nodes[_id]) {
+        if (state.nodes[_id]) {
             return {
                 getParentId: getParentId,
                 getId: getId,
@@ -16367,10 +14665,11 @@ define('client/js/client/gmeNodeGetter',['common/core/users/tojson'], function (
                 getCollectionPaths: getCollectionPaths
 
             };
+        } else {
+            //logger.warn('Tried to get node with path "' + _id + '" but was not in state.nodes');
         }
 
         return null;
-
     }
 
     return getNode;
@@ -16380,39 +14679,39 @@ define('client/js/client/gmeNodeGetter',['common/core/users/tojson'], function (
 /**
  * @author kecso / https://github.com/kecso
  */
-define('client/js/client/gmeNodeSetter',[], function () {
-    
-    function gmeNodeSetter(_clientGlobal) {
+define('js/client/gmeNodeSetter',[], function () {
+
+    function gmeNodeSetter(logger, state, saveRoot, storeNode) {
 
         function setAttributes(path, name, value, msg) {
-            if (_clientGlobal.core && _clientGlobal.nodes[path] && typeof _clientGlobal.nodes[path].node === 'object') {
-                _clientGlobal.core.setAttribute(_clientGlobal.nodes[path].node, name, value);
+            if (state.core && state.nodes[path] && typeof state.nodes[path].node === 'object') {
+                state.core.setAttribute(state.nodes[path].node, name, value);
                 msg = msg || 'setAttribute(' + path + ',' + name + ',' + value + ')';
-                _clientGlobal.functions.saveRoot(msg);
+                saveRoot(msg);
             }
         }
 
         function delAttributes(path, name, msg) {
-            if (_clientGlobal.core && _clientGlobal.nodes[path] && typeof _clientGlobal.nodes[path].node === 'object') {
-                _clientGlobal.core.delAttribute(_clientGlobal.nodes[path].node, name);
+            if (state.core && state.nodes[path] && typeof state.nodes[path].node === 'object') {
+                state.core.delAttribute(state.nodes[path].node, name);
                 msg = msg || 'delAttribute(' + path + ',' + name + ')';
-                _clientGlobal.functions.saveRoot(msg);
+                saveRoot(msg);
             }
         }
 
         function setRegistry(path, name, value, msg) {
-            if (_clientGlobal.core && _clientGlobal.nodes[path] && typeof _clientGlobal.nodes[path].node === 'object') {
-                _clientGlobal.core.setRegistry(_clientGlobal.nodes[path].node, name, value);
+            if (state.core && state.nodes[path] && typeof state.nodes[path].node === 'object') {
+                state.core.setRegistry(state.nodes[path].node, name, value);
                 msg = msg || 'setRegistry(' + path + ',' + ',' + name + ',' + value + ')';
-                _clientGlobal.functions.saveRoot(msg);
+                saveRoot(msg);
             }
         }
 
         function delRegistry(path, name, msg) {
-            if (_clientGlobal.core && _clientGlobal.nodes[path] && typeof _clientGlobal.nodes[path].node === 'object') {
-                _clientGlobal.core.delRegistry(_clientGlobal.nodes[path].node, name);
+            if (state.core && state.nodes[path] && typeof state.nodes[path].node === 'object') {
+                state.core.delRegistry(state.nodes[path].node, name);
                 msg = msg || 'delRegistry(' + path + ',' + ',' + name + ')';
-                _clientGlobal.functions.saveRoot(msg);
+                saveRoot(msg);
             }
         }
 
@@ -16422,8 +14721,8 @@ define('client/js/client/gmeNodeSetter',[], function () {
                 j,
                 newNode;
 
-            if (typeof parameters.parentId === 'string' && _clientGlobal.nodes[parameters.parentId] &&
-                typeof _clientGlobal.nodes[parameters.parentId].node === 'object') {
+            if (typeof parameters.parentId === 'string' && state.nodes[parameters.parentId] &&
+                typeof state.nodes[parameters.parentId].node === 'object') {
                 for (i in parameters) {
                     if (i !== 'parentId') {
                         pathestocopy.push(i);
@@ -16434,50 +14733,50 @@ define('client/js/client/gmeNodeSetter',[], function () {
                 if (pathestocopy.length < 1) {
                     // empty on purpose
                 } else if (pathestocopy.length === 1) {
-                    newNode = _clientGlobal.core.copyNode(_clientGlobal.nodes[pathestocopy[0]].node,
-                        _clientGlobal.nodes[parameters.parentId].node);
-                    _clientGlobal.functions.storeNode(newNode);
+                    newNode = state.core.copyNode(state.nodes[pathestocopy[0]].node,
+                        state.nodes[parameters.parentId].node);
+                    storeNode(newNode);
                     if (parameters[pathestocopy[0]]) {
                         for (j in parameters[pathestocopy[0]].attributes) {
                             if (parameters[pathestocopy[0]].attributes.hasOwnProperty(j)) {
-                                _clientGlobal.core.setAttribute(newNode, j, parameters[pathestocopy[0]].attributes[j]);
+                                state.core.setAttribute(newNode, j, parameters[pathestocopy[0]].attributes[j]);
                             }
                         }
                         for (j in parameters[pathestocopy[0]].registry) {
                             if (parameters[pathestocopy[0]].registry.hasOwnProperty(j)) {
-                                _clientGlobal.core.setRegistry(newNode, j, parameters[pathestocopy[0]].registry[j]);
+                                state.core.setRegistry(newNode, j, parameters[pathestocopy[0]].registry[j]);
                             }
                         }
                     }
-                    _clientGlobal.functions.saveRoot(msg);
+                    saveRoot(msg);
                 } else {
                     copyMoreNodesAsync(pathestocopy, parameters.parentId, function (err, copyarr) {
                         var i,
                             j;
                         if (err) {
                             //rollBackModification();
-                            _clientGlobal.logger.error(err);
+                            state.logger.error(err);
                         } else {
                             for (i in copyarr) {
                                 if (copyarr.hasOwnProperty(i) && parameters[i]) {
                                     for (j in parameters[i].attributes) {
                                         if (parameters[i].attributes.hasOwnProperty(j)) {
-                                            _clientGlobal.core.setAttribute(copyarr[i], j, parameters[i].attributes[j]);
+                                            state.core.setAttribute(copyarr[i], j, parameters[i].attributes[j]);
                                         }
                                     }
                                     for (j in parameters[i].registry) {
                                         if (parameters[i].registry.hasOwnProperty(j)) {
-                                            _clientGlobal.core.setRegistry(copyarr[i], j, parameters[i].registry[j]);
+                                            state.core.setRegistry(copyarr[i], j, parameters[i].registry[j]);
                                         }
                                     }
                                 }
                             }
-                            _clientGlobal.functions.saveRoot(msg);
+                            saveRoot(msg);
                         }
                     });
                 }
             } else {
-                _clientGlobal.logger.error('wrong parameters for copy operation - denied -');
+                state.logger.error('wrong parameters for copy operation - denied -');
             }
         }
 
@@ -16494,66 +14793,66 @@ define('client/js/client/gmeNodeSetter',[], function () {
                         result = true;
 
                     for (i = 0; i < nodePaths.length; i += 1) {
-                        result = result && (_clientGlobal.nodes[nodePaths[i]] &&
-                            typeof _clientGlobal.nodes[nodePaths[i]].node === 'object');
+                        result = result && (state.nodes[nodePaths[i]] &&
+                            typeof state.nodes[nodePaths[i]].node === 'object');
                     }
                     return result;
                 };
 
-            if (_clientGlobal.nodes[parentPath] &&
-                typeof _clientGlobal.nodes[parentPath].node === 'object' && checkPaths()) {
+            if (state.nodes[parentPath] &&
+                typeof state.nodes[parentPath].node === 'object' && checkPaths()) {
                 helpArray = {};
                 subPathArray = {};
-                parent = _clientGlobal.nodes[parentPath].node;
+                parent = state.nodes[parentPath].node;
                 returnArray = {};
 
                 //creating the 'from' object
-                tempFrom = _clientGlobal.core.createNode({
+                tempFrom = state.core.createNode({
                     parent: parent,
-                    base: _clientGlobal.core.getTypeRoot(_clientGlobal.nodes[nodePaths[0]].node)
+                    base: state.core.getTypeRoot(state.nodes[nodePaths[0]].node)
                 });
                 //and moving every node under it
                 for (i = 0; i < nodePaths.length; i += 1) {
                     helpArray[nodePaths[i]] = {};
                     helpArray[nodePaths[i]].origparent =
-                        _clientGlobal.core.getParent(_clientGlobal.nodes[nodePaths[i]].node);
+                        state.core.getParent(state.nodes[nodePaths[i]].node);
                     helpArray[nodePaths[i]].tempnode =
-                        _clientGlobal.core.moveNode(_clientGlobal.nodes[nodePaths[i]].node, tempFrom);
-                    subPathArray[_clientGlobal.core.getRelid(helpArray[nodePaths[i]].tempnode)] = nodePaths[i];
-                    delete _clientGlobal.nodes[nodePaths[i]];
+                        state.core.moveNode(state.nodes[nodePaths[i]].node, tempFrom);
+                    subPathArray[state.core.getRelid(helpArray[nodePaths[i]].tempnode)] = nodePaths[i];
+                    delete state.nodes[nodePaths[i]];
                 }
 
                 //do the copy
-                tempTo = _clientGlobal.core.copyNode(tempFrom, parent);
+                tempTo = state.core.copyNode(tempFrom, parent);
 
                 //moving back the temporary source
                 for (i = 0; i < nodePaths.length; i += 1) {
-                    helpArray[nodePaths[i]].node = _clientGlobal.core.moveNode(helpArray[nodePaths[i]].tempnode,
+                    helpArray[nodePaths[i]].node = state.core.moveNode(helpArray[nodePaths[i]].tempnode,
                         helpArray[nodePaths[i]].origparent);
-                    _clientGlobal.functions.storeNode(helpArray[nodePaths[i]].node);
+                    storeNode(helpArray[nodePaths[i]].node);
                 }
 
                 //gathering the destination nodes
-                _clientGlobal.core.loadChildren(tempTo, function (err, children) {
+                state.core.loadChildren(tempTo, function (err, children) {
                     var newNode;
 
                     if (!err && children && children.length > 0) {
                         for (i = 0; i < children.length; i += 1) {
-                            if (subPathArray[_clientGlobal.core.getRelid(children[i])]) {
-                                newNode = _clientGlobal.core.moveNode(children[i], parent);
-                                _clientGlobal.functions.storeNode(newNode);
-                                returnArray[subPathArray[_clientGlobal.core.getRelid(children[i])]] = newNode;
+                            if (subPathArray[state.core.getRelid(children[i])]) {
+                                newNode = state.core.moveNode(children[i], parent);
+                                storeNode(newNode);
+                                returnArray[subPathArray[state.core.getRelid(children[i])]] = newNode;
                             } else {
-                                _clientGlobal.logger.error('635 - should never happen!!!');
+                                state.logger.error('635 - should never happen!!!');
                             }
                         }
-                        _clientGlobal.core.deleteNode(tempFrom);
-                        _clientGlobal.core.deleteNode(tempTo);
+                        state.core.deleteNode(tempFrom);
+                        state.core.deleteNode(tempTo);
                         callback(null, returnArray);
                     } else {
                         //clean up the mess and return
-                        _clientGlobal.core.deleteNode(tempFrom);
-                        _clientGlobal.core.deleteNode(tempTo);
+                        state.core.deleteNode(tempFrom);
+                        state.core.deleteNode(tempTo);
                         callback(err, {});
                     }
                 });
@@ -16577,18 +14876,18 @@ define('client/js/client/gmeNodeSetter',[], function () {
 
             if (pathsToMove.length > 0 &&
                 typeof parameters.parentId === 'string' &&
-                _clientGlobal.nodes[parameters.parentId] &&
-                typeof _clientGlobal.nodes[parameters.parentId].node === 'object') {
+                state.nodes[parameters.parentId] &&
+                typeof state.nodes[parameters.parentId].node === 'object') {
                 for (i = 0; i < pathsToMove.length; i += 1) {
-                    if (_clientGlobal.nodes[pathsToMove[i]] &&
-                        typeof _clientGlobal.nodes[pathsToMove[i]].node === 'object') {
-                        newNode = _clientGlobal.core.moveNode(_clientGlobal.nodes[pathsToMove[i]].node,
-                            _clientGlobal.nodes[parameters.parentId].node);
-                        returnParams[pathsToMove[i]] = _clientGlobal.core.getPath(newNode);
+                    if (state.nodes[pathsToMove[i]] &&
+                        typeof state.nodes[pathsToMove[i]].node === 'object') {
+                        newNode = state.core.moveNode(state.nodes[pathsToMove[i]].node,
+                            state.nodes[parameters.parentId].node);
+                        returnParams[pathsToMove[i]] = state.core.getPath(newNode);
                         if (parameters[pathsToMove[i]].attributes) {
                             for (j in parameters[pathsToMove[i]].attributes) {
                                 if (parameters[pathsToMove[i]].attributes.hasOwnProperty(j)) {
-                                    _clientGlobal.core.setAttribute(newNode,
+                                    state.core.setAttribute(newNode,
                                         j, parameters[pathsToMove[i]].attributes[j]);
                                 }
                             }
@@ -16596,14 +14895,14 @@ define('client/js/client/gmeNodeSetter',[], function () {
                         if (parameters[pathsToMove[i]].registry) {
                             for (j in parameters[pathsToMove[i]].registry) {
                                 if (parameters[pathsToMove[i]].registry.hasOwnProperty(j)) {
-                                    _clientGlobal.core.setRegistry(newNode,
+                                    state.core.setRegistry(newNode,
                                         j, parameters[pathsToMove[i]].registry[j]);
                                 }
                             }
                         }
 
-                        delete _clientGlobal.nodes[pathsToMove[i]];
-                        _clientGlobal.functions.storeNode(newNode, true);
+                        delete state.nodes[pathsToMove[i]];
+                        storeNode(newNode, true);
                     }
                 }
             }
@@ -16617,7 +14916,7 @@ define('client/js/client/gmeNodeSetter',[], function () {
                 paths = [],
                 nodes = [],
                 node,
-                parent = _clientGlobal.nodes[parameters.parentId].node,
+                parent = state.nodes[parameters.parentId].node,
                 names, i, j, index, pointer,
                 newChildren = [],
                 relations = [];
@@ -16627,17 +14926,17 @@ define('client/js/client/gmeNodeSetter',[], function () {
             paths = Object.keys(parameters);
             paths.splice(paths.indexOf('parentId'), 1);
             for (i = 0; i < paths.length; i++) {
-                node = _clientGlobal.nodes[paths[i]].node;
+                node = state.nodes[paths[i]].node;
                 nodes.push(node);
                 pointer = {};
-                names = _clientGlobal.core.getPointerNames(node);
+                names = state.core.getPointerNames(node);
                 index = names.indexOf('base');
                 if (index !== -1) {
                     names.splice(index, 1);
                 }
 
                 for (j = 0; j < names.length; j++) {
-                    index = paths.indexOf(_clientGlobal.core.getPointerPath(node, names[j]));
+                    index = paths.indexOf(state.core.getPointerPath(node, names[j]));
                     if (index !== -1) {
                         pointer[names[j]] = index;
                     }
@@ -16647,7 +14946,7 @@ define('client/js/client/gmeNodeSetter',[], function () {
 
             //now the instantiation
             for (i = 0; i < nodes.length; i++) {
-                newChildren.push(_clientGlobal.core.createNode({parent: parent, base: nodes[i]}));
+                newChildren.push(state.core.createNode({parent: parent, base: nodes[i]}));
             }
 
             //now for the storage and relation setting
@@ -16655,85 +14954,85 @@ define('client/js/client/gmeNodeSetter',[], function () {
                 //attributes
                 names = Object.keys(parameters[paths[i]].attributes || {});
                 for (j = 0; j < names.length; j++) {
-                    _clientGlobal.core.setAttribute(newChildren[i],
+                    state.core.setAttribute(newChildren[i],
                         names[j], parameters[paths[i]].attributes[names[j]]);
                 }
                 //registry
                 names = Object.keys(parameters[paths[i]].registry || {});
                 for (j = 0; j < names.length; j++) {
-                    _clientGlobal.core.setRegistry(newChildren[i],
+                    state.core.setRegistry(newChildren[i],
                         names[j], parameters[paths[i]].registry[names[j]]);
                 }
 
                 //relations
                 names = Object.keys(relations[i]);
                 for (j = 0; j < names.length; j++) {
-                    _clientGlobal.core.setPointer(newChildren[i], names[j], newChildren[relations[i][names[j]]]);
+                    state.core.setPointer(newChildren[i], names[j], newChildren[relations[i][names[j]]]);
                 }
 
                 //store
-                result[paths[i]] = _clientGlobal.functions.storeNode(newChildren[i]);
+                result[paths[i]] = storeNode(newChildren[i]);
 
             }
 
             msg = msg || 'createChildren(' + JSON.stringify(result) + ')';
-            _clientGlobal.functions.saveRoot(msg);
+            saveRoot(msg);
             return result;
         }
 
         //TODO should be removed as there is no user or public API related to this function
         //function deleteNode(path, msg) {
-        //  if (_clientGlobal.core && _clientGlobal.nodes[path] && typeof _clientGlobal.nodes[path].node === 'object') {
-        //    _clientGlobal.core.deleteNode(_clientGlobal.nodes[path].node);
-        //    //delete _clientGlobal.nodes[path];
+        //  if (state.core && state.nodes[path] && typeof state.nodes[path].node === 'object') {
+        //    state.core.deleteNode(state.nodes[path].node);
+        //    //delete state.nodes[path];
         //    msg = msg || 'deleteNode(' + path + ')';
         //    saveRoot(msg);
         //  }
         //}
 
         function delMoreNodes(paths, msg) {
-            if (_clientGlobal.core) {
+            if (state.core) {
                 for (var i = 0; i < paths.length; i++) {
-                    if (_clientGlobal.nodes[paths[i]] && typeof _clientGlobal.nodes[paths[i]].node === 'object') {
-                        _clientGlobal.core.deleteNode(_clientGlobal.nodes[paths[i]].node);
-                        //delete _clientGlobal.nodes[paths[i]];
+                    if (state.nodes[paths[i]] && typeof state.nodes[paths[i]].node === 'object') {
+                        state.core.deleteNode(state.nodes[paths[i]].node);
+                        //delete state.nodes[paths[i]];
                     }
                 }
                 msg = msg || 'delMoreNodes(' + paths + ')';
-                _clientGlobal.functions.saveRoot(msg);
+                saveRoot(msg);
             }
         }
 
         function createChild(parameters, msg) {
             var newID;
 
-            if (_clientGlobal.core) {
-                if (typeof parameters.parentId === 'string' && _clientGlobal.nodes[parameters.parentId] &&
-                    typeof _clientGlobal.nodes[parameters.parentId].node === 'object') {
+            if (state.core) {
+                if (typeof parameters.parentId === 'string' && state.nodes[parameters.parentId] &&
+                    typeof state.nodes[parameters.parentId].node === 'object') {
                     var baseNode = null;
-                    if (_clientGlobal.nodes[parameters.baseId]) {
-                        baseNode = _clientGlobal.nodes[parameters.baseId].node || baseNode;
+                    if (state.nodes[parameters.baseId]) {
+                        baseNode = state.nodes[parameters.baseId].node || baseNode;
                     }
-                    var child = _clientGlobal.core.createNode({
-                        parent: _clientGlobal.nodes[parameters.parentId].node,
+                    var child = state.core.createNode({
+                        parent: state.nodes[parameters.parentId].node,
                         base: baseNode,
                         guid: parameters.guid,
                         relid: parameters.relid
                     });
                     if (parameters.position) {
-                        _clientGlobal.core.setRegistry(child,
+                        state.core.setRegistry(child,
                             'position',
                             {
                                 x: parameters.position.x || 100,
                                 y: parameters.position.y || 100
                             });
                     } else {
-                        _clientGlobal.core.setRegistry(child, 'position', {x: 100, y: 100});
+                        state.core.setRegistry(child, 'position', {x: 100, y: 100});
                     }
-                    _clientGlobal.functions.storeNode(child);
-                    newID = _clientGlobal.core.getPath(child);
+                    storeNode(child);
+                    newID = state.core.getPath(child);
                     msg = msg || 'createChild(' + parameters.parentId + ',' + parameters.baseId + ',' + newID + ')';
-                    _clientGlobal.functions.saveRoot(msg);
+                    saveRoot(msg);
                 }
             }
 
@@ -16742,129 +15041,128 @@ define('client/js/client/gmeNodeSetter',[], function () {
 
         function makePointer(id, name, to, msg) {
             if (to === null) {
-                _clientGlobal.core.setPointer(_clientGlobal.nodes[id].node, name, to);
+                state.core.setPointer(state.nodes[id].node, name, to);
             } else {
 
 
-                _clientGlobal.core.setPointer(_clientGlobal.nodes[id].node, name, _clientGlobal.nodes[to].node);
+                state.core.setPointer(state.nodes[id].node, name, state.nodes[to].node);
             }
 
             msg = msg || 'makePointer(' + id + ',' + name + ',' + to + ')';
-            _clientGlobal.functions.saveRoot(msg);
+            saveRoot(msg);
         }
 
         function delPointer(path, name, msg) {
-            if (_clientGlobal.core && _clientGlobal.nodes[path] && typeof _clientGlobal.nodes[path].node === 'object') {
-                _clientGlobal.core.deletePointer(_clientGlobal.nodes[path].node, name);
+            if (state.core && state.nodes[path] && typeof state.nodes[path].node === 'object') {
+                state.core.deletePointer(state.nodes[path].node, name);
                 msg = msg || 'delPointer(' + path + ',' + name + ')';
-                _clientGlobal.functions.saveRoot(msg);
+                saveRoot(msg);
             }
         }
 
 
         //MGAlike - set functions
         function addMember(path, memberpath, setid, msg) {
-            if (_clientGlobal.nodes[path] &&
-                _clientGlobal.nodes[memberpath] &&
-                typeof _clientGlobal.nodes[path].node === 'object' &&
-                typeof _clientGlobal.nodes[memberpath].node === 'object') {
-                _clientGlobal.core.addMember(_clientGlobal.nodes[path].node,
-                    setid, _clientGlobal.nodes[memberpath].node);
+            if (state.nodes[path] &&
+                state.nodes[memberpath] &&
+                typeof state.nodes[path].node === 'object' &&
+                typeof state.nodes[memberpath].node === 'object') {
+                state.core.addMember(state.nodes[path].node,
+                    setid, state.nodes[memberpath].node);
                 msg = msg || 'addMember(' + path + ',' + memberpath + ',' + setid + ')';
-                _clientGlobal.functions.saveRoot(msg);
+                saveRoot(msg);
             }
         }
 
         function removeMember(path, memberpath, setid, msg) {
-            if (_clientGlobal.nodes[path] &&
-                typeof _clientGlobal.nodes[path].node === 'object') {
-                _clientGlobal.core.delMember(_clientGlobal.nodes[path].node, setid, memberpath);
+            if (state.nodes[path] &&
+                typeof state.nodes[path].node === 'object') {
+                state.core.delMember(state.nodes[path].node, setid, memberpath);
                 msg = msg || 'removeMember(' + path + ',' + memberpath + ',' + setid + ')';
-                _clientGlobal.functions.saveRoot(msg);
+                saveRoot(msg);
             }
         }
 
         function setMemberAttribute(path, memberpath, setid, name, value, msg) {
-            if (_clientGlobal.nodes[path] && typeof _clientGlobal.nodes[path].node === 'object') {
-                _clientGlobal.core.setMemberAttribute(_clientGlobal.nodes[path].node, setid, memberpath, name, value);
+            if (state.nodes[path] && typeof state.nodes[path].node === 'object') {
+                state.core.setMemberAttribute(state.nodes[path].node, setid, memberpath, name, value);
                 msg = msg ||
                     'setMemberAttribute(' + path + ',' + memberpath + ',' + setid + ',' + name + ',' + value +
                     ')';
-                _clientGlobal.functions.saveRoot(msg);
+                saveRoot(msg);
             }
         }
 
         function delMemberAttribute(path, memberpath, setid, name, msg) {
-            if (_clientGlobal.nodes[path] && typeof _clientGlobal.nodes[path].node === 'object') {
-                _clientGlobal.core.delMemberAttribute(_clientGlobal.nodes[path].node, setid, memberpath, name);
+            if (state.nodes[path] && typeof state.nodes[path].node === 'object') {
+                state.core.delMemberAttribute(state.nodes[path].node, setid, memberpath, name);
                 msg = msg || 'delMemberAttribute(' + path + ',' + memberpath + ',' + setid + ',' + name + ')';
-                _clientGlobal.functions.saveRoot(msg);
+                saveRoot(msg);
             }
         }
 
         function setMemberRegistry(path, memberpath, setid, name, value, msg) {
-            if (_clientGlobal.nodes[path] && typeof _clientGlobal.nodes[path].node === 'object') {
-                _clientGlobal.core.setMemberRegistry(_clientGlobal.nodes[path].node, setid, memberpath, name, value);
+            if (state.nodes[path] && typeof state.nodes[path].node === 'object') {
+                state.core.setMemberRegistry(state.nodes[path].node, setid, memberpath, name, value);
                 msg = msg ||
                     'setMemberRegistry(' + path + ',' + memberpath + ',' + setid + ',' + name + ',' + value + ')';
-                _clientGlobal.functions.saveRoot(msg);
+                saveRoot(msg);
             }
         }
 
         function delMemberRegistry(path, memberpath, setid, name, msg) {
-            if (_clientGlobal.nodes[path] && typeof _clientGlobal.nodes[path].node === 'object') {
-                _clientGlobal.core.delMemberRegistry(_clientGlobal.nodes[path].node, setid, memberpath, name);
+            if (state.nodes[path] && typeof state.nodes[path].node === 'object') {
+                state.core.delMemberRegistry(state.nodes[path].node, setid, memberpath, name);
                 msg = msg || 'delMemberRegistry(' + path + ',' + memberpath + ',' + setid + ',' + name + ')';
-                _clientGlobal.functions.saveRoot(msg);
+                saveRoot(msg);
             }
         }
 
         function createSet(path, setid, msg) {
-            if (_clientGlobal.nodes[path] && typeof _clientGlobal.nodes[path].node === 'object') {
-                _clientGlobal.core.createSet(_clientGlobal.nodes[path].node, setid);
+            if (state.nodes[path] && typeof state.nodes[path].node === 'object') {
+                state.core.createSet(state.nodes[path].node, setid);
                 msg = msg || 'createSet(' + path + ',' + setid + ')';
-                _clientGlobal.functions.saveRoot(msg);
+                saveRoot(msg);
             }
         }
 
         function deleteSet(path, setid, msg) {
-            if (_clientGlobal.nodes[path] && typeof _clientGlobal.nodes[path].node === 'object') {
-                _clientGlobal.core.deleteSet(_clientGlobal.nodes[path].node, setid);
+            if (state.nodes[path] && typeof state.nodes[path].node === 'object') {
+                state.core.deleteSet(state.nodes[path].node, setid);
                 msg = msg || 'deleteSet(' + path + ',' + setid + ')';
-                _clientGlobal.functions.saveRoot(msg);
+                saveRoot(msg);
             }
         }
 
         function setBase(path, basepath) {
-            /*if (_clientGlobal.core &&
-             _clientGlobal.nodes[path] && typeof _clientGlobal.nodes[path].node === 'object') {
-             _clientGlobal.core.setRegistry(_clientGlobal.nodes[path].node,'base',basepath);
+            /*if (state.core &&
+             state.nodes[path] && typeof state.nodes[path].node === 'object') {
+             state.core.setRegistry(state.nodes[path].node,'base',basepath);
              saveRoot('setBase('+path+','+basepath+')');
              }*/
-            if (_clientGlobal.core &&
-                _clientGlobal.nodes[path] &&
-                typeof _clientGlobal.nodes[path].node === 'object' &&
-                _clientGlobal.nodes[basepath] &&
-                typeof _clientGlobal.nodes[basepath].node === 'object') {
-                _clientGlobal.core.setBase(_clientGlobal.nodes[path].node, _clientGlobal.nodes[basepath].node);
-                _clientGlobal.functions.saveRoot('setBase(' + path + ',' + basepath + ')');
+            if (state.core &&
+                state.nodes[path] &&
+                typeof state.nodes[path].node === 'object' &&
+                state.nodes[basepath] &&
+                typeof state.nodes[basepath].node === 'object') {
+                state.core.setBase(state.nodes[path].node, state.nodes[basepath].node);
+                saveRoot('setBase(' + path + ',' + basepath + ')');
             }
         }
 
         function delBase(path) {
-            /*if (_clientGlobal.core &&
-             _clientGlobal.nodes[path] && typeof _clientGlobal.nodes[path].node === 'object') {
-             _clientGlobal.core.delRegistry(_clientGlobal.nodes[path].node,'base');
+            /*if (state.core &&
+             state.nodes[path] && typeof state.nodes[path].node === 'object') {
+             state.core.delRegistry(state.nodes[path].node,'base');
              saveRoot('delBase('+path+')');
              }*/
-            if (_clientGlobal.core && _clientGlobal.nodes[path] && typeof _clientGlobal.nodes[path].node === 'object') {
-                _clientGlobal.core.setBase(_clientGlobal.nodes[path].node, null);
-                _clientGlobal.functions.saveRoot('delBase(' + path + ')');
+            if (state.core && state.nodes[path] && typeof state.nodes[path].node === 'object') {
+                state.core.setBase(state.nodes[path].node, null);
+                saveRoot('delBase(' + path + ')');
             }
         }
 
-
-        _clientGlobal.nodeSetter = {
+        return {
             setAttributes: setAttributes,
             delAttributes: delAttributes,
             setRegistry: setRegistry,
@@ -16893,372 +15191,6 @@ define('client/js/client/gmeNodeSetter',[], function () {
     return gmeNodeSetter;
 });
 /*globals define*/
-/*jshint browser: true*/
-/**
- * @author kecso / https://github.com/kecso
- */
-define('client/js/client/commitCache',[], function () {
-    
-
-    function commitCache(_clientGlobal) {
-        var _cache = {},
-            _timeOrder = [];
-
-        function clearCache() {
-            _cache = {};
-            _timeOrder = [];
-        }
-
-        function addCommit(commitObject) {
-            var index;
-
-            if (!_cache[commitObject._id]) {
-                _cache[commitObject._id] = commitObject;
-                index = 0;
-                while (index < _timeOrder.length && _cache[_timeOrder[index]].time > commitObject.time) {
-                    index++;
-                }
-                _timeOrder.splice(index, 0, commitObject._id);
-            }
-        }
-
-        function getNCommitsFrom(commitHash, number, callback) {
-            var fillCache,
-                returnNCommitsFromHash,
-                cacheFilled,
-                index;
-
-            fillCache = function (time, number, cb) {
-                _clientGlobal.project.getCommits(time, number, function (err, commits) {
-                    var i;
-                    if (!err && commits) {
-                        for (i = 0; i < commits.length; i++) {
-                            addCommit(commits[i]);
-                        }
-                        cb(null);
-                    } else {
-                        //we cannot get new commits from the server
-                        //we should use our very own ones
-                        cb(null);
-                    }
-                });
-            };
-            returnNCommitsFromHash = function (hash, num, cb) {
-                //now we should have all the commits in place
-                var index = _timeOrder.indexOf(hash),
-                    commits = [];
-                if (index > -1 || hash === null) {
-                    if (hash === null) {
-                        index = 0;
-                    } else {
-                        index++;
-
-                    }
-                    while (commits.length < num && index < _timeOrder.length) {
-                        commits.push(_cache[_timeOrder[index]]);
-                        index++;
-                    }
-                    cb(null, commits);
-                } else {
-                    cb('cannot found starting commit');
-                }
-            };
-            cacheFilled = function (err) {
-                if (err) {
-                    callback(err);
-                } else {
-                    returnNCommitsFromHash(commitHash, number, callback);
-                }
-            };
-
-
-            if (commitHash) {
-                if (_cache[commitHash]) {
-                    //we can be lucky :)
-                    index = _timeOrder.indexOf(commitHash);
-                    if (_timeOrder.length > index + number) {
-                        //we are lucky
-                        cacheFilled(null);
-                    } else {
-                        //not that lucky
-                        fillCache(_cache[_timeOrder[_timeOrder.length - 1]].time,
-                            number - (_timeOrder.length - (index + 1)),
-                            cacheFilled);
-                    }
-                } else {
-                    //we are not lucky enough so we have to download the commit
-                    _clientGlobal.project.loadObject(commitHash, function (err, commitObject) {
-                        if (!err && commitObject) {
-                            addCommit(commitObject);
-                            fillCache(commitObject.time, number, cacheFilled);
-                        } else {
-                            callback(err);
-                        }
-                    });
-                }
-            } else {
-                //initial call
-                fillCache((new Date()).getTime(), number, cacheFilled);
-            }
-        }
-
-        function newCommit(commitHash) {
-            if (_cache[commitHash]) {
-                return;
-            }
-
-            _clientGlobal.project.loadObject(commitHash, function (err, commitObj) {
-                if (!err && commitObj) {
-                    addCommit(commitObj);
-                }
-
-            });
-        }
-
-        _clientGlobal.commitCache = {
-            getNCommitsFrom: getNCommitsFrom,
-            clearCache: clearCache,
-            newCommit: newCommit
-        };
-    }
-
-    return commitCache;
-});
-/*globals define*/
-/*jshint browser: true*/
-/**
- * @author kecso / https://github.com/kecso
- */
-
-//TODO this functionality will be refactored sooon
-define('client/js/client/serverEventer',[], function () {
-    
-
-    function serverEventer(_clientGlobal) {
-        var lastGuid = '',
-            nextServerEvent = function (err, guid, parameters) {
-                lastGuid = guid || lastGuid;
-                if (!err && parameters) {
-                    switch (parameters.type) {
-                        case 'PROJECT_CREATED':
-                            _clientGlobal.eDispatcher.dispatchEvent(_clientGlobal.events.SERVER_PROJECT_CREATED,
-                                parameters.project);
-                            break;
-                        case 'PROJECT_DELETED':
-                            _clientGlobal.eDispatcher.dispatchEvent(_clientGlobal.events.SERVER_PROJECT_DELETED,
-                                parameters.project);
-                            break;
-                        case 'BRANCH_CREATED':
-                            _clientGlobal.eDispatcher.dispatchEvent(_clientGlobal.events.SERVER_BRANCH_CREATED,
-                                {
-                                    project: parameters.project,
-                                    branch: parameters.branch,
-                                    commit: parameters.commit
-                                });
-                            break;
-                        case 'BRANCH_DELETED':
-                            _clientGlobal.eDispatcher.dispatchEvent(_clientGlobal.events.SERVER_BRANCH_DELETED,
-                                {
-                                    project: parameters.project,
-                                    branch: parameters.branch
-                                });
-                            break;
-                        case 'BRANCH_UPDATED':
-                            _clientGlobal.eDispatcher.dispatchEvent(_clientGlobal.events.SERVER_BRANCH_UPDATED,
-                                {
-                                    project: parameters.project,
-                                    branch: parameters.branch,
-                                    commit: parameters.commit
-                                });
-                            break;
-                    }
-                    return _clientGlobal.db.getNextServerEvent(lastGuid, nextServerEvent);
-                } else {
-                    setTimeout(function () {
-                        return _clientGlobal.db.getNextServerEvent(lastGuid, nextServerEvent);
-                    }, 1000);
-                }
-            };
-        _clientGlobal.db.getNextServerEvent(lastGuid, nextServerEvent);
-    }
-    
-    return serverEventer;
-});
-/*globals define*/
-/*jshint browser: true*/
-/**
- * @author kecso / https://github.com/kecso
- */
-define('client/js/client/addon',[], function () {
-    
-
-    function AddOn(_clientGlobal) {
-        var _addOns = {},
-            _constraintCallback = function () {
-            };
-        //addOn functions
-        function startAddOn(name) {
-            if (_addOns[name] === undefined) {
-                _addOns[name] = 'loading';
-                _clientGlobal.db.simpleRequest({
-                        command: 'connectedWorkerStart',
-                        workerName: name,
-                        project: _clientGlobal.projectName,
-                        branch: _clientGlobal.branch
-                    },
-                    function (err, id) {
-                        if (err) {
-                            _clientGlobal.logger.error('starting addon failed ' + err);
-                            delete _addOns[name];
-                            return _clientGlobal.logger.error(err);
-                        }
-
-                        _clientGlobal.logger.debug('started addon ' + name + ' ' + id);
-                        _addOns[name] = id;
-                    });
-            }
-
-        }
-
-        function queryAddOn(name, query, callback) {
-            if (!_addOns[name] || _addOns[name] === 'loading') {
-                return callback(new Error('no such addOn is ready for queries'));
-            }
-            _clientGlobal.db.simpleQuery(_addOns[name], query, callback);
-        }
-
-        function stopAddOn(name, callback) {
-            if (_addOns[name] && _addOns[name] !== 'loading') {
-                _clientGlobal.db.simpleResult(_addOns[name], callback);
-                delete _addOns[name];
-            } else {
-                callback(_addOns[name] ? new Error('addon loading') : null);
-            }
-        }
-
-        //generic project related addOn handling
-        function updateRunningAddOns(root) {
-            var i,
-                neededAddOns,
-                runningAddOns,
-                callback = function (err) {
-                    _clientGlobal.logger.error(err);
-                };
-
-            if (_clientGlobal.gmeConfig.addOn.enable === true) {
-                neededAddOns = _clientGlobal.core.getRegistry(root, 'usedAddOns');
-                runningAddOns = getRunningAddOnNames();
-                neededAddOns = neededAddOns ? neededAddOns.split(' ') : [];
-                for (i = 0; i < neededAddOns.length; i += 1) {
-                    if (!_addOns[neededAddOns[i]]) {
-                        startAddOn(neededAddOns[i]);
-                    }
-                }
-                for (i = 0; i < runningAddOns.length; i += 1) {
-                    if (neededAddOns.indexOf(runningAddOns[i]) === -1) {
-                        stopAddOn(runningAddOns[i], callback);
-                    }
-                }
-            }
-        }
-
-        function stopRunningAddOns() {
-            var i,
-                keys,
-                callback;
-
-            if (_clientGlobal.gmeConfig.addOn.enable === true) {
-                keys = Object.keys(_addOns);
-                callback = function (err) {
-                    if (err) {
-                        _clientGlobal.logger.error('stopAddOn' + err);
-                    }
-                };
-
-                for (i = 0; i < keys.length; i++) {
-                    stopAddOn(keys[i], callback);
-                }
-            }
-        }
-
-        function getRunningAddOnNames() {
-            var i,
-                names = [],
-                keys = Object.keys(_addOns);
-            for (i = 0; i < keys.length; i++) {
-                if (_addOns[keys[i]] !== 'loading') {
-                    names.push(keys[i]);
-                }
-            }
-            return names;
-        }
-
-        //core addOns
-        //history
-        function getDetailedHistoryAsync(callback) {
-            if (_addOns.hasOwnProperty('HistoryAddOn') && _addOns.HistoryAddOn !== 'loading') {
-                queryAddOn('HistoryAddOn', {}, callback);
-            } else {
-                callback(new Error('history information is not available'));
-            }
-        }
-
-        //constraint
-        function validateProjectAsync(callback) {
-            callback = callback || _constraintCallback || function (/*err, result*/) {
-                };
-            if (_addOns.hasOwnProperty('ConstraintAddOn') && _addOns.ConstraintAddOn !== 'loading') {
-                queryAddOn('ConstraintAddOn', {querytype: 'checkProject'}, callback);
-            } else {
-                callback(new Error('constraint checking is not available'));
-            }
-        }
-
-        function validateModelAsync(path, callback) {
-            callback = callback || _constraintCallback || function (/* err, result */) {
-                };
-            if (_addOns.hasOwnProperty('ConstraintAddOn') && _addOns.ConstraintAddOn !== 'loading') {
-                queryAddOn('ConstraintAddOn', {querytype: 'checkModel', path: path}, callback);
-            } else {
-                callback(new Error('constraint checking is not available'));
-            }
-        }
-
-        function validateNodeAsync(path, callback) {
-            callback = callback || _constraintCallback || function (/* err, result */) {
-                };
-            if (_addOns.hasOwnProperty('ConstraintAddOn') && _addOns.ConstraintAddOn !== 'loading') {
-                queryAddOn('ConstraintAddOn', {querytype: 'checkNode', path: path}, callback);
-            } else {
-                callback(new Error('constraint checking is not available'));
-            }
-        }
-
-        function setValidationCallback(cFunction) {
-            if (typeof cFunction === 'function' || cFunction === null) {
-                _constraintCallback = cFunction;
-            }
-        }
-
-        //core addOns end
-
-        _clientGlobal.addOn = {
-            startAddOn: startAddOn,
-            queryAddOn: queryAddOn,
-            stopAddOn: stopAddOn,
-            updateRunningAddOns: updateRunningAddOns,
-            stopRunningAddOns: stopRunningAddOns,
-            getDetailedHistoryAsync: getDetailedHistoryAsync,
-            validateProjectAsync: validateProjectAsync,
-            validateModelAsync: validateModelAsync,
-            validateNodeAsync: validateNodeAsync,
-            setValidationCallback: setValidationCallback
-        };
-    }
-
-    return AddOn;
-});
-/*globals define*/
 /*jshint node: true, browser: true*/
 
 /**
@@ -17267,7 +15199,7 @@ define('client/js/client/addon',[], function () {
 
 define('common/core/users/serialization',['common/util/assert'], function (ASSERT) {
 
-    
+
     var _nodes = {},
         _core = null,
         _pathToGuidMap = {},
@@ -18179,1876 +16111,444 @@ define('common/core/users/serialization',['common/util/assert'], function (ASSER
 });
 
 /*globals define*/
-/*jshint node: true, browser: true*/
-
-/**
- * @author kecso / https://github.com/kecso
- */
-
-define('common/core/users/dump',['common/core/users/tojson', 'common/util/url'], function (toJson, URL) {
-    
-
-    var _refTypes = {
-            url: 'url',
-            path: 'path',
-            guid: 'guid'
-        },
-        _cache = {},
-        _rootPath = '',
-        _refType = 'url',
-        _core = null;
-
-    var isRefObject = function (obj) {
-        if (obj && typeof obj.$ref === 'string') {
-            return true;
-        }
-        return false;
-    };
-
-    var getRefObjectPath = function (obj) {
-        var result = null;
-        if (isRefObject(obj) === true) {
-            var refValue = obj.$ref;
-            switch (_refType) {
-                case _refTypes.url:
-                    if (refValue === null) {
-                        result = null;
-                    } else {
-                        refValue = refValue.split('/');
-                        result = URL.removeSpecialChars(refValue[refValue.length - 1]);
-                    }
-                    break;
-                case _refTypes.path:
-                case _refTypes.guid:
-                    result = refValue;
-                    break;
-                default:
-                    result = null;
-                    break;
-            }
-        }
-
-        return result;
-    };
-
-    var refToRelRefObj = function (path, refObj) {
-        if (_cache[path]) {
-            refObj.$ref = _cache[path];
-        } else {
-            refObj = {$ref: null};
-        }
-    };
-
-    var isSubordinate = function (path) {
-        if (path.indexOf(_rootPath) === 0) {
-            return true;
-        }
-        return false;
-    };
-
-    var dumpChildren = function (node, dumpObject, urlPrefix, relPath, callback) {
-        var needed = dumpObject.children.length;
-        if (needed > 0) {
-            _core.loadChildren(node, function (err, children) {
-                if (err) {
-                    callback(err);
-                } else {
-                    if (children === null || children === undefined || !children.length > 0) { //FIXME: Indeed jshint
-                        callback(new Error('invalid children info found'));
-                    } else {
-                        var setChildJson = function (child, cb) {
-                            toJson(_core, child, urlPrefix, _refType, function (err, jChild) {
-                                if (err) {
-                                    cb(err);
-                                } else {
-                                    if (jChild) {
-                                        var childRelPath,
-                                            childPath = _core.getPath(child);
-                                        for (var j = 0; j < dumpObject.children.length; j++) {
-                                            if (childPath === getRefObjectPath(dumpObject.children[j])) {
-                                                childRelPath = relPath + '/children[' + j + ']';
-                                                _cache[childPath] = childRelPath;
-                                                dumpObject.children[j] = jChild;
-                                                break;
-                                            }
-                                        }
-                                        dumpChildren(child, dumpObject.children[j], urlPrefix, childRelPath, cb);
-                                    }
-                                }
-                            });
-                        };
-                        var error = null;
-
-                        for (var i = 0; i < children.length; i++) {
-                            setChildJson(children[i], function (err) {
-                                error = error || err;
-                                if (--needed === 0) {
-                                    callback(error);
-                                }
-                            }); //FIXME
-                        }
-                    }
-                }
-            });
-        } else {
-            callback(null);
-        }
-    };
-    var checkForInternalReferences = function (dumpObject) {
-        if (typeof dumpObject === 'object') {
-            for (var i in dumpObject) {
-                if (typeof dumpObject[i] === 'object') {
-                    if (isRefObject(dumpObject[i])) {
-                        var path = getRefObjectPath(dumpObject[i]);
-                        if (isSubordinate(path)) {
-                            refToRelRefObj(path, dumpObject[i]);
-                        }
-                    } else {
-                        checkForInternalReferences(dumpObject[i]);
-                    }
-                }
-            }
-        }
-    };
-
-    var dumpJsonNode = function (core, node, urlPrefix, refType, callback) {
-        _cache = {};
-        _core = core;
-        _rootPath = core.getPath(node);
-        _refType = refType;
-
-        //TODO this needs to be done in another way
-        toJson(core, node, urlPrefix, _refType, function (err, jDump) {
-            if (err) {
-                callback(err, null);
-            } else {
-                if (jDump) {
-                    _cache[_rootPath] = '#';
-                }
-                dumpChildren(node, jDump, urlPrefix, _cache[_rootPath], function (err) {
-                    if (err) {
-                        callback(err);
-                    } else {
-                        checkForInternalReferences(jDump);
-                        callback(null, jDump);
-                    }
-                });
-            }
-        });
-    };
-
-    return dumpJsonNode;
-});
-
-
-/*globals define*/
-/*jshint node: true, browser: true*/
-
-/**
- * This import will only enter the outgoing relations and the internal ones.
- * This import will try to import an array of objects as well as a single object.
- * Although this import also assumes that there is no loop in the references so it can simply wait for
- *
- * @author kecso / https://github.com/kecso
- */
-
-define('common/core/users/copyimport',['common/core/users/meta'], function (BaseMeta) {
-    
-    var _core = null,
-        _root = null,
-        _cache = {},
-        _underImport = {},
-        _internalRefHash = {},
-        META = new BaseMeta();
-
-    function internalRefCreated(intPath, node) {
-        _cache[_core.getPath(node)] = node;
-        _internalRefHash[intPath] = _core.getPath(node);
-        var callbacks = _underImport[intPath] || [];
-        delete _underImport[intPath];
-        for (var i = 0; i < callbacks.length; i++) {
-            callbacks[i](null, node);
-        }
-    }
-
-    function objectLoaded(error, node) {
-        if (error === null) {
-            _cache[_core.getPath(node)] = node;
-        }
-
-        var callbacks = _underImport[_core.getPath(node)] || [];
-        delete _underImport[_core.getPath(node)];
-        for (var i = 0; i < callbacks.length; i++) {
-            callbacks[i](error, node);
-        }
-    }
-
-    //function isInternalReference(refObj) {
-    //    if (refObj && typeof refObj.$ref === 'string') {
-    //        if (refObj.$ref.indexOf('#') === 0) {
-    //            return true;
-    //        }
-    //    }
-    //    return false;
-    //}
-
-    function getReferenceNode(refObj, callback) {
-        //we allow the internal references and the
-        if (refObj && typeof refObj.$ref === 'string') {
-            if (refObj.$ref.indexOf('#') === 0) {
-                //we assume that it is an internal reference
-                if (_internalRefHash[refObj.$ref] !== undefined) {
-                    callback(null, _cache[_internalRefHash[refObj.$ref]]);
-                } else if (_underImport[refObj.$ref] !== undefined) {
-                    _underImport[refObj.$ref].push(callback);
-                } else {
-                    //TODO we should check if the loading order is really finite this way
-                    _underImport[refObj.$ref] = [callback];
-                }
-            } else if (refObj.$ref === null) {
-                callback(null, null);
-            } else {
-                if (_cache[refObj.$ref]) {
-                    callback(null, _cache[refObj.$ref]);
-                } else if (_underImport[refObj.$ref]) {
-                    _underImport[refObj.$ref].push(callback);
-                } else {
-                    _underImport[refObj.$ref] = [callback];
-                    _core.loadByPath(_root, refObj.$ref, function (err, node) {
-                        if (err) {
-                            objectLoaded(err, null);
-                        } else {
-                            if (refObj.GUID) {
-                                if (refObj.GUID === _core.getGuid(node)) {
-                                    objectLoaded(err, node);
-                                } else {
-                                    objectLoaded('GUID mismatch', node);
-                                }
-                            } else {
-                                objectLoaded(err, node);
-                            }
-                        }
-                    });
-                }
-            }
-        } else {
-            callback(null, null);
-        }
-    }
-
-    function importChildren(node, jNode, pIntPath, callback) {
-        if (jNode && jNode.children && jNode.children.length) {
-            var needed = jNode.children.length;
-
-            if (needed > 0) {
-                var error = null;
-                for (var i = 0; i < jNode.children.length; i++) {
-                    importNode(jNode.children[i], node, pIntPath + '/children[' + i + ']', function (err) {
-                        error = error || err;
-                        if (--needed === 0) {
-                            callback(error);
-                        }
-                    }); //FIXME
-                }
-            } else {
-                callback(null);
-            }
-
-        } else {
-            callback(null); //TODO maybe we should be more strict
-        }
-    }
-
-    function importAttributes(node, jNode) {
-        if (typeof jNode.attributes === 'object') {
-            for (var i in jNode.attributes) {
-                _core.setAttribute(node, i, jNode.attributes[i]);
-            }
-        }
-    }
-
-    function importRegistry(node, jNode) {
-        if (typeof jNode.registry === 'object') {
-            for (var i in jNode.registry) {
-                _core.setRegistry(node, i, jNode.registry[i]);
-            }
-        }
-    }
-
-    function importPointer(node, jNode, pName, callback) {
-        if (jNode.pointers[pName].to && jNode.pointers[pName].to.length > 0) {
-            var needed = jNode.pointers[pName].to.length,
-                i,
-                error = null;
-
-            for (i = 0; i < jNode.pointers[pName].to.length; i++) {
-                getReferenceNode(jNode.pointers[pName].to[i], function (err, target) {
-                    error = error || err;
-                    if (target !== undefined) {
-                        _core.setPointer(node, pName, target);
-                    }
-
-                    if (--needed === 0) {
-                        callback(error);
-                    }
-                }); //FIXME
-            }
-
-        } else {
-            callback(null);
-        }
-    }
-
-    function importSet(node, jNode, sName, callback) {
-        if (jNode.pointers[sName].to && jNode.pointers[sName].to.length > 0) {
-            var needed = 0,
-                i,
-                key,
-                importSetRegAndAtr = function (sOwner, sMember, atrAndReg) {
-                    _core.addMember(sOwner, sName, sMember);
-                    var mPath = _core.getPath(sMember);
-                    atrAndReg.attributes = atrAndReg.attributes || {};
-                    for (key in atrAndReg.attributes) {
-                        _core.setMemberAttribute(sOwner, sName, mPath, key, atrAndReg.attributes[key]);
-                    }
-                    atrAndReg.registry = atrAndReg.registry || {};
-                    for (key in atrAndReg.registry) {
-                        _core.setMemberRegistry(sOwner, sName, mPath, key, atrAndReg.registry[key]);
-                    }
-                },
-                importSetReference = function (isTo, index, cb) {
-                    var jObj = isTo === true ? jNode.pointers[sName].to[index] : jNode.pointers[sName].from[index];
-                    getReferenceNode(jObj, function (err, sNode) {
-                        if (err) {
-                            cb(err);
-                        } else {
-                            if (sNode) {
-                                var sOwner = isTo === true ? node : sNode,
-                                    sMember = isTo === true ? sNode : node;
-                                importSetRegAndAtr(sOwner, sMember, jObj);
-                            }
-                            cb(null);
-                        }
-                    });
-                },
-                error = null;
-
-            _core.createSet(node, sName);
-            needed = jNode.pointers[sName].to.length;
-            for (i = 0; i < jNode.pointers[sName].to.length; i++) {
-                importSetReference(true, i, function (err) {
-                    error = error || err;
-                    if (--needed === 0) {
-                        callback(error);
-                    }
-                }); //FIXME
-            }
-        } else {
-            callback(null); //TODO now we just simply try to ignore faulty data import
-        }
-    }
-
-    //function _importSet(node, jNode, sName, callback) {
-    //    if (jNode.pointers[sName].to) {
-    //        var needed = 0,
-    //            importSetRegAndAtr = function (sOwner, sMember, atrAndReg) {
-    //                _core.addMember(sOwner, sName, sMember);
-    //                var mPath = _core.getPath(sMember);
-    //                atrAndReg.attributes = atrAndReg.attributes || {};
-    //                for (var i in atrAndReg.attributes) {
-    //                    _core.setMemberAttribute(sOwner, sName, mPath, i, atrAndReg.attributes[i]);
-    //                }
-    //                atrAndReg.registry = atrAndReg.registry || {};
-    //                for (var i in atrAndReg.registry) {
-    //                    _core.setMemberRegistry(sOwner, sName, mPath, i, atrAndReg.registry[i]);
-    //                }
-    //            },
-    //            importSetReference = function (isTo, index, cb) {
-    //                var jObj = isTo === true ? jNode.pointers[sName].to[index] : jNode.pointers[sName].from[index];
-    //                getReferenceNode(jObj, function (err, sNode) {
-    //                    if (err) {
-    //                        cb(err);
-    //                    } else {
-    //                        if (sNode) {
-    //                            var sOwner = isTo === true ? node : sNode,
-    //                                sMember = isTo === true ? sNode : node;
-    //                            importSetRegAndAtr(sOwner, sMember, jObj);
-    //                        }
-    //                        cb(null);
-    //                    }
-    //                });
-    //            },
-    //            error = null;
-    //
-    //        if (jNode.pointers[sName].to.length > 0) {
-    //            needed += jNode.pointers[sName].to.length;
-    //            _core.createSet(node, sName);
-    //        }
-    //
-    //        if (needed > 0) {
-    //            for (var i = 0; i < jNode.pointers[sName].to.length; i++) {
-    //                importSetReference(true, i, function (err) {
-    //                    error = error || err;
-    //                    if (--needed === 0) {
-    //                        callback(error);
-    //                    }
-    //                });
-    //            }
-    //        } else {
-    //            callback(null);
-    //        }
-    //    } else {
-    //        callback(null); //TODO now we just simply try to ignore faulty data import
-    //    }
-    //}
-
-    function importRelations(node, jNode, callback) {
-        //TODO now se use the pointer's 'set' attribute to decide if it is a set or a pointer really
-        var pointers = [],
-            sets = [],
-            needed = 0,
-            error = null,
-            i;
-        if (typeof jNode.pointers !== 'object') {
-            callback(null); //TODO should we drop an error???
-        } else {
-            for (i in jNode.pointers) {
-                if (jNode.pointers[i].set === true) {
-                    sets.push(i);
-                } else {
-                    pointers.push(i);
-                }
-            }
-
-            needed = sets.length + pointers.length;
-
-            if (needed > 0) {
-                for (i = 0; i < pointers.length; i++) {
-                    importPointer(node, jNode, pointers[i], function (err) {
-                        error = error || err;
-                        if (--needed === 0) {
-                            callback(error);
-                        }
-                    });
-                }
-                for (i = 0; i < sets.length; i++) {
-                    importSet(node, jNode, sets[i], function (err) {
-                        error = error || err;
-                        if (--needed === 0) {
-                            callback(error);
-                        }
-                    });
-                }
-            } else {
-                callback(null);
-            }
-        }
-    }
-
-    function importMeta(node, jNode, callback) {
-
-        //TODO now this function searches the whole meta data for reference objects and load them, then call setMeta
-        var loadReference = function (refObj, cb) {
-                getReferenceNode(refObj, function (err, rNode) {
-                    if (err) {
-                        cb(err);
-                    } else {
-                        if (rNode) {
-                            refObj.$ref = _core.getPath(rNode);
-                        }
-                        cb(null);
-                    }
-                });
-            },
-            loadMetaReferences = function (jObject, cb) {
-                var needed = 0,
-                    i,
-                    error = null;
-                for (i in jObject) {
-                    if (jObject[i] !== null && typeof jObject[i] === 'object') {
-                        needed++;
-                    }
-                }
-
-                if (needed > 0) {
-                    for (i in jObject) {
-                        if (jObject[i] !== null && typeof jObject[i] === 'object') {
-                            if (jObject[i].$ref) {
-                                loadReference(jObject[i], function (err) {
-                                    error = error || err;
-                                    if (--needed === 0) {
-                                        cb(error);
-                                    }
-                                });
-                            } else {
-                                loadMetaReferences(jObject[i], function (err) {
-                                    error = error || err;
-                                    if (--needed === 0) {
-                                        cb(error);
-                                    }
-                                });
-                            }
-                        }
-                    }
-                } else {
-                    cb(error);
-                }
-            };
-
-        loadMetaReferences(jNode.meta || {}, function (err) {
-            if (err) {
-                callback(err);
-            } else {
-                META.setMeta(_core.getPath(node), jNode.meta || {});
-                callback(null);
-            }
-        });
-    }
-
-    function importRoot(jNode, callback) {
-        //first we create the root node itself, then the other parts of the function is pretty much like the importNode
-
-        _root = _core.createNode();
-        internalRefCreated('#', _root);
-        importAttributes(_root, jNode);
-        importRegistry(_root, jNode);
-        importChildren(_root, jNode, '#', function (err) {
-            if (err) {
-                callback(err);
-            } else {
-                importRelations(_root, jNode, function (err) {
-                    if (err) {
-                        callback(err);
-                    } else {
-                        importMeta(_root, jNode, function (err) {
-                            callback(err, _root);
-                        });
-                    }
-                });
-            }
-        });
-    }
-
-    function importNode(jNode, parentNode, intPath, callback) {
-        //return callback('not implemented');
-        //first we have to get the base of the node
-        if (jNode.pointers && jNode.pointers.base && jNode.pointers.base.to) {
-            getReferenceNode(jNode.pointers.base.to[0], function (err, base) {
-                if (err) {
-                    callback(err);
-                } else {
-                    //now we are ready to create the node itself
-                    var node = _core.createNode({base: base, parent: parentNode});
-                    internalRefCreated(intPath, node);
-                    importAttributes(node, jNode);
-                    importRegistry(node, jNode);
-                    importChildren(node, jNode, intPath, function (err) {
-                        if (err) {
-                            callback(err);
-                        } else {
-                            importRelations(node, jNode, function (err) {
-                                if (err) {
-                                    callback(err);
-                                } else {
-                                    importMeta(node, jNode, callback);
-                                }
-                            });
-                        }
-                    });
-                }
-            });
-        } else {
-            callback('wrong import format: base info is wrong');
-        }
-    }
-
-    function importing(core, parent, jNode, callback) {
-        _core = core;
-        _cache = {};
-        _underImport = {};
-        _internalRefHash = {};
-        META.initialize(_core, _cache, function () {
-        });
-
-        if (jNode.length) {
-            //multiple objects
-            if (parent) {
-                var needed = jNode.length,
-                    error = null;
-                _cache[core.getPath(parent)] = parent;
-                _root = core.getRoot(parent);
-                for (var i = 0; i < jNode.length; i++) {
-                    importNode(jNode[i], parent, '#[' + i + ']', function (err) {
-                        error = error || err;
-                        if (--needed === 0) {
-                            callback(error);
-                        }
-                    });
-                }
-            } else {
-                callback('no parent given!!!');
-            }
-        } else {
-            //single object
-            if (parent) {
-                _cache[core.getPath(parent)] = parent;
-                _root = core.getRoot(parent);
-                importNode(jNode, parent, '#', callback);
-            } else {
-                importRoot(jNode, callback);
-            }
-        }
-    }
-
-    return importing;
-});
-/*globals define*/
-/*jshint node: true, browser: true*/
-
-/**
- * this type of import is for merge purposes
- * it tries to import not only the outgoing relations but the incoming ones as well
- * it also tries to keep both the GUID and the relid's
- * if it finds the same guid in the same place then it overwrites the node with the imported one!!!
- * it not searches for GUID!!! so be careful when to use this method
- *
- * @author kecso / https://github.com/kecso
- */
-
-define('common/core/users/import',['common/core/users/meta'], function (BaseMeta) {
-    
-    var _core = null,
-        _root = null,
-        _cache = {},
-        _underImport = {},
-        _internalRefHash = {},
-        META = new BaseMeta();
-
-    function internalRefCreated(intPath, node) {
-        _cache[_core.getPath(node)] = node;
-        _internalRefHash[intPath] = _core.getPath(node);
-        var callbacks = _underImport[intPath] || [];
-        delete _underImport[intPath];
-        for (var i = 0; i < callbacks.length; i++) {
-            callbacks[i](null, node);
-        }
-    }
-
-    function objectLoaded(error, node) {
-        if (error === null) {
-            _cache[_core.getPath(node)] = node;
-        }
-
-        var callbacks = _underImport[_core.getPath(node)] || [];
-        delete _underImport[_core.getPath(node)];
-        for (var i = 0; i < callbacks.length; i++) {
-            callbacks[i](error, node);
-        }
-    }
-
-    function isInternalReference(refObj) {
-        if (refObj && typeof refObj.$ref === 'string') {
-            if (refObj.$ref.indexOf('#') === 0) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    function getReferenceNode(refObj, callback) {
-        //we allow the internal references and the
-        if (refObj && typeof refObj.$ref === 'string') {
-            if (refObj.$ref.indexOf('#') === 0) {
-                //we assume that it is an internal reference
-                if (_internalRefHash[refObj.$ref] !== undefined) {
-                    callback(null, _cache[_internalRefHash[refObj.$ref]]);
-                } else if (_underImport[refObj.$ref] !== undefined) {
-                    _underImport[refObj.$ref].push(callback);
-                } else {
-                    //TODO we should check if the loading order is really finite this way
-                    _underImport[refObj.$ref] = [callback];
-                }
-            } else if (refObj.$ref === null) {
-                callback(null, null);
-            } else {
-                if (_cache[refObj.$ref]) {
-                    callback(null, _cache[refObj.$ref]);
-                } else if (_underImport[refObj.$ref]) {
-                    _underImport[refObj.$ref].push(callback);
-                } else {
-                    _underImport[refObj.$ref] = [callback];
-                    _core.loadByPath(_root, refObj.$ref, function (err, node) {
-                        if (err) {
-                            objectLoaded(err, null);
-                        } else {
-                            if (refObj.GUID) {
-                                if (refObj.GUID === _core.getGuid(node)) {
-                                    objectLoaded(err, node);
-                                } else {
-                                    objectLoaded('GUID mismatch', node);
-                                }
-                            } else {
-                                objectLoaded(err, node);
-                            }
-                        }
-                    });
-                }
-            }
-        } else {
-            callback(null, null);
-        }
-    }
-
-    function importChildren(node, jNode, pIntPath, callback) {
-        if (jNode && jNode.children && jNode.children.length) {
-            var needed = jNode.children.length;
-
-            if (needed > 0) {
-                var error = null;
-                for (var i = 0; i < jNode.children.length; i++) {
-                    importNode(jNode.children[i], node, pIntPath + '/children[' + i + ']', true, function (err) {
-                        error = error || err;
-                        if (--needed === 0) {
-                            callback(error);
-                        }
-                    });
-                }
-            } else {
-                callback(null);
-            }
-
-        } else {
-            callback(null); //TODO maybe we should be more strict
-        }
-    }
-
-    function importAttributes(node, jNode) {
-        if (typeof jNode.attributes === 'object') {
-            var names = Object.keys(jNode.attributes);
-            if (jNode.OWN) {
-                names = jNode.OWN.attributes;
-            }
-
-            for (var i = 0; i < names.length; i++) {
-                var value = jNode.attributes[names[i]];
-                if (value !== undefined) {
-                    _core.setAttribute(node, names[i], value);
-                }
-            }
-        }
-    }
-
-    function importRegistry(node, jNode) {
-        if (typeof jNode.registry === 'object') {
-            var names = Object.keys(jNode.registry);
-            if (jNode.OWN) {
-                names = jNode.OWN.registry;
-            }
-
-            for (var i = 0; i < names.length; i++) {
-                var value = jNode.registry[names[i]];
-                if (value !== undefined) {
-                    _core.setRegistry(node, names[i], value);
-                }
-            }
-        }
-    }
-
-    function importPointer(node, jNode, pName, callback) {
-        if (jNode.pointers[pName].to && jNode.pointers[pName].from) {
-            var needed = jNode.pointers[pName].to.length + jNode.pointers[pName].from.length,
-                i,
-                error = null;
-            var ownPointer = true;
-            if (jNode.OWN) {
-                if (jNode.OWN.pointers.indexOf(pName) === -1) {
-                    ownPointer = false;
-                    needed -= jNode.pointers[pName].to.length;
-                }
-            }
-            if (needed === 0) {
-                callback(null);
-            } else {
-                if (ownPointer) {
-                    for (i = 0; i < jNode.pointers[pName].to.length; i++) {
-                        getReferenceNode(jNode.pointers[pName].to[i], function (err, target) {
-                            error = error || err;
-                            _core.setPointer(node, pName, target);
-
-                            if (--needed === 0) {
-                                callback(error);
-                            }
-                        });
-                    }
-                }
-
-                for (i = 0; i < jNode.pointers[pName].from.length; i++) {
-                    if (!isInternalReference(jNode.pointers[pName].from[i])) {
-                        getReferenceNode(jNode.pointers[pName].from[i], function (err, source) {
-                            error = error || err;
-                            if (source) {
-                                _core.setPointer(source, pName, node);
-                            }
-
-                            if (--needed === 0) {
-                                callback(error);
-                            }
-                        });
-                    } else {
-                        if (--needed === 0) {
-                            callback(error);
-                        }
-                    }
-                }
-            }
-        } else {
-            callback(null);
-        }
-    }
-
-    function importSet(node, jNode, sName, callback) {
-        if (jNode.pointers[sName].to && jNode.pointers[sName].from) {
-            var needed = 0,
-                i,
-                importSetRegAndAtr = function (sOwner, sMember, atrAndReg) {
-                    _core.addMember(sOwner, sName, sMember);
-                    var mPath = _core.getPath(sMember);
-                    atrAndReg.attributes = atrAndReg.attributes || {};
-                    for (i in atrAndReg.attributes) {
-                        _core.setMemberAttribute(sOwner, sName, mPath, i, atrAndReg.attributes[i]);
-                    }
-                    atrAndReg.registry = atrAndReg.registry || {};
-                    for (i in atrAndReg.registry) {
-                        _core.setMemberRegistry(sOwner, sName, mPath, i, atrAndReg.registry[i]);
-                    }
-                },
-                importSetReference = function (isTo, index, cb) {
-                    var jObj = isTo === true ? jNode.pointers[sName].to[index] : jNode.pointers[sName].from[index];
-                    getReferenceNode(jObj, function (err, sNode) {
-                        if (err) {
-                            cb(err);
-                        } else {
-                            if (sNode) {
-                                var sOwner = isTo === true ? node : sNode,
-                                    sMember = isTo === true ? sNode : node;
-                                importSetRegAndAtr(sOwner, sMember, jObj);
-                            }
-                            cb(null);
-                        }
-                    });
-                },
-                error = null;
-
-            if (jNode.pointers[sName].to.length > 0) {
-                needed += jNode.pointers[sName].to.length;
-                _core.createSet(node, sName);
-            }
-            if (jNode.pointers[sName].from.length > 0) {
-                needed += jNode.pointers[sName].from.length;
-            }
-
-            if (needed > 0) {
-                for (i = 0; i < jNode.pointers[sName].to.length; i++) {
-                    importSetReference(true, i, function (err) {
-                        error = error || err;
-                        if (--needed === 0) {
-                            callback(error);
-                        }
-                    });
-                }
-                for (i = 0; i < jNode.pointers[sName].from.length; i++) {
-                    importSetReference(false, i, function (err) {
-                        error = error || err;
-                        if (--needed === 0) {
-                            callback(error);
-                        }
-                    });
-                }
-            } else {
-                callback(null);
-            }
-        } else {
-            callback(null); //TODO now we just simply try to ignore faulty data import
-        }
-    }
-
-    function importRelations(node, jNode, callback) {
-        //TODO now se use the pointer's 'set' attribute to decide if it is a set or a pointer really
-        var pointers = [],
-            sets = [],
-            needed = 0,
-            error = null,
-            i;
-        if (typeof jNode.pointers !== 'object') {
-            callback(null); //TODO should we drop an error???
-        } else {
-            for (i in jNode.pointers) {
-                if (jNode.pointers[i].set === true) {
-                    sets.push(i);
-                } else {
-                    pointers.push(i);
-                }
-            }
-
-            needed = sets.length + pointers.length;
-
-            if (needed > 0) {
-                for (i = 0; i < pointers.length; i++) {
-                    importPointer(node, jNode, pointers[i], function (err) {
-                        error = error || err;
-                        if (--needed === 0) {
-                            callback(error);
-                        }
-                    });
-                }
-                for (i = 0; i < sets.length; i++) {
-                    importSet(node, jNode, sets[i], function (err) {
-                        error = error || err;
-                        if (--needed === 0) {
-                            callback(error);
-                        }
-                    });
-                }
-            } else {
-                callback(null);
-            }
-        }
-    }
-
-    function importMeta(node, jNode, callback) {
-        //TODO now this function searches the whole meta data for reference objects and load them, then call setMeta
-        var loadReference = function (refObj, cb) {
-                getReferenceNode(refObj, function (err, rNode) {
-                    if (err) {
-                        cb(err);
-                    } else {
-                        if (rNode) {
-                            refObj.$ref = _core.getPath(rNode);
-                        }
-                        cb(null);
-                    }
-                });
-            },
-            loadMetaReferences = function (jObject, cb) {
-                var needed = 0,
-                    i,
-                    error = null;
-                for (i in jObject) {
-                    if (jObject[i] !== null && typeof jObject[i] === 'object') {
-                        needed++;
-                    }
-                }
-
-                if (needed > 0) {
-                    for (i in jObject) {
-                        if (jObject[i] !== null && typeof jObject[i] === 'object') {
-                            if (jObject[i].$ref) {
-                                loadReference(jObject[i], function (err) {
-                                    error = error || err;
-                                    if (--needed === 0) {
-                                        cb(error);
-                                    }
-                                });
-                            } else {
-                                loadMetaReferences(jObject[i], function (err) {
-                                    error = error || err;
-                                    if (--needed === 0) {
-                                        cb(error);
-                                    }
-                                });
-                            }
-                        }
-                    }
-                } else {
-                    cb(error);
-                }
-            };
-
-        loadMetaReferences(jNode.meta || {}, function (err) {
-            if (err) {
-                callback(err);
-            } else {
-                META.setMeta(_core.getPath(node), jNode.meta || {});
-                callback(null);
-            }
-        });
-    }
-
-    function importRoot(jNode, callback) {
-        //first we create the root node itself, then the other parts of the function is pretty much like the importNode
-        _root = _core.createNode({guid: jNode.GUID});
-        internalRefCreated('#', _root);
-        importAttributes(_root, jNode);
-        importRegistry(_root, jNode);
-        importChildren(_root, jNode, '#', function (err) {
-            if (err) {
-                callback(err);
-            } else {
-                importRelations(_root, jNode, function (err) {
-                    if (err) {
-                        callback(err);
-                    } else {
-                        importMeta(_root, jNode, function (err) {
-                            callback(err, _root);
-                        });
-                    }
-                });
-            }
-        });
-    }
-
-    //function clearOldNode(relid, guid, parentNode, callback) {
-    //    var relids = _core.getChildrenRelids(parentNode);
-    //    if (relids.indexOf(relid) !== -1) {
-    //        _core.loadChild(parentNode, relid, function (err, oldChild) {
-    //            if (err) {
-    //                callback(err);
-    //            } else {
-    //                if (_core.getGuid(oldChild) === guid) {
-    //                    var root = _core.getRoot(oldChild);
-    //                    _core.deleteNode(oldChild);
-    //                    _core.persist(root, function () {
-    //                        callback(null);
-    //                    });
-    //                } else {
-    //                    callback(null);
-    //                }
-    //            }
-    //        });
-    //    } else {
-    //        callback(null);
-    //    }
-    //}
-
-    function getEmptyNode(jNode, parentNode, baseNode, noClear, callback) {
-        var relids = _core.getChildrenRelids(parentNode),
-            returnNewNode = function () {
-                var node = _core.createNode({base: baseNode, parent: parentNode, relid: jNode.RELID, guid: jNode.GUID});
-                callback(null, node);
-            };
-        if (relids.indexOf(jNode.RELID) !== -1) {
-            _core.loadChild(parentNode, jNode.RELID, function (err, oldChild) {
-                if (err) {
-                    callback(err, null);
-                } else {
-                    if (_core.getGuid(oldChild) === jNode.GUID) {
-                        if (noClear === true) {
-                            callback(null, oldChild);
-                        } else {
-                            var root = _core.getRoot(oldChild);
-                            _core.deleteNode(oldChild);
-                            _core.persist(root, function () {
-                                returnNewNode();
-                            });
-                        }
-                    } else {
-                        returnNewNode();
-                    }
-                }
-            });
-        } else {
-            returnNewNode();
-        }
-    }
-
-    function importNode(jNode, parentNode, intPath, noClear, callback) {
-        //first we have to get the base of the node
-        if (jNode.pointers && jNode.pointers.base && jNode.pointers.base.to) {
-            getReferenceNode(jNode.pointers.base.to[0], function (err, base) {
-                if (err) {
-                    callback(err);
-                } else {
-                    getEmptyNode(jNode, parentNode, base, noClear, function (err, node) {
-                        if (err) {
-                            callback(err);
-                        } else {
-                            internalRefCreated(intPath, node);
-                            importAttributes(node, jNode);
-                            importRegistry(node, jNode);
-                            importChildren(node, jNode, intPath, function (err) {
-                                if (err) {
-                                    callback(err);
-                                } else {
-                                    importRelations(node, jNode, function (err) {
-                                        if (err) {
-                                            callback(err);
-                                        } else {
-                                            importMeta(node, jNode, function (err) {
-                                                callback(err);
-                                            });
-                                        }
-                                    });
-                                }
-                            });
-                        }
-                    });
-                }
-            });
-        } else {
-            callback('wrong import format: base info is wrong');
-        }
-    }
-
-    function importing(core, parent, jNode, callback) {
-        _core = core;
-        _cache = {};
-        _underImport = {};
-        _internalRefHash = {};
-        META.initialize(_core, _cache, function () {
-        });
-
-        if (jNode.length) {
-            //multiple objects
-            if (parent) {
-                var needed = jNode.length,
-                    error = null;
-                _cache[core.getPath(parent)] = parent;
-                _root = core.getRoot(parent);
-                for (var i = 0; i < jNode.length; i++) {
-                    importNode(jNode[i], parent, '#[' + i + ']', false, function (err) {
-                        error = error || err;
-                        if (--needed === 0) {
-                            callback(error);
-                        }
-                    });
-                }
-            } else {
-                callback('no parent given!!!');
-            }
-        } else {
-            //single object
-            if (parent) {
-                _cache[core.getPath(parent)] = parent;
-                _root = core.getRoot(parent);
-                importNode(jNode, parent, '#', false, callback);
-            } else {
-                importRoot(jNode, callback);
-            }
-        }
-    }
-
-    return importing;
-});
-
-
-/*globals define*/
 /*jshint browser: true*/
 /**
  * @author kecso / https://github.com/kecso
  */
-define('client/js/client/requests',['common/util/assert',
-    'common/core/users/serialization',
-    'common/core/users/dump',
-    'common/core/users/copyimport',
-    'common/core/users/import',
-    'common/util/url'
-], function (ASSERT,
-             Serialization,
-             dump,
-             importing,
-             mergeImport,
-             URL) {
-    
-    var ROOT_PATH = '';
+define('js/client/addon',[], function () {
 
-    function Requests(_clientGlobal) {
-        function getAvailableProjectsAsync(callback) {
-            if (_clientGlobal.db) {
-                _clientGlobal.db.getProjectNames(callback);
-            } else {
-                callback(new Error('there is no open database connection!'));
-            }
-        }
 
-        function getViewableProjectsAsync(callback) {
-            if (_clientGlobal.db) {
-                _clientGlobal.db.getAllowedProjectNames(callback);
-            } else {
-                callback(new Error('there is no open database connection!'));
-            }
-        }
-
-        function getProjectAuthInfoAsync(projectname, callback) {
-            if (_clientGlobal.db) {
-                _clientGlobal.db.getAuthorizationInfo(projectname, callback);
-            } else {
-                callback(new Error('there is no open database connection!'));
-            }
-        }
-
-        function getFullProjectListAsync(callback) {
-            _clientGlobal.db.getProjectNames(function (err, names) {
-                var wait,
-                    fullList = {},
-                    getProjectAuthInfo,
-                    i,
-                    projectAuthInfoResponse = function (/*err*/) {
-                        wait -= 1;
-                        if (wait === 0) {
-                            callback(null, fullList);
-                        }
-                    };
-
-                if (!err && names) {
-                    wait = names.length || 0;
-                    if (wait > 0) {
-                        getProjectAuthInfo = function (name, cb) {
-                            _clientGlobal.db.getAuthorizationInfo(name, function (err, authObj) {
-                                if (!err && authObj) {
-                                    fullList[name] = authObj;
-                                }
-                                cb(err);
-                            });
-                        };
-
-                        for (i = 0; i < names.length; i += 1) {
-                            getProjectAuthInfo(names[i], projectAuthInfoResponse);
-                        }
-                    } else {
-                        callback(null, {});
-                    }
-                } else {
-                    callback(err, {});
-                }
-            });
-        }
-
-        function getFullProjectsInfoAsync(callback) {
-            _clientGlobal.db.simpleRequest({command: 'getAllProjectsInfo'}, function (err, id) {
-                if (err) {
-                    return callback(err);
-                }
-                _clientGlobal.db.simpleResult(id, callback);
-            });
-        }
-
-        function setProjectInfoAsync(projectId, info, callback) {
-            _clientGlobal.db.simpleRequest({
-                    command: 'setProjectInfo',
-                    projectId: projectId,
-                    info: info
-                },
-                function (err, rId) {
-                    if (err) {
-                        return callback(err);
-                    }
-                    _clientGlobal.db.simpleResult(rId, callback);
-                });
-        }
-
-        function getProjectInfoAsync(projectId, callback) {
-            _clientGlobal.db.simpleRequest({command: 'getProjectInfo', projectId: projectId}, function (err, rId) {
-                if (err) {
-                    return callback(err);
-                }
-                _clientGlobal.db.simpleResult(rId, callback);
-            });
-        }
-
-        function getAllInfoTagsAsync(callback) {
-            _clientGlobal.db.simpleRequest({command: 'getAllInfoTags'}, function (err, rId) {
-                if (err) {
-                    return callback(err);
-                }
-                _clientGlobal.db.simpleResult(rId, callback);
-            });
-        }
-
-        function createGenericBranchAsync(project, branch, commit, callback) {
-            _clientGlobal.db.simpleRequest({
-                    command: 'setBranch',
-                    project: project,
-                    branch: branch,
-                    old: '',
-                    new: commit
-                },
-                function (err, id) {
-                    if (err) {
-                        return callback(err);
-                    }
-                    _clientGlobal.db.simpleResult(id, callback);
-                });
-        }
-
-        function deleteGenericBranchAsync(project, branch, commit, callback) {
-            _clientGlobal.db.simpleRequest({
-                    command: 'setBranch',
-                    project: project,
-                    branch: branch,
-                    old: commit,
-                    new: ''
-                },
-                function (err, id) {
-                    if (err) {
-                        return callback(err);
-                    }
-                    _clientGlobal.db.simpleResult(id, callback);
-                });
-        }
-
-        function createEmptyProject(project, callback) {
-            var core = _clientGlobal.functions.getNewCore(project,
-                    _clientGlobal.gmeConfig, _clientGlobal.logger.fork('createEmptyProject')),
-                root = core.createNode(),
-                rootHash = '',
-                commitHash = '';
-            core.persist(root, function (/* err */) {
-                rootHash = core.getHash(root);
-                commitHash = project.makeCommit([], rootHash, 'project creation commit', function (/* err */) {
-                    project.setBranchHash('master', '', commitHash, function (err) {
-                        callback(err, commitHash);
-                    });
-                });
-            });
-
-        }
-
-        function exportItems(paths, callback) {
-            var nodes = [];
-            for (var i = 0; i < paths.length; i++) {
-                if (_clientGlobal.nodes[paths[i]]) {
-                    nodes.push(_clientGlobal.nodes[paths[i]].node);
-                } else {
-                    callback('invalid node');
-                    return;
-                }
-            }
-
-            _clientGlobal.db.simpleRequest({
-                    command: 'dumpMoreNodes',
-                    name: _clientGlobal.projectName,
-                    hash: _clientGlobal.root.current || _clientGlobal.core.getHash(_clientGlobal.nodes[ROOT_PATH].node),
-                    nodes: paths
-                },
-                function (err, resId) {
-                    if (err) {
-                        callback(err);
-                    } else {
-                        _clientGlobal.db.simpleResult(resId, callback);
-                    }
-                });
-        }
-
-        function getExportItemsUrlAsync(paths, filename, callback) {
-            _clientGlobal.db.simpleRequest({
-                    command: 'dumpMoreNodes',
-                    name: _clientGlobal.projectName,
-                    hash: _clientGlobal.root.current || _clientGlobal.core.getHash(_clientGlobal.nodes[ROOT_PATH].node),
-                    nodes: paths
-                },
-                function (err, resId) {
-                    if (err) {
-                        callback(err);
-                    } else {
-                        callback(null,
-                            window.location.protocol + '//' + window.location.host + '/worker/simpleResult/' +
-                            resId + '/' + filename);
-                    }
-                });
-        }
-
-        function getExportLibraryUrlAsync(libraryRootPath, filename, callback) {
-            var command = {};
-            command.command = 'exportLibrary';
-            command.name = _clientGlobal.projectName;
-            command.hash = _clientGlobal.root.current ||
-                _clientGlobal.core.getHash(_clientGlobal.nodes[ROOT_PATH].node);
-            command.path = libraryRootPath;
-            if (command.name && command.hash) {
-                _clientGlobal.db.simpleRequest(command, function (err, resId) {
-                    if (err) {
-                        callback(err);
-                    } else {
-                        callback(null,
-                            window.location.protocol + '//' + window.location.host + '/worker/simpleResult/' +
-                            resId + '/' + filename);
-                    }
-                });
-            } else {
-                callback(new Error('there is no open project!'));
-            }
-        }
-
-        function getExportProjectBranchUrlAsync(projectName, branchName, rootPath, fileName, callback) {
-            var command = {};
-            command.command = 'exportLibrary';
-            command.name = projectName;
-            command.branch = branchName;
-            command.path = rootPath;
-            if (command.name && command.branch) {
-                _clientGlobal.db.simpleRequest(command, function (err, resId) {
-                    if (err) {
-                        callback(err);
-                    } else {
-                        callback(null,
-                            window.location.protocol + '//' + window.location.host + '/worker/simpleResult/' +
-                            resId + '/' + fileName);
-                    }
-                });
-            } else {
-                callback(new Error('invalid parameters!'));
-            }
-        }
-
-        function updateLibraryAsync(libraryRootPath, newLibrary, callback) {
-            Serialization.import(_clientGlobal.core,
-                _clientGlobal.nodes[libraryRootPath].node, newLibrary, function (err, log) {
-                    if (err) {
-                        return callback(err);
-                    }
-
-                    _clientGlobal.functions.saveRoot('library update done\nlogs:\n' + log, callback);
-                }
-            );
-        }
-
-        function addLibraryAsync(libraryParentPath, newLibrary, callback) {
-            _clientGlobal.functions.startTransaction('creating library as a child of ' + libraryParentPath);
-            var libraryRoot = _clientGlobal.nodeSetter.createChild({
-                parentId: libraryParentPath,
-                baseId: null
-            }, 'library placeholder');
-            Serialization.import(_clientGlobal.core,
-                _clientGlobal.nodes[libraryRoot].node, newLibrary, function (err, log) {
-                    if (err) {
-                        return callback(err);
-                    }
-
-                    _clientGlobal.functions.completeTransaction('library update done\nlogs:\n' + log, callback);
-                }
-            );
-        }
-
-        function dumpNodeAsync(path, callback) {
-            if (_clientGlobal.nodes[path]) {
-                dump(_clientGlobal.core, _clientGlobal.nodes[path].node, '', 'guid', callback);
-            } else {
-                callback('unknown object', null);
-            }
-        }
-
-        function importNodeAsync(parentPath, jNode, callback) {
-            var node = null;
-            if (_clientGlobal.nodes[parentPath]) {
-                node = _clientGlobal.nodes[parentPath].node;
-            }
-            importing(_clientGlobal.core, _clientGlobal.nodes[parentPath].node, jNode, function (err) {
-                if (err) {
-                    callback(err);
-                } else {
-                    _clientGlobal.functions.saveRoot('importNode under ' + parentPath, callback);
-                }
-            });
-        }
-
-        function mergeNodeAsync(parentPath, jNode, callback) {
-            var node = null;
-            if (_clientGlobal.nodes[parentPath]) {
-                node = _clientGlobal.nodes[parentPath].node;
-            }
-            mergeImport(_clientGlobal.core, _clientGlobal.nodes[parentPath].node, jNode, function (err) {
-                if (err) {
-                    callback(err);
-                } else {
-                    _clientGlobal.functions.saveRoot('importNode under ' + parentPath, callback);
-                }
-            });
-        }
-
-        function createProjectFromFileAsync(projectname, jProject, callback) {
-            //TODO somehow the export / import should contain the INFO field
-            // so the tags and description could come from it
-            createProjectAsync(projectname, {}, function (/*err*/) {
-                selectProjectAsync(projectname, function (/*err*/) {
-                    Serialization.import(_clientGlobal.core, _clientGlobal.root.object, jProject, function (err) {
+    function AddOn(state, storage, logger__, gmeConfig) {
+        var _addOns = {},
+            logger = logger__.fork('addOn'),
+            _constraintCallback = function () {
+            };
+        //addOn functions
+        function startAddOn(name) {
+            if (_addOns[name] === undefined) {
+                _addOns[name] = 'loading';
+                logger.debug('loading addOn ' + name);
+                storage.simpleRequest({
+                        command: 'connectedWorkerStart',
+                        workerName: name,
+                        project: state.project.name,
+                        branch: state.branchName
+                    },
+                    function (err, id) {
                         if (err) {
-                            return callback(err);
+                            logger.error('starting addon failed ' + err);
+                            delete _addOns[name];
+                            return logger.error(err);
                         }
 
-                        _clientGlobal.functions.saveRoot('library has been updated...', callback);
+                        logger.debug('started addon ' + name + ' ' + id);
+                        _addOns[name] = id;
                     });
-                });
-            });
+            }
+
         }
 
-        function selectProjectAsync(projectname, callback) {
-            if (_clientGlobal.db) {
-                if (projectname === _clientGlobal.projectName) {
-                    callback(null);
-                } else {
-                    _clientGlobal.functions.closeOpenedProject(function (/*err*/) {
-                        //TODO what can we do with the error??
-                        _clientGlobal.functions.openProject(projectname, function (err) {
-                            //TODO is there a meaningful error which we should propagate towards user???
-                            if (!err) {
-                                _clientGlobal.functions.reLaunchUsers();
-                            }
-                            callback(err);
-                        });
-                    });
-                }
+        function queryAddOn(name, query, callback) {
+            if (!_addOns[name] || _addOns[name] === 'loading') {
+                return callback(new Error('no such addOn is ready for queries'));
+            }
+            storage.simpleQuery(_addOns[name], query, callback);
+        }
+
+        function stopAddOn(name, callback) {
+            if (_addOns[name] && _addOns[name] !== 'loading') {
+                storage.simpleResult(_addOns[name], callback);
+                delete _addOns[name];
             } else {
-                callback(new Error('there is no open database connection!!!'));
+                callback(_addOns[name] ? new Error('addon loading') : null);
             }
         }
 
-        function plainUrl(parameters) {
-            //setting the default values
-            parameters.command = parameters.command || 'etf';
-            parameters.path = parameters.path || '';
-            parameters.project = parameters.project || _clientGlobal.projectName;
+        //generic project related addOn handling
+        function updateRunningAddOns(root) {
+            var i,
+                neededAddOns,
+                runningAddOns,
+                callback = function (err) {
+                    logger.error(err);
+                };
 
-            if (!parameters.root && !parameters.branch && !parameters.commit) {
-                if (_clientGlobal.root.current) {
-                    parameters.root = _clientGlobal.root.current;
-                } else if (_clientGlobal.nodes && _clientGlobal.nodes[ROOT_PATH]) {
-                    parameters.root = _clientGlobal.core.getHash(_clientGlobal.nodes[ROOT_PATH].node);
-                } else {
-                    parameters.branch = _clientGlobal.branch || 'master';
-                }
-            }
-
-            //now we compose the URL
-            if (window && window.location) {
-                var address = window.location.protocol + '//' + window.location.host + '/rest/' +
-                    parameters.command + '?';
-                address += '&project=' + URL.addSpecialChars(parameters.project);
-                if (parameters.root) {
-                    address += '&root=' + URL.addSpecialChars(parameters.root);
-                } else {
-                    if (parameters.commit) {
-                        address += '&commit=' + URL.addSpecialChars(parameters.commit);
-                    } else {
-                        address += '&branch=' + URL.addSpecialChars(parameters.branch);
+            if (gmeConfig.addOn.enable === true) {
+                neededAddOns = state.core.getRegistry(root, 'usedAddOns');
+                runningAddOns = getRunningAddOnNames();
+                neededAddOns = neededAddOns ? neededAddOns.split(' ') : [];
+                for (i = 0; i < neededAddOns.length; i += 1) {
+                    if (!_addOns[neededAddOns[i]]) {
+                        startAddOn(neededAddOns[i]);
                     }
                 }
-
-                address += '&path=' + URL.addSpecialChars(parameters.path);
-
-                if (parameters.output) {
-                    address += '&output=' + URL.addSpecialChars(parameters.output);
-                }
-
-                return address;
-            }
-
-            return null;
-
-        }
-
-        function createProjectAsync(projectname, projectInfo, callback) {
-            if (_clientGlobal.db) {
-                getAvailableProjectsAsync(function (err, names) {
-                    if (!err && names) {
-                        if (names.indexOf(projectname) === -1) {
-                            _clientGlobal.db.openProject(projectname, function (err, p) {
-                                if (!err && p) {
-                                    createEmptyProject(p, function (err, commit) {
-                                        if (!err && commit) {
-                                            //TODO currently this is just a hack
-                                            p.setInfo(projectInfo || {
-                                                    visibleName: projectname,
-                                                    description: 'project in webGME',
-                                                    tags: {}
-                                                }, function (err) {
-                                                callback(err);
-                                            });
-                                        } else {
-                                            callback(err);
-                                        }
-                                    });
-                                } else {
-                                    callback(err);
-                                }
-                            });
-                        } else {
-                            //TODO maybe the selectProjectAsync could be called :)
-                            callback('the project already exists!');
-                        }
-                    } else {
-                        callback(err);
+                for (i = 0; i < runningAddOns.length; i += 1) {
+                    if (neededAddOns.indexOf(runningAddOns[i]) === -1) {
+                        stopAddOn(runningAddOns[i], callback);
                     }
-                });
-            } else {
-                callback(new Error('there is no open database connection!'));
-            }
-
-        }
-
-        function deleteProjectAsync(projectname, callback) {
-            if (_clientGlobal.db) {
-                if (projectname === _clientGlobal.projectName) {
-                    _clientGlobal.functions.closeOpenedProject();
                 }
-                _clientGlobal.db.deleteProject(projectname, callback);
-
-            } else {
-                callback(new Error('there is no open database connection!'));
             }
         }
 
-        //branching functionality
-        function getBranchesAsync(callback) {
-            if (_clientGlobal.db) {
-                if (_clientGlobal.project) {
-                    _clientGlobal.project.getBranchNames(function (err, names) {
-                        var missing = 0,
-                            branchArray = [],
-                            error = null,
-                            getBranchValues,
-                            i,
-                            element;
+        function stopRunningAddOns() {
+            var i,
+                keys,
+                callback;
 
-                        if (!err && names) {
-                            getBranchValues = function (name) {
-                                _clientGlobal.project.getBranchHash(name, '#hack', function (err, newhash, forked) {
-                                    if (!err && newhash) {
-                                        element = {name: name, commitId: newhash};
-                                        if (forked) {
-                                            element.sync = false;
-                                        } else {
-                                            element.sync = true;
-                                        }
-                                        branchArray.push(element);
-                                    } else {
-                                        error = error || err;
-                                    }
-
-                                    missing -= 1;
-                                    if (missing === 0) {
-                                        callback(error, branchArray);
-                                    }
-                                });
-                            };
-
-                            for (i in names) {
-                                missing += 1;
-                            }
-
-                            if (missing > 0) {
-                                for (i in names) {
-                                    getBranchValues(i);
-                                }
-                            } else {
-                                callback(null, branchArray);
-                            }
-                        } else {
-                            callback(err);
-                        }
-                    });
-                } else {
-                    callback(new Error('there is no open project!'));
-                }
-            } else {
-                callback(new Error('there is no opened database connection!'));
-            }
-        }
-
-        function selectCommitAsync(hash, callback) {
-            //this should proxy to branch selection and viewer functions
-            if (_clientGlobal.db) {
-                if (_clientGlobal.project) {
-                    _clientGlobal.functions.viewerCommit(hash, callback);
-                } else {
-                    callback(new Error('there is no open project!'));
-                }
-            } else {
-                callback(new Error('there is no open database connection!'));
-            }
-        }
-
-        function selectBranchAsync(branch, callback) {
-            var waiting = 1,
-                error = null,
-                innerCallback = function (err) {
-                    error = error || err;
-                    if (--waiting === 0) {
-                        callback(error);
+            if (gmeConfig.addOn.enable === true) {
+                keys = Object.keys(_addOns);
+                callback = function (err) {
+                    if (err) {
+                        logger.error('stopAddOn' + err);
                     }
                 };
 
-            if (_clientGlobal.db) {
-                if (_clientGlobal.project) {
-                            _clientGlobal.addOn.stopRunningAddOns();
-                            _clientGlobal.functions.branchWatcher(branch, innerCallback);
-                } else {
-                    callback(new Error('there is no open project!'));
+                for (i = 0; i < keys.length; i++) {
+                    stopAddOn(keys[i], callback);
                 }
-            } else {
-                callback(new Error('there is no open database connection!'));
             }
         }
 
-        function getCommitsAsync(commitHash, number, callback) {
-            if (_clientGlobal.db) {
-                if (_clientGlobal.project) {
-                    ASSERT(_clientGlobal.commitCache);
-                    if (commitHash === undefined) {
-                        commitHash = null;
-                    }
-                    _clientGlobal.commitCache.getNCommitsFrom(commitHash, number, callback);
-                } else {
-                    callback(new Error('there is no open project!'));
+        function getRunningAddOnNames() {
+            var i,
+                names = [],
+                keys = Object.keys(_addOns);
+            for (i = 0; i < keys.length; i++) {
+                if (_addOns[keys[i]] !== 'loading') {
+                    names.push(keys[i]);
                 }
+            }
+            return names;
+        }
+
+        //core addOns
+        //history
+        function getDetailedHistoryAsync(callback) {
+            if (_addOns.hasOwnProperty('HistoryAddOn') && _addOns.HistoryAddOn !== 'loading') {
+                queryAddOn('HistoryAddOn', {}, callback);
             } else {
-                callback(new Error('there is no open database connection!'));
+                callback(new Error('history information is not available'));
             }
         }
 
-        function createBranchAsync(branchName, commitHash, callback) {
-            //it doesn't changes anything, just creates the new branch
-            if (_clientGlobal.db) {
-                if (_clientGlobal.project) {
-                    _clientGlobal.project.setBranchHash(branchName, '', commitHash, callback);
-                } else {
-                    callback(new Error('there is no open project!'));
-                }
+        //constraint
+        function validateProjectAsync(callback) {
+            callback = callback || _constraintCallback || function (/*err, result*/) {
+                };
+            if (_addOns.hasOwnProperty('ConstraintAddOn') && _addOns.ConstraintAddOn !== 'loading') {
+                queryAddOn('ConstraintAddOn', {querytype: 'checkProject'}, callback);
             } else {
-                callback(new Error('there is no open database connection!'));
+                callback(new Error('constraint checking is not available'));
             }
         }
 
-        function deleteBranchAsync(branchName, callback) {
-            if (_clientGlobal.db) {
-                if (_clientGlobal.project) {
-                    _clientGlobal.project.getBranchHash(branchName, '', function (err, newhash, forkedhash) {
-                        if (!err && newhash) {
-                            if (forkedhash) {
-                                _clientGlobal.project.setBranchHash(branchName, newhash, forkedhash, function (err) {
-                                    if (!err) {
-                                        _clientGlobal.functions.changeBranchState(_clientGlobal.branchStates.SYNC);
-                                    }
-                                    callback(err);
-                                });
-                            } else {
-                                _clientGlobal.project.setBranchHash(branchName, newhash, '', callback);
-                            }
-                        } else {
-                            callback(err);
-                        }
-                    });
-                } else {
-                    callback(new Error('there is no open project!'));
-                }
+        function validateModelAsync(path, callback) {
+            callback = callback || _constraintCallback || function (/* err, result */) {
+                };
+            if (_addOns.hasOwnProperty('ConstraintAddOn') && _addOns.ConstraintAddOn !== 'loading') {
+                queryAddOn('ConstraintAddOn', {querytype: 'checkModel', path: path}, callback);
             } else {
-                callback(new Error('there is no open database connection!'));
+                callback(new Error('constraint checking is not available'));
             }
         }
+
+        function validateNodeAsync(path, callback) {
+            callback = callback || _constraintCallback || function (/* err, result */) {
+                };
+            if (_addOns.hasOwnProperty('ConstraintAddOn') && _addOns.ConstraintAddOn !== 'loading') {
+                queryAddOn('ConstraintAddOn', {querytype: 'checkNode', path: path}, callback);
+            } else {
+                callback(new Error('constraint checking is not available'));
+            }
+        }
+
+        function setValidationCallback(cFunction) {
+            if (typeof cFunction === 'function' || cFunction === null) {
+                _constraintCallback = cFunction;
+            }
+        }
+
+        //core addOns end
 
         return {
-            getAvailableProjectsAsync: getAvailableProjectsAsync,
-            getViewableProjectsAsync: getViewableProjectsAsync,
-            getFullProjectListAsync: getFullProjectListAsync,
-            getProjectAuthInfoAsync: getProjectAuthInfoAsync,
-            createProjectAsync: createProjectAsync,
-            selectProjectAsync: selectProjectAsync,
-            deleteProjectAsync: deleteProjectAsync,
-            getBranchesAsync: getBranchesAsync,
-            selectCommitAsync: selectCommitAsync,
-            getCommitsAsync: getCommitsAsync,
-            createBranchAsync: createBranchAsync,
-            deleteBranchAsync: deleteBranchAsync,
-            selectBranchAsync: selectBranchAsync,
-//JSON functions
-            exportItems: exportItems,
-            getExportItemsUrlAsync: getExportItemsUrlAsync,
-            //getExternalInterpreterConfigUrlAsync: getExternalInterpreterConfigUrlAsync,
-            dumpNodeAsync: dumpNodeAsync,
-            importNodeAsync: importNodeAsync,
-            mergeNodeAsync: mergeNodeAsync,
-            createProjectFromFileAsync: createProjectFromFileAsync,
-            //getDumpURL: getDumpURL,
-            getExportProjectBranchUrlAsync: getExportProjectBranchUrlAsync,
-            getExportLibraryUrlAsync: getExportLibraryUrlAsync,
-            updateLibraryAsync: updateLibraryAsync,
-            addLibraryAsync: addLibraryAsync,
-            getFullProjectsInfoAsync: getFullProjectsInfoAsync,
-            createGenericBranchAsync: createGenericBranchAsync,
-            deleteGenericBranchAsync: deleteGenericBranchAsync,
-            setProjectInfoAsync: setProjectInfoAsync,
-            getProjectInfoAsync: getProjectInfoAsync,
-            getAllInfoTagsAsync: getAllInfoTagsAsync
+            startAddOn: startAddOn,
+            queryAddOn: queryAddOn,
+            stopAddOn: stopAddOn,
+            updateRunningAddOns: updateRunningAddOns,
+            stopRunningAddOns: stopRunningAddOns,
+            getDetailedHistoryAsync: getDetailedHistoryAsync,
+            validateProjectAsync: validateProjectAsync,
+            validateModelAsync: validateModelAsync,
+            validateNodeAsync: validateNodeAsync,
+            setValidationCallback: setValidationCallback,
+            getRunningAddOnNames: getRunningAddOnNames
         };
     }
 
-    return Requests;
+    return AddOn;
 });
 /*globals define*/
 /*jshint browser: true*/
-
 /**
  * @author kecso / https://github.com/kecso
+ * @author pmeijer / https://github.com/pmeijer
  */
-
-define('client/js/client/index',[
-    'common/util/assert',
-    'common/EventDispatcher',
-    'common/util/guid',
-    'common/core/core',
-    'common/storage/clientstorage',
+define('client/js/client',[
     'js/logger',
-    'common/util/url',
+    'common/storage/browserstorage',
+    'common/EventDispatcher',
+    'common/core/core',
+    'js/client/constants',
     'common/core/users/meta',
-    'common/core/users/tojson',
+    'common/util/assert',
     'common/core/tasync',
-    'superagent',
-    './undoredo',
-    './gmeNodeGetter',
-    './gmeNodeSetter',
-    './commitCache',
-    './serverEventer',
-    './addon',
-    './requests'
-], function (ASSERT,
-             EventDispatcher,
-             GUID,
-             Core,
+    'common/util/guid',
+    'common/util/url',
+    'js/client/gmeNodeGetter',
+    'js/client/gmeNodeSetter',
+    'common/core/users/serialization',
+    'js/client/addon'
+], function (Logger,
              Storage,
-             Logger,
-             URL,
-             BaseMeta,
-             toJson,
+             EventDispatcher,
+             Core,
+             CONSTANTS,
+             META,
+             ASSERT,
              TASYNC,
-             superagent,
-             UndoRedo,
+             GUID,
+             URL,
              getNode,
-             gmeNodeSetter,
-             createCommitCache,
-             serverEventer,
-             createAddOn,
-             Requests) {
+             getNodeSetters,
+             Serialization,
+             AddOn) {
 
-    
-
-    var ROOT_PATH = '';
-
-    function COPY(object) {
-        if (object) {
-            return JSON.parse(JSON.stringify(object));
-        }
-        return null;
-    }
-
-
-    function getNewCore(project, gmeConfig, logger) {
-        //return new NullPointerCore(new DescriptorCore(new SetCore(new GuidCore(new Core(project)))));
-        // FIXME: why usertype is nodejs when it is running from the browser?
-        var options = {usertype: 'nodejs', globConf: gmeConfig, logger: logger.fork('core')};
-        return new Core(project, options);
-    }
 
     function Client(gmeConfig) {
+        var self = this,
+            logger = Logger.create('gme:client', gmeConfig.client.log),
+            storage = Storage.getStorage(logger, gmeConfig, true),
+            state = {
+                connection: null, // CONSTANTS.STORAGE. CONNECTED/DISCONNECTED/RECONNECTED
+                project: null, //CONSTANTS.BRANCH_STATUS. SYNCH/FORKED/AHEAD/PULLING
+                core: null,
+                branchName: null,
+                branchStatus: null,
+                inSync: true,
+                readOnlyProject: false,
+                viewer: false, // This means that a specific commit is selected w/o regards to any branch.
+
+                users: {},
+                nodes: {},
+                loadNodes: {},
+                // FIXME: This should be the same as nodes (need to make sure they are not modified in meta).
+                metaNodes: {},
+
+                root: {
+                    current: null,
+                    previous: null,
+                    object: null
+                },
+                commit: {
+                    current: null,
+                    previous: null
+                },
+                undoRedoChain: null, //{commit: '#hash', root: '#hash', previous: object, next: object}
+                inTransaction: false,
+                msg: '',
+                gHash: 0,
+                loadError: null
+            },
+            monkeyPatchKey,
+            nodeSetterFunctions,
+            addOnFunctions = new AddOn(state, storage, logger, gmeConfig);
+
+        EventDispatcher.call(this);
+
+        this.CONSTANTS = CONSTANTS;
+
+        function logState(level, msg) {
+            var lightState;
+
+            function replacer(key, value) {
+                var chainItem,
+                    prevChain,
+                    nextChain,
+                    chain;
+                if (key === 'project') {
+                    if (value) {
+                        return value.name;
+                    } else {
+                        return null;
+                    }
+
+                } else if (key === 'core') {
+                    if (value) {
+                        return 'instantiated';
+                    } else {
+                        return 'notInstantiated';
+                    }
+                } else if (key === 'metaNodes') {
+                    return Object.keys(value);
+                } else if (key === 'nodes') {
+                    return Object.keys(value);
+                } else if (key === 'loadNodes') {
+                    return Object.keys(value);
+                } else if (key === 'users') {
+                    return Object.keys(value);
+                } else if (key === 'root') {
+                    return {
+                        current: value.current,
+                        previous: value.previous
+                    };
+                } else if (key === 'undoRedoChain') {
+                    if (value) {
+                        chain = {
+                            previous: null,
+                            next: null
+                        };
+                        if (value.previous) {
+                            prevChain = {};
+                            chain.previous = prevChain;
+                        }
+                        chainItem = value;
+                        while (chainItem.previous) {
+                            prevChain.previous = {
+                                commit: chainItem.commit,
+                                previous: null
+                            };
+                            prevChain = prevChain.previous;
+                            chainItem = chainItem.previous;
+                        }
+                        if (value.next) {
+                            nextChain = {};
+                            chain.next = nextChain;
+                        }
+                        chainItem = value;
+                        while (chainItem.next) {
+                            nextChain.next = {
+                                commit: chainItem.commit,
+                                next: null
+                            };
+                            nextChain = nextChain.next;
+                            chainItem = chainItem.next;
+                        }
+                        return chain;
+                    }
+                }
+
+                return value;
+            }
+
+            if (gmeConfig.debug) {
+                logger[level]('state at ' + msg, JSON.stringify(state, replacer, 2));
+            } else {
+                lightState = {
+                    connection: self.getNetworkStatus(),
+                    projectName: self.getActiveProjectName(),
+                    branchName: self.getActiveBranchName(),
+                    branchStatus: self.getBranchStatus(),
+                    commitHash: self.getActiveCommitHash(),
+                    rootHash: self.getActiveRootHash(),
+                    projectReadOnly: self.isProjectReadOnly(),
+                    commitReadOnly: self.isCommitReadOnly()
+                };
+                logger[level]('state at ' + msg, JSON.stringify(lightState));
+            }
+        }
+
+        // Forwarded functions
+        function saveRoot(msg, callback) {
+            var persisted,
+                numberOfPersistedObjects,
+                beforeLoading = true,
+                commitQueue,
+                newCommitObject;
+            logger.debug('saveRoot msg', msg);
+
+            callback = callback || function () {
+                };
+            if (!state.viewer && !state.readOnlyProject) {
+                if (state.msg) {
+                    state.msg += '\n' + msg;
+                } else {
+                    state.msg += msg;
+                }
+                if (!state.inTransaction) {
+                    ASSERT(state.project && state.core && state.branchName);
+                    logger.debug('is NOT in transaction - will persist.');
+                    persisted = state.core.persist(state.nodes[ROOT_PATH].node);
+                    logger.debug('persisted', persisted);
+                    numberOfPersistedObjects = Object.keys(persisted.objects).length;
+                    if (numberOfPersistedObjects === 0) {
+                        logger.warn('No changes after persist will return from saveRoot.');
+                        callback(null);
+                        return;
+                    } else if (numberOfPersistedObjects > 200) {
+                        //This is just for debugging
+                        logger.warn('Lots of persisted objects', numberOfPersistedObjects);
+                    }
+
+                    // Calling event-listeners (users)
+                    // N.B. it is no longer waiting for the setBranchHash to return from server.
+                    // Which also was the case before:
+                    // https://github.com/webgme/webgme/commit/48547c33f638aedb60866772ca5638f9e447fa24
+
+                    loading(persisted.rootHash, function (err) {
+                        if (err) {
+                            logger.error('Saveroot - loading failed', err);
+                        }
+                        // TODO: Are local updates really guaranteed to be synchronous?
+                        if (beforeLoading === false) {
+                            logger.error('SaveRoot - was not synchronous!');
+                        }
+                    });
+
+                    beforeLoading = false;
+                    newCommitObject = storage.makeCommit(
+                        state.project.name,
+                        state.branchName,
+                        [state.commit.current],
+                        persisted.rootHash,
+                        persisted.objects,
+                        state.msg,
+                        callback
+                    );
+                    commitQueue = state.project.getBranch(state.branchName, true).getCommitQueue();
+                    if (state.inSync === true) {
+                        changeBranchStatus(CONSTANTS.BRANCH_STATUS.AHEAD_SYNC, commitQueue);
+                    } else {
+                        changeBranchStatus(CONSTANTS.BRANCH_STATUS.AHEAD_NOT_SYNC, commitQueue);
+                    }
+
+
+                    addCommit(newCommitObject[CONSTANTS.STORAGE.MONGO_ID]);
+                    //undo-redo
+                    addModification(newCommitObject, false);
+                    self.dispatchEvent(CONSTANTS.UNDO_AVAILABLE, canUndo());
+                    self.dispatchEvent(CONSTANTS.REDO_AVAILABLE, canRedo());
+
+                    state.msg = '';
+                } else {
+                    logger.debug('is in transaction - will NOT persist.');
+                }
+            } else {
+                //TODO: Why is this set to empty here?
+                state.msg = '';
+                callback(null);
+            }
+        }
 
         function storeNode(node /*, basic */) {
             var path;
             //basic = basic || true;
             if (node) {
-                path = _clientGlobal.core.getPath(node);
-                _metaNodes[path] = node;
-                if (_clientGlobal.nodes[path]) {
+                path = state.core.getPath(node);
+                state.metaNodes[path] = node;
+                if (state.nodes[path]) {
                     //TODO we try to avoid this
                 } else {
-                    _clientGlobal.nodes[path] = {node: node, hash: ''/*,incomplete:true,basic:basic*/};
+                    state.nodes[path] = {node: node, hash: ''/*,incomplete:true,basic:basic*/};
                     //TODO this only needed when real eventing will be reintroduced
                     //_inheritanceHash[path] = getInheritanceChain(node);
                 }
@@ -20057,795 +16557,746 @@ define('client/js/client/index',[
             return null;
         }
 
-        function saveRoot(msg, callback) {
-            var newRootHash,
-                newCommitHash;
+        // Monkey patching from other files..
+        this.meta = new META();
 
-            callback = callback || function () {
-                };
-            if (!_viewer && !_readOnlyProject) {
-                if (_msg) {
-                    _msg += '\n' + msg;
-                } else {
-                    _msg += msg;
+        for (monkeyPatchKey in this.meta) {
+            //TODO: These should be accessed via this.meta.
+            //TODO: e.g. client.meta.getMetaAspectNames(id) instead of client.getMetaAspectNames(id)
+            //TODO: However that will break a lot since it's used all over the place...
+            if (this.meta.hasOwnProperty(monkeyPatchKey)) {
+                self[monkeyPatchKey] = this.meta[monkeyPatchKey];
+            }
+        }
+
+        nodeSetterFunctions = getNodeSetters(logger, state, saveRoot, storeNode);
+
+        for (monkeyPatchKey in nodeSetterFunctions) {
+            if (nodeSetterFunctions.hasOwnProperty(monkeyPatchKey)) {
+                self[monkeyPatchKey] = nodeSetterFunctions[monkeyPatchKey];
+            }
+        }
+
+        // Main API functions (with helpers) for connecting, selecting project and branches etc.
+        this.connectToDatabase = function (callback) {
+            if (isConnected()) {
+                logger.warn('connectToDatabase - already connected');
+                callback(null);
+                return;
+            }
+            storage.open(function (connectionState) {
+                state.connection = connectionState;
+                if (connectionState === CONSTANTS.STORAGE.CONNECTED) {
+                    //N.B. this event will only be triggered once.
+                    self.dispatchEvent(CONSTANTS.NETWORK_STATUS_CHANGED, connectionState);
+                    reLaunchUsers();
+                    callback(null);
+                } else if (connectionState === CONSTANTS.STORAGE.DISCONNECTED) {
+                    self.dispatchEvent(CONSTANTS.NETWORK_STATUS_CHANGED, connectionState);
+                } else if (connectionState === CONSTANTS.STORAGE.RECONNECTED) {
+                    self.dispatchEvent(CONSTANTS.NETWORK_STATUS_CHANGED, connectionState);
+                } else { //CONSTANTS.ERROR
+                    callback(Error('Connection failed!' + connectionState));
                 }
-                if (!_inTransaction) {
-                    ASSERT(_clientGlobal.project && _clientGlobal.core && _clientGlobal.branch);
-                    _clientGlobal.core.persist(_clientGlobal.nodes[ROOT_PATH].node, function (/*err*/) {
-                    });
-                    newRootHash = _clientGlobal.core.getHash(_clientGlobal.nodes[ROOT_PATH].node);
-                    newCommitHash = _clientGlobal.project.makeCommit([_recentCommits[0]],
-                        newRootHash, _msg, function (/*err*/) {
-                            //TODO now what??? - could we end up here?
-                        });
-                    _msg = '';
-                    addCommit(newCommitHash);
-                    _selfCommits[newCommitHash] = true;
-                    _redoer.addModification(newCommitHash, '');
-                    _clientGlobal.project.setBranchHash(_clientGlobal.branch,
-                        _recentCommits[1], _recentCommits[0], function (err) {
-                            //TODO now what??? - could we screw up?
-                            loading(newRootHash);
-                            callback(err);
-                        });
-                    //loading(newRootHash);
+            });
+        };
+
+        this.disconnectFromDatabase = function (callback) {
+
+            function closeStorage(err) {
+                storage.close(function (err2) {
+                    state.connection = CONSTANTS.STORAGE.DISCONNECTED;
+                    callback(err || err2);
+                });
+            }
+
+            if (isConnected()) {
+                if (state.project) {
+                    closeProject(state.project.name, closeStorage);
+                } else {
+                    closeStorage(null);
                 }
             } else {
-                _msg = '';
+                logger.warn('Trying to disconnect when already disconnected.');
                 callback(null);
             }
-        }
+        };
 
-        function closeOpenedProject(callback) {
-            var returning,
-                project;
-
-            callback = callback || function () {
-                };
-            returning = function (e) {
-                var oldProjName = _clientGlobal.projectName;
-                _clientGlobal.projectName = null;
-                _inTransaction = false;
-                _clientGlobal.core = null;
-                _clientGlobal.nodes = {};
-                _metaNodes = {};
-                //_commitObject = null;
-                _patterns = {};
-                _msg = '';
-                _recentCommits = [];
-                _clientGlobal.root.current = null;
-                _clientGlobal.root.previous = null;
-                _viewer = false;
-                _readOnlyProject = false;
-                _loadNodes = {};
-                _loadError = 0;
-                _offline = false;
-                cleanUsersTerritories();
-                if (oldProjName) {
-                    //otherwise there were no open project at all
-                    _self.dispatchEvent(_self.events.PROJECT_CLOSED, oldProjName);
-                }
-
-                callback(e);
-            };
-            if (_clientGlobal.branch) {
-                //otherwise the branch will not 'change'
-                _self.dispatchEvent(_self.events.BRANCH_CHANGED, null);
+        this.selectProject = function (projectName, callback) {
+            if (isConnected() === false) {
+                callback(new Error('There is no open database connection!'));
             }
-            _clientGlobal.branch = null;
-            if (_clientGlobal.project) {
-                project = _clientGlobal.project;
-                _clientGlobal.project = null;
-                project.closeProject(function (err) {
-                    //TODO what if for some reason we are in transaction???
-                    returning(err);
+            var prevProjectName,
+                branchToOpen = 'master';
+
+            function projectOpened(err, project, branches, access) {
+                if (err) {
+                    callback(new Error(err));
+                    return;
+                }
+                state.project = project;
+                state.readOnlyProject = access.write === false;
+                state.core = new Core(project, {
+                    globConf: gmeConfig,
+                    logger: logger.fork('core')
                 });
-            } else {
-                returning(null);
-            }
-        }
+                self.meta.initialize(state.core, state.metaNodes, saveRoot);
+                logState('info', 'projectOpened');
+                self.dispatchEvent(CONSTANTS.PROJECT_OPENED, projectName);
 
-        function viewerCommit(hash, callback) {
-            //no project change
-            //we stop watching branch
-            //we create the core
-            //we use the existing territories
-            //we set viewer mode, so there will be no modification allowed to send to server...
-            _clientGlobal.branch = null;
-            _viewer = true;
-            _recentCommits = [hash];
-            _self.dispatchEvent(_self.events.BRANCH_CHANGED, _clientGlobal.branch);
-            _clientGlobal.project.loadObject(hash, function (err, commitObj) {
-                if (!err && commitObj) {
-                    loading(commitObj.root, callback);
-                } else {
-                    logger.error('Cannot view given ' + hash + ' commit as it\'s root cannot be loaded! [' +
-                        JSON.stringify(err) + ']');
-                    callback(err || new Error('commit object cannot be found!'));
+                if (branches.hasOwnProperty('master') === false) {
+                    branchToOpen = Object.keys(branches)[0] || null;
+                    logger.debug('Project "' + projectName + '" did not have a master branch, picked:', branchToOpen);
                 }
-            });
-        }
-
-        function startTransaction(msg) {
-            if (_clientGlobal.core) {
-                _inTransaction = true;
-                msg = msg || 'startTransaction()';
-                saveRoot(msg);
-            }
-        }
-
-        function completeTransaction(msg, callback) {
-            _inTransaction = false;
-            if (_clientGlobal.core) {
-                msg = msg || 'completeTransaction()';
-                saveRoot(msg, callback);
-            }
-        }
-
-        function branchWatcher(branch, callback) {
-            ASSERT(_clientGlobal.project);
-            callback = callback || function () {
-                };
-            var myCallback = function (err) {
-                myCallback = function () {
-                };
-                callback(err);
-            };
-            var redoerNeedsClean = true;
-            var branchHashUpdated = function (err, newhash, forked) {
-                var doUpdate = false;
-                if (branch === _clientGlobal.branch && !_offline) {
-                    if (!err && typeof newhash === 'string') {
-                        if (newhash === '') {
-                            logger.warn('The current branch ' + branch + ' have been deleted!');
-                            //we should open a viewer with our current commit...
-                            var latestCommit = _recentCommits[0];
-                            viewerCommit(latestCommit, function (err) {
-                                if (err) {
-                                    logger.error('Current branch ' + branch +
-                                        ' have been deleted, and unable to open the latest commit ' +
-                                        latestCommit + '! [' + JSON.stringify(err) + ']');
-                                }
-                            });
-                        } else {
-                            if (_redoer.isCurrentTarget(newhash)) {
-                                addCommit(newhash);
-                                doUpdate = true;
-                            } else if (!_selfCommits[newhash] || redoerNeedsClean) {
-                                redoerNeedsClean = false;
-                                _redoer.clean();
-                                _redoer.addModification(newhash, 'branch initial');
-                                _selfCommits = {};
-                                _selfCommits[newhash] = true;
-                                doUpdate = true;
-                                addCommit(newhash);
-                            }
-                            var redoInfo = _redoer.checkStatus(),
-                                canUndo = false,
-                                canRedo = false;
-
-                            if (_selfCommits[newhash]) {
-                                if (redoInfo.undo) {
-                                    canUndo = true;
-                                }
-                                if (redoInfo.redo) {
-                                    canRedo = true;
-                                }
-                            }
-
-                            _self.dispatchEvent(_self.events.UNDO_AVAILABLE, canUndo);
-                            _self.dispatchEvent(_self.events.REDO_AVAILABLE, canRedo);
-
-                            if (doUpdate) {
-                                _clientGlobal.project.loadObject(newhash, function (err, commitObj) {
-                                    if (!err && commitObj) {
-                                        loading(commitObj.root, myCallback);
-                                    } else {
-                                        setTimeout(function () {
-                                            _clientGlobal.project.loadObject(newhash, function (err, commitObj) {
-                                                if (!err && commitObj) {
-                                                    loading(commitObj.root, myCallback);
-                                                } else {
-                                                    logger.error('second load try failed on commit!!!', err);
-                                                }
-                                            });
-                                        }, 1000);
-                                    }
-                                });
-                            }
-
-                            //branch status update
-                            if (_offline) {
-                                changeBranchState(_self.branchStates.OFFLINE);
-                            } else {
-                                if (forked) {
-                                    changeBranchState(_self.branchStates.FORKED);
-                                }
-                            }
-
-                            //FIXME should kill the branch watcher gracefully as it is possible now to get a callback,
-                            // but the branch is already closed here - actually the whole project is closed
-                            return (branch === _clientGlobal.branch &&
-                            _clientGlobal.db &&
-                            _clientGlobal.project) ? _clientGlobal.project.getBranchHash(branch,
-                                _recentCommits[0],
-                                branchHashUpdated) : null;
-                        }
-                    } else {
-                        myCallback(null);
-                        return _clientGlobal.project.getBranchHash(branch, _recentCommits[0], branchHashUpdated);
+                ASSERT(branchToOpen, 'No branch avaliable in project'); // TODO: Deal with this
+                self.selectBranch(branchToOpen, null, function (err) {
+                    if (err) {
+                        callback(err);
+                        return;
                     }
-                } else {
-                    myCallback(null);
-                }
-            };
-
-            if (_clientGlobal.branch === branch) {
-                if (_offline) {
-                    _viewer = false;
-                    _offline = false;
-                    changeBranchState(_self.branchStates.SYNC);
-                    _clientGlobal.project.getBranchHash(branch, _recentCommits[0], branchHashUpdated);
-                } else {
+                    logState('info', 'selectBranch');
+                    reLaunchUsers();
                     callback(null);
-                }
-            } else {
-                _clientGlobal.branch = branch;
-                _viewer = false;
-                _offline = false;
-                _recentCommits = [''];
-                _self.dispatchEvent(_self.events.BRANCH_CHANGED, _clientGlobal.branch);
-                changeBranchState(_self.branchStates.SYNC);
-                _clientGlobal.project.getBranchHash(branch, _recentCommits[0], branchHashUpdated);
-            }
-        }
-
-        function reLaunchUsers() {
-            var i;
-            for (i in _users) {
-                if (_users.hasOwnProperty(i)) {
-                    if (_users[i].UI.reLaunch) {
-                        _users[i].UI.reLaunch();
-                    }
-                }
-            }
-        }
-
-        function openProject(name, callback) {
-            //this function cannot create new project
-            ASSERT(_clientGlobal.db);
-            var waiting = 1,
-                innerCallback = function (err) {
-                    error = error || err;
-                    if (--waiting === 0) {
-                        if (error) {
-                            logger.error('The branch ' + firstName + ' of project ' + name +
-                                ' cannot be selected! [' + JSON.stringify(error) + ']');
-                        }
-                        callback(error);
-                    }
-                },
-                firstName = null,
-                error = null;
-            _clientGlobal.db.getProjectNames(function (err, names) {
-                if (err) {
-                    return callback(err);
-                }
-                if (names.indexOf(name) !== -1) {
-                    _clientGlobal.db.openProject(name, function (err, p) {
-                        if (!err && p) {
-                            _clientGlobal.db.getAuthorizationInfo(name, function (err, authInfo) {
-                                _readOnlyProject = authInfo ? (authInfo.write === true ? false : true) : true;
-                                _clientGlobal.project = p;
-                                _clientGlobal.projectName = name;
-                                _inTransaction = false;
-                                _clientGlobal.nodes = {};
-                                _metaNodes = {};
-                                _clientGlobal.core = getNewCore(_clientGlobal.project,
-                                    gmeConfig, logger.fork('project' + name));
-                                _clientGlobal.META.initialize(_clientGlobal.core, _metaNodes, saveRoot);
-                                if (_clientGlobal.commitCache) {
-                                    _clientGlobal.commitCache.clearCache();
-                                } else {
-                                    createCommitCache(_clientGlobal); //attaches itself to the global
-                                }
-                                _self.dispatchEvent(_self.events.PROJECT_OPENED, _clientGlobal.projectName);
-
-                                //check for master or any other branch
-                                _clientGlobal.project.getBranchNames(function (err, names) {
-                                    if (!err && names) {
-
-                                        if (names.master) {
-                                            firstName = 'master';
-                                        } else {
-                                            firstName = Object.keys(names)[0] || null;
-                                        }
-
-                                        if (firstName) {
-                                            _clientGlobal.addOn.stopRunningAddOns();
-                                            branchWatcher(firstName, innerCallback);
-                                        } else {
-                                            //we should try the latest commit
-                                            viewLatestCommit(callback);
-                                        }
-                                    } else {
-                                        //we should try the latest commit
-                                        viewLatestCommit(callback);
-                                    }
-                                });
-                            });
-                        } else {
-                            logger.error('The project ' + name + ' cannot be opened! [' + JSON.stringify(err) +
-                                ']');
-                            callback(err);
-                        }
-                    });
-                } else {
-                    callback(new Error('there is no such project'));
-                }
-
-            });
-        }
-
-        function changeBranchState(newstate) {
-            if (_clientGlobal.branchState !== newstate) {
-                _clientGlobal.branchState = newstate;
-                _self.dispatchEvent(_self.events.BRANCHSTATUS_CHANGED, _clientGlobal.branchState);
-            }
-        }
-
-        var _self = this,
-            logger = Logger.create('gme:client', gmeConfig.client.log),
-            _metaNodes = {},
-            _inTransaction = false,
-            _users = {},
-            _patterns = {},
-            _networkStatus = '',
-            _msg = '',
-            _recentCommits = [],
-            _viewer = false,
-            _readOnlyProject = false,
-            _loadNodes = {},
-            _loadError = 0,
-            _offline = false,
-            _networkWatcher = null,
-            _TOKEN = null,
-        //_changeTree = null,
-            _gHash = 0,
-            _redoer = null,
-            _selfCommits = {},
-            _configuration = {},
-            AllPlugins,
-            AllDecorators,
-            eventDispatcher,
-            i,
-            _clientGlobal = {
-                gmeConfig: gmeConfig,
-                logger: logger,
-                core: null,
-                branch: null,
-                branchState: null,
-                projectName: null,
-                root: {
-                    current: null,
-                    previous: null,
-                    object: null
-                },
-                nodes: {},
-                project: null,
-                db: null,
-                META: new BaseMeta(),
-                functions: {
-                    toJson: toJson,
-                    storeNode: storeNode,
-                    saveRoot: saveRoot,
-                    getNewCore: getNewCore,
-                    closeOpenedProject: closeOpenedProject,
-                    viewerCommit: viewerCommit,
-                    startTransaction: startTransaction,
-                    completeTransaction: completeTransaction,
-                    branchWatcher: branchWatcher, //refactor this
-                    reLaunchUsers: reLaunchUsers,
-                    openProject: openProject,
-                    changeBranchState: changeBranchState
-                }
-            },
-            _clientAPI = {},
-            _requests = new Requests(_clientGlobal);
-
-        gmeNodeSetter(_clientGlobal); //this attaches itself to the global object
-        createAddOn(_clientGlobal); //this attaches itself to the global
-
-        if (window) {
-            _configuration.host = window.location.protocol + '//' + window.location.host;
-        } else {
-            //TODO: Is this ever applicable?
-            _configuration.host = '';
-        }
-        // FIXME: These are asynchronous
-        superagent.get('/listAllPlugins')
-            .end(function (err, res) {
-                if (res.status === 200) {
-                    AllPlugins = res.body.allPlugins;
-                    logger.debug('/listAllPlugins', AllPlugins);
-                } else {
-                    logger.error('/listAllPlugins failed', err);
-                }
-            });
-
-        superagent.get('/listAllDecorators')
-            .end(function (err, res) {
-                if (res.status === 200) {
-                    AllDecorators = res.body.allDecorators;
-                    logger.debug('/listAllDecorators', AllDecorators);
-                } else {
-                    logger.error('/listAllDecorators failed', err);
-                }
-            });
-
-        //default configuration
-        //FIXME: Are these gme options or not??
-        _configuration.autoreconnect = true; // MAGIC NUMBERS
-        _configuration.reconndelay = 1000; // MAGIC NUMBERS
-        _configuration.reconnamount = 1000; // MAGIC NUMBERS
-        _configuration.autostart = false; // MAGIC NUMBERS
-
-        //TODO remove the usage of jquery
-        //$.extend(_self, new EventDispatcher());
-        eventDispatcher = new EventDispatcher();
-        for (i in eventDispatcher) {
-            _self[i] = eventDispatcher[i];
-        }
-        _clientGlobal.eDispatcher = _self; //propagating dispatching functionality
-
-        _self.events = {
-            NETWORKSTATUS_CHANGED: 'NETWORKSTATUS_CHANGED',
-            BRANCHSTATUS_CHANGED: 'BRANCHSTATUS_CHANGED',
-            BRANCH_CHANGED: 'BRANCH_CHANGED',
-            PROJECT_CLOSED: 'PROJECT_CLOSED',
-            PROJECT_OPENED: 'PROJECT_OPENED',
-
-            SERVER_PROJECT_CREATED: 'SERVER_PROJECT_CREATED',
-            SERVER_PROJECT_DELETED: 'SERVER_PROJECT_DELETED',
-            SERVER_BRANCH_CREATED: 'SERVER_BRANCH_CREATED',
-            SERVER_BRANCH_UPDATED: 'SERVER_BRANCH_UPDATED',
-            SERVER_BRANCH_DELETED: 'SERVER_BRANCH_DELETED',
-
-            UNDO_AVAILABLE: 'UNDO_AVAILABLE',
-            REDO_AVAILABLE: 'REDO_AVAILABLE'
-        };
-
-        _clientGlobal.events = _self.events; //propagating the event names
-
-        _self.networkStates = {
-            CONNECTED: 'connected',
-            DISCONNECTED: 'socket.io is disconnected'
-        };
-
-        _self.branchStates = {
-            SYNC: 'inSync',
-            FORKED: 'forked',
-            OFFLINE: 'offline'
-        };
-
-        _clientGlobal.branchStates = _self.branchStates;
-
-        function getUserId() {
-            var cookies = URL.parseCookie(document.cookie);
-            if (cookies.webgme) {
-                return cookies.webgme;
-            } else {
-                return 'n/a';
-            }
-        }
-
-        //FIXME remove TESTING
-        function newDatabase() {
-            var storageOptions = {
-                    logger: Logger.create('gme:client:storage', gmeConfig.client.log),
-                    host: _configuration.host
-                },
-                protocolStr;
-
-            if (typeof TESTING === 'undefined') {
-                storageOptions.user = getUserId();
-            } else {
-                protocolStr = gmeConfig.server.https.enable ? 'https' : 'http';
-
-                storageOptions.type = 'node';
-                storageOptions.host = protocolStr + '://127.0.0.1';
-                storageOptions.user = 'TEST';
-            }
-
-            storageOptions.globConf = gmeConfig;
-            return new Storage(storageOptions);
-        }
-
-        function connect() {
-            //this is when the user force to go online on network level
-            //TODO implement :) - but how, there is no such function on the storage's API
-            if (_clientGlobal.db) {
-                _clientGlobal.db.openDatabase(function (/*err*/) {
                 });
             }
-        }
 
-        //branch handling functions
-        function goOffline() {
-            //TODO stop watching the branch changes
-            _offline = true;
-            changeBranchState(_self.branchStates.OFFLINE);
-        }
+            if (state.project) {
+                prevProjectName = state.project.name;
+                logger.debug('A project was open, closing it', prevProjectName);
 
-        function goOnline() {
-            //TODO we should try to update the branch with our latest commit
-            //and 'restart' listening to branch changes
-            if (_offline) {
-                _clientGlobal.addOn.stopRunningAddOns();
-                branchWatcher(_clientGlobal.branch);
-            }
-        }
-
-        function addCommit(commitHash) {
-            _clientGlobal.commitCache.newCommit(commitHash);
-            _recentCommits.unshift(commitHash);
-            if (_recentCommits.length > 100) {
-                _recentCommits.pop();
-            }
-        }
-
-
-        function tokenWatcher() {
-            var token = null,
-                refreshToken = function () {
-                    _clientGlobal.db.getToken(function (err, t) {
-                        if (!err) {
-                            token = t || '_';
-                        }
-                    });
-                },
-                getToken = function () {
-                    return token;
-                };
-
-            setInterval(refreshToken, 10000); //maybe it could be configurable
-            refreshToken();
-
-            return {
-                getToken: getToken
-            };
-        }
-
-        function networkWatcher() {
-            _networkStatus = '';
-            //FIXME: Are these gme options or not??
-
-            var frequency = 10,
-                running = true,
-                stop = function () {
-                    running = false;
-                },
-                checking = false,
-                reconnecting = function (finished) {
-                    var connecting = false,
-                        counter = 0,
-                        frequency = _configuration.reconndelay || 10,
-                        timerId = setInterval(function () {
-                            if (!connecting) {
-                                connecting = true;
-                                _clientGlobal.db.openDatabase(function (err) {
-                                    connecting = false;
-                                    if (!err) {
-                                        //we are back!
-                                        clearInterval(timerId);
-                                        return finished(null);
-                                    }
-                                    if (++counter === _configuration.reconnamount) {
-                                        //we failed, stop trying
-                                        clearInterval(timerId);
-                                        return finished(err);
-                                    }
-                                });
-                            }
-                        }, frequency);
-                },
-                checkId = setInterval(function () {
-                    if (!checking) {
-                        checking = true;
-                        _clientGlobal.db.getDatabaseStatus(_networkStatus, function (err, newStatus) {
-                            if (running) {
-                                if (_networkStatus !== newStatus) {
-                                    _networkStatus = newStatus;
-                                    _self.dispatchEvent(_self.events.NETWORKSTATUS_CHANGED, _networkStatus);
-                                    if (_networkStatus === _self.networkStates.DISCONNECTED &&
-                                        _configuration.autoreconnect) {
-                                        reconnecting(function (err) {
-                                            checking = false;
-                                            if (err) {
-                                                logger.error('permanent network failure:', err);
-                                                clearInterval(checkId);
-                                            }
-                                        });
-                                    } else {
-                                        checking = false;
-                                    }
-                                } else {
-                                    checking = false;
-                                }
-                            } else {
-                                clearInterval(checkId);
-                            }
-                        });
+                if (prevProjectName === projectName) {
+                    logger.warn('projectName is already opened', projectName);
+                    callback(null);
+                    return;
+                }
+                closeProject(prevProjectName, function (err) {
+                    if (err) {
+                        logger.error('problems closing previous project', err);
+                        callback(err);
+                        return;
                     }
-                }, frequency);
+                    storage.openProject(projectName, projectOpened);
+                });
+            } else {
+                storage.openProject(projectName, projectOpened);
+            }
+        };
 
-            return {
-                stop: stop
-            };
-        }
-
-        function viewLatestCommit(callback) {
-            _clientGlobal.commitCache.getNCommitsFrom(null, 1, function (err, commits) {
-                if (!err && commits && commits.length > 0) {
-                    viewerCommit(commits[0][_clientGlobal.project.ID_NAME], callback);
-                } else {
-                    logger.error('Cannot get latest commit! [' + JSON.stringify(err) + ']');
+        function closeProject(projectName, callback) {
+            state.project = null;
+            //TODO what if for some reason we are in transaction?
+            storage.closeProject(projectName, function (err) {
+                if (err) {
                     callback(err);
+                    return;
                 }
+                state.core = null;
+                state.branchName = null;
+                changeBranchStatus(null);
+                state.patterns = {};
+                //state.gHash = 0;
+                state.nodes = {};
+                state.metaNodes = {};
+                state.loadNodes = {};
+                state.loadError = 0;
+                state.root.current = null;
+                state.root.previous = null;
+                //state.root.object = null;
+                state.inTransaction = false;
+                state.msg = '';
+
+                cleanUsersTerritories();
+                self.dispatchEvent(CONSTANTS.PROJECT_CLOSED, projectName);
+                callback(null);
             });
         }
 
-        //internal functions
-        function cleanUsersTerritories() {
-            //look out as the user can remove itself at any time!!!
-            var userIds = Object.keys(_users),
-                i,
-                j,
-                events;
-
-            for (i = 0; i < userIds.length; i++) {
-                if (_users[userIds[i]]) {
-                    events = [{eid: null, etype: 'complete'}];
-                    for (j in _users[userIds[i]].PATHS
-                        ) {
-                        events.push({etype: 'unload', eid: j});
-                    }
-                    _users[userIds[i]].PATTERNS = {};
-                    _users[userIds[i]].PATHS = {};
-                    _users[userIds[i]].SENDEVENTS = true;
-                    _users[userIds[i]].FN(events);
-                }
+        /**
+         *
+         * @param {string} branchName - name of branch to open.
+         * @param {function} [commitHandler=getDefaultCommitHandler()] - Handles returned statuses after commits.
+         * @param callback
+         */
+        this.selectBranch = function (branchName, commitHandler, callback) {
+            logger.debug('selectBranch', branchName);
+            if (isConnected() === false) {
+                callback(new Error('There is no open database connection!'));
+                return;
             }
-        }
-
-        function connectToDatabaseAsync(options, callback) {
-            var oldcallback = callback;
-            callback = function (err) {
-                _TOKEN = tokenWatcher();
-                reLaunchUsers();
-                oldcallback(err);
-            }; //we add tokenWatcher start at this point
-            options = options || {};
-            callback = callback || function () {
-                };
-            options.open = (options.open !== undefined || options.open !== null) ? options.open : false;
-            options.project = options.project || null;
-            if (_clientGlobal.db) {
-                //we have to close the current
-                closeOpenedProject(function () {
-                });
-                _clientGlobal.db.closeDatabase(function () {
-                });
-                _networkStatus = '';
-                changeBranchState(null);
+            if (!state.project) {
+                callback(new Error('selectBranch invoked without an opened project'));
+                return;
             }
-            _clientGlobal.db = newDatabase();
 
-            _clientGlobal.db.openDatabase(function (err) {
+            var prevBranchName = state.branchName;
+
+            function openBranch(err) {
                 if (err) {
-                    logger.error('Cannot open database');
+                    logger.error('Problems closing existing branch', err);
+                    callback(err);
+                    return;
+                }
+                commitHandler = commitHandler || getDefaultCommitHandler();
+                storage.openBranch(state.project.name, branchName, getUpdateHandler(), commitHandler,
+                    function (err, latestCommit) {
+                        var commitObject;
+                        if (err) {
+                            logger.error('storage.openBranch returned with error', err);
+                            callback(new Error(err));
+                            return;
+                        }
+
+                        commitObject = latestCommit.commitObject;
+                        logger.debug('Branch opened latestCommit', latestCommit);
+
+                        //undo-redo
+                        logger.debug('changing branch - cleaning undo-redo chain');
+                        addModification(commitObject, true);
+                        self.dispatchEvent(CONSTANTS.UNDO_AVAILABLE, canUndo());
+                        self.dispatchEvent(CONSTANTS.REDO_AVAILABLE, canRedo());
+
+                        state.viewer = false;
+                        state.branchName = branchName;
+                        self.dispatchEvent(CONSTANTS.BRANCH_CHANGED, branchName);
+                        logState('info', 'openBranch');
+
+                        loading(commitObject.root, function (err) {
+                            if (err) {
+                                logger.error('loading failed after opening branch', branchName);
+                            } else {
+                                addCommit(commitObject[CONSTANTS.STORAGE.MONGO_ID]);
+                            }
+                            changeBranchStatus(CONSTANTS.BRANCH_STATUS.SYNC);
+                            // TODO: Make sure this is always the case.
+                            callback(err);
+                        });
+
+                    }
+                );
+            }
+
+            if (state.branchName !== null) {
+                logger.debug('Branch was open, closing it first', state.branchName);
+                prevBranchName = state.branchName;
+                storage.closeBranch(state.project.name, prevBranchName, openBranch);
+            } else {
+                openBranch(null);
+            }
+        };
+
+        this.selectCommit = function (commitHash, callback) {
+            logger.debug('selectCommit', commitHash);
+            if (isConnected() === false) {
+                callback(new Error('There is no open database connection!'));
+                return;
+            }
+            if (!state.project) {
+                callback(new Error('selectCommit invoked without open project'));
+                return;
+            }
+            var prevBranchName;
+
+            function openCommit(err) {
+                if (err) {
+                    logger.error('Problems closing existing branch', err);
                     callback(err);
                     return;
                 }
 
-                if (_networkWatcher) {
-                    _networkWatcher.stop();
-                }
-                _networkWatcher = networkWatcher();
-                serverEventer(_clientGlobal); //this starts the eventing service
-
-                //FIXME remove option open, and the possibility to open 'first' project
-                // should be clear if it is projectId or projectName
-                if (options.open) {
-                    if (options.project) {
-                        openProject(options.project, callback);
-                    } else {
-                        //default opening routine
-                        _clientGlobal.db.getProjectNames(function (err, names) {
-                            if (!err && names && names.length > 0) {
-                                openProject(names[0], callback);
-                            } else {
-                                logger.error('Cannot get project names / There is no project on the server');
+                state.viewer = true;
+                changeBranchStatus(null);
+                state.project.loadObject(commitHash, function (err, commitObj) {
+                    if (!err && commitObj) {
+                        logState('info', 'selectCommit loaded commit');
+                        loading(commitObj.root, function (err, aborted) {
+                            if (err) {
+                                logger.error('loading returned error', commitObj.root, err);
+                                logState('error', 'selectCommit loading');
                                 callback(err);
+                            } else if (aborted === true) {
+                                logState('warn', 'selectCommit loading');
+                                callback('Loading selected commit was aborted');
+                            } else {
+                                addCommit(commitHash);
+                                logger.debug('loading complete for selectCommit rootHash', commitObj.root);
+                                logState('info', 'selectCommit loading');
+                                changeBranchStatus(null);
+                                callback(null);
                             }
                         });
+                    } else {
+                        logger.error('Cannot view given ' + commitHash + ' commit as it\'s root cannot be loaded! [' +
+                            JSON.stringify(err) + ']');
+                        callback(err || new Error('commit object cannot be found!'));
                     }
+                });
+            }
+
+            if (state.branchName !== null) {
+                logger.debug('Branch was open, closing it first', state.branchName);
+                prevBranchName = state.branchName;
+                state.branchName = null;
+                //state.branchStatus = null;
+                storage.closeBranch(state.project.name, prevBranchName, openCommit);
+            } else {
+                openCommit(null);
+            }
+        };
+
+        function getDefaultCommitHandler() {
+            return function (commitQueue, result, callback) {
+                logger.debug('default commitHandler invoked, result: ', result);
+                logger.debug('commitQueue', commitQueue);
+
+                if (result.status === CONSTANTS.STORAGE.SYNCH) {
+                    logger.debug('You are in synch.');
+                    logState('info', 'commitHandler');
+                    if (commitQueue.length === 1) {
+                        logger.debug('No commits queued.');
+                        changeBranchStatus(CONSTANTS.BRANCH_STATUS.SYNC);
+                    } else {
+                        logger.debug('Will proceed with next queued commit...');
+                        changeBranchStatus(CONSTANTS.BRANCH_STATUS.AHEAD_SYNC, commitQueue);
+                    }
+                    callback(true); // push:true
+                } else if (result.status === CONSTANTS.STORAGE.FORKED) {
+                    logger.debug('You got forked');
+                    logState('info', 'commitHandler');
+                    changeBranchStatus(CONSTANTS.BRANCH_STATUS.AHEAD_NOT_SYNC, commitQueue);
+                    callback(false); // push:false
                 } else {
-                    callback(null);
+                    callback(false);
+                    changeBranchStatus(null);
+                    throw new Error('Unexpected result', result);
+                }
+            };
+        }
+
+        function getUpdateHandler() {
+            return function (updateQueue, eventData, callback) {
+                var commitHash = eventData.commitObject[CONSTANTS.STORAGE.MONGO_ID];
+                logger.debug('updateHandler invoked. project, branch', eventData.projectName, eventData.branchName);
+                if (state.inTransaction) {
+                    logger.warn('Is in transaction, will not load in changes');
+                    callback(true); // aborted: true
+                    return;
+                }
+                logger.debug('loading commitHash', commitHash);
+                //undo-redo
+                logger.debug('foreign modification clearing undo-redo chain');
+                addModification(eventData.commitObject, true);
+                self.dispatchEvent(CONSTANTS.UNDO_AVAILABLE, canUndo());
+                self.dispatchEvent(CONSTANTS.REDO_AVAILABLE, canRedo());
+                changeBranchStatus(CONSTANTS.BRANCH_STATUS.PULLING, updateQueue.length);
+                loading(eventData.commitObject.root, function (err, aborted) {
+                    if (err) {
+                        logger.error('updateHandler invoked loading and it returned error',
+                            eventData.commitObject.root, err);
+                        logState('error', 'updateHandler');
+                        callback(true); // aborted: true
+                    } else if (aborted === true) {
+                        logState('warn', 'updateHandler');
+                        callback(true); // aborted: true
+                    } else {
+                        addCommit(commitHash);
+                        logger.debug('loading complete for incoming rootHash', eventData.commitObject.root);
+                        logState('debug', 'updateHandler');
+                        if (updateQueue.length === 1) {
+                            changeBranchStatus(CONSTANTS.BRANCH_STATUS.SYNC);
+                        }
+                        callback(false); // aborted: false
+                    }
+                });
+            };
+        }
+
+        function changeBranchStatus(branchStatus, details) {
+            logger.debug('changeBranchStatus, prev, new, details', state.branchStatus, branchStatus, details);
+            state.branchStatus = branchStatus;
+            if (branchStatus === CONSTANTS.BRANCH_STATUS.SYNC) {
+                state.inSync = true;
+            } else if (branchStatus === CONSTANTS.BRANCH_STATUS.AHEAD_NOT_SYNC) {
+                state.inSync = false;
+            }
+            self.dispatchEvent(CONSTANTS.BRANCH_STATUS_CHANGED, {status: branchStatus, details: details});
+        }
+
+        this.forkCurrentBranch = function (newName, commitHash, callback) {
+            var self = this,
+                activeBranchName = self.getActiveBranchName(),
+                activeProjectName = self.getActiveProjectName(),
+                forkName;
+
+            logger.debug('forkCurrentBranch', newName, commitHash);
+            if (!state.project) {
+                callback('Cannot fork without an open project!');
+                return;
+            }
+            if (activeBranchName === null) {
+                callback('Cannot fork without an open branch!');
+                return;
+            }
+            forkName = newName || activeBranchName + '_' + (new Date()).getTime();
+            storage.forkBranch(activeProjectName, activeBranchName, forkName, commitHash,
+                function (err, forkHash) {
+                    if (err) {
+                        logger.error('Could not fork branch:', newName, err);
+                        callback(err);
+                        return;
+                    }
+                    callback(null, forkName, forkHash);
+                }
+            );
+        };
+
+        // State getters.
+        this.getNetworkStatus = function () {
+            return state.connection;
+        };
+
+        this.getBranchStatus = function () {
+            return state.branchStatus;
+        };
+
+        this.getActiveProjectName = function () {
+            return state.project && state.project.name;
+        };
+
+        this.getActiveBranchName = function () {
+            return state.branchName;
+        };
+
+        this.getActiveCommitHash = function () {
+            return state.commit.current;
+        };
+
+        this.getActiveRootHash = function () {
+            return state.root.current;
+        };
+
+        this.isProjectReadOnly = function () {
+            return state.readOnlyProject;
+        };
+
+        this.isCommitReadOnly = function () {
+            // This means that a specific commit is selected w/o regards to any branch.
+            return state.viewer;
+        };
+
+        this.getProjectObject = function () {
+            return state.project;
+        };
+
+        // Undo/Redo functionality
+        function addModification(commitObject, clear) {
+            var newItem;
+            if (clear) {
+                state.undoRedoChain = {
+                    commit: commitObject[CONSTANTS.STORAGE.MONGO_ID],
+                    root: commitObject.root,
+                    previous: null,
+                    next: null
+                };
+                return;
+            }
+
+            newItem = {
+                commit: commitObject[CONSTANTS.STORAGE.MONGO_ID],
+                root: commitObject.root,
+                previous: state.undoRedoChain,
+                next: null
+            };
+            state.undoRedoChain.next = newItem;
+            state.undoRedoChain = newItem;
+        }
+
+        function canUndo() {
+            var result = false;
+            if (state.undoRedoChain && state.undoRedoChain.previous) {
+                result = true;
+            }
+
+            return result;
+        }
+
+        function canRedo() {
+            var result = false;
+            if (state.undoRedoChain && state.undoRedoChain.next) {
+                result = true;
+            }
+
+            return result;
+        }
+
+        this.undo = function (branchName, callback) {
+            if (canUndo() === false) {
+                callback(new Error('unable to make undo'));
+                return;
+            }
+
+            state.undoRedoChain = state.undoRedoChain.previous;
+
+            loading(state.undoRedoChain.root, function (err) {
+                //TODO do we need to handle this??
+                if (err) {
+                    logger.error(err);
                 }
             });
-        }
+            self.dispatchEvent(CONSTANTS.UNDO_AVAILABLE, canUndo());
+            self.dispatchEvent(CONSTANTS.REDO_AVAILABLE, canRedo());
+            logState('info', 'undo [before setBranchHash]');
+            storage.setBranchHash(state.project.name,
+                state.branchName, state.undoRedoChain.commit, state.commit.current, function (err) {
+                    if (err) {
+                        //TODO do we need to handle this? How?
+                        callback(err);
+                        return;
+                    }
 
-        //loading functions
-        function getStringHash(node) {
-            //TODO there is a memory issue with the huge strings so we have to replace it with something
-            if (node.parent && node.parent.data && node.parent.data[node.relid]) {
-                return node.parent.data[node.relid];
+                    state.commit.current = state.undoRedoChain.commit;
+                    logState('info', 'undo [after setBranchHash]');
+                    callback(null);
+                }
+            );
+
+        };
+
+        this.redo = function (branchName, callback) {
+            if (canRedo() === false) {
+                callback(new Error('unable to make redo'));
+                return;
             }
-            _gHash += 1;
-            return _gHash;
+
+            state.undoRedoChain = state.undoRedoChain.next;
+
+            loading(state.undoRedoChain.root, function (err) {
+                //TODO do we need to handle this??
+                if (err) {
+                    logger.error(err);
+                }
+            });
+            self.dispatchEvent(CONSTANTS.UNDO_AVAILABLE, canUndo());
+            self.dispatchEvent(CONSTANTS.REDO_AVAILABLE, canRedo());
+            logState('info', 'redo [before setBranchHash]');
+            storage.setBranchHash(state.project.name,
+                state.branchName, state.undoRedoChain.commit, state.commit.current, function (err) {
+                    if (err) {
+                        //TODO do we need to handle this? How?
+                        callback(err);
+                        return;
+                    }
+                    state.commit.current = state.undoRedoChain.commit;
+                    logState('info', 'redo [after setBranchHash]');
+                    callback(null);
+                }
+            );
+        };
+
+        // REST-like functions and forwarded to storage TODO: add these to separate base class
+
+        //  Getters
+        this.getProjects = function (callback) {
+            if (isConnected()) {
+                storage.getProjects(callback);
+            } else {
+                callback(new Error('There is no open database connection!'));
+            }
+        };
+
+        this.getBranches = function (projectName, callback) {
+            if (isConnected()) {
+                storage.getBranches(projectName, callback);
+            } else {
+                callback(new Error('There is no open database connection!'));
+            }
+        };
+
+        this.getCommits = function (projectName, before, number, callback) {
+            if (isConnected()) {
+                storage.getCommits(projectName, before, number, callback);
+            } else {
+                callback(new Error('There is no open database connection!'));
+            }
+        };
+
+        this.getLatestCommitData = function (projectName, branchName, callback) {
+            if (isConnected()) {
+                storage.getLatestCommitData(projectName, branchName, callback);
+            } else {
+                callback(new Error('There is no open database connection!'));
+            }
+        };
+
+        this.getProjectsAndBranches = function (asObject, callback) {
+            if (isConnected()) {
+                storage.getProjectsAndBranches(function (err, projectsWithBranches) {
+                    var i,
+                        result = {};
+                    if (err) {
+                        callback(err);
+                        return;
+                    }
+                    if (asObject === true) {
+                        //Move the result in the same format as before.
+                        for (i = 0; i < projectsWithBranches.length; i += 1) {
+                            result[projectsWithBranches[i].name] = {
+                                branches: projectsWithBranches[i].branches,
+                                rights: {
+                                    read: projectsWithBranches[i].read,
+                                    write: projectsWithBranches[i].write,
+                                    delete: projectsWithBranches[i].delete,
+                                }
+                            };
+                        }
+                        callback(null, result);
+                    } else {
+                        callback(null, projectsWithBranches);
+                    }
+
+                });
+            } else {
+                callback(new Error('There is no open database connection!'));
+            }
+        };
+
+        //  Setters
+        this.createProject = function (projectName, parameters, callback) {
+            if (isConnected()) {
+                storage.createProject(projectName, parameters, callback);
+            } else {
+                callback(new Error('There is no open database connection!'));
+            }
+        };
+
+        this.deleteProject = function (projectName, callback) {
+            if (isConnected()) {
+                storage.deleteProject(projectName, function (err, didExist) {
+                    if (err) {
+                        callback(new Error(err));
+                        return;
+                    }
+                    callback(null, didExist);
+                });
+            } else {
+                callback(new Error('There is no open database connection!'));
+            }
+        };
+
+        this.createBranch = function (projectName, branchName, newHash, callback) {
+            if (isConnected()) {
+                storage.createBranch(projectName, branchName, newHash, callback);
+            } else {
+                callback(new Error('There is no open database connection!'));
+            }
+        };
+
+        this.deleteBranch = function (projectName, branchName, oldHash, callback) {
+            if (isConnected()) {
+                storage.deleteBranch(projectName, branchName, oldHash, callback);
+            } else {
+                callback(new Error('There is no open database connection!'));
+            }
+        };
+
+        // Watchers (used in e.g. ProjectNavigator).
+        /**
+         * Triggers eventHandler(storage, eventData) on PROJECT_CREATED and PROJECT_DELETED.
+         *
+         * eventData = {
+         *    etype: PROJECT_CREATED||DELETED,
+         *    projectName: %name of project%
+         * }
+         *
+         * @param {function} eventHandler
+         * @param {function} [callback]
+         */
+        this.watchDatabase = function (eventHandler, callback) {
+            callback = callback || function (err) {
+                    if (err) {
+                        logger.error('Problems watching database room');
+                    }
+                };
+            storage.watchDatabase(eventHandler, callback);
+        };
+
+        this.unwatchDatabase = function (eventHandler, callback) {
+            callback = callback || function (err) {
+                    if (err) {
+                        logger.error('Problems unwatching database room');
+                    }
+                };
+            storage.unwatchDatabase(eventHandler, callback);
+        };
+
+        /**
+         * Triggers eventHandler(storage, eventData) on BRANCH_CREATED, BRANCH_DELETED and BRANCH_HASH_UPDATED
+         * for the given projectName.
+         *
+         *
+         * eventData = {
+         *    etype: BRANCH_CREATED||DELETED||HASH_UPDATED,
+         *    projectName: %name of project%,
+         *    branchName: %name of branch%,
+         *    newHash: %new commitHash (='' when DELETED)%
+         *    oldHash: %previous commitHash (='' when CREATED)%
+         * }
+         *
+         * @param {string} projectName
+         * @param {function} eventHandler
+         * @param {function} [callback]
+         */
+        this.watchProject = function (projectName, eventHandler, callback) {
+            callback = callback || function (err) {
+                    if (err) {
+                        logger.error('Problems watching project room', projectName);
+                    }
+                };
+            storage.watchProject(projectName, eventHandler, callback);
+        };
+
+        this.unwatchProject = function (projectName, eventHandler, callback) {
+            callback = callback || function (err) {
+                    if (err) {
+                        logger.error('Problems unwatching project room', projectName);
+                    }
+                };
+            storage.unwatchProject(projectName, eventHandler, callback);
+        };
+
+        // Internal functions
+        function isConnected() {
+            return state.connection === CONSTANTS.STORAGE.CONNECTED ||
+                state.connection === CONSTANTS.STORAGE.RECONNECTED;
         }
 
-        //TODO this function will be used when diff based event generation will be reintroduced
-        //function getInheritanceChain(node) {
-        //    var ancestors = [];
-        //    node = _clientGlobal.core.getBase(node);
-        //    while (node) {
-        //        ancestors.push(_clientGlobal.core.getPath(node));
-        //        node = _clientGlobal.core.getBase(node);
-        //    }
-        //    return ancestors;
-        //}
+        var ROOT_PATH = ''; //FIXME: This should come from constants..
 
-        //TODO this function will be used when diff based event generation will be reintroduced
-        //function isInChangeTree(path) {
-        //    var pathArray = path.split('/'),
-        //        diffObj = _changeTree,
-        //        index = 0,
-        //        found = false;
-        //
-        //    pathArray.shift();
-        //    if (pathArray.length === 0) {
-        //        found = true;
-        //    }
-        //
-        //    if (!diffObj) {
-        //        return false;
-        //    }
-        //
-        //    while (index < pathArray.length && !found) {
-        //        if (diffObj[pathArray[index]]) {
-        //            diffObj = diffObj[pathArray[index]];
-        //            index += 1;
-        //            if (index === pathArray.length) {
-        //                found = true;
-        //            }
-        //        } else {
-        //            index = pathArray.length;
-        //        }
-        //    }
-        //
-        //    if (found && diffObj) {
-        //        if (diffObj.removed !== undefined) {
-        //            return false;
-        //        }
-        //        if (diffObj.reg || diffObj.attr || diffObj.pointer || diffObj.set || diffObj.meta ||
-        //            diffObj.childrenListChanged) {
-        //            return true;
-        //        }
-        //    }
-        //
-        //    return false;
-        //}
+        function COPY(object) {
+            if (object) {
+                return JSON.parse(JSON.stringify(object));
+            }
+            return null;
+        }
+
+        // Node handling
+        this.getNode = function (nodePath) {
+            return getNode(nodePath, logger, state, self.meta, storeNode);
+        };
+
+        function getStringHash(/* node */) {
+            //TODO there is a memory issue with the huge strings so we have to replace it with something
+            state.gHash += 1;
+            return state.gHash;
+        }
 
         function getModifiedNodes(newerNodes) {
             var modifiedNodes = [],
                 i;
 
-            for (i in _clientGlobal.nodes) {
-                if (_clientGlobal.nodes.hasOwnProperty(i)) {
+            for (i in state.nodes) {
+                if (state.nodes.hasOwnProperty(i)) {
                     if (newerNodes[i]) {
-                        if (newerNodes[i].hash !== _clientGlobal.nodes[i].hash && _clientGlobal.nodes[i].hash !== '') {
+                        if (newerNodes[i].hash !== state.nodes[i].hash && state.nodes[i].hash !== '') {
                             modifiedNodes.push(i);
                         }
                     }
@@ -20854,14 +17305,13 @@ define('client/js/client/index',[
             return modifiedNodes;
         }
 
-
         //this is just a first brute implementation it needs serious optimization!!!
         function fitsInPatternTypes(path, pattern) {
             var i;
 
             if (pattern.items && pattern.items.length > 0) {
                 for (i = 0; i < pattern.items.length; i += 1) {
-                    if (_clientGlobal.META.isTypeOf(path, pattern.items[i])) {
+                    if (self.meta.isTypeOf(path, pattern.items[i])) {
                         return true;
                     }
                 }
@@ -20876,10 +17326,10 @@ define('client/js/client/index',[
                 subPattern,
                 i;
 
-            if (_clientGlobal.nodes[patternId]) {
+            if (state.nodes[patternId]) {
                 pathsSoFar[patternId] = true;
                 if (pattern.children && pattern.children > 0) {
-                    children = _clientGlobal.core.getChildrenPaths(_clientGlobal.nodes[patternId].node);
+                    children = state.core.getChildrenPaths(state.nodes[patternId].node);
                     subPattern = COPY(pattern);
                     subPattern.children -= 1;
                     for (i = 0; i < children.length; i += 1) {
@@ -20889,31 +17339,30 @@ define('client/js/client/index',[
                     }
                 }
             } else {
-                _loadError++;
+                state.loadError++;
             }
-
         }
 
         function userEvents(userId, modifiedNodes) {
             var newPaths = {},
-                startErrorLevel = _loadError,
+                startErrorLevel = state.loadError,
                 i,
                 events = [];
 
-            for (i in _users[userId].PATTERNS) {
-                if (_users[userId].PATTERNS.hasOwnProperty(i)) {
-                    if (_clientGlobal.nodes[i]) { //TODO we only check pattern if its root is there...
-                        patternToPaths(i, _users[userId].PATTERNS[i], newPaths);
+            for (i in state.users[userId].PATTERNS) {
+                if (state.users[userId].PATTERNS.hasOwnProperty(i)) {
+                    if (state.nodes[i]) { //TODO we only check pattern if its root is there...
+                        patternToPaths(i, state.users[userId].PATTERNS[i], newPaths);
                     }
                 }
             }
 
-            if (startErrorLevel !== _loadError) {
+            if (startErrorLevel !== state.loadError) {
                 return; //we send events only when everything is there correctly
             }
 
             //deleted items
-            for (i in _users[userId].PATHS) {
+            for (i in state.users[userId].PATHS) {
                 if (!newPaths[i]) {
                     events.push({etype: 'unload', eid: i});
                 }
@@ -20921,7 +17370,7 @@ define('client/js/client/index',[
 
             //added items
             for (i in newPaths) {
-                if (!_users[userId].PATHS[i]) {
+                if (!state.users[userId].PATHS[i]) {
                     events.push({etype: 'load', eid: i});
                 }
             }
@@ -20933,11 +17382,11 @@ define('client/js/client/index',[
                 }
             }
 
-            _users[userId].PATHS = newPaths;
+            state.users[userId].PATHS = newPaths;
 
             //this is how the events should go
             if (events.length > 0) {
-                if (_loadError > startErrorLevel) {
+                if (state.loadError > startErrorLevel) {
                     events.unshift({etype: 'incomplete', eid: null});
                 } else {
                     events.unshift({etype: 'complete', eid: null});
@@ -20945,11 +17394,9 @@ define('client/js/client/index',[
             } else {
                 events.unshift({etype: 'complete', eid: null});
             }
-            _users[userId].FN(events);
+            state.users[userId].FN(events);
         }
 
-
-        //partially optimized
         function loadChildrenPattern(core, nodesSoFar, node, level, callback) {
             var path = core.getPath(node),
                 childrenPaths = core.getChildrenPaths(node),
@@ -20975,7 +17422,7 @@ define('client/js/client/index',[
                         callback(error);
                     }
                 };
-            _metaNodes[path] = node;
+            state.metaNodes[path] = node;
             if (!nodesSoFar[path]) {
                 nodesSoFar[path] = {node: node, incomplete: true, basic: true, hash: getStringHash(node)};
             }
@@ -21015,16 +17462,16 @@ define('client/js/client/index',[
                 baseLoaded();
             } else {
                 base = null;
-                if (_loadNodes[ROOT_PATH]) {
-                    base = _loadNodes[ROOT_PATH].node;
-                } else if (_clientGlobal.nodes[ROOT_PATH]) {
-                    base = _clientGlobal.nodes[ROOT_PATH].node;
+                if (state.loadNodes[ROOT_PATH]) {
+                    base = state.loadNodes[ROOT_PATH].node;
+                } else if (state.nodes[ROOT_PATH]) {
+                    base = state.nodes[ROOT_PATH].node;
                 }
                 core.loadByPath(base, id, function (err, node) {
                     var path;
                     if (!err && node && !core.isEmpty(node)) {
                         path = core.getPath(node);
-                        _metaNodes[path] = node;
+                        state.metaNodes[path] = node;
                         if (!nodesSoFar[path]) {
                             nodesSoFar[path] = {
                                 node: node,
@@ -21065,39 +17512,6 @@ define('client/js/client/index',[
             return ordered;
         }
 
-        //TODO will be used when diff based event generation is reintroduced
-        //function getEventTree(oldRootHash, newRootHash, callback) {
-        //    var error = null,
-        //        sRoot = null,
-        //        tRoot = null,
-        //        loadRoot = function (hash /*, root */) {
-        //            _clientGlobal.core.loadRoot(hash, function (err, r) {
-        //                error = error || err;
-        //                if (sRoot === null && hash === oldRootHash) {
-        //                    sRoot = r;
-        //                } else {
-        //                    tRoot = r;
-        //                }
-        //                needed -= 1;
-        //                if (needed === 0) {
-        //                    rootsLoaded();
-        //                }
-        //            });
-        //
-        //        },
-        //        rootsLoaded = function () {
-        //            if (error) {
-        //                return callback(error);
-        //            }
-        //            _clientGlobal.core.generateLightTreeDiff(sRoot, tRoot, function (err, diff) {
-        //                callback(err, diff);
-        //            });
-        //        },
-        //        needed = 2;
-        //    loadRoot(oldRootHash, sRoot);
-        //    loadRoot(newRootHash, tRoot);
-        //}
-
         function loadRoot(newRootHash, callback) {
             //with the newer approach we try to optimize a bit the mechanism of the loading and
             // try to get rid of the parallelism behind it
@@ -21109,21 +17523,21 @@ define('client/js/client/index',[
                 keysi,
                 keysj;
 
-            _loadNodes = {};
-            _loadError = 0;
+            state.loadNodes = {};
+            state.loadError = 0;
 
             //gathering the patterns
-            keysi = Object.keys(_users);
+            keysi = Object.keys(state.users);
             for (i = 0; i < keysi.length; i++) {
-                keysj = Object.keys(_users[keysi[i]].PATTERNS);
+                keysj = Object.keys(state.users[keysi[i]].PATTERNS);
                 for (j = 0; j < keysj.length; j++) {
                     if (patterns[keysj[j]]) {
                         //we check if the range is bigger for the new definition
-                        if (patterns[keysj[j]].children < _users[keysi[i]].PATTERNS[keysj[j]].children) {
-                            patterns[keysj[j]].children = _users[keysi[i]].PATTERNS[keysj[j]].children;
+                        if (patterns[keysj[j]].children < state.users[keysi[i]].PATTERNS[keysj[j]].children) {
+                            patterns[keysj[j]].children = state.users[keysi[i]].PATTERNS[keysj[j]].children;
                         }
                     } else {
-                        patterns[keysj[j]] = _users[keysi[i]].PATTERNS[keysj[j]];
+                        patterns[keysj[j]] = state.users[keysi[i]].PATTERNS[keysj[j]];
                     }
                 }
             }
@@ -21133,24 +17547,25 @@ define('client/js/client/index',[
 
 
             //and now the one-by-one loading
-            _clientGlobal.core.loadRoot(newRootHash, function (err, root) {
+            state.core.loadRoot(newRootHash, function (err, root) {
                 var fut,
                     _loadPattern;
 
                 ASSERT(err || root);
 
-                _clientGlobal.root.object = root;
+                state.root.object = root;
+                addOnFunctions.updateRunningAddOns(root);
                 error = error || err;
                 if (!err) {
-                    _clientGlobal.addOn.updateRunningAddOns(root);
-                    _loadNodes[_clientGlobal.core.getPath(root)] = {
+                    //_clientGlobal.addOn.updateRunningAddOns(root); //FIXME: ADD ME BACK!!
+                    state.loadNodes[state.core.getPath(root)] = {
                         node: root,
                         incomplete: true,
                         basic: true,
                         hash: getStringHash(root)
                     };
-                    _metaNodes[_clientGlobal.core.getPath(root)] = root;
-                    if (orderedPatternIds.length === 0 && Object.keys(_users) > 0) {
+                    state.metaNodes[state.core.getPath(root)] = root;
+                    if (orderedPatternIds.length === 0 && Object.keys(state.users) > 0) {
                         //we have user, but they do not interested in any object -> let's relaunch them :D
                         callback(null);
                         reLaunchUsers();
@@ -21159,7 +17574,7 @@ define('client/js/client/index',[
                         fut = TASYNC.lift(
                             orderedPatternIds.map(function (pattern /*, index */) {
                                 return TASYNC.apply(_loadPattern,
-                                    [_clientGlobal.core, pattern, patterns[pattern], _loadNodes],
+                                    [state.core, pattern, patterns[pattern], state.loadNodes],
                                     this);
                             }));
                         TASYNC.unwrap(function () {
@@ -21174,118 +17589,116 @@ define('client/js/client/index',[
 
         //this is just a first brute implementation it needs serious optimization!!!
         function loading(newRootHash, callback) {
-            var finalEvents = function () {
-                var modifiedPaths,
-                    i;
+            var firstRoot = !state.nodes[ROOT_PATH],
+                originatingRootHash = state.nodes[ROOT_PATH] ? state.core.getHash(state.nodes[ROOT_PATH].node) : null,
+                finalEvents = function () {
+                    var modifiedPaths,
+                        i;
 
-                modifiedPaths = getModifiedNodes(_loadNodes);
-                _clientGlobal.nodes = _loadNodes;
-                _loadNodes = {};
-                for (i in _users) {
-                    if (_users.hasOwnProperty(i)) {
-                        userEvents(i, modifiedPaths);
+                    modifiedPaths = getModifiedNodes(state.loadNodes);
+                    state.nodes = state.loadNodes;
+                    state.loadNodes = {};
+                    state.root.previous = state.root.current;
+                    state.root.current = newRootHash;
+                    for (i in state.users) {
+                        if (state.users.hasOwnProperty(i)) {
+                            userEvents(i, modifiedPaths);
+                        }
                     }
-                }
-                callback(null);
-            };
+                    callback(null);
+                };
+            logger.debug('loading newRootHash', newRootHash);
 
             callback = callback || function (/*err*/) {
                 };
 
-            _clientGlobal.root.previous = _clientGlobal.root.current;
-            _clientGlobal.root.current = newRootHash;
+
             loadRoot(newRootHash, function (err) {
                 if (err) {
-                    _clientGlobal.root.current = null;
+                    state.root.current = null;
                     callback(err);
                 } else {
-                    finalEvents();
+                    if (firstRoot ||
+                        state.core.getHash(state.nodes[ROOT_PATH].node) === originatingRootHash) {
+                        finalEvents();
+                    } else {
+                        // This relies on the fact that loading is synchronous for local updates.
+                        logger.warn('Modifications were done during loading - load aborted.');
+                        callback(null, true);
+                    }
                 }
             });
         }
 
-        function getActiveProject() {
-            return _clientGlobal.projectName;
-        }
-
-        function getActualCommit() {
-            return _recentCommits[0];
-        }
-
-        function getActualBranch() {
-            return _clientGlobal.branch;
-        }
-
-        function getActualNetworkStatus() {
-            return _networkStatus;
-        }
-
-        function getActualBranchStatus() {
-            return _clientGlobal.branchState;
-        }
-
-        function commitAsync(params, callback) {
-            var msg;
-
-            if (_clientGlobal.db) {
-                if (_clientGlobal.project) {
-                    msg = params.message || '';
-                    saveRoot(msg, callback);
-                } else {
-                    callback(new Error('there is no open project!'));
-                }
+        this.startTransaction = function (msg) {
+            if (state.inTransaction) {
+                logger.error('Already in transaction, will proceed though..');
+            }
+            if (state.core) {
+                state.inTransaction = true;
+                msg = msg || 'startTransaction()';
+                saveRoot(msg);
             } else {
-                callback(new Error('there is no open database connection!'));
+                logger.error('Can not start transaction with no core avaliable.');
             }
-        }
+        };
 
-
-        //constraint functions
-        function setConstraint(path, name, constraintObj) {
-            if (_clientGlobal.core && _clientGlobal.nodes[path] && typeof _clientGlobal.nodes[path].node === 'object') {
-                _clientGlobal.core.setConstraint(_clientGlobal.nodes[path].node, name, constraintObj);
-                saveRoot('setConstraint(' + path + ',' + name + ')');
+        this.completeTransaction = function (msg, callback) {
+            state.inTransaction = false;
+            if (state.core) {
+                msg = msg || 'completeTransaction()';
+                saveRoot(msg, callback);
             }
-        }
+        };
 
-        function delConstraint(path, name) {
-            if (_clientGlobal.core && _clientGlobal.nodes[path] && typeof _clientGlobal.nodes[path].node === 'object') {
-                _clientGlobal.core.delConstraint(_clientGlobal.nodes[path].node, name);
-                saveRoot('delConstraint(' + path + 'name' + ')');
-            }
+        function addCommit(commitHash) {
+            state.commit.previous = state.commit.current;
+            state.commit.current = commitHash;
         }
 
         //territory functions
-        function addUI(ui, fn, guid) {
+        this.addUI = function (ui, fn, guid) {
             ASSERT(fn);
             ASSERT(typeof fn === 'function');
             guid = guid || GUID();
-            _users[guid] = {type: 'notused', UI: ui, PATTERNS: {}, PATHS: {}, SENDEVENTS: true, FN: fn};
+            state.users[guid] = {type: 'notused', UI: ui, PATTERNS: {}, PATHS: {}, SENDEVENTS: true, FN: fn};
             return guid;
-        }
+        };
 
-        function removeUI(guid) {
-            delete _users[guid];
+        this.removeUI = function (guid) {
+            logger.debug('removeUI', guid);
+            delete state.users[guid];
+        };
+
+        function reLaunchUsers() {
+            var i;
+            for (i in state.users) {
+                if (state.users.hasOwnProperty(i)) {
+                    if (state.users[i].UI.reLaunch) {
+                        state.users[i].UI.reLaunch();
+                    }
+                }
+            }
         }
 
         function _updateTerritoryAllDone(guid, patterns, error) {
-            if (_users[guid]) {
-                _users[guid].PATTERNS = JSON.parse(JSON.stringify(patterns));
+            if (state.users[guid]) {
+                state.users[guid].PATTERNS = JSON.parse(JSON.stringify(patterns));
                 if (!error) {
                     userEvents(guid, []);
                 }
             }
         }
 
-        function updateTerritory(guid, patterns) {
+        this.updateTerritory = function (guid, patterns) {
             var missing,
                 error,
                 patternLoaded,
                 i;
 
-            if (_users[guid]) {
-                if (_clientGlobal.project) {
-                    if (_clientGlobal.nodes[ROOT_PATH]) {
+            if (state.users[guid]) {
+                if (state.project) {
+                    if (state.nodes[ROOT_PATH]) {
                         //TODO: this has to be optimized
                         missing = 0;
                         error = null;
@@ -21305,7 +17718,7 @@ define('client/js/client/index',[
                         if (missing > 0) {
                             for (i in patterns) {
                                 if (patterns.hasOwnProperty(i)) {
-                                    loadPattern(_clientGlobal.core, i, patterns[i], _clientGlobal.nodes, patternLoaded);
+                                    loadPattern(state.core, i, patterns[i], state.nodes, patternLoaded);
                                 }
                             }
                         } else {
@@ -21314,191 +17727,325 @@ define('client/js/client/index',[
                         }
                     } else {
                         //something funny is going on
-                        if (_loadNodes[ROOT_PATH]) {
+                        if (state.loadNodes[ROOT_PATH]) {
                             //probably we are in the loading process,
                             // so we should redo this update when the loading finishes
                             //setTimeout(updateTerritory, 100, guid, patterns);
                         } else {
                             //root is not in nodes and has not even started to load it yet...
-                            _users[guid].PATTERNS = JSON.parse(JSON.stringify(patterns));
+                            state.users[guid].PATTERNS = JSON.parse(JSON.stringify(patterns));
                         }
                     }
                 } else {
                     //we should update the patterns, but that is all
-                    _users[guid].PATTERNS = JSON.parse(JSON.stringify(patterns));
+                    state.users[guid].PATTERNS = JSON.parse(JSON.stringify(patterns));
                 }
             }
-        }
-
-        function getProjectObject() {
-            return _clientGlobal.project;
-        }
-
-        function getAvailableInterpreterNames() {
-            if (!AllPlugins) {
-                logger.error('AllPlugins were never uploaded!');
-                return [];
-            }
-            var names = [],
-                valids = _clientGlobal.nodes[ROOT_PATH] ? _clientGlobal.core.getRegistry(
-                    _clientGlobal.nodes[ROOT_PATH].node, 'validPlugins') || '' : '';
-            valids = valids.split(' ');
-            for (var i = 0; i < valids.length; i++) {
-                if (AllPlugins.indexOf(valids[i]) !== -1) {
-                    names.push(valids[i]);
-                }
-            }
-            return names;
-        }
-
-        function runServerPlugin(name, context, callback) {
-            _clientGlobal.db.simpleRequest({command: 'executePlugin', name: name, context: context}, callback);
-        }
-
-        function getAvailableDecoratorNames() {
-            if (!AllDecorators) {
-                logger.error('AllDecorators were never uploaded!');
-                return [];
-            }
-            return AllDecorators;
-        }
-
-        function getSeedInfoAsync(callback) {
-            _clientGlobal.db.simpleRequest({command: 'getSeedInfo'}, function (err, id) {
-                if (err) {
-                    return callback(err);
-                }
-
-                _clientGlobal.db.simpleResult(id, callback);
-            });
-        }
-
-        function seedProjectAsync(parameters, callback) {
-            parameters.command = 'seedProject';
-            _clientGlobal.db.simpleRequest(parameters, function (err, id) {
-                if (err) {
-                    return callback(err);
-                }
-
-                _clientGlobal.db.simpleResult(id, callback);
-            });
-        }
-
-
-        _redoer = new UndoRedo({
-            //eventer
-            events: _self.events,
-            networkStates: _self.networkStates,
-            branchStates: _self.branchStates,
-            _eventList: _self._eventList,
-            _getEvent: _self._getEvent,
-            addEventListener: _self.addEventListener,
-            removeEventListener: _self.removeEventListener,
-            removeAllEventListeners: _self.removeAllEventListeners,
-            dispatchEvent: _self.dispatchEvent,
-            getProjectObject: getProjectObject
-        });
-
-
-        _clientAPI = {
-            //eventer
-            events: _self.events,
-            networkStates: _self.networkStates,
-            branchStates: _self.branchStates,
-            _eventList: _self._eventList,
-            _getEvent: _self._getEvent,
-            addEventListener: _self.addEventListener,
-            removeEventListener: _self.removeEventListener,
-            removeAllEventListeners: _self.removeAllEventListeners,
-            dispatchEvent: _self.dispatchEvent,
-            connect: connect,
-
-            getUserId: getUserId,
-
-            //projects, branch, etc.
-            connectToDatabaseAsync: connectToDatabaseAsync,
-            getActiveProjectName: getActiveProject,
-            getActualCommit: getActualCommit,
-            getActualBranch: getActualBranch,
-            getActualNetworkStatus: getActualNetworkStatus,
-            getActualBranchStatus: getActualBranchStatus,
-            commitAsync: commitAsync,
-            goOffline: goOffline,
-            goOnline: goOnline,
-            isProjectReadOnly: function () {
-                return _readOnlyProject;
-            },
-            isCommitReadOnly: function () {
-                return _viewer;
-            },
-
-            startTransaction: startTransaction,
-            completeTransaction: completeTransaction,
-
-            //decorators
-            getAvailableDecoratorNames: getAvailableDecoratorNames,
-            //interpreters
-            getAvailableInterpreterNames: getAvailableInterpreterNames,
-            getProjectObject: getProjectObject,
-            runServerPlugin: runServerPlugin,
-
-            //constraint
-            setConstraint: setConstraint,
-            delConstraint: delConstraint,
-
-            //territory functions for the UI
-            addUI: addUI,
-            removeUI: removeUI,
-            updateTerritory: updateTerritory,
-            getNode: function (_id) {
-                return getNode(_id,
-                    _clientGlobal);
-            },
-
-            //undo - redo
-            undo: _redoer.undo,
-            redo: _redoer.redo,
-
-            //clone services
-            getSeedInfoAsync: getSeedInfoAsync,
-            seedProjectAsync: seedProjectAsync
-
         };
 
-        for (i in _clientGlobal.META) {
-            _clientAPI[i] = _clientGlobal.META[i];
+        function cleanUsersTerritories() {
+            //look out as the user can remove itself at any time!!!
+            var userIds = Object.keys(state.users),
+                i,
+                j,
+                events;
+
+            for (i = 0; i < userIds.length; i++) {
+                if (state.users[userIds[i]]) {
+                    events = [{eid: null, etype: 'complete'}];
+                    for (j in state.users[userIds[i]].PATHS
+                        ) {
+                        events.push({etype: 'unload', eid: j});
+                    }
+                    state.users[userIds[i]].PATTERNS = {};
+                    state.users[userIds[i]].PATHS = {};
+                    state.users[userIds[i]].SENDEVENTS = true;
+                    state.users[userIds[i]].FN(events);
+                }
+            }
         }
 
-        for (i in _clientGlobal.nodeSetter) {
-            _clientAPI[i] = _clientGlobal.nodeSetter[i];
-        }
+        this.getUserId = function () {
+            var cookies = URL.parseCookie(document.cookie);
+            if (cookies.webgme) {
+                return cookies.webgme;
+            } else {
+                return 'n/a';
+            }
+        };
 
-        for (i in _requests) {
-            _clientAPI[i] = _requests[i];
-        }
+        //create from file
+        this.createProjectFromFile = function (projectName, jProject, callback) {
+            //TODO somehow the export / import should contain the INFO field
+            // so the tags and description could come from it
+            storage.createProject(projectName, function (err, project) {
+                if (err) {
+                    callback(err);
+                    return;
+                }
+
+                var core = new Core(project, {
+                        globConf: gmeConfig,
+                        logger: logger.fork('core')
+                    }),
+                    root = core.createNode({parent: null, base: null}),
+                    persisted = core.persist(root);
+
+                storage.makeCommit(projectName,
+                    null,
+                    [],
+                    persisted.rootHash,
+                    persisted.objects,
+                    'creating project from a file',
+                    function (err, commitResult) {
+                        if (err) {
+                            logger.error('cannot make initial commit for project creation from file');
+                            callback(err);
+                            return;
+                        }
+
+                        project.createBranch('master', commitResult.hash, function (err) {
+                            if (err) {
+                                logger.error('cannot set branch \'master\' for project creation from file');
+                                callback(err);
+                                return;
+                            }
+
+                            storage.closeProject(projectName, function (err) {
+                                if (err) {
+                                    callback(err);
+                                    return;
+                                }
+                                self.selectProject(projectName, function (err) {
+                                    if (err) {
+                                        callback(err);
+                                        return;
+                                    }
+
+                                    Serialization.import(state.core, state.root.object, jProject, function (err) {
+                                        if (err) {
+                                            return callback(err);
+                                        }
+                                        saveRoot('project created from file', callback);
+                                    });
+                                });
+                            });
+                        });
+                    }
+                );
+            });
+        };
+
+        //seed
+        this.seedProject = function (parameters, callback) {
+            parameters.command = 'seedProject';
+            storage.simpleRequest(parameters, function (err, id) {
+                if (err) {
+                    callback(err);
+                    return;
+                }
+
+                storage.simpleResult(id, callback);
+            });
+        };
+
+        //export branch
+        this.getExportProjectBranchUrl = function (projectName, branchName, fileName, callback) {
+            var command = {};
+            command.command = 'exportLibrary';
+            command.name = projectName;
+            command.branch = branchName;
+            command.path = ROOT_PATH;
+            if (command.name && command.branch) {
+                storage.simpleRequest(command, function (err, resId) {
+                    if (err) {
+                        callback(err);
+                    } else {
+                        callback(null,
+                            window.location.protocol + '//' + window.location.host + '/worker/simpleResult/' +
+                            resId + '/' + fileName);
+                    }
+                });
+            } else {
+                callback(new Error('invalid parameters!'));
+            }
+        };
+
+        //dump nodes
+        this.getExportItemsUrl = function (paths, filename, callback) {
+            storage.simpleRequest({
+                    command: 'dumpMoreNodes',
+                    name: state.project.name,
+                    hash: state.root.current,
+                    nodes: paths
+                },
+                function (err, resId) {
+                    if (err) {
+                        callback(err);
+                    } else {
+                        callback(null,
+                            window.location.protocol + '//' + window.location.host + '/worker/simpleResult/' +
+                            resId + '/' + filename);
+                    }
+                });
+        };
+
+        //library functions
+        this.getExportLibraryUrl = function (libraryRootPath, filename, callback) {
+            var command = {};
+            command.command = 'exportLibrary';
+            command.name = state.project.name;
+            command.hash = state.root.current;
+            command.path = libraryRootPath;
+            if (command.name && command.hash) {
+                storage.simpleRequest(command, function (err, resId) {
+                    if (err) {
+                        callback(err);
+                    } else {
+                        callback(null,
+                            window.location.protocol + '//' + window.location.host + '/worker/simpleResult/' +
+                            resId + '/' + filename);
+                    }
+                });
+            } else {
+                callback(new Error('there is no open project!'));
+            }
+        };
+
+        this.updateLibrary = function (libraryRootPath, newLibrary, callback) {
+            Serialization.import(state.core, state.nodes[libraryRootPath].node, newLibrary, function (err, log) {
+                if (err) {
+                    return callback(err);
+                }
+
+                saveRoot('library update done\nlogs:\n' + log, callback);
+            });
+        };
+
+        this.addLibrary = function (libraryParentPath, newLibrary, callback) {
+            self.startTransaction('creating library as a child of ' + libraryParentPath);
+            var libraryRoot = self.createChild({
+                parentId: libraryParentPath,
+                baseId: null
+            }, 'library placeholder');
+            Serialization.import(state.core,
+                state.nodes[libraryRoot].node, newLibrary, function (err, log) {
+                    if (err) {
+                        return callback(err);
+                    }
+
+                    self.completeTransaction('library update done\nlogs:\n' + log, callback);
+                }
+            );
+        };
+
+        /**
+         * Run the plugin on the server inside a worker process.
+         * @param {string} name - name of plugin.
+         * @param {object} context
+         * @param {object} context.managerConfig - where the plugin should execute.
+         * @param {string} context.managerConfig.project - name of project.
+         * @param {string} context.managerConfig.activeNode - path to activeNode.
+         * @param {string} [context.managerConfig.activeSelection=[]] - paths to selected nodes.
+         * @param {string} context.managerConfig.commit - commit hash to start the plugin from.
+         * @param {string} context.managerConfig.branchName - branch which to save to.
+         * @param {object} [context.pluginConfig=%defaultForPlugin%] - specific configuration for the plugin.
+         * @param {function} callback
+         */
+        this.runServerPlugin = function (name, context, callback) {
+            storage.simpleRequest({command: 'executePlugin', name: name, context: context}, callback);
+        };
+
+        /**
+         * @param {string[]} pluginNames - All avaliable plugins from server.
+         * @param {string} [nodePath=''] - Node to get the validPlugins from.
+         * @returns {string[]} - Filtered plugin names.
+         */
+        this.filterPlugins = function (pluginNames, nodePath) {
+            var filteredNames = [],
+                validPlugins,
+                i,
+                node;
+
+            logger.debug('filterPluginsBasedOnNode allPlugins, given nodePath', pluginNames, nodePath);
+            if (!nodePath) {
+                logger.debug('filterPluginsBasedOnNode nodePath not given - will fall back on root-node.');
+                nodePath = ROOT_PATH;
+            }
+
+            node = state.nodes[nodePath];
+
+            if (!node) {
+                logger.warn('filterPluginsBasedOnNode node not loaded - will fall back on root-node.', nodePath);
+                nodePath = ROOT_PATH;
+                node = state.nodes[nodePath];
+            }
+
+            if (!node) {
+                logger.warn('filterPluginsBasedOnNode root node not loaded - will return full list.');
+                return pluginNames;
+            }
+
+            validPlugins = (state.core.getRegistry(node.node, 'validPlugins') || '').split(' ');
+            for (i = 0; i < validPlugins.length; i += 1) {
+                if (pluginNames.indexOf(validPlugins[i]) > -1) {
+                    filteredNames.push(validPlugins[i]);
+                } else {
+                    logger.warn('Registered plugin for node at path "' + nodePath +
+                        '" is not amongst avaliable plugins', pluginNames);
+                }
+            }
+
+            return filteredNames;
+        };
 
         //addOn
-        _clientAPI.validateProjectAsync = _clientGlobal.addOn.validateProjectAsync;
-        _clientAPI.validateModelAsync = _clientGlobal.addOn.validateModelAsync;
-        _clientAPI.validateNodeAsync = _clientGlobal.addOn.validateNodeAsync;
-        _clientAPI.setValidationCallback = _clientGlobal.addOn.setValidationCallback;
-        _clientAPI.getDetailedHistoryAsync = _clientGlobal.addOn.getDetailedHistoryAsync;
-        _clientAPI.getRunningAddOnNames = _clientGlobal.addOn.getRunningAddOnNames;
-        _clientAPI.addOnsAllowed = gmeConfig.addOn.enable === true;
+        this.validateProjectAsync = addOnFunctions.validateProjectAsync;
+        this.validateModelAsync = addOnFunctions.validateModelAsync;
+        this.validateNodeAsync = addOnFunctions.validateNodeAsync;
+        this.setValidationCallback = addOnFunctions.setValidationCallback;
+        this.getDetailedHistoryAsync = addOnFunctions.getDetailedHistoryAsync;
+        this.getRunningAddOnNames = addOnFunctions.getRunningAddOnNames;
+        this.addOnsAllowed = gmeConfig.addOn.enable === true;
 
-        return _clientAPI;
+        //constraint
+        this.setConstraint = function (path, name, constraintObj) {
+            if (state.core && state.nodes[path] && typeof state.nodes[path].node === 'object') {
+                state.core.setConstraint(state.nodes[path].node, name, constraintObj);
+                saveRoot('setConstraint(' + path + ',' + name + ')');
+            }
+        };
+
+        this.delConstraint = function (path, name) {
+            if (state.core && state.nodes[path] && typeof state.nodes[path].node === 'object') {
+                state.core.delConstraint(state.nodes[path].node, name);
+                saveRoot('delConstraint(' + path + 'name' + ')');
+            }
+        };
+
+        //automerge
+        this.autoMerge = function (projectName, mine, theirs, callback) {
+            var command = {
+                command: 'autoMerge',
+                project: projectName,
+                mine: mine,
+                theirs: theirs
+            };
+            storage.simpleRequest(command, function (err, resId) {
+                if (err) {
+                    callback(err);
+                } else {
+                    storage.simpleResult(resId, callback);
+                }
+            });
+        };
     }
 
-    return Client;
-});
 
-/*globals define*/
-/*jshint browser: true*/
-/**
- * @author kecso / https://github.com/kecso
- */
-define('client/js/client',['./client/index'], function (Client) {
-    
+// Inherit from the EventDispatcher
+    Client.prototype = Object.create(EventDispatcher.prototype);
+    Client.prototype.constructor = Client;
+
     return Client;
   });
 
@@ -21512,7 +18059,7 @@ define('client/js/client',['./client/index'], function (Client) {
  */
 
 define('blob/BlobConfig',[], function () {
-    
+
     var BlobConfig = {
         hashMethod: 'sha1', // TODO: in the future we may switch to sha512
         hashRegex: new RegExp('^[0-9a-f]{40}$')
@@ -21530,7 +18077,7 @@ define('blob/BlobConfig',[], function () {
  */
 
 define('blob/BlobMetadata',['blob/BlobConfig'], function (BlobConfig) {
-    
+
 
     /**
      * Initializes a new instance of BlobMetadata
@@ -21558,7 +18105,7 @@ define('blob/BlobMetadata',['blob/BlobConfig'], function (BlobConfig) {
                 for (key in this.content) {
                     if (this.content.hasOwnProperty(key)) {
                         if (BlobConfig.hashRegex.test(this.content[key].content) === false) {
-                            throw Error('BlobMetadata is malformed: hash is invalid');
+                            throw Error('BlobMetadata is malformed: hash \'' + this.content[key].content + '\'is invalid');
                         }
                     }
                 }
@@ -21617,6 +18164,7 @@ define('blob/BlobMetadata',['blob/BlobConfig'], function (BlobConfig) {
 
     return BlobMetadata;
 });
+
 /*globals define*/
 /*jshint browser: true, node:true*/
 
@@ -21625,7 +18173,7 @@ define('blob/BlobMetadata',['blob/BlobConfig'], function (BlobConfig) {
  */
 
 define('blob/Artifact',['blob/BlobMetadata', 'blob/BlobConfig', 'common/core/tasync'], function (BlobMetadata, BlobConfig, tasync) {
-    
+
     /**
      * Creates a new instance of artifact, i.e. complex object, in memory. This object can be saved in the storage.
      * @param {string} name Artifact's name without extension
@@ -21917,1920 +18465,7 @@ define('blob/Artifact',['blob/BlobMetadata', 'blob/BlobConfig', 'common/core/tas
     return Artifact;
 });
 
-/*globals define, escape*/
-/*jshint browser: true, node:true*/
-
-/**
- * Client module for accessing the blob.
- *
- * @author lattmann / https://github.com/lattmann
- * @author ksmyth / https://github.com/ksmyth
- */
-
-define('blob/BlobClient',['blob/Artifact', 'blob/BlobMetadata', 'superagent'], function (Artifact, BlobMetadata, superagent) {
-    
-
-    var BlobClient = function (parameters) {
-        this.artifacts = [];
-
-        if (parameters) {
-            this.server = parameters.server || this.server;
-            this.serverPort = parameters.serverPort || this.serverPort;
-            this.httpsecure = (parameters.httpsecure !== undefined) ? parameters.httpsecure : this.httpsecure;
-            this.webgmeclientsession = parameters.webgmeclientsession;
-            this.keepaliveAgentOptions = parameters.keepaliveAgentOptions || { /* use defaults */ };
-        } else {
-            this.keepaliveAgentOptions = { /* use defaults */ };
-        }
-        this.blobUrl = '';
-        if (this.httpsecure !== undefined && this.server && this.serverPort) {
-            this.blobUrl = (this.httpsecure ? 'https://' : 'http://') + this.server + ':' + this.serverPort;
-        }
-
-        // TODO: TOKEN???
-        this.blobUrl = this.blobUrl + '/rest/blob/'; // TODO: any ways to ask for this or get it from the configuration?
-
-        this.isNodeOrNodeWebKit = typeof process !== 'undefined';
-        if (this.isNodeOrNodeWebKit) {
-            // node or node-webkit
-            if (this.httpsecure) {
-                this.Agent = require('agentkeepalive').HttpsAgent;
-            } else {
-                this.Agent = require('agentkeepalive');
-            }
-            if (this.keepaliveAgentOptions.hasOwnProperty('ca') === false) {
-                this.keepaliveAgentOptions.ca = require('https').globalAgent.options.ca;
-            }
-            this.keepaliveAgent = new this.Agent(this.keepaliveAgentOptions);
-        }
-    };
-
-    BlobClient.prototype.getMetadataURL = function (hash) {
-        var metadataBase = this.blobUrl + 'metadata';
-        if (hash) {
-            return metadataBase + '/' + hash;
-        } else {
-            return metadataBase;
-        }
-    };
-
-    BlobClient.prototype._getURL = function (base, hash, subpath) {
-        var subpathURL = '';
-        if (subpath) {
-            subpathURL = subpath;
-        }
-        return this.blobUrl + base + '/' + hash + '/' + encodeURIComponent(subpathURL);
-    };
-
-    BlobClient.prototype.getViewURL = function (hash, subpath) {
-        return this._getURL('view', hash, subpath);
-    };
-
-    BlobClient.prototype.getDownloadURL = function (hash, subpath) {
-        return this._getURL('download', hash, subpath);
-    };
-
-    BlobClient.prototype.getCreateURL = function (filename, isMetadata) {
-        if (isMetadata) {
-            return this.blobUrl + 'createMetadata/';
-        } else {
-            return this.blobUrl + 'createFile/' + encodeURIComponent(filename);
-        }
-    };
-
-    BlobClient.prototype.putFile = function (name, data, callback) {
-        var contentLength,
-            req;
-
-        function toArrayBuffer(buffer) {
-            var ab = new ArrayBuffer(buffer.length);
-            var view = new Uint8Array(ab);
-            for (var i = 0; i < buffer.length; ++i) {
-                view[i] = buffer[i];
-            }
-            return ab;
-        }
-
-        // On node-webkit, we use XMLHttpRequest, but xhr.send thinks a Buffer is a string and encodes it in utf-8 -
-        // send an ArrayBuffer instead.
-        if (typeof window !== 'undefined' && typeof Buffer !== 'undefined' && data instanceof Buffer) {
-            data = toArrayBuffer(data); // FIXME will this have performance problems
-        }
-        // on node, empty Buffers will cause a crash in superagent
-        if (typeof window === 'undefined' && typeof Buffer !== 'undefined' && data instanceof Buffer) {
-            if (data.length === 0) {
-                data = '';
-            }
-        }
-        contentLength = data.hasOwnProperty('length') ? data.length : data.byteLength;
-        req = superagent.post(this.getCreateURL(name));
-
-        if (typeof window === 'undefined') {
-            req.agent(this.keepaliveAgent);
-        }
-
-        if (this.webgmeclientsession) {
-            req.set('webgmeclientsession', this.webgmeclientsession);
-        }
-        if (typeof data !== 'string' && !(data instanceof String)) {
-            req.set('Content-Length', contentLength)
-        }
-        req.set('Content-Type', 'application/octet-stream')
-            .send(data)
-            .end(function (err, res) {
-                if (err || res.status > 399) {
-                    callback(err || res.status);
-                    return;
-                }
-                var response = res.body;
-                // Get the first one
-                var hash = Object.keys(response)[0];
-                callback(null, hash);
-            });
-    };
-
-    BlobClient.prototype.putMetadata = function (metadataDescriptor, callback) {
-        var metadata = new BlobMetadata(metadataDescriptor),
-            blob,
-            contentLength,
-            req;
-        // FIXME: in production mode do not indent the json file.
-        if (typeof Blob !== 'undefined') {
-            blob = new Blob([JSON.stringify(metadata.serialize(), null, 4)], {type: 'text/plain'});
-            contentLength = blob.size;
-        } else {
-            blob = new Buffer(JSON.stringify(metadata.serialize(), null, 4), 'utf8');
-            contentLength = blob.length;
-        }
-
-        req = superagent.post(this.getCreateURL(metadataDescriptor.name, true));
-        if (this.webgmeclientsession) {
-            req.set('webgmeclientsession', this.webgmeclientsession);
-        }
-
-        if (typeof window === 'undefined') {
-            req.agent(this.keepaliveAgent);
-        }
-
-        req.set('Content-Type', 'application/octet-stream')
-            .set('Content-Length', contentLength)
-            .send(blob)
-            .end(function (err, res) {
-                if (err || res.status > 399) {
-                    callback(err || res.status);
-                    return;
-                }
-                // Uploaded.
-                var response = JSON.parse(res.text);
-                // Get the first one
-                var hash = Object.keys(response)[0];
-                callback(null, hash);
-            });
-    };
-
-    BlobClient.prototype.putFiles = function (o, callback) {
-        var self = this,
-            error = '',
-            filenames = Object.keys(o),
-            remaining = filenames.length,
-            hashes = {},
-            putFile;
-        if (remaining === 0) {
-            callback(null, hashes);
-        }
-        putFile = function (filename, data) {
-            self.putFile(filename, data, function (err, hash) {
-                remaining -= 1;
-
-                hashes[filename] = hash;
-
-                if (err) {
-                    error += 'putFile error: ' + err.toString();
-                }
-
-                if (remaining === 0) {
-                    callback(error, hashes);
-                }
-            });
-        };
-
-        for (var j = 0; j < filenames.length; j += 1) {
-            putFile(filenames[j], o[filenames[j]]);
-        }
-    };
-
-    BlobClient.prototype.getSubObject = function (hash, subpath, callback) {
-        return this.getObject(hash, callback, subpath);
-    };
-
-    BlobClient.prototype.getObject = function (hash, callback, subpath) {
-        superagent.parse['application/zip'] = function (obj, parseCallback) {
-            if (parseCallback) {
-                // Running on node; this should be unreachable due to req.pipe() below
-            } else {
-                return obj;
-            }
-        };
-        //superagent.parse['application/json'] = superagent.parse['application/zip'];
-
-        var req = superagent.get(this.getViewURL(hash, subpath));
-        if (this.webgmeclientsession) {
-            req.set('webgmeclientsession', this.webgmeclientsession);
-        }
-
-        if (typeof window === 'undefined') {
-            req.agent(this.keepaliveAgent);
-        }
-
-        if (req.pipe) {
-            // running on node
-            var Writable = require('stream').Writable;
-            var BuffersWritable = function (options) {
-                Writable.call(this, options);
-
-                var self = this;
-                self.buffers = [];
-            };
-            require('util').inherits(BuffersWritable, Writable);
-
-            BuffersWritable.prototype._write = function (chunk, encoding, callback) {
-                this.buffers.push(chunk);
-                callback();
-            };
-
-            var buffers = new BuffersWritable();
-            buffers.on('finish', function () {
-                if (req.req.res.statusCode > 399) {
-                    return callback(req.req.res.statusCode);
-                }
-                callback(null, Buffer.concat(buffers.buffers));
-            });
-            buffers.on('error', function (err) {
-                callback(err);
-            });
-            req.pipe(buffers);
-        } else {
-            req.removeAllListeners('end');
-            req.on('request', function () {
-                if (typeof this.xhr !== 'undefined') {
-                    this.xhr.responseType = 'arraybuffer';
-                }
-            });
-            // req.on('error', callback);
-            req.on('end', function () {
-                if (req.xhr.status > 399) {
-                    callback(req.xhr.status);
-                } else {
-                    var contentType = req.xhr.getResponseHeader('content-type');
-                    var response = req.xhr.response; // response is an arraybuffer
-                    if (contentType === 'application/json') {
-                        var utf8ArrayToString = function (uintArray) {
-                            var inputString = '',
-                                i;
-                            for (i = 0; i < uintArray.byteLength; i++) {
-                                inputString += String.fromCharCode(uintArray[i]);
-                            }
-                            return decodeURIComponent(escape(inputString));
-                        };
-                        response = JSON.parse(utf8ArrayToString(new Uint8Array(response)));
-                    }
-                    callback(null, response);
-                }
-            });
-            req.end(callback);
-        }
-    };
-
-    BlobClient.prototype.getMetadata = function (hash, callback) {
-        var req = superagent.get(this.getMetadataURL(hash));
-        if (this.webgmeclientsession) {
-            req.set('webgmeclientsession', this.webgmeclientsession);
-        }
-
-        if (typeof window === 'undefined') {
-            req.agent(this.keepaliveAgent);
-        }
-
-        req.end(function (err, res) {
-            if (err || res.status > 399) {
-                callback(err || res.status);
-            } else {
-                callback(null, JSON.parse(res.text));
-            }
-        });
-    };
-
-    BlobClient.prototype.createArtifact = function (name) {
-        var artifact = new Artifact(name, this);
-        this.artifacts.push(artifact);
-        return artifact;
-    };
-
-    BlobClient.prototype.getArtifact = function (metadataHash, callback) {
-        // TODO: get info check if complex flag is set to true.
-        // TODO: get info get name.
-        var self = this;
-        this.getMetadata(metadataHash, function (err, info) {
-            if (err) {
-                callback(err);
-                return;
-            }
-
-            if (info.contentType === BlobMetadata.CONTENT_TYPES.COMPLEX) {
-                var artifact = new Artifact(info.name, self, info);
-                self.artifacts.push(artifact);
-                callback(null, artifact);
-            } else {
-                callback('not supported contentType ' + JSON.stringify(info, null, 4));
-            }
-
-        });
-    };
-
-    BlobClient.prototype.saveAllArtifacts = function (callback) {
-        var remaining = this.artifacts.length,
-            hashes = [],
-            error = '',
-            saveCallback;
-
-        if (remaining === 0) {
-            callback(null, hashes);
-        }
-
-        saveCallback = function (err, hash) {
-            remaining -= 1;
-
-            hashes.push(hash);
-
-            if (err) {
-                error += 'artifact.save err: ' + err.toString();
-            }
-            if (remaining === 0) {
-                callback(error, hashes);
-            }
-        };
-
-        for (var i = 0; i < this.artifacts.length; i += 1) {
-
-            this.artifacts[i].save(saveCallback);
-        }
-    };
-
-    return BlobClient;
-});
-
-/*globals define*/
-/*jshint browser: true, node:true*/
-
-/**
- * Client module for creating, monitoring executor jobs.
- *
- * @author lattmann / https://github.com/lattmann
- * @author ksmyth / https://github.com/ksmyth
- */
-
-
-define('executor/ExecutorClient',['superagent'], function (superagent) {
-    
-
-    var ExecutorClient = function (parameters) {
-        parameters = parameters || {};
-        this.isNodeJS = (typeof window === 'undefined') && (typeof process === 'object');
-        this.isNodeWebkit = (typeof window === 'object') && (typeof process === 'object');
-        //console.log(isNode);
-        if (this.isNodeJS) {
-            this.server = '127.0.0.1';
-            this._clientSession = null; // parameters.sessionId;;
-        }
-        this.server = parameters.server || this.server;
-        this.serverPort = parameters.serverPort || this.serverPort;
-        this.httpsecure = (parameters.httpsecure !== undefined) ? parameters.httpsecure : this.httpsecure;
-        if (this.isNodeJS) {
-            this.http = this.httpsecure ? require('https') : require('http');
-        }
-        this.executorUrl = '';
-        if (this.httpsecure !== undefined && this.server && this.serverPort) {
-            this.executorUrl = (this.httpsecure ? 'https://' : 'http://') + this.server + ':' + this.serverPort;
-        }
-        // TODO: TOKEN???
-        // TODO: any ways to ask for this or get it from the configuration?
-        this.executorUrl = this.executorUrl + '/rest/executor/';
-        if (parameters.executorNonce) {
-            this.executorNonce = parameters.executorNonce;
-        }
-    };
-
-    ExecutorClient.prototype.getInfoURL = function (hash) {
-        var metadataBase = this.executorUrl + 'info';
-        if (hash) {
-            return metadataBase + '/' + hash;
-        } else {
-            return metadataBase;
-        }
-    };
-
-
-    ExecutorClient.prototype.getCreateURL = function (hash) {
-        var metadataBase = this.executorUrl + 'create';
-        if (hash) {
-            return metadataBase + '/' + hash;
-        } else {
-            return metadataBase;
-        }
-    };
-
-    ExecutorClient.prototype.createJob = function (jobInfo, callback) {
-        if (typeof jobInfo === 'string') {
-            jobInfo = { hash: jobInfo }; // old API
-        }
-        this.sendHttpRequestWithData('POST', this.getCreateURL(jobInfo.hash), jobInfo, function (err, response) {
-            if (err) {
-                callback(err);
-                return;
-            }
-
-            callback(null, JSON.parse(response));
-        });
-    };
-
-    ExecutorClient.prototype.updateJob = function (jobInfo, callback) {
-        this.sendHttpRequestWithData('POST', this.executorUrl + 'update/' + jobInfo.hash, jobInfo,
-            function (err, response) {
-                if (err) {
-                    callback(err);
-                    return;
-                }
-
-                callback(null, response);
-            }
-        );
-    };
-
-    ExecutorClient.prototype.getInfo = function (hash, callback) {
-        this.sendHttpRequest('GET', this.getInfoURL(hash), function (err, response) {
-            if (err) {
-                callback(err);
-                return;
-            }
-
-            callback(null, JSON.parse(response));
-        });
-    };
-
-    ExecutorClient.prototype.getAllInfo = function (callback) {
-
-        this.sendHttpRequest('GET', this.getInfoURL(), function (err, response) {
-            if (err) {
-                callback(err);
-                return;
-            }
-
-            callback(null, JSON.parse(response));
-        });
-    };
-
-    ExecutorClient.prototype.getInfoByStatus = function (status, callback) {
-
-        this.sendHttpRequest('GET', this.executorUrl + '?status=' + status, function (err, response) {
-            if (err) {
-                callback(err);
-                return;
-            }
-
-            callback(null, JSON.parse(response));
-        });
-    };
-
-    ExecutorClient.prototype.getWorkersInfo = function (callback) {
-
-        this.sendHttpRequest('GET', this.executorUrl + 'worker', function (err, response) {
-            if (err) {
-                callback(err);
-                return;
-            }
-
-            callback(null, JSON.parse(response));
-        });
-    };
-
-    ExecutorClient.prototype.sendHttpRequest = function (method, url, callback) {
-        return this.sendHttpRequestWithData(method, url, null, callback);
-    };
-
-    ExecutorClient.prototype.sendHttpRequestWithData = function (method, url, data, callback) {
-        var req = new superagent.Request(method, url);
-        if (this.executorNonce) {
-            req.set('x-executor-nonce', this.executorNonce);
-        }
-        if (data) {
-            req.send(data);
-        }
-        req.end(function (err, res) {
-            if (err) {
-                callback(err);
-                return;
-            }
-            if (res.status > 399) {
-                callback(res.status, res.text);
-            } else {
-                callback(null, res.text);
-            }
-        });
-    };
-
-    ExecutorClient.prototype._ensureAuthenticated = function (options, callback) {
-        //this function enables the session of the client to be authenticated
-        //TODO currently this user does not have a session, so it has to upgrade the options always!!!
-//        if (options.headers) {
-//            options.headers.webgmeclientsession = this._clientSession;
-//        } else {
-//            options.headers = {
-//                'webgmeclientsession': this._clientSession
-//            }
-//        }
-        callback(null, options);
-    };
-
-    return ExecutorClient;
-});
-
-/*globals define*/
-/*jshint browser: true, node:true*/
-
-/**
- * @author lattmann / https://github.com/lattmann
- */
-
-define('plugin/PluginConfig',[], function () {
-    
-    /**
-     * Initializes a new instance of plugin configuration.
-     *
-     * Note: this object is JSON serializable see serialize method.
-     *
-     * @param config - deserializes an existing configuration to this object.
-     * @constructor
-     */
-    var PluginConfig = function (config) {
-        if (config) {
-            var keys = Object.keys(config);
-            for (var i = 0; i < keys.length; i += 1) {
-                // TODO: check for type on deserialization
-                this[keys[i]] = config[keys[i]];
-            }
-        }
-    };
-
-    /**
-     * Serializes this object to a JSON representation.
-     *
-     * @returns {{}}
-     */
-    PluginConfig.prototype.serialize = function () {
-        var keys = Object.keys(this);
-        var result = {};
-
-        for (var i = 0; i < keys.length; i += 1) {
-            // TODO: check for type on serialization
-            result[keys[i]] = this[keys[i]];
-        }
-
-        return result;
-    };
-
-
-    return PluginConfig;
-});
-/*globals define*/
-/*jshint browser: true, node:true*/
-
-/**
- * @author lattmann / https://github.com/lattmann
- */
-
-
-define('plugin/PluginNodeDescription',[], function () {
-    
-    /**
-     * Initializes a new instance of plugin node description object.
-     *
-     * Note: this object is JSON serializable see serialize method.
-     *
-     * @param config - deserializes an existing configuration to this object.
-     * @constructor
-     */
-    var PluginNodeDescription = function (config) {
-        if (config) {
-            this.name = config.name;
-            this.id = config.id;
-        } else {
-            this.name = '';
-            this.id = '';
-        }
-    };
-
-    /**
-     * Serializes this object to a JSON representation.
-     *
-     * @returns {{}}
-     */
-    PluginNodeDescription.prototype.serialize = function () {
-        var keys = Object.keys(this),
-            result = {},
-            i;
-
-        for (i = 0; i < keys.length; i += 1) {
-            // TODO: check for type on serialization
-            result[keys[i]] = this[keys[i]];
-        }
-
-        return result;
-    };
-
-    return PluginNodeDescription;
-});
-/*globals define*/
-/*jshint browser: true, node:true*/
-
-/**
- * @author lattmann / https://github.com/lattmann
- */
-
-
-define('plugin/PluginMessage',['plugin/PluginNodeDescription'], function (PluginNodeDescription) {
-    
-
-    /**
-     * Initializes a new instance of plugin message.
-     *
-     * Note: this object is JSON serializable see serialize method.
-     *
-     * @param config - deserializes an existing configuration to this object.
-     * @constructor
-     */
-    var PluginMessage = function (config) {
-        if (config) {
-            this.commitHash = config.commitHash;
-            if (config.activeNode instanceof PluginNodeDescription) {
-                this.activeNode = config.activeNode;
-            } else {
-                this.activeNode = new PluginNodeDescription(config.activeNode);
-            }
-
-            this.message = config.message;
-            if (config.severity) {
-                this.severity = config.severity;
-            } else {
-                this.severity = 'info';
-            }
-        } else {
-            this.commitHash = '';
-            this.activeNode = new PluginNodeDescription();
-            this.message = '';
-            this.severity = 'info';
-        }
-    };
-
-    /**
-     * Serializes this object to a JSON representation.
-     *
-     * @returns {{}}
-     */
-    PluginMessage.prototype.serialize = function () {
-        var result = {
-            commitHash: this.commitHash,
-            activeNode: this.activeNode.serialize(),
-            message: this.message,
-            severity: this.severity
-        };
-
-        return result;
-    };
-
-    return PluginMessage;
-});
-/*globals define*/
-/*jshint browser: true, node:true*/
-
-/**
- * @author lattmann / https://github.com/lattmann
- */
-
-
-define('plugin/PluginResult',['plugin/PluginMessage'], function (PluginMessage) {
-    
-    /**
-     * Initializes a new instance of a plugin result object.
-     *
-     * Note: this object is JSON serializable see serialize method.
-     *
-     * @param config - deserializes an existing configuration to this object.
-     * @constructor
-     */
-    var PluginResult = function (config) {
-        var pluginMessage,
-            i;
-        if (config) {
-            this.success = config.success;
-            this.pluginName = config.pluginName;
-            this.startTime = config.startTime;
-            this.finishTime = config.finishTime;
-            this.messages = [];
-            this.artifacts = config.artifacts;
-            this.error = config.error;
-
-            for (i = 0; i < config.messages.length; i += 1) {
-                if (config.messages[i] instanceof PluginMessage) {
-                    pluginMessage = config.messages[i];
-                } else {
-                    pluginMessage = new PluginMessage(config.messages[i]);
-                }
-                this.messages.push(pluginMessage);
-            }
-        } else {
-            this.success = false;
-            this.messages = []; // array of PluginMessages
-            this.artifacts = []; // array of hashes
-            this.pluginName = 'PluginName N/A';
-            this.startTime = null;
-            this.finishTime = null;
-            this.error = null;
-        }
-    };
-
-    /**
-     * Gets the success flag of this result object
-     *
-     * @returns {boolean}
-     */
-    PluginResult.prototype.getSuccess = function () {
-        return this.success;
-    };
-
-    /**
-     * Sets the success flag of this result.
-     *
-     * @param {boolean} value
-     */
-    PluginResult.prototype.setSuccess = function (value) {
-        this.success = value;
-    };
-
-    /**
-     * Returns with the plugin messages.
-     *
-     * @returns {plugin.PluginMessage[]}
-     */
-    PluginResult.prototype.getMessages = function () {
-        return this.messages;
-    };
-
-    /**
-     * Adds a new plugin message to the messages list.
-     *
-     * @param {plugin.PluginMessage} pluginMessage
-     */
-    PluginResult.prototype.addMessage = function (pluginMessage) {
-        this.messages.push(pluginMessage);
-    };
-
-    PluginResult.prototype.getArtifacts = function () {
-        return this.artifacts;
-    };
-
-    PluginResult.prototype.addArtifact = function (hash) {
-        this.artifacts.push(hash);
-    };
-
-    /**
-     * Gets the name of the plugin to which the result object belongs to.
-     *
-     * @returns {string}
-     */
-    PluginResult.prototype.getPluginName = function () {
-        return this.pluginName;
-    };
-
-    //------------------------------------------------------------------------------------------------------------------
-    //--------------- Methods used by the plugin manager
-
-    /**
-     * Sets the name of the plugin to which the result object belongs to.
-     *
-     * @param pluginName - name of the plugin
-     */
-    PluginResult.prototype.setPluginName = function (pluginName) {
-        this.pluginName = pluginName;
-    };
-
-    /**
-     * Gets the ISO 8601 representation of the time when the plugin started its execution.
-     *
-     * @returns {string}
-     */
-    PluginResult.prototype.getStartTime = function () {
-        return this.startTime;
-    };
-
-    /**
-     * Sets the ISO 8601 representation of the time when the plugin started its execution.
-     *
-     * @param {string} time
-     */
-    PluginResult.prototype.setStartTime = function (time) {
-        this.startTime = time;
-    };
-
-    /**
-     * Gets the ISO 8601 representation of the time when the plugin finished its execution.
-     *
-     * @returns {string}
-     */
-    PluginResult.prototype.getFinishTime = function () {
-        return this.finishTime;
-    };
-
-    /**
-     * Sets the ISO 8601 representation of the time when the plugin finished its execution.
-     *
-     * @param {string} time
-     */
-    PluginResult.prototype.setFinishTime = function (time) {
-        this.finishTime = time;
-    };
-
-    /**
-     * Gets error if any error occured during execution.
-     * FIXME: should this be an Error object?
-     * @returns {string}
-     */
-    PluginResult.prototype.getError = function () {
-        return this.error;
-    };
-
-    /**
-     * Sets the error string if any error occured during execution.
-     * FIXME: should this be an Error object?
-     * @param {string} time
-     */
-    PluginResult.prototype.setError = function (error) {
-        this.error = error;
-    };
-
-    /**
-     * Serializes this object to a JSON representation.
-     *
-     * @returns {{success: boolean, messages: plugin.PluginMessage[], pluginName: string, finishTime: stirng}}
-     */
-    PluginResult.prototype.serialize = function () {
-        var result = {
-            success: this.success,
-            messages: [],
-            artifacts: this.artifacts,
-            pluginName: this.pluginName,
-            startTime: this.startTime,
-            finishTime: this.finishTime,
-            error: this.error
-        },
-            i;
-
-        for (i = 0; i < this.messages.length; i += 1) {
-            result.messages.push(this.messages[i].serialize());
-        }
-
-        return result;
-    };
-
-    return PluginResult;
-});
-/*globals define*/
-/*jshint browser: true, node:true*/
-
-/**
- * This is the base class that plugins should inherit from.
- * (Using the plugin-generator - the generated plugin will do that.)
- *
- * @author lattmann / https://github.com/lattmann
- */
-
-define('plugin/PluginBase',[
-    'plugin/PluginConfig',
-    'plugin/PluginResult',
-    'plugin/PluginMessage',
-    'plugin/PluginNodeDescription'
-], function (PluginConfig, PluginResult, PluginMessage, PluginNodeDescription) {
-    
-
-    /**
-     * Initializes a new instance of a plugin object, which should be a derived class.
-     *
-     * @constructor
-     */
-    var PluginBase = function () {
-        // set by initialize
-        this.logger = null;
-        this.blobClient = null;
-        this._currentConfig = null;
-
-        // set by configure
-        this.core = null;
-        this.project = null;
-        this.projectName = null;
-        this.branchName = null;
-        this.branchHash = null;
-        this.commitHash = null;
-        this.currentHash = null;
-        this.rootNode = null;
-        this.activeNode = null;
-        this.activeSelection = [];
-        this.META = null;
-
-        this.result = null;
-        this.isConfigured = false;
-        this.gmeConfig = null;
-    };
-
-    //--------------------------------------------------------------------------------------------------------------
-    //---------- Methods must be overridden by the derived classes
-
-    /**
-     * Main function for the plugin to execute. This will perform the execution.
-     * Notes:
-     * - do NOT use console.log use this.logger.[error,warning,info,debug] instead
-     * - do NOT put any user interaction logic UI, etc. inside this function
-     * - callback always have to be called even if error happened
-     *
-     * @param {function(string, plugin.PluginResult)} callback - the result callback
-     */
-    PluginBase.prototype.main = function (/*callback*/) {
-        throw new Error('implement this function in the derived class');
-    };
-
-    /**
-     * Readable name of this plugin that can contain spaces.
-     *
-     * @returns {string}
-     */
-    PluginBase.prototype.getName = function () {
-        throw new Error('implement this function in the derived class - getting type automatically is a bad idea,' +
-        'when the js scripts are minified names are useless.');
-    };
-
-    //--------------------------------------------------------------------------------------------------------------
-    //---------- Methods could be overridden by the derived classes
-
-    /**
-     * Current version of this plugin using semantic versioning.
-     * @returns {string}
-     */
-    PluginBase.prototype.getVersion = function () {
-        return '0.1.0';
-    };
-
-    /**
-     * A detailed description of this plugin and its purpose. It can be one or more sentences.
-     *
-     * @returns {string}
-     */
-    PluginBase.prototype.getDescription = function () {
-        return '';
-    };
-
-    /**
-     * Configuration structure with names, descriptions, minimum, maximum values, default values and
-     * type definitions.
-     *
-     * Example:
-     *
-     * [{
-         *    "name": "logChildrenNames",
-         *    "displayName": "Log Children Names",
-         *    "description": '',
-         *    "value": true, // this is the 'default config'
-         *    "valueType": "boolean",
-         *    "readOnly": false
-         * },{
-         *    "name": "logLevel",
-         *    "displayName": "Logger level",
-         *    "description": '',
-         *    "value": "info",
-         *    "valueType": "string",
-         *    "valueItems": [
-         *          "debug",
-         *          "info",
-         *          "warn",
-         *          "error"
-         *      ],
-         *    "readOnly": false
-         * },{
-         *    "name": "maxChildrenToLog",
-         *    "displayName": "Maximum children to log",
-         *    "description": 'Set this parameter to blabla',
-         *    "value": 4,
-         *    "minValue": 1,
-         *    "valueType": "number",
-         *    "readOnly": false
-         * }]
-     *
-     * @returns {object[]}
-     */
-    PluginBase.prototype.getConfigStructure = function () {
-        return [];
-    };
-
-    //--------------------------------------------------------------------------------------------------------------
-    //---------- Methods that can be used by the derived classes
-
-    /**
-     * Updates the current success flag with a new value.
-     *
-     * NewValue = OldValue && Value
-     *
-     * @param {boolean} value - apply this flag on current success value
-     * @param {string|null} message - optional detailed message
-     */
-    PluginBase.prototype.updateSuccess = function (value, message) {
-        var prevSuccess = this.result.getSuccess();
-        var newSuccessValue = prevSuccess && value;
-
-        this.result.setSuccess(newSuccessValue);
-        var msg = '';
-        if (message) {
-            msg = ' - ' + message;
-        }
-
-        this.logger.debug('Success was updated from ' + prevSuccess + ' to ' + newSuccessValue + msg);
-    };
-
-    /**
-     * WebGME can export the META types as path and this method updates the generated domain specific types with
-     * webgme node objects. These can be used to define the base class of new objects created through the webgme API.
-     *
-     * @param {object} generatedMETA
-     */
-    PluginBase.prototype.updateMETA = function (generatedMETA) {
-        var name;
-        for (name in this.META) {
-            if (this.META.hasOwnProperty(name)) {
-                generatedMETA[name] = this.META[name];
-            }
-        }
-
-        // TODO: check if names are not the same
-        // TODO: log if META is out of date
-    };
-
-    /**
-     * Checks if the given node is of the given meta-type.
-     * Usage: <tt>self.isMetaTypeOf(aNode, self.META['FCO']);</tt>
-     * @param node - Node to be checked for type.
-     * @param metaNode - Node object defining the meta type.
-     * @returns {boolean} - True if the given object was of the META type.
-     */
-    PluginBase.prototype.isMetaTypeOf = function (node, metaNode) {
-        var self = this;
-        while (node) {
-            if (self.core.getGuid(node) === self.core.getGuid(metaNode)) {
-                return true;
-            }
-            node = self.core.getBase(node);
-        }
-        return false;
-    };
-
-    /**
-     * Finds and returns the node object defining the meta type for the given node.
-     * @param node - Node to be checked for type.
-     * @returns {Object} - Node object defining the meta type of node.
-     */
-    PluginBase.prototype.getMetaType = function (node) {
-        var self = this,
-            name;
-        while (node) {
-            name = self.core.getAttribute(node, 'name');
-            if (self.META.hasOwnProperty(name) && self.core.getGuid(node) === self.core.getGuid(self.META[name])) {
-                break;
-            }
-            node = self.core.getBase(node);
-        }
-        return node;
-    };
-
-    /**
-     * Returns true if node is a direct instance of a meta-type node (or a meta-type node itself).
-     * @param node - Node to be checked.
-     * @returns {boolean}
-     */
-    PluginBase.prototype.baseIsMeta = function (node) {
-        var self = this,
-            baseName,
-            baseNode = self.core.getBase(node);
-        if (!baseNode) {
-            // FCO does not have a base node, by definition function returns true.
-            return true;
-        }
-        baseName = self.core.getAttribute(baseNode, 'name');
-        return self.META.hasOwnProperty(baseName) &&
-            self.core.getGuid(self.META[baseName]) === self.core.getGuid(baseNode);
-    };
-
-    /**
-     * Gets the current configuration of the plugin that was set by the user and plugin manager.
-     *
-     * @returns {object}
-     */
-    PluginBase.prototype.getCurrentConfig = function () {
-        return this._currentConfig;
-    };
-
-    /**
-     * Creates a new message for the user and adds it to the result.
-     *
-     * @param {object} node - webgme object which is related to the message
-     * @param {string} message - feedback to the user
-     * @param {string} severity - severity level of the message: 'debug', 'info' (default), 'warning', 'error'.
-     */
-    PluginBase.prototype.createMessage = function (node, message, severity) {
-        var severityLevel = severity || 'info';
-        //this occurence of the function will always handle a single node
-
-        var descriptor = new PluginNodeDescription({
-            name: node ? this.core.getAttribute(node, 'name') : '',
-            id: node ? this.core.getPath(node) : ''
-        });
-        var pluginMessage = new PluginMessage({
-            commitHash: this.currentHash,
-            activeNode: descriptor,
-            message: message,
-            severity: severityLevel
-        });
-
-        this.result.addMessage(pluginMessage);
-    };
-
-    /**
-     * Saves all current changes if there is any to a new commit.
-     * If the changes were started from a branch, then tries to fast forward the branch to the new commit.
-     * Note: Does NOT handle any merges at this point.
-     *
-     * @param {string|null} message - commit message
-     * @param callback
-     */
-    PluginBase.prototype.save = function (message, callback) {
-        var self = this;
-
-        this.logger.debug('Saving project');
-
-        this.core.persist(this.rootNode, function (err) {
-            if (err) {
-                self.logger.error(err);
-            }
-        });
-        var newRootHash = self.core.getHash(self.rootNode);
-
-        var commitMessage = '[Plugin] ' + self.getName() + ' (v' + self.getVersion() + ') updated the model.';
-        if (message) {
-            commitMessage += ' - ' + message;
-        }
-        self.currentHash = self.project.makeCommit([self.currentHash], newRootHash, commitMessage, function (err) {
-            if (err) {
-                self.logger.error(err);
-            }
-        });
-
-        if (self.branchName) {
-            // try to fast forward branch if there was a branch name defined
-
-            // FIXME: what if master branch is already in a different state?
-
-            // try to fast forward branch to the current commit
-            self.project.setBranchHash(self.branchName, self.branchHash, self.currentHash, function (err) {
-                if (err) {
-                    // fast forward failed
-                    // TODO: try auto-merge
-
-                    self.logger.error(err);
-                    self.logger.info('"' + self.branchName + '" was NOT updated');
-                    self.logger.info('Project was saved to ' + self.currentHash + ' commit.');
-                } else {
-                    // successful fast forward of branch to the new commit
-                    self.logger.info('"' + self.branchName + '" was updated to the new commit.');
-                    // roll starting point on success
-                    self.branchHash = self.currentHash;
-                }
-                callback(err);
-            });
-
-            // FIXME: is this call async??
-            // FIXME: we are not tracking all commits that we make
-
-        } else {
-            // making commits, we have not started from a branch
-            self.logger.info('Project was saved to ' + self.currentHash + ' commit.');
-            callback(null);
-        }
-
-        // Commit changes.
-        /*            this.core.persist(this.rootNode, function (err) {
-         // TODO: any error here?
-         if (err) {
-         self.logger.error(err);
-         }
-
-         var newRootHash = self.core.getHash(self.rootNode);
-
-         var commitMessage = '[Plugin] ' + self.getName() + ' (v' + self.getVersion() + ') updated the model.';
-         if (message) {
-         commitMessage += ' - ' + message;
-         }
-
-         self.currentHash = self.project.makeCommit([self.currentHash], newRootHash, commitMessage, function (err) {
-         // TODO: any error handling here?
-         if (err) {
-         self.logger.error(err);
-         }
-
-         if (self.branchName) {
-         // try to fast forward branch if there was a branch name defined
-
-         // FIXME: what if master branch is already in a different state?
-
-         self.project.getBranchNames(function (err, branchNames) {
-         if (branchNames.hasOwnProperty(self.branchName)) {
-         var branchHash = branchNames[self.branchName];
-         if (branchHash === self.branchHash) {
-         // the branch does not have any new commits
-         // try to fast forward branch to the current commit
-         self.project.setBranchHash(self.branchName, self.branchHash, self.currentHash, function (err) {
-         if (err) {
-         // fast forward failed
-         self.logger.error(err);
-         self.logger.info('"' + self.branchName + '" was NOT updated');
-         self.logger.info('Project was saved to ' + self.currentHash + ' commit.');
-         } else {
-         // successful fast forward of branch to the new commit
-         self.logger.info('"' + self.branchName + '" was updated to the new commit.');
-         // roll starting point on success
-         self.branchHash = self.currentHash;
-         }
-         callback(err);
-         });
-         } else {
-         // branch has changes a merge is required
-         // TODO: try auto-merge, if fails ...
-         self.logger.warn('Cannot fast forward "' + self.branchName + '" branch.
-         Merge is required but not supported yet.');
-         self.logger.info('Project was saved to ' + self.currentHash + ' commit.');
-         callback(null);
-         }
-         } else {
-         // branch was deleted or not found, do nothing
-         self.logger.info('Project was saved to ' + self.currentHash + ' commit.');
-         callback(null);
-         }
-         });
-         // FIXME: is this call async??
-         // FIXME: we are not tracking all commits that we make
-
-         } else {
-         // making commits, we have not started from a branch
-         self.logger.info('Project was saved to ' + self.currentHash + ' commit.');
-         callback(null);
-         }
-         });
-
-         });*/
-    };
-
-    //--------------------------------------------------------------------------------------------------------------
-    //---------- Methods that are used by the Plugin Manager. Derived classes should not use these methods
-
-    /**
-     * Initializes the plugin with objects that can be reused within the same plugin instance.
-     *
-     * @param {logManager} logger - logging capability to console (or file) based on PluginManager configuration
-     * @param {blob.BlobClient} blobClient - virtual file system where files can be generated then saved as a zip file.
-     * @param {object} gmeConfig - global configuration for webGME.
-     */
-    PluginBase.prototype.initialize = function (logger, blobClient, gmeConfig) {
-        if (logger) {
-            this.logger = logger;
-        } else {
-            this.logger = console;
-        }
-        if (!gmeConfig) {
-            // TODO: Remove this check at some point
-            throw new Error('gmeConfig was not provided to Plugin.initialize!');
-        }
-        this.blobClient = blobClient;
-        this.gmeConfig = gmeConfig;
-
-        this._currentConfig = null;
-        // initialize default configuration
-        this.setCurrentConfig(this.getDefaultConfig());
-
-        this.isConfigured = false;
-    };
-
-    /**
-     * Configures this instance of the plugin for a specific execution. This function is called before the main by
-     * the PluginManager.
-     * Initializes the result with a new object.
-     *
-     * @param {PluginContext} config - specific context: project, branch, core, active object and active selection.
-     */
-    PluginBase.prototype.configure = function (config) {
-        this.core = config.core;
-        this.project = config.project;
-        this.projectName = config.projectName;
-        this.branchName = config.branchName;
-        this.branchHash = config.branchName ? config.commitHash : null;
-        this.commitHash = config.commitHash;
-        this.currentHash = config.commitHash;
-        this.rootNode = config.rootNode;
-        this.activeNode = config.activeNode;
-        this.activeSelection = config.activeSelection;
-        this.META = config.META;
-
-        this.result = new PluginResult();
-
-
-        this.isConfigured = true;
-    };
-
-    /**
-     * Gets the default configuration based on the configuration structure for this plugin.
-     *
-     * @returns {plugin.PluginConfig}
-     */
-    PluginBase.prototype.getDefaultConfig = function () {
-        var configStructure = this.getConfigStructure();
-
-        var defaultConfig = new PluginConfig();
-
-        for (var i = 0; i < configStructure.length; i += 1) {
-            defaultConfig[configStructure[i].name] = configStructure[i].value;
-        }
-
-        return defaultConfig;
-    };
-
-    /**
-     * Sets the current configuration of the plugin.
-     *
-     * @param {object} newConfig - this is the actual configuration and NOT the configuration structure.
-     */
-    PluginBase.prototype.setCurrentConfig = function (newConfig) {
-        this._currentConfig = newConfig;
-    };
-
-    return PluginBase;
-});
-
-/*globals define*/
-/*jshint browser: true, node:true*/
-
-/**
- * @author lattmann / https://github.com/lattmann
- */
-
-define('plugin/PluginContext',[], function () {
-    
-
-    /**
-     * Initializes a new instance of PluginContext. This context is set through PluginBase.configure method for a given
-     * plugin instance and execution.
-     *
-     * @constructor
-     */
-    var PluginContext = function () {
-
-        // TODO: something like this
-//        context.project = project;
-//        context.projectName = config.project;
-//        context.core = new Core(context.project);
-//        context.commitHash = config.commit;
-//        context.selected = config.selected;
-//        context.storage = null;
-
-    };
-
-
-    return PluginContext;
-});
-/*globals define*/
-/*jshint browser: true, node:true*/
-
-/**
- * @author lattmann / https://github.com/lattmann
- */
-
-// TODO: Use PluginManagerConfiguration
-// TODO: Load ActiveSelection objects and pass it correctly
-// TODO: Add more statistics to the result object
-// TODO: Result object rename name -> pluginName, time -> finishTime)
-// TODO: Make this class testable
-// TODO: PluginManager should download the plugins
-
-
-define('plugin/PluginManagerBase',['plugin/PluginBase', 'plugin/PluginContext'], function (PluginBase, PluginContext) {
-
-
-        var PluginManagerBase = function (storage, Core, logger, plugins, gmeConfig) {
-            this.gmeConfig = gmeConfig; // global configuration of webgme
-            this.logger = logger.fork('PluginManager');
-            this._Core = Core;       // webgme core class is used to operate on objects
-            this._storage = storage; // webgme storage
-            this._plugins = plugins; // key value pair of pluginName: pluginType - plugins are already loaded/downloaded
-            this._pluginConfigs = {}; // keeps track of the current configuration for each plugins by name
-
-            if (!this.gmeConfig) {
-                // TODO: this error check is temporary
-                throw new Error('PluginManagerBase takes gmeConfig as parameter!');
-            }
-
-            var pluginNames = Object.keys(this._plugins);
-            for (var i = 0; i < pluginNames.length; i += 1) {
-                var p = new this._plugins[pluginNames[i]]();
-                this._pluginConfigs[pluginNames[i]] = p.getDefaultConfig();
-            }
-        };
-
-        PluginManagerBase.prototype.initialize = function (managerConfiguration, configCallback, callbackContext) {
-            var self = this,
-                pluginName,
-                plugins = this._plugins;
-
-            //#1: PluginManagerBase should load the plugins
-
-            //#2: PluginManagerBase iterates through each plugin and collects the config data
-            var pluginConfigs = {};
-
-            for (pluginName in plugins) {
-                if (plugins.hasOwnProperty(pluginName)) {
-                    var plugin = new plugins[pluginName]();
-                    pluginConfigs[pluginName] = plugin.getConfigStructure();
-                }
-            }
-
-            if (configCallback) {
-                configCallback.call(callbackContext, pluginConfigs, function (updatedPluginConfig) {
-                    for (pluginName in updatedPluginConfig) {
-                        if (updatedPluginConfig.hasOwnProperty(pluginName)) {
-                            //save it back to the plugin
-                            self._pluginConfigs[pluginName] = updatedPluginConfig[pluginName];
-                        }
-                    }
-                });
-            }
-        };
-
-        /**
-         * Gets a new instance of a plugin by name.
-         *
-         * @param {string} name
-         * @returns {plugin.PluginBase}
-         */
-        PluginManagerBase.prototype.getPluginByName = function (name) {
-            return this._plugins[name];
-        };
-
-        PluginManagerBase.prototype.loadMetaNodes = function (pluginContext, callback) {
-            var self = this;
-
-            this.logger.debug('Loading meta nodes');
-
-            // get meta members
-            var metaIDs = pluginContext.core.getMemberPaths(pluginContext.rootNode, 'MetaAspectSet');
-
-            var len = metaIDs.length;
-
-            var nodeObjs = [];
-
-
-            var allObjectsLoadedHandler = function () {
-                var len2 = nodeObjs.length;
-
-                var nameObjMap = {};
-
-                while (len2--) {
-                    var nodeObj = nodeObjs[len2];
-
-                    nameObjMap[pluginContext.core.getAttribute(nodeObj, 'name')] = nodeObj;
-                }
-
-                pluginContext.META = nameObjMap;
-
-                self.logger.debug('Meta nodes are loaded');
-
-                callback(null, pluginContext);
-            };
-
-            var loadedMetaObjectHandler = function (err, nodeObj) {
-                nodeObjs.push(nodeObj);
-
-                if (nodeObjs.length === metaIDs.length) {
-                    allObjectsLoadedHandler();
-                }
-            };
-
-            while (len--) {
-                pluginContext.core.loadByPath(pluginContext.rootNode, metaIDs[len], loadedMetaObjectHandler);
-            }
-        };
-
-        /**
-         *
-         * @param {plugin.PluginManagerConfiguration} managerConfiguration
-         * @param {function} callback
-         */
-        PluginManagerBase.prototype.getPluginContext = function (managerConfiguration, callback) {
-            var self = this,
-                pluginContext = new PluginContext();
-
-            // TODO: check if callback is a function
-            // based on the string values get the node objects
-            // 1) Open project
-            // 2) Load branch OR commit hash
-            // 3) Load rootNode
-            // 4) Load active object
-            // 5) Load active selection
-            // 6) Update context
-            // 7) return
-
-            pluginContext.project = this._storage;
-            pluginContext.projectName = managerConfiguration.project;
-            pluginContext.core = new self._Core(pluginContext.project, {
-                globConf: self.gmeConfig,
-                logger: self.logger.fork('core') //TODO: This logger should probably fork from the plugin logger
-            });
-            pluginContext.commitHash = managerConfiguration.commit;
-            pluginContext.activeNode = null;    // active object
-            pluginContext.activeSelection = []; // selected objects
-
-            // add activeSelection
-            function loadActiveSelectionAndMetaNodes() {
-                var remaining = managerConfiguration.activeSelection.length,
-                    i;
-                function loadNodeByNode(selectedNodePath) {
-                    pluginContext.core.loadByPath(pluginContext.rootNode, selectedNodePath,
-                        function (err, selectedNode) {
-                                remaining -= 1;
-
-                                if (err) {
-                                self.logger.warn('unable to load active selection: ' + selectedNodePath);
-                                } else {
-                                pluginContext.activeSelection.push(selectedNode);
-                                }
-
-                                if (remaining === 0) {
-                                    // all nodes from active selection are loaded
-                                    self.loadMetaNodes(pluginContext, callback);
-                                }
-                        }
-                    );
-                }
-                if (managerConfiguration.activeSelection.length === 0) {
-                    self.loadMetaNodes(pluginContext, callback);
-                } else {
-                    for (i = 0; i < managerConfiguration.activeSelection.length; i += 1) {
-                        loadNodeByNode(managerConfiguration.activeSelection[i]);
-                    }
-                    }
-                }
-
-            // add activeNode
-            function loadCommitHashAndRun(commitHash) {
-                self.logger.info('Loading commit ' + commitHash);
-                pluginContext.project.loadObject(commitHash, function (err, commitObj) {
-                    if (err) {
-                        callback(err, pluginContext);
-                        return;
-                    }
-
-                    if (typeof commitObj === 'undefined' || commitObj === null) {
-                        callback('cannot find commit', pluginContext);
-                        return;
-                    }
-
-                    pluginContext.core.loadRoot(commitObj.root, function (err, rootNode) {
-                        if (err) {
-                            callback('unable to load root', pluginContext);
-                            return;
-                        }
-
-                        pluginContext.rootNode = rootNode;
-                        if (typeof managerConfiguration.activeNode === 'string') {
-                            pluginContext.core.loadByPath(pluginContext.rootNode, managerConfiguration.activeNode,
-                                function (err, activeNode) {
-                                if (err) {
-                                        callback('unable to load selected object', pluginContext);
-                                    return;
-                                }
-
-                                pluginContext.activeNode = activeNode;
-                                loadActiveSelectionAndMetaNodes();
-                                }
-                            );
-                        } else {
-                            pluginContext.activeNode = null;
-                            loadActiveSelectionAndMetaNodes();
-                        }
-                    });
-                });
-            }
-
-            // load commit hash and run based on branch name or commit hash
-            if (managerConfiguration.branchName) {
-                pluginContext.project.getBranchNames(function (err, branchNames) {
-                    self.logger.debug(branchNames);
-
-                        pluginContext.commitHash = branchNames[managerConfiguration.branchName] || pluginContext.commitHash;
-                        pluginContext.branchName = managerConfiguration.branchName;
-                        loadCommitHashAndRun(pluginContext.commitHash);
-                });
-            } else {
-                loadCommitHashAndRun(pluginContext.commitHash);
-            }
-
-        };
-
-        PluginManagerBase.prototype.executePlugin = function (name, managerConfiguration, callback) {
-            // TODO: check if name is a string
-            // TODO: check if managerConfiguration is an instance of PluginManagerConfiguration
-            // TODO: check if callback is a function
-            var self = this,
-                mainCallbackCalls = 0,
-                multiCallbackHandled = false;
-
-            var PluginClass = this.getPluginByName(name);
-
-            var plugin = new PluginClass();
-
-            var pluginLogger = this.logger.fork('gme:plugin:' + name, true);
-
-            plugin.initialize(pluginLogger, managerConfiguration.blobClient, self.gmeConfig);
-
-            plugin.setCurrentConfig(this._pluginConfigs[name]);
-            for (var key in managerConfiguration.pluginConfig) {
-                if (managerConfiguration.pluginConfig.hasOwnProperty(key) &&
-                    plugin._currentConfig.hasOwnProperty(key)) {
-
-                    plugin._currentConfig[key] = managerConfiguration.pluginConfig[key];
-                }
-            }
-            self.getPluginContext(managerConfiguration, function (err, pluginContext) {
-                if (err) {
-                    // TODO: this has to return with an empty PluginResult object and NOT with null.
-                    callback(err, null);
-                    return;
-
-                }
-
-                plugin.configure(pluginContext);
-
-                var startTime = (new Date()).toISOString();
-
-                plugin.main(function (err, result) {
-                    var stackTrace;
-                    mainCallbackCalls += 1;
-                    // set common information (meta info) about the plugin and measured execution times
-                    result.setFinishTime((new Date()).toISOString());
-                    result.setStartTime(startTime);
-
-                    result.setPluginName(plugin.getName());
-
-                    if (mainCallbackCalls > 1) {
-                        stackTrace = new Error().stack;
-                        self.logger.error('The main callback is being called more than once!', {metadata: stackTrace});
-                        result.setError('The main callback is being called more than once!');
-                        if (multiCallbackHandled === true) {
-                            plugin.createMessage(null, stackTrace);
-                            return;
-                        }
-                        multiCallbackHandled = true;
-                        result.setSuccess(false);
-                        plugin.createMessage(null, 'The main callback is being called more than once.');
-                        plugin.createMessage(null, stackTrace);
-                        callback('The main callback is being called more than once!', result);
-                    } else {
-                        result.setError(err);
-                        callback(err, result);
-                    }
-                });
-
-            });
-
-        };
-
-
-        return PluginManagerBase;
-    });
-define('js/Dialogs/PluginConfig/PluginConfigDialog',[], function () {
-   return;
-});
-
-/*globals define, WebGMEGlobal, requirejs*/
-/*jshint browser: true*/
-
-/**
- * @author rkereskenyi / https://github.com/rkereskenyi
- * @author lattmann / https://github.com/lattmann
- * @author pmeijer / https://github.com/pmeijer
- */
-
-define('js/Utils/InterpreterManager',[
-    'common/core/core',
-    'plugin/PluginManagerBase',
-    'plugin/PluginResult',
-    'blob/BlobClient',
-    'js/Dialogs/PluginConfig/PluginConfigDialog',
-    'js/logger'
-], function (Core, PluginManagerBase, PluginResult, BlobClient, PluginConfigDialog, Logger) {
-
-    
-
-    var InterpreterManager = function (client, gmeConfig) {
-        this._client = client;
-        //this._manager = new PluginManagerBase();
-        this.gmeConfig = gmeConfig;
-        this._savedConfigs = {};
-        this.logger = Logger.create('gme:InterpreterManager', gmeConfig.client.log);
-        this.logger.debug('InterpreterManager ctor');
-    };
-
-    var getPlugin = function (name, callback) {
-        if (WebGMEGlobal && WebGMEGlobal.plugins && WebGMEGlobal.plugins.hasOwnProperty(name)) {
-            callback(null, WebGMEGlobal.plugins[name]);
-        } else {
-            requirejs(['/plugin/' + name + '/' + name + '/' + name],
-                function (InterpreterClass) {
-                    callback(null, InterpreterClass);
-                },
-                function (err) {
-                    callback(err, null);
-                }
-            );
-        }
-    };
-
-    /**
-     *
-     * @param {string} name - name of plugin to be executed.
-     * @param {object} silentPluginCfg - if falsy dialog window will be shown.
-     * @param {object.string} silentPluginCfg.activeNode - Path to activeNode.
-     * @param {object.Array.<string>} silentPluginCfg.activeSelection - Paths to nodes in activeSelection.
-     * @param {object.boolean} silentPluginCfg.runOnServer - Whether to run the plugin on the server or not.
-     * @param {object.object} silentPluginCfg.pluginConfig - Plugin specific options.
-     * @param callback
-     */
-    InterpreterManager.prototype.run = function (name, silentPluginCfg, callback) {
-        var self = this;
-        getPlugin(name, function (err, plugin) {
-            self.logger.debug('Getting getPlugin in run.');
-            if (!err && plugin) {
-                var plugins = {},
-                    runWithConfiguration;
-                plugins[name] = plugin;
-                var pluginManager = new PluginManagerBase(self._client.getProjectObject(), Core, self.logger, plugins,
-                    self.gmeConfig);
-                pluginManager.initialize(null, function (pluginConfigs, configSaveCallback) {
-                    //#1: display config to user
-                    var noServerExecution = self.gmeConfig.plugin.allowServerExecution === false,
-                        hackedConfig = {
-                            'Global Options': [
-                                {
-                                    name: 'runOnServer',
-                                    displayName: 'Execute on Server',
-                                    description: noServerExecution ? 'Server side execution is disabled.' : '',
-                                    value: false, // this is the 'default config'
-                                    valueType: 'boolean',
-                                    readOnly: noServerExecution
-                                }
-                            ]
-                        },
-                        i, j, d, len;
-
-                    for (i in pluginConfigs) {
-                        if (pluginConfigs.hasOwnProperty(i)) {
-                            hackedConfig[i] = pluginConfigs[i];
-
-                            // retrieve user settings from previous run
-                            if (self._savedConfigs.hasOwnProperty(i)) {
-                                var iConfig = self._savedConfigs[i];
-                                len = hackedConfig[i].length;
-
-                                while (len--) {
-                                    if (iConfig.hasOwnProperty(hackedConfig[i][len].name)) {
-                                        hackedConfig[i][len].value = iConfig[hackedConfig[i][len].name];
-                                    }
-                                }
-
-                            }
-                        }
-                    }
-
-                    runWithConfiguration = function (updatedConfig) {
-                        //when Save&Run is clicked in the dialog (or silentPluginCfg was passed)
-                        var globalconfig = updatedConfig['Global Options'],
-                            activeNode,
-                            activeSelection;
-                        delete updatedConfig['Global Options'];
-
-                        activeNode = silentPluginCfg.activeNode;
-                        if (!activeNode && WebGMEGlobal && WebGMEGlobal.State) {
-                            activeNode = WebGMEGlobal.State.getActiveObject();
-                        }
-                        activeSelection = silentPluginCfg.activeSelection;
-                        if (!activeSelection && WebGMEGlobal && WebGMEGlobal.State) {
-                            activeSelection = WebGMEGlobal.State.getActiveSelection();
-                        }
-                        // save config from user
-                        for (i in updatedConfig) {
-                            self._savedConfigs[i] = updatedConfig[i];
-                        }
-
-                        //#2: save it back and run the plugin
-                        if (configSaveCallback) {
-                            configSaveCallback(updatedConfig);
-
-                            // TODO: If global config says try to merge branch then we
-                            // TODO: should pass the name of the branch.
-                            var config = {
-                                project: self._client.getActiveProjectName(),
-                                token: '',
-                                activeNode: activeNode, // active object in the editor
-                                activeSelection: activeSelection || [],
-                                commit: self._client.getActualCommit(), //#668b3babcdf2ddcd7ba38b51acb62d63da859d90,
-
-                                // this has priority over the commit if not null
-                                branchName: self._client.getActualBranch()
-                            };
-
-                            if (globalconfig.runOnServer === true || silentPluginCfg.runOnServer === true) {
-                                var context = {
-                                    managerConfig: config,
-                                    pluginConfigs: updatedConfig
-                                };
-                                self._client.runServerPlugin(name, context, function (err, result) {
-                                    if (err) {
-                                        self.logger.error(err);
-                                        callback(new PluginResult()); //TODO return proper error result
-                                    } else {
-                                        var resultObject = new PluginResult(result);
-                                        callback(resultObject);
-                                    }
-                                });
-                            } else {
-                                config.blobClient = new BlobClient();
-
-                                pluginManager.executePlugin(name, config, function (err, result) {
-                                    if (err) {
-                                        self.logger.error(err);
-                                    }
-                                    callback(result);
-                                });
-                            }
-                        }
-                    };
-
-                    if (silentPluginCfg) {
-                        var updatedConfig = {};
-                        for (i in hackedConfig) {
-                            updatedConfig[i] = {};
-                            len = hackedConfig[i].length;
-                            while (len--) {
-                                updatedConfig[i][hackedConfig[i][len].name] = hackedConfig[i][len].value;
-                            }
-
-                            if (silentPluginCfg && silentPluginCfg.pluginConfig) {
-                                for (j in silentPluginCfg.pluginConfig) {
-                                    updatedConfig[i][j] = silentPluginCfg.pluginConfig[j];
-                                }
-                            }
-                        }
-                        runWithConfiguration(updatedConfig);
-                    } else {
-                        d = new PluginConfigDialog();
-                        silentPluginCfg = {};
-                        d.show(hackedConfig, runWithConfiguration);
-                    }
-                });
-            } else {
-                self.logger.error(err);
-                self.logger.error('unable to load plugin');
-                callback(null); //TODO proper result
-            }
-        });
-    };
-
-    //TODO: Somehow it would feel more right if we do run in async mode, but if not then we should provide getState and
-    //TODO: getResult synchronous functions as well.
-
-    return InterpreterManager;
-});
-
-!function(e){if("object"==typeof exports&&"undefined"!=typeof module)module.exports=e();else if("function"==typeof define&&define.amd)define('lib/superagent/superagent-1.1.0',[],e);else{var f;"undefined"!=typeof window?f=window:"undefined"!=typeof global?f=global:"undefined"!=typeof self&&(f=self),f.superagent=e()}}(function(){var define,module,exports;return (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
+!function(e){if("object"==typeof exports&&"undefined"!=typeof module)module.exports=e();else if("function"==typeof define&&define.amd)define('superagent',[],e);else{var f;"undefined"!=typeof window?f=window:"undefined"!=typeof global?f=global:"undefined"!=typeof self&&(f=self),f.superagent=e()}}(function(){var define,module,exports;return (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
 /**
  * Module dependencies.
  */
@@ -23843,7 +18478,7 @@ var reduce = require('reduce');
  */
 
 var root = 'undefined' == typeof window
-  ? this
+  ? (this || self)
   : window;
 
 /**
@@ -23882,7 +18517,8 @@ function isHost(obj) {
 
 request.getXHR = function () {
   if (root.XMLHttpRequest
-    && ('file:' != root.location.protocol || !root.ActiveXObject)) {
+      && (!root.location || 'file:' != root.location.protocol
+          || !root.ActiveXObject)) {
     return new XMLHttpRequest;
   } else {
     try { return new ActiveXObject('Microsoft.XMLHTTP'); } catch(e) {}
@@ -24218,6 +18854,11 @@ Response.prototype.parseBody = function(str){
  */
 
 Response.prototype.setStatusProperties = function(status){
+  // handle IE9 bug: http://stackoverflow.com/questions/10046972/msie-returns-status-code-of-1223-for-ajax-request
+  if (status === 1223) {
+    status = 204;
+  }
+
   var type = status / 100 | 0;
 
   // status / class
@@ -24235,7 +18876,7 @@ Response.prototype.setStatusProperties = function(status){
 
   // sugar
   this.accepted = 202 == status;
-  this.noContent = 204 == status || 1223 == status;
+  this.noContent = 204 == status;
   this.badRequest = 400 == status;
   this.unauthorized = 401 == status;
   this.notAcceptable = 406 == status;
@@ -24743,12 +19384,18 @@ Request.prototype.end = function(fn){
   };
 
   // progress
+  var handleProgress = function(e){
+    if (e.total > 0) {
+      e.percent = e.loaded / e.total * 100;
+    }
+    self.emit('progress', e);
+  };
+  if (this.hasListeners('progress')) {
+    xhr.onprogress = handleProgress;
+  }
   try {
     if (xhr.upload && this.hasListeners('progress')) {
-      xhr.upload.onprogress = function(e){
-        e.percent = e.loaded / e.total * 100;
-        self.emit('progress', e);
-      };
+      xhr.upload.onprogress = handleProgress;
     }
   } catch(e) {
     // Accessing xhr.upload fails in IE from a web worker, so just pretend it doesn't exist.
@@ -25121,7 +19768,7 @@ Emitter.prototype.hasListeners = function(event){
  * TODO: combatible error handling?
  */
 
-module.exports = function(arr, fn, initial){  
+module.exports = function(arr, fn, initial){
   var idx = 0;
   var len = arr.length;
   var curr = arguments.length == 3
@@ -25131,10 +19778,3547 @@ module.exports = function(arr, fn, initial){
   while (idx < len) {
     curr = fn.call(null, curr, arr[idx], ++idx, arr);
   }
-  
+
   return curr;
 };
 },{}]},{},[1])(1)
+});
+/*globals define, escape*/
+/*jshint browser: true, node:true*/
+
+/**
+ * Client module for accessing the blob.
+ *
+ * @author lattmann / https://github.com/lattmann
+ * @author ksmyth / https://github.com/ksmyth
+ */
+
+define('blob/BlobClient',['blob/Artifact', 'blob/BlobMetadata', 'superagent'], function (Artifact, BlobMetadata, superagent) {
+
+
+    var BlobClient = function (parameters) {
+        this.artifacts = [];
+
+        if (parameters) {
+            this.server = parameters.server || this.server;
+            this.serverPort = parameters.serverPort || this.serverPort;
+            this.httpsecure = (parameters.httpsecure !== undefined) ? parameters.httpsecure : this.httpsecure;
+            this.webgmeclientsession = parameters.webgmeclientsession;
+            this.keepaliveAgentOptions = parameters.keepaliveAgentOptions || { /* use defaults */ };
+        } else {
+            this.keepaliveAgentOptions = { /* use defaults */ };
+        }
+        this.blobUrl = '';
+        if (this.httpsecure !== undefined && this.server && this.serverPort) {
+            this.blobUrl = (this.httpsecure ? 'https://' : 'http://') + this.server + ':' + this.serverPort;
+        }
+
+        // TODO: TOKEN???
+        this.blobUrl = this.blobUrl + '/rest/blob/'; // TODO: any ways to ask for this or get it from the configuration?
+
+        this.isNodeOrNodeWebKit = typeof process !== 'undefined';
+        if (this.isNodeOrNodeWebKit) {
+            // node or node-webkit
+            if (this.httpsecure) {
+                this.Agent = require('agentkeepalive').HttpsAgent;
+            } else {
+                this.Agent = require('agentkeepalive');
+            }
+            if (this.keepaliveAgentOptions.hasOwnProperty('ca') === false) {
+                this.keepaliveAgentOptions.ca = require('https').globalAgent.options.ca;
+            }
+            this.keepaliveAgent = new this.Agent(this.keepaliveAgentOptions);
+        }
+    };
+
+    BlobClient.prototype.getMetadataURL = function (hash) {
+        var metadataBase = this.blobUrl + 'metadata';
+        if (hash) {
+            return metadataBase + '/' + hash;
+        } else {
+            return metadataBase;
+        }
+    };
+
+    BlobClient.prototype._getURL = function (base, hash, subpath) {
+        var subpathURL = '';
+        if (subpath) {
+            subpathURL = subpath;
+        }
+        return this.blobUrl + base + '/' + hash + '/' + encodeURIComponent(subpathURL);
+    };
+
+    BlobClient.prototype.getViewURL = function (hash, subpath) {
+        return this._getURL('view', hash, subpath);
+    };
+
+    BlobClient.prototype.getDownloadURL = function (hash, subpath) {
+        return this._getURL('download', hash, subpath);
+    };
+
+    BlobClient.prototype.getCreateURL = function (filename, isMetadata) {
+        if (isMetadata) {
+            return this.blobUrl + 'createMetadata/';
+        } else {
+            return this.blobUrl + 'createFile/' + encodeURIComponent(filename);
+        }
+    };
+
+    BlobClient.prototype.putFile = function (name, data, callback) {
+        var contentLength,
+            req;
+
+        function toArrayBuffer(buffer) {
+            var ab = new ArrayBuffer(buffer.length);
+            var view = new Uint8Array(ab);
+            for (var i = 0; i < buffer.length; ++i) {
+                view[i] = buffer[i];
+            }
+            return ab;
+        }
+
+        // On node-webkit, we use XMLHttpRequest, but xhr.send thinks a Buffer is a string and encodes it in utf-8 -
+        // send an ArrayBuffer instead.
+        if (typeof window !== 'undefined' && typeof Buffer !== 'undefined' && data instanceof Buffer) {
+            data = toArrayBuffer(data); // FIXME will this have performance problems
+        }
+        // on node, empty Buffers will cause a crash in superagent
+        if (typeof window === 'undefined' && typeof Buffer !== 'undefined' && data instanceof Buffer) {
+            if (data.length === 0) {
+                data = '';
+            }
+        }
+        contentLength = data.hasOwnProperty('length') ? data.length : data.byteLength;
+        req = superagent.post(this.getCreateURL(name));
+
+        if (typeof window === 'undefined') {
+            req.agent(this.keepaliveAgent);
+        }
+
+        if (this.webgmeclientsession) {
+            req.set('webgmeclientsession', this.webgmeclientsession);
+        }
+        if (typeof data !== 'string' && !(data instanceof String)) {
+            req.set('Content-Length', contentLength)
+        }
+        req.set('Content-Type', 'application/octet-stream')
+            .send(data)
+            .end(function (err, res) {
+                if (err || res.status > 399) {
+                    callback(err || res.status);
+                    return;
+                }
+                var response = res.body;
+                // Get the first one
+                var hash = Object.keys(response)[0];
+                callback(null, hash);
+            });
+    };
+
+    BlobClient.prototype.putMetadata = function (metadataDescriptor, callback) {
+        var metadata = new BlobMetadata(metadataDescriptor),
+            blob,
+            contentLength,
+            req;
+        // FIXME: in production mode do not indent the json file.
+        if (typeof Blob !== 'undefined') {
+            blob = new Blob([JSON.stringify(metadata.serialize(), null, 4)], {type: 'text/plain'});
+            contentLength = blob.size;
+        } else {
+            blob = new Buffer(JSON.stringify(metadata.serialize(), null, 4), 'utf8');
+            contentLength = blob.length;
+        }
+
+        req = superagent.post(this.getCreateURL(metadataDescriptor.name, true));
+        if (this.webgmeclientsession) {
+            req.set('webgmeclientsession', this.webgmeclientsession);
+        }
+
+        if (typeof window === 'undefined') {
+            req.agent(this.keepaliveAgent);
+        }
+
+        req.set('Content-Type', 'application/octet-stream')
+            .set('Content-Length', contentLength)
+            .send(blob)
+            .end(function (err, res) {
+                if (err || res.status > 399) {
+                    callback(err || res.status);
+                    return;
+                }
+                // Uploaded.
+                var response = JSON.parse(res.text);
+                // Get the first one
+                var hash = Object.keys(response)[0];
+                callback(null, hash);
+            });
+    };
+
+    BlobClient.prototype.putFiles = function (o, callback) {
+        var self = this,
+            error = '',
+            filenames = Object.keys(o),
+            remaining = filenames.length,
+            hashes = {},
+            putFile;
+        if (remaining === 0) {
+            callback(null, hashes);
+        }
+        putFile = function (filename, data) {
+            self.putFile(filename, data, function (err, hash) {
+                remaining -= 1;
+
+                hashes[filename] = hash;
+
+                if (err) {
+                    error += 'putFile error: ' + err.toString();
+                }
+
+                if (remaining === 0) {
+                    callback(error, hashes);
+                }
+            });
+        };
+
+        for (var j = 0; j < filenames.length; j += 1) {
+            putFile(filenames[j], o[filenames[j]]);
+        }
+    };
+
+    BlobClient.prototype.getSubObject = function (hash, subpath, callback) {
+        return this.getObject(hash, callback, subpath);
+    };
+
+    BlobClient.prototype.getObject = function (hash, callback, subpath) {
+        superagent.parse['application/zip'] = function (obj, parseCallback) {
+            if (parseCallback) {
+                // Running on node; this should be unreachable due to req.pipe() below
+            } else {
+                return obj;
+            }
+        };
+        //superagent.parse['application/json'] = superagent.parse['application/zip'];
+
+        var req = superagent.get(this.getViewURL(hash, subpath));
+        if (this.webgmeclientsession) {
+            req.set('webgmeclientsession', this.webgmeclientsession);
+        }
+
+        if (typeof window === 'undefined') {
+            req.agent(this.keepaliveAgent);
+        }
+
+        if (req.pipe) {
+            // running on node
+            var Writable = require('stream').Writable;
+            var BuffersWritable = function (options) {
+                Writable.call(this, options);
+
+                var self = this;
+                self.buffers = [];
+            };
+            require('util').inherits(BuffersWritable, Writable);
+
+            BuffersWritable.prototype._write = function (chunk, encoding, callback) {
+                this.buffers.push(chunk);
+                callback();
+            };
+
+            var buffers = new BuffersWritable();
+            buffers.on('finish', function () {
+                if (req.req.res.statusCode > 399) {
+                    return callback(req.req.res.statusCode);
+                }
+                callback(null, Buffer.concat(buffers.buffers));
+            });
+            buffers.on('error', function (err) {
+                callback(err);
+            });
+            req.pipe(buffers);
+        } else {
+            req.removeAllListeners('end');
+            req.on('request', function () {
+                if (typeof this.xhr !== 'undefined') {
+                    this.xhr.responseType = 'arraybuffer';
+                }
+            });
+            // req.on('error', callback);
+            req.on('end', function () {
+                if (req.xhr.status > 399) {
+                    callback(req.xhr.status);
+                } else {
+                    var contentType = req.xhr.getResponseHeader('content-type');
+                    var response = req.xhr.response; // response is an arraybuffer
+                    if (contentType === 'application/json') {
+                        var utf8ArrayToString = function (uintArray) {
+                            var inputString = '',
+                                i;
+                            for (i = 0; i < uintArray.byteLength; i++) {
+                                inputString += String.fromCharCode(uintArray[i]);
+                            }
+                            return decodeURIComponent(escape(inputString));
+                        };
+                        response = JSON.parse(utf8ArrayToString(new Uint8Array(response)));
+                    }
+                    callback(null, response);
+                }
+            });
+            req.end(callback);
+        }
+    };
+
+    BlobClient.prototype.getMetadata = function (hash, callback) {
+        var req = superagent.get(this.getMetadataURL(hash));
+        if (this.webgmeclientsession) {
+            req.set('webgmeclientsession', this.webgmeclientsession);
+        }
+
+        if (typeof window === 'undefined') {
+            req.agent(this.keepaliveAgent);
+        }
+
+        req.end(function (err, res) {
+            if (err || res.status > 399) {
+                callback(err || res.status);
+            } else {
+                callback(null, JSON.parse(res.text));
+            }
+        });
+    };
+
+    BlobClient.prototype.createArtifact = function (name) {
+        var artifact = new Artifact(name, this);
+        this.artifacts.push(artifact);
+        return artifact;
+    };
+
+    BlobClient.prototype.getArtifact = function (metadataHash, callback) {
+        // TODO: get info check if complex flag is set to true.
+        // TODO: get info get name.
+        var self = this;
+        this.getMetadata(metadataHash, function (err, info) {
+            if (err) {
+                callback(err);
+                return;
+            }
+
+            if (info.contentType === BlobMetadata.CONTENT_TYPES.COMPLEX) {
+                var artifact = new Artifact(info.name, self, info);
+                self.artifacts.push(artifact);
+                callback(null, artifact);
+            } else {
+                callback('not supported contentType ' + JSON.stringify(info, null, 4));
+            }
+
+        });
+    };
+
+    BlobClient.prototype.saveAllArtifacts = function (callback) {
+        var remaining = this.artifacts.length,
+            hashes = [],
+            error = '',
+            saveCallback;
+
+        if (remaining === 0) {
+            callback(null, hashes);
+        }
+
+        saveCallback = function (err, hash) {
+            remaining -= 1;
+
+            hashes.push(hash);
+
+            if (err) {
+                error += 'artifact.save err: ' + err.toString();
+            }
+            if (remaining === 0) {
+                callback(error, hashes);
+            }
+        };
+
+        for (var i = 0; i < this.artifacts.length; i += 1) {
+
+            this.artifacts[i].save(saveCallback);
+        }
+    };
+
+    return BlobClient;
+});
+
+/*globals define*/
+/*jshint browser: true, node:true*/
+
+/**
+ * Client module for creating, monitoring executor jobs.
+ *
+ * @author lattmann / https://github.com/lattmann
+ * @author ksmyth / https://github.com/ksmyth
+ */
+
+
+define('executor/ExecutorClient',['superagent'], function (superagent) {
+
+
+    var ExecutorClient = function (parameters) {
+        parameters = parameters || {};
+        this.isNodeJS = (typeof window === 'undefined') && (typeof process === 'object');
+        this.isNodeWebkit = (typeof window === 'object') && (typeof process === 'object');
+        //console.log(isNode);
+        if (this.isNodeJS) {
+            this.server = '127.0.0.1';
+            this._clientSession = null; // parameters.sessionId;;
+        }
+        this.server = parameters.server || this.server;
+        this.serverPort = parameters.serverPort || this.serverPort;
+        this.httpsecure = (parameters.httpsecure !== undefined) ? parameters.httpsecure : this.httpsecure;
+        if (this.isNodeJS) {
+            this.http = this.httpsecure ? require('https') : require('http');
+        }
+        this.executorUrl = '';
+        if (this.httpsecure !== undefined && this.server && this.serverPort) {
+            this.executorUrl = (this.httpsecure ? 'https://' : 'http://') + this.server + ':' + this.serverPort;
+        }
+        // TODO: TOKEN???
+        // TODO: any ways to ask for this or get it from the configuration?
+        this.executorUrl = this.executorUrl + '/rest/executor/';
+        if (parameters.executorNonce) {
+            this.executorNonce = parameters.executorNonce;
+        }
+    };
+
+    ExecutorClient.prototype.getInfoURL = function (hash) {
+        var metadataBase = this.executorUrl + 'info';
+        if (hash) {
+            return metadataBase + '/' + hash;
+        } else {
+            return metadataBase;
+        }
+    };
+
+
+    ExecutorClient.prototype.getCreateURL = function (hash) {
+        var metadataBase = this.executorUrl + 'create';
+        if (hash) {
+            return metadataBase + '/' + hash;
+        } else {
+            return metadataBase;
+        }
+    };
+
+    ExecutorClient.prototype.createJob = function (jobInfo, callback) {
+        if (typeof jobInfo === 'string') {
+            jobInfo = { hash: jobInfo }; // old API
+        }
+        this.sendHttpRequestWithData('POST', this.getCreateURL(jobInfo.hash), jobInfo, function (err, response) {
+            if (err) {
+                callback(err);
+                return;
+            }
+
+            callback(null, JSON.parse(response));
+        });
+    };
+
+    ExecutorClient.prototype.updateJob = function (jobInfo, callback) {
+        this.sendHttpRequestWithData('POST', this.executorUrl + 'update/' + jobInfo.hash, jobInfo,
+            function (err, response) {
+                if (err) {
+                    callback(err);
+                    return;
+                }
+
+                callback(null, response);
+            }
+        );
+    };
+
+    ExecutorClient.prototype.getInfo = function (hash, callback) {
+        this.sendHttpRequest('GET', this.getInfoURL(hash), function (err, response) {
+            if (err) {
+                callback(err);
+                return;
+            }
+
+            callback(null, JSON.parse(response));
+        });
+    };
+
+    ExecutorClient.prototype.getAllInfo = function (callback) {
+
+        this.sendHttpRequest('GET', this.getInfoURL(), function (err, response) {
+            if (err) {
+                callback(err);
+                return;
+            }
+
+            callback(null, JSON.parse(response));
+        });
+    };
+
+    ExecutorClient.prototype.getInfoByStatus = function (status, callback) {
+
+        this.sendHttpRequest('GET', this.executorUrl + '?status=' + status, function (err, response) {
+            if (err) {
+                callback(err);
+                return;
+            }
+
+            callback(null, JSON.parse(response));
+        });
+    };
+
+    ExecutorClient.prototype.getWorkersInfo = function (callback) {
+
+        this.sendHttpRequest('GET', this.executorUrl + 'worker', function (err, response) {
+            if (err) {
+                callback(err);
+                return;
+            }
+
+            callback(null, JSON.parse(response));
+        });
+    };
+
+    ExecutorClient.prototype.sendHttpRequest = function (method, url, callback) {
+        return this.sendHttpRequestWithData(method, url, null, callback);
+    };
+
+    ExecutorClient.prototype.sendHttpRequestWithData = function (method, url, data, callback) {
+        var req = new superagent.Request(method, url);
+        if (this.executorNonce) {
+            req.set('x-executor-nonce', this.executorNonce);
+        }
+        if (data) {
+            req.send(data);
+        }
+        req.end(function (err, res) {
+            if (err) {
+                callback(err);
+                return;
+            }
+            if (res.status > 399) {
+                callback(res.status, res.text);
+            } else {
+                callback(null, res.text);
+            }
+        });
+    };
+
+    ExecutorClient.prototype._ensureAuthenticated = function (options, callback) {
+        //this function enables the session of the client to be authenticated
+        //TODO currently this user does not have a session, so it has to upgrade the options always!!!
+//        if (options.headers) {
+//            options.headers.webgmeclientsession = this._clientSession;
+//        } else {
+//            options.headers = {
+//                'webgmeclientsession': this._clientSession
+//            }
+//        }
+        callback(null, options);
+    };
+
+    return ExecutorClient;
+});
+
+/*globals define*/
+/*jshint browser: true, node:true*/
+
+/**
+ * @author lattmann / https://github.com/lattmann
+ */
+
+define('plugin/PluginConfig',[], function () {
+
+    /**
+     * Initializes a new instance of plugin configuration.
+     *
+     * Note: this object is JSON serializable see serialize method.
+     *
+     * @param config - deserializes an existing configuration to this object.
+     * @constructor
+     */
+    var PluginConfig = function (config) {
+        if (config) {
+            var keys = Object.keys(config);
+            for (var i = 0; i < keys.length; i += 1) {
+                // TODO: check for type on deserialization
+                this[keys[i]] = config[keys[i]];
+            }
+        }
+    };
+
+    /**
+     * Serializes this object to a JSON representation.
+     *
+     * @returns {{}}
+     */
+    PluginConfig.prototype.serialize = function () {
+        var keys = Object.keys(this);
+        var result = {};
+
+        for (var i = 0; i < keys.length; i += 1) {
+            // TODO: check for type on serialization
+            result[keys[i]] = this[keys[i]];
+        }
+
+        return result;
+    };
+
+
+    return PluginConfig;
+});
+/*globals define*/
+/*jshint browser: true, node:true*/
+
+/**
+ * @author lattmann / https://github.com/lattmann
+ */
+
+
+define('plugin/PluginNodeDescription',[], function () {
+
+    /**
+     * Initializes a new instance of plugin node description object.
+     *
+     * Note: this object is JSON serializable see serialize method.
+     *
+     * @param config - deserializes an existing configuration to this object.
+     * @constructor
+     */
+    var PluginNodeDescription = function (config) {
+        if (config) {
+            this.name = config.name;
+            this.id = config.id;
+        } else {
+            this.name = '';
+            this.id = '';
+        }
+    };
+
+    /**
+     * Serializes this object to a JSON representation.
+     *
+     * @returns {{}}
+     */
+    PluginNodeDescription.prototype.serialize = function () {
+        var keys = Object.keys(this),
+            result = {},
+            i;
+
+        for (i = 0; i < keys.length; i += 1) {
+            // TODO: check for type on serialization
+            result[keys[i]] = this[keys[i]];
+        }
+
+        return result;
+    };
+
+    return PluginNodeDescription;
+});
+/*globals define*/
+/*jshint browser: true, node:true*/
+
+/**
+ * @author lattmann / https://github.com/lattmann
+ */
+
+
+define('plugin/PluginMessage',['plugin/PluginNodeDescription'], function (PluginNodeDescription) {
+
+
+    /**
+     * Initializes a new instance of plugin message.
+     *
+     * Note: this object is JSON serializable see serialize method.
+     *
+     * @param config - deserializes an existing configuration to this object.
+     * @constructor
+     */
+    var PluginMessage = function (config) {
+        if (config) {
+            this.commitHash = config.commitHash;
+            if (config.activeNode instanceof PluginNodeDescription) {
+                this.activeNode = config.activeNode;
+            } else {
+                this.activeNode = new PluginNodeDescription(config.activeNode);
+            }
+
+            this.message = config.message;
+            if (config.severity) {
+                this.severity = config.severity;
+            } else {
+                this.severity = 'info';
+            }
+        } else {
+            this.commitHash = '';
+            this.activeNode = new PluginNodeDescription();
+            this.message = '';
+            this.severity = 'info';
+        }
+    };
+
+    /**
+     * Serializes this object to a JSON representation.
+     *
+     * @returns {{}}
+     */
+    PluginMessage.prototype.serialize = function () {
+        var result = {
+            commitHash: this.commitHash,
+            activeNode: this.activeNode.serialize(),
+            message: this.message,
+            severity: this.severity
+        };
+
+        return result;
+    };
+
+    return PluginMessage;
+});
+/*globals define*/
+/*jshint browser: true, node:true*/
+
+/**
+ * @author lattmann / https://github.com/lattmann
+ */
+
+
+define('plugin/PluginResult',['plugin/PluginMessage'], function (PluginMessage) {
+
+    /**
+     * Initializes a new instance of a plugin result object.
+     *
+     * Note: this object is JSON serializable see serialize method.
+     *
+     * @param config - deserializes an existing configuration to this object.
+     * @constructor
+     */
+    var PluginResult = function (config) {
+        var pluginMessage,
+            i;
+        if (config) {
+            this.success = config.success;
+            this.pluginName = config.pluginName;
+            this.startTime = config.startTime;
+            this.finishTime = config.finishTime;
+            this.messages = [];
+            this.artifacts = config.artifacts;
+            this.error = config.error;
+            this.commits = config.commits;
+
+            for (i = 0; i < config.messages.length; i += 1) {
+                if (config.messages[i] instanceof PluginMessage) {
+                    pluginMessage = config.messages[i];
+                } else {
+                    pluginMessage = new PluginMessage(config.messages[i]);
+                }
+                this.messages.push(pluginMessage);
+            }
+        } else {
+            this.success = false;
+            this.messages = []; // array of PluginMessages
+            this.artifacts = []; // array of hashes
+            this.pluginName = 'PluginName N/A';
+            this.startTime = null;
+            this.finishTime = null;
+            this.error = null;
+            this.commits = [];
+        }
+    };
+
+    /**
+     * Gets the success flag of this result object
+     *
+     * @returns {boolean}
+     */
+    PluginResult.prototype.getSuccess = function () {
+        return this.success;
+    };
+
+    /**
+     * Sets the success flag of this result.
+     *
+     * @param {boolean} value
+     */
+    PluginResult.prototype.setSuccess = function (value) {
+        this.success = value;
+    };
+
+    /**
+     * Returns with the plugin messages.
+     *
+     * @returns {plugin.PluginMessage[]}
+     */
+    PluginResult.prototype.getMessages = function () {
+        return this.messages;
+    };
+
+    /**
+     * Adds a new plugin message to the messages list.
+     *
+     * @param {plugin.PluginMessage} pluginMessage
+     */
+    PluginResult.prototype.addMessage = function (pluginMessage) {
+        this.messages.push(pluginMessage);
+    };
+
+    PluginResult.prototype.getArtifacts = function () {
+        return this.artifacts;
+    };
+
+    PluginResult.prototype.addArtifact = function (hash) {
+        this.artifacts.push(hash);
+    };
+
+    /**
+     *
+     * @param {object} commitData
+     * @param {string} commitData.commitHash - hash of the commit.
+     * @param {string} commitData.status - storage.constants./SYNCH/FORKED.
+     * @param {string} commitData.branchName - name of branch that got updated with the commitHash.
+     */
+    PluginResult.prototype.addCommit = function (commitData) {
+        this.commits.push(commitData);
+    };
+
+    /**
+     * Gets the name of the plugin to which the result object belongs to.
+     *
+     * @returns {string}
+     */
+    PluginResult.prototype.getPluginName = function () {
+        return this.pluginName;
+    };
+
+    //------------------------------------------------------------------------------------------------------------------
+    //--------------- Methods used by the plugin manager
+
+    /**
+     * Sets the name of the plugin to which the result object belongs to.
+     *
+     * @param pluginName - name of the plugin
+     */
+    PluginResult.prototype.setPluginName = function (pluginName) {
+        this.pluginName = pluginName;
+    };
+
+    /**
+     * Gets the ISO 8601 representation of the time when the plugin started its execution.
+     *
+     * @returns {string}
+     */
+    PluginResult.prototype.getStartTime = function () {
+        return this.startTime;
+    };
+
+    /**
+     * Sets the ISO 8601 representation of the time when the plugin started its execution.
+     *
+     * @param {string} time
+     */
+    PluginResult.prototype.setStartTime = function (time) {
+        this.startTime = time;
+    };
+
+    /**
+     * Gets the ISO 8601 representation of the time when the plugin finished its execution.
+     *
+     * @returns {string}
+     */
+    PluginResult.prototype.getFinishTime = function () {
+        return this.finishTime;
+    };
+
+    /**
+     * Sets the ISO 8601 representation of the time when the plugin finished its execution.
+     *
+     * @param {string} time
+     */
+    PluginResult.prototype.setFinishTime = function (time) {
+        this.finishTime = time;
+    };
+
+    /**
+     * Gets error if any error occured during execution.
+     * FIXME: should this be an Error object?
+     * @returns {string}
+     */
+    PluginResult.prototype.getError = function () {
+        return this.error;
+    };
+
+    /**
+     * Sets the error string if any error occured during execution.
+     * FIXME: should this be an Error object?
+     * @param {string} time
+     */
+    PluginResult.prototype.setError = function (error) {
+        this.error = error;
+    };
+
+    /**
+     * Serializes this object to a JSON representation.
+     *
+     * @returns {{success: boolean, messages: plugin.PluginMessage[], pluginName: string, finishTime: stirng}}
+     */
+    PluginResult.prototype.serialize = function () {
+        var result = {
+            success: this.success,
+            messages: [],
+            commits: this.commits,
+            artifacts: this.artifacts,
+            pluginName: this.pluginName,
+            startTime: this.startTime,
+            finishTime: this.finishTime,
+            error: this.error
+        },
+            i;
+
+        for (i = 0; i < this.messages.length; i += 1) {
+            result.messages.push(this.messages[i].serialize());
+        }
+
+        return result;
+    };
+
+    return PluginResult;
+});
+/*globals define*/
+/*jshint browser: true, node:true*/
+
+/**
+ * This is the base class that plugins should inherit from.
+ * (Using the plugin-generator - the generated plugin will do that.)
+ *
+ * @author lattmann / https://github.com/lattmann
+ */
+
+define('plugin/PluginBase',[
+    'plugin/PluginConfig',
+    'plugin/PluginResult',
+    'plugin/PluginMessage',
+    'plugin/PluginNodeDescription',
+    'common/storage/constants',
+], function (PluginConfig, PluginResult, PluginMessage, PluginNodeDescription, STORAGE_CONSTANTS) {
+
+
+    /**
+     * Initializes a new instance of a plugin object, which should be a derived class.
+     *
+     * @constructor
+     */
+    var PluginBase = function () {
+        // set by initialize
+        this.logger = null;
+        this.blobClient = null;
+        this._currentConfig = null;
+
+        // set by configure
+        this.core = null;
+        this.project = null;
+        this.projectName = null;
+        this.branchName = null;
+        this.branchHash = null;
+        this.commitHash = null;
+        this.currentHash = null;
+        this.rootNode = null;
+        this.activeNode = null;
+        this.activeSelection = [];
+        this.META = null;
+
+        this.result = null;
+        this.isConfigured = false;
+        this.gmeConfig = null;
+    };
+
+    //--------------------------------------------------------------------------------------------------------------
+    //---------- Methods must be overridden by the derived classes
+
+    /**
+     * Main function for the plugin to execute. This will perform the execution.
+     * Notes:
+     * - do NOT use console.log use this.logger.[error,warning,info,debug] instead
+     * - do NOT put any user interaction logic UI, etc. inside this function
+     * - callback always have to be called even if error happened
+     *
+     * @param {function(string, plugin.PluginResult)} callback - the result callback
+     */
+    PluginBase.prototype.main = function (/*callback*/) {
+        throw new Error('implement this function in the derived class');
+    };
+
+    /**
+     * Readable name of this plugin that can contain spaces.
+     *
+     * @returns {string}
+     */
+    PluginBase.prototype.getName = function () {
+        throw new Error('implement this function in the derived class - getting type automatically is a bad idea,' +
+            'when the js scripts are minified names are useless.');
+    };
+
+    //--------------------------------------------------------------------------------------------------------------
+    //---------- Methods could be overridden by the derived classes
+
+    /**
+     * Current version of this plugin using semantic versioning.
+     * @returns {string}
+     */
+    PluginBase.prototype.getVersion = function () {
+        return '0.1.0';
+    };
+
+    /**
+     * A detailed description of this plugin and its purpose. It can be one or more sentences.
+     *
+     * @returns {string}
+     */
+    PluginBase.prototype.getDescription = function () {
+        return '';
+    };
+
+    /**
+     * Configuration structure with names, descriptions, minimum, maximum values, default values and
+     * type definitions.
+     *
+     * Example:
+     *
+     * [{
+         *    "name": "logChildrenNames",
+         *    "displayName": "Log Children Names",
+         *    "description": '',
+         *    "value": true, // this is the 'default config'
+         *    "valueType": "boolean",
+         *    "readOnly": false
+         * },{
+         *    "name": "logLevel",
+         *    "displayName": "Logger level",
+         *    "description": '',
+         *    "value": "info",
+         *    "valueType": "string",
+         *    "valueItems": [
+         *          "debug",
+         *          "info",
+         *          "warn",
+         *          "error"
+         *      ],
+         *    "readOnly": false
+         * },{
+         *    "name": "maxChildrenToLog",
+         *    "displayName": "Maximum children to log",
+         *    "description": 'Set this parameter to blabla',
+         *    "value": 4,
+         *    "minValue": 1,
+         *    "valueType": "number",
+         *    "readOnly": false
+         * }]
+     *
+     * @returns {object[]}
+     */
+    PluginBase.prototype.getConfigStructure = function () {
+        return [];
+    };
+
+    //--------------------------------------------------------------------------------------------------------------
+    //---------- Methods that can be used by the derived classes
+
+    /**
+     * Updates the current success flag with a new value.
+     *
+     * NewValue = OldValue && Value
+     *
+     * @param {boolean} value - apply this flag on current success value
+     * @param {string|null} message - optional detailed message
+     */
+    PluginBase.prototype.updateSuccess = function (value, message) {
+        var prevSuccess = this.result.getSuccess();
+        var newSuccessValue = prevSuccess && value;
+
+        this.result.setSuccess(newSuccessValue);
+        var msg = '';
+        if (message) {
+            msg = ' - ' + message;
+        }
+
+        this.logger.debug('Success was updated from ' + prevSuccess + ' to ' + newSuccessValue + msg);
+    };
+
+    /**
+     * WebGME can export the META types as path and this method updates the generated domain specific types with
+     * webgme node objects. These can be used to define the base class of new objects created through the webgme API.
+     *
+     * @param {object} generatedMETA
+     */
+    PluginBase.prototype.updateMETA = function (generatedMETA) {
+        var name;
+        for (name in this.META) {
+            if (this.META.hasOwnProperty(name)) {
+                generatedMETA[name] = this.META[name];
+            }
+        }
+
+        // TODO: check if names are not the same
+        // TODO: log if META is out of date
+    };
+
+    /**
+     * Checks if the given node is of the given meta-type.
+     * Usage: <tt>self.isMetaTypeOf(aNode, self.META['FCO']);</tt>
+     * @param node - Node to be checked for type.
+     * @param metaNode - Node object defining the meta type.
+     * @returns {boolean} - True if the given object was of the META type.
+     */
+    PluginBase.prototype.isMetaTypeOf = function (node, metaNode) {
+        var self = this;
+        while (node) {
+            if (self.core.getGuid(node) === self.core.getGuid(metaNode)) {
+                return true;
+            }
+            node = self.core.getBase(node);
+        }
+        return false;
+    };
+
+    /**
+     * Finds and returns the node object defining the meta type for the given node.
+     * @param node - Node to be checked for type.
+     * @returns {Object} - Node object defining the meta type of node.
+     */
+    PluginBase.prototype.getMetaType = function (node) {
+        var self = this,
+            name;
+        while (node) {
+            name = self.core.getAttribute(node, 'name');
+            if (self.META.hasOwnProperty(name) && self.core.getGuid(node) === self.core.getGuid(self.META[name])) {
+                break;
+            }
+            node = self.core.getBase(node);
+        }
+        return node;
+    };
+
+    /**
+     * Returns true if node is a direct instance of a meta-type node (or a meta-type node itself).
+     * @param node - Node to be checked.
+     * @returns {boolean}
+     */
+    PluginBase.prototype.baseIsMeta = function (node) {
+        var self = this,
+            baseName,
+            baseNode = self.core.getBase(node);
+        if (!baseNode) {
+            // FCO does not have a base node, by definition function returns true.
+            return true;
+        }
+        baseName = self.core.getAttribute(baseNode, 'name');
+        return self.META.hasOwnProperty(baseName) &&
+            self.core.getGuid(self.META[baseName]) === self.core.getGuid(baseNode);
+    };
+
+    /**
+     * Gets the current configuration of the plugin that was set by the user and plugin manager.
+     *
+     * @returns {object}
+     */
+    PluginBase.prototype.getCurrentConfig = function () {
+        return this._currentConfig;
+    };
+
+    /**
+     * Creates a new message for the user and adds it to the result.
+     *
+     * @param {object} node - webgme object which is related to the message
+     * @param {string} message - feedback to the user
+     * @param {string} severity - severity level of the message: 'debug', 'info' (default), 'warning', 'error'.
+     */
+    PluginBase.prototype.createMessage = function (node, message, severity) {
+        var severityLevel = severity || 'info';
+        //this occurence of the function will always handle a single node
+
+        var descriptor = new PluginNodeDescription({
+            name: node ? this.core.getAttribute(node, 'name') : '',
+            id: node ? this.core.getPath(node) : ''
+        });
+        var pluginMessage = new PluginMessage({
+            commitHash: this.currentHash,
+            activeNode: descriptor,
+            message: message,
+            severity: severityLevel
+        });
+
+        this.result.addMessage(pluginMessage);
+    };
+
+    /**
+     * Saves all current changes if there is any to a new commit.
+     * If the changes were started from a branch, then tries to fast forward the branch to the new commit.
+     * Note: Does NOT handle any merges at this point.
+     *
+     * @param {string|null} message - commit message
+     * @param callback
+     */
+    PluginBase.prototype.save = function (message, callback) {
+        var self = this,
+            persisted,
+            commitMessage = '[Plugin] ' + self.getName() + ' (v' + self.getVersion() + ') updated the model.';
+
+        commitMessage = message ? commitMessage + ' - ' + message : commitMessage;
+
+        self.logger.debug('Saving project');
+        persisted = self.core.persist(self.rootNode);
+        if (Object.keys(persisted.objects).length === 0) {
+            self.logger.warn('save invoked with no changes, will still proceed');
+        }
+        if (self.branch) {
+            self._commitWithClient(persisted, commitMessage, callback);
+        } else {
+            // Make commit w/o depending on a client.
+            self._makeCommit(persisted, commitMessage, callback);
+        }
+    };
+
+    PluginBase.prototype._commitWithClient = function (persisted, commitMessage, callback) {
+        var self = this,
+            forkName;
+        if (self.currentHash !== self.branch.getLocalHash()) {
+            // If the client has made local changes  since the plugin started - create a new branch.
+            forkName = self.forkName || self.branchName + '_' + (new Date()).getTime();
+            self.logger.warn('Client has made local change since the plugin started in "' + self.branchName + '". ' +
+                'Trying to create a new branch "' + forkName + '".');
+            self.branch = null; // Set the branch to null - from now on the plugin is detached from the client branch.
+            self.project.makeCommit(null,
+                [self.currentHash],
+                persisted.rootHash,
+                persisted.objects,
+                commitMessage,
+                function (err, commitResult) {
+                    var originalBranchName;
+                    if (err) {
+                        self.logger.error('project.makeCommit failed.');
+                        callback(err);
+                        return;
+                    }
+                    self.commitHash = commitResult.hash;
+                    self.project.setBranchHash(forkName, commitResult.hash, '',
+                        function (err, updateResult) {
+                            if (err) {
+                                self.logger.error('setBranchHash failed with error.');
+                                callback(err);
+                                return;
+                            }
+                            self.currentHash = commitResult.hash;
+                            if (updateResult.status === STORAGE_CONSTANTS.SYNCH) {
+                                self.logger.info('"' + self.branchName + '" was updated to the new commit.' +
+                                    '(Successive saves will try to save to this new branch.)');
+                                self.branchName = forkName;
+                                self.addCommitToResult(STORAGE_CONSTANTS.FORKED);
+
+                                callback(null, {status: STORAGE_CONSTANTS.FORKED, forkName: forkName});
+
+                            } else if (updateResult.status === STORAGE_CONSTANTS.FORKED) {
+                                originalBranchName = self.branchName;
+                                self.branchName = null;
+                                self.addCommitToResult(STORAGE_CONSTANTS.FORKED);
+                                callback('Plugin got forked from "' + originalBranchName + '". ' +
+                                    'And got forked from name "' + forkName + '" too.');
+                            }
+                        }
+                    );
+
+                }
+            );
+        } else {
+            var commitObject,
+                updateData;
+
+            commitObject = self.project.makeCommit(self.branch.name,
+                [self.currentHash],
+                persisted.rootHash,
+                persisted.objects,
+                commitMessage,
+                function (err, commmitResult) {
+                    if (err) {
+                        self.logger.error('project.makeCommit failed in _commitWithClient.');
+                        callback(err);
+                        return;
+                    }
+                    self.currentHash = commmitResult.hash;
+
+                    if (commmitResult.status === STORAGE_CONSTANTS.SYNCH) {
+                        self.logger.info('"' + self.branchName + '" was updated to the new commit.');
+
+                        self.addCommitToResult(STORAGE_CONSTANTS.SYNCH);
+
+                        callback(null, {status: STORAGE_CONSTANTS.SYNCH});
+                    } else if (commmitResult.status === STORAGE_CONSTANTS.FORKED) {
+                        self.logger.warn('Plugin and client are forked from "' + self.branchName + '". ');
+                        // Set the branch to null - from now on the plugin is detached from the client branch.
+                        self.branch = null;
+                        self._createFork(callback);
+                    } else {
+                        callback('makeCommit returned unexpected status, ' + commmitResult.status);
+                    }
+                }
+            );
+
+            // Locally update the client with the new data.
+            updateData = {
+                projectName: self.projectName,
+                branchName: self.branchName,
+                commitObject: commitObject,
+                coreObjects: persisted.objects
+            };
+
+            self.branch.localUpdateHandler(self.branch.getUpdateQueue(), updateData, function (aborted) {
+                if (aborted) {
+                    self.logger.warn('Updates were not loaded in client. Expect a fork..');
+                }
+            });
+        }
+    };
+
+    PluginBase.prototype._makeCommit = function (persisted, commitMessage, callback) {
+        var self = this;
+        self.project.makeCommit(null,
+            [self.currentHash],
+            persisted.rootHash,
+            persisted.objects,
+            commitMessage,
+            function (err, commitResult) {
+                if (err) {
+                    self.logger.error('project.makeCommit failed.');
+                    callback(err);
+                    return;
+                }
+                self.project.setBranchHash(self.branchName, commitResult.hash, self.currentHash,
+                    function (err, updateResult) {
+                        if (err) {
+                            self.logger.error('setBranchHash failed with error.');
+                            callback(err);
+                            return;
+                        }
+                        self.currentHash = commitResult.hash;
+                        if (updateResult.status === STORAGE_CONSTANTS.SYNCH) {
+                            self.logger.info('"' + self.branchName + '" was updated to the new commit.');
+
+                            self.addCommitToResult(STORAGE_CONSTANTS.SYNCH);
+
+                            callback(null, {status: STORAGE_CONSTANTS.SYNCH});
+                        } else if (updateResult.status === STORAGE_CONSTANTS.FORKED) {
+                            self._createFork(callback);
+                        } else {
+                            callback('setBranchHash returned unexpected status' + updateResult.status);
+                        }
+                    }
+                );
+            }
+        );
+    };
+
+    PluginBase.prototype._createFork = function (callback) {
+        // User can set self.forkName, but must make sure it is unique.
+        var self = this,
+            oldBranchName = self.branchName,
+            forkName = self.forkName || self.branchName + '_' + (new Date()).getTime();
+        self.logger.warn('Plugin got forked from "' + self.branchName + '". ' +
+            'Trying to create a new branch "' + forkName + '".');
+        self.project.createBranch(forkName, self.currentHash, function (err, forkResult) {
+            if (err) {
+                self.logger.error('createBranch failed with error.');
+                callback(err);
+                return;
+            }
+            if (forkResult.status === STORAGE_CONSTANTS.SYNCH) {
+                self.branchName = forkName;
+                self.logger.info('"' + self.branchName + '" was updated to the new commit.' +
+                    '(Successive saves will try to save to this new branch.)');
+                self.addCommitToResult(STORAGE_CONSTANTS.FORKED);
+
+                callback(null, {status: STORAGE_CONSTANTS.FORKED, forkName: forkName});
+
+            } else if (forkResult.status === STORAGE_CONSTANTS.FORKED) {
+                self.branchName = null;
+                self.addCommitToResult(STORAGE_CONSTANTS.FORKED);
+
+                callback('Plugin got forked from "' + oldBranchName + '". ' +
+                    'And got forked from "' + forkName + '" too.');
+            } else {
+                callback('createBranch returned unexpected status' + forkResult.status);
+            }
+        });
+    };
+
+    PluginBase.prototype.addCommitToResult = function (status) {
+        var newCommit = {
+            commitHash: this.currentHash,
+            branchName: this.branchName,
+            status: status
+        };
+        this.result.addCommit(newCommit);
+        this.logger.debug('newCommit added', newCommit);
+    };
+
+    //--------------------------------------------------------------------------------------------------------------
+    //---------- Methods that are used by the Plugin Manager. Derived classes should not use these methods
+
+    /**
+     * Initializes the plugin with objects that can be reused within the same plugin instance.
+     *
+     * @param {logManager} logger - logging capability to console (or file) based on PluginManager configuration
+     * @param {blob.BlobClient} blobClient - virtual file system where files can be generated then saved as a zip file.
+     * @param {object} gmeConfig - global configuration for webGME.
+     */
+    PluginBase.prototype.initialize = function (logger, blobClient, gmeConfig) {
+        if (logger) {
+            this.logger = logger;
+        } else {
+            this.logger = console;
+        }
+        if (!gmeConfig) {
+            // TODO: Remove this check at some point
+            throw new Error('gmeConfig was not provided to Plugin.initialize!');
+        }
+        this.blobClient = blobClient;
+        this.gmeConfig = gmeConfig;
+
+        this._currentConfig = null;
+        // initialize default configuration
+        this.setCurrentConfig(this.getDefaultConfig());
+
+        this.isConfigured = false;
+    };
+
+    /**
+     * Configures this instance of the plugin for a specific execution. This function is called before the main by
+     * the PluginManager.
+     * Initializes the result with a new object.
+     *
+     * @param {PluginContext} config - specific context: project, branch, core, active object and active selection.
+     */
+    PluginBase.prototype.configure = function (config) {
+        this.core = config.core;
+        this.project = config.project;
+        this.branch = config.branch;  // This is only for client side.
+        this.projectName = config.projectName;
+        this.branchName = config.branchName;
+        this.branchHash = config.branchName ? config.commitHash : null;
+
+        this.commitHash = config.commitHash;
+        this.currentHash = config.commitHash;
+
+        this.rootNode = config.rootNode;
+        this.activeNode = config.activeNode;
+        this.activeSelection = config.activeSelection;
+        this.META = config.META;
+
+        this.result = new PluginResult();
+
+        this.addCommitToResult(STORAGE_CONSTANTS.SYNCH);
+
+        this.isConfigured = true;
+    };
+
+    /**
+     * Gets the default configuration based on the configuration structure for this plugin.
+     *
+     * @returns {plugin.PluginConfig}
+     */
+    PluginBase.prototype.getDefaultConfig = function () {
+        var configStructure = this.getConfigStructure();
+
+        var defaultConfig = new PluginConfig();
+
+        for (var i = 0; i < configStructure.length; i += 1) {
+            defaultConfig[configStructure[i].name] = configStructure[i].value;
+        }
+
+        return defaultConfig;
+    };
+
+    /**
+     * Sets the current configuration of the plugin.
+     *
+     * @param {object} newConfig - this is the actual configuration and NOT the configuration structure.
+     */
+    PluginBase.prototype.setCurrentConfig = function (newConfig) {
+        this._currentConfig = newConfig;
+    };
+
+    return PluginBase;
+});
+
+/*globals define*/
+/*jshint browser: true, node:true*/
+
+/**
+ * @author lattmann / https://github.com/lattmann
+ */
+
+define('plugin/PluginContext',[], function () {
+
+
+    /**
+     * Initializes a new instance of PluginContext. This context is set through PluginBase.configure method for a given
+     * plugin instance and execution.
+     *
+     * @constructor
+     */
+    var PluginContext = function () {
+
+        // TODO: something like this
+//        context.project = project;
+//        context.projectName = config.project;
+//        context.core = new Core(context.project);
+//        context.commitHash = config.commit;
+//        context.selected = config.selected;
+//        context.storage = null;
+
+    };
+
+
+    return PluginContext;
+});
+/*globals define*/
+/*jshint browser: true, node:true*/
+
+/**
+ * @author lattmann / https://github.com/lattmann
+ */
+
+// TODO: Use PluginManagerConfiguration
+// TODO: Load ActiveSelection objects and pass it correctly
+// TODO: Add more statistics to the result object
+// TODO: Result object rename name -> pluginName, time -> finishTime)
+// TODO: Make this class testable
+// TODO: PluginManager should download the plugins
+
+
+define('plugin/PluginManagerBase',['plugin/PluginBase', 'plugin/PluginContext'], function (PluginBase, PluginContext) {
+
+
+        var PluginManagerBase = function (storage, Core, logger, plugins, gmeConfig) {
+            this.gmeConfig = gmeConfig; // global configuration of webgme
+            this.logger = logger.fork('PluginManager');
+            this._Core = Core;       // webgme core class is used to operate on objects
+            this._storage = storage; // webgme storage (project)
+            this._plugins = plugins; // key value pair of pluginName: pluginType - plugins are already loaded/downloaded
+            this._pluginConfigs = {}; // keeps track of the current configuration for each plugins by name
+
+            if (!this.gmeConfig) {
+                // TODO: this error check is temporary
+                throw new Error('PluginManagerBase takes gmeConfig as parameter!');
+            }
+
+            var pluginNames = Object.keys(this._plugins);
+            for (var i = 0; i < pluginNames.length; i += 1) {
+                var p = new this._plugins[pluginNames[i]]();
+                this._pluginConfigs[pluginNames[i]] = p.getDefaultConfig();
+            }
+        };
+
+        PluginManagerBase.prototype.initialize = function (managerConfiguration, configCallback, callbackContext) {
+            var self = this,
+                pluginName,
+                plugins = this._plugins;
+
+            //#1: PluginManagerBase should load the plugins
+
+            //#2: PluginManagerBase iterates through each plugin and collects the config data
+            var pluginConfigs = {};
+
+            for (pluginName in plugins) {
+                if (plugins.hasOwnProperty(pluginName)) {
+                    var plugin = new plugins[pluginName]();
+                    pluginConfigs[pluginName] = plugin.getConfigStructure();
+                }
+            }
+
+            if (configCallback) {
+                configCallback.call(callbackContext, pluginConfigs, function (updatedPluginConfig) {
+                    for (pluginName in updatedPluginConfig) {
+                        if (updatedPluginConfig.hasOwnProperty(pluginName)) {
+                            //save it back to the plugin
+                            self._pluginConfigs[pluginName] = updatedPluginConfig[pluginName];
+                        }
+                    }
+                });
+            }
+        };
+
+        /**
+         * Gets a new instance of a plugin by name.
+         *
+         * @param {string} name
+         * @returns {plugin.PluginBase}
+         */
+        PluginManagerBase.prototype.getPluginByName = function (name) {
+            return this._plugins[name];
+        };
+
+        PluginManagerBase.prototype.loadMetaNodes = function (pluginContext, callback) {
+            var self = this;
+
+            this.logger.debug('Loading meta nodes');
+
+            // get meta members
+            var metaIDs = pluginContext.core.getMemberPaths(pluginContext.rootNode, 'MetaAspectSet');
+
+            var len = metaIDs.length;
+
+            var nodeObjs = [];
+
+
+            var allObjectsLoadedHandler = function () {
+                var len2 = nodeObjs.length;
+
+                var nameObjMap = {};
+
+                while (len2--) {
+                    var nodeObj = nodeObjs[len2];
+
+                    nameObjMap[pluginContext.core.getAttribute(nodeObj, 'name')] = nodeObj;
+                }
+
+                pluginContext.META = nameObjMap;
+
+                self.logger.debug('Meta nodes are loaded');
+
+                callback(null, pluginContext);
+            };
+
+            var loadedMetaObjectHandler = function (err, nodeObj) {
+                nodeObjs.push(nodeObj);
+
+                if (nodeObjs.length === metaIDs.length) {
+                    allObjectsLoadedHandler();
+                }
+            };
+
+            while (len--) {
+                pluginContext.core.loadByPath(pluginContext.rootNode, metaIDs[len], loadedMetaObjectHandler);
+            }
+        };
+
+        /**
+         *
+         * @param {plugin.PluginManagerConfiguration} managerConfiguration
+         * @param {function} callback
+         */
+        PluginManagerBase.prototype.getPluginContext = function (managerConfiguration, callback) {
+            var self = this,
+                pluginContext = new PluginContext();
+
+            // TODO: check if callback is a function
+            // based on the string values get the node objects
+            // 1) Open project
+            // 2) Load branch OR commit hash
+            // 3) Load rootNode
+            // 4) Load active object
+            // 5) Load active selection
+            // 6) Update context
+            // 7) return
+
+            pluginContext.project = this._storage;
+            pluginContext.projectName = managerConfiguration.project;
+            pluginContext.branchName = managerConfiguration.branchName;
+            pluginContext.branch = pluginContext.project.getBranch(pluginContext.branchName, true);
+            pluginContext.core = new self._Core(pluginContext.project, {
+                globConf: self.gmeConfig,
+                logger: self.logger.fork('core') //TODO: This logger should probably fork from the plugin logger
+            });
+            pluginContext.commitHash = managerConfiguration.commit;
+            pluginContext.activeNode = null;    // active object
+            pluginContext.activeSelection = []; // selected objects
+
+
+            // add activeSelection
+            function loadActiveSelectionAndMetaNodes() {
+                var remaining = managerConfiguration.activeSelection.length,
+                    i;
+                function loadNodeByNode(selectedNodePath) {
+                    pluginContext.core.loadByPath(pluginContext.rootNode, selectedNodePath,
+                        function (err, selectedNode) {
+                                remaining -= 1;
+
+                                if (err) {
+                                self.logger.warn('unable to load active selection: ' + selectedNodePath);
+                                } else {
+                                pluginContext.activeSelection.push(selectedNode);
+                                }
+
+                                if (remaining === 0) {
+                                    // all nodes from active selection are loaded
+                                    self.loadMetaNodes(pluginContext, callback);
+                                }
+                        }
+                    );
+                }
+                if (managerConfiguration.activeSelection.length === 0) {
+                    self.loadMetaNodes(pluginContext, callback);
+                } else {
+                    for (i = 0; i < managerConfiguration.activeSelection.length; i += 1) {
+                        loadNodeByNode(managerConfiguration.activeSelection[i]);
+                    }
+                    }
+                }
+
+            // add activeNode
+            function loadCommitHashAndRun(commitHash) {
+                self.logger.info('Loading commit ' + commitHash);
+                pluginContext.project.getCommits(commitHash, 1, function (err, commitObjects) {
+                    var commitObj;
+                    if (err || commitObjects.length !== 1) {
+                        if (err) {
+                            callback(err, pluginContext);
+                        } else {
+                            self.logger.error('commitObjects', commitObjects);
+                            callback('getCommits did not return with one commit', pluginContext);
+                        }
+                        return;
+                    }
+
+                    commitObj = commitObjects[0];
+
+                    if (typeof commitObj === 'undefined' || commitObj === null) {
+                        callback('cannot find commit', pluginContext);
+                        return;
+                    }
+
+                    if (managerConfiguration.rootHash && commitObj.root !== managerConfiguration.rootHash) {
+                        // This is a sanity check for the client state handling..
+                        self.logger.error('Root hash for commit-object, is not the same as passed from the client.' +
+                        'commitHash, rootHash, given rootHash:',
+                            commitHash, commitObj.root, managerConfiguration.rootHash);
+                    }
+
+                    pluginContext.core.loadRoot(commitObj.root, function (err, rootNode) {
+                        if (err) {
+                            callback('unable to load root', pluginContext);
+                            return;
+                        }
+
+                        pluginContext.rootNode = rootNode;
+                        if (typeof managerConfiguration.activeNode === 'string') {
+                            pluginContext.core.loadByPath(pluginContext.rootNode, managerConfiguration.activeNode,
+                                function (err, activeNode) {
+                                if (err) {
+                                        callback('unable to load selected object', pluginContext);
+                                    return;
+                                }
+
+                                pluginContext.activeNode = activeNode;
+                                loadActiveSelectionAndMetaNodes();
+                                }
+                            );
+                        } else {
+                            pluginContext.activeNode = null;
+                            loadActiveSelectionAndMetaNodes();
+                        }
+                    });
+                });
+            }
+
+            // load commit hash and run based on branch name or commit hash
+            if (managerConfiguration.branchName) {
+                pluginContext.project.getBranchNames(function (err, branchNames) {
+                    self.logger.debug(branchNames);
+
+                        pluginContext.commitHash = branchNames[managerConfiguration.branchName] || pluginContext.commitHash;
+                        pluginContext.branchName = managerConfiguration.branchName;
+                        loadCommitHashAndRun(pluginContext.commitHash);
+                });
+            } else {
+                loadCommitHashAndRun(pluginContext.commitHash);
+            }
+
+        };
+
+        PluginManagerBase.prototype.executePlugin = function (name, managerConfiguration, callback) {
+            // TODO: check if name is a string
+            // TODO: check if managerConfiguration is an instance of PluginManagerConfiguration
+            // TODO: check if callback is a function
+            var self = this,
+                mainCallbackCalls = 0,
+                multiCallbackHandled = false;
+
+            var PluginClass = this.getPluginByName(name);
+
+            var plugin = new PluginClass();
+
+            var pluginLogger = this.logger.fork('gme:plugin:' + name, true);
+
+            plugin.initialize(pluginLogger, managerConfiguration.blobClient, self.gmeConfig);
+
+            plugin.setCurrentConfig(this._pluginConfigs[name]);
+            for (var key in managerConfiguration.pluginConfig) {
+                if (managerConfiguration.pluginConfig.hasOwnProperty(key) &&
+                    plugin._currentConfig.hasOwnProperty(key)) {
+
+                    plugin._currentConfig[key] = managerConfiguration.pluginConfig[key];
+                }
+            }
+            self.getPluginContext(managerConfiguration, function (err, pluginContext) {
+                if (err) {
+                    // TODO: this has to return with an empty PluginResult object and NOT with null.
+                    callback(err, null);
+                    return;
+
+                }
+
+                plugin.configure(pluginContext);
+
+                var startTime = (new Date()).toISOString();
+
+                plugin.main(function (err, result) {
+                    var stackTrace;
+                    mainCallbackCalls += 1;
+                    // set common information (meta info) about the plugin and measured execution times
+                    result.setFinishTime((new Date()).toISOString());
+                    result.setStartTime(startTime);
+
+                    result.setPluginName(plugin.getName());
+
+                    if (mainCallbackCalls > 1) {
+                        stackTrace = new Error().stack;
+                        self.logger.error('The main callback is being called more than once!', {metadata: stackTrace});
+                        result.setError('The main callback is being called more than once!');
+                        if (multiCallbackHandled === true) {
+                            plugin.createMessage(null, stackTrace);
+                            return;
+                        }
+                        multiCallbackHandled = true;
+                        result.setSuccess(false);
+                        plugin.createMessage(null, 'The main callback is being called more than once.');
+                        plugin.createMessage(null, stackTrace);
+                        callback('The main callback is being called more than once!', result);
+                    } else {
+                        result.setError(err);
+                        callback(err, result);
+                    }
+                });
+
+            });
+
+        };
+
+
+        return PluginManagerBase;
+    });
+define('js/Dialogs/PluginConfig/PluginConfigDialog',[], function () {
+   return;
+});
+
+/*globals define, WebGMEGlobal, requirejs*/
+/*jshint browser: true*/
+
+/**
+ * @author rkereskenyi / https://github.com/rkereskenyi
+ * @author lattmann / https://github.com/lattmann
+ * @author pmeijer / https://github.com/pmeijer
+ */
+
+define('js/Utils/InterpreterManager',[
+    'common/core/core',
+    'plugin/PluginManagerBase',
+    'plugin/PluginResult',
+    'blob/BlobClient',
+    'js/Dialogs/PluginConfig/PluginConfigDialog',
+    'js/logger'
+], function (Core, PluginManagerBase, PluginResult, BlobClient, PluginConfigDialog, Logger) {
+
+
+
+    var InterpreterManager = function (client, gmeConfig) {
+        this._client = client;
+        //this._manager = new PluginManagerBase();
+        this.gmeConfig = gmeConfig;
+        this._savedConfigs = {};
+        this.logger = Logger.create('gme:InterpreterManager', gmeConfig.client.log);
+        this.logger.debug('InterpreterManager ctor');
+    };
+
+    var getPlugin = function (name, callback) {
+        if (WebGMEGlobal && WebGMEGlobal.plugins && WebGMEGlobal.plugins.hasOwnProperty(name)) {
+            callback(null, WebGMEGlobal.plugins[name]);
+        } else {
+            requirejs(['/plugin/' + name + '/' + name + '/' + name],
+                function (InterpreterClass) {
+                    callback(null, InterpreterClass);
+                },
+                function (err) {
+                    callback(err, null);
+                }
+            );
+        }
+    };
+
+    /**
+     *
+     * @param {string} name - name of plugin to be executed.
+     * @param {object} silentPluginCfg - if falsy dialog window will be shown.
+     * @param {object.string} silentPluginCfg.activeNode - Path to activeNode.
+     * @param {object.Array.<string>} silentPluginCfg.activeSelection - Paths to nodes in activeSelection.
+     * @param {object.boolean} silentPluginCfg.runOnServer - Whether to run the plugin on the server or not.
+     * @param {object.object} silentPluginCfg.pluginConfig - Plugin specific options.
+     * @param callback
+     */
+    InterpreterManager.prototype.run = function (name, silentPluginCfg, callback) {
+        var self = this;
+        getPlugin(name, function (err, plugin) {
+            self.logger.debug('Getting getPlugin in run.');
+            if (!err && plugin) {
+                var plugins = {},
+                    runWithConfiguration;
+                plugins[name] = plugin;
+                var pluginManager = new PluginManagerBase(self._client.getProjectObject(), Core, self.logger, plugins,
+                    self.gmeConfig);
+                pluginManager.initialize(null, function (pluginConfigs, configSaveCallback) {
+                    //#1: display config to user
+                    var noServerExecution = self.gmeConfig.plugin.allowServerExecution === false,
+                        hackedConfig = {
+                            'Global Options': [
+                                {
+                                    name: 'runOnServer',
+                                    displayName: 'Execute on Server',
+                                    description: noServerExecution ? 'Server side execution is disabled.' : '',
+                                    value: false, // this is the 'default config'
+                                    valueType: 'boolean',
+                                    readOnly: noServerExecution
+                                }
+                            ]
+                        },
+                        i, j, d, len;
+
+                    for (i in pluginConfigs) {
+                        if (pluginConfigs.hasOwnProperty(i)) {
+                            hackedConfig[i] = pluginConfigs[i];
+
+                            // retrieve user settings from previous run
+                            if (self._savedConfigs.hasOwnProperty(i)) {
+                                var iConfig = self._savedConfigs[i];
+                                len = hackedConfig[i].length;
+
+                                while (len--) {
+                                    if (iConfig.hasOwnProperty(hackedConfig[i][len].name)) {
+                                        hackedConfig[i][len].value = iConfig[hackedConfig[i][len].name];
+                                    }
+                                }
+
+                            }
+                        }
+                    }
+
+                    runWithConfiguration = function (updatedConfig) {
+                        //when Save&Run is clicked in the dialog (or silentPluginCfg was passed)
+                        var globalconfig = updatedConfig['Global Options'],
+                            activeNode,
+                            activeSelection;
+                        delete updatedConfig['Global Options'];
+
+                        activeNode = silentPluginCfg.activeNode;
+                        if (!activeNode && WebGMEGlobal && WebGMEGlobal.State) {
+                            activeNode = WebGMEGlobal.State.getActiveObject();
+                        }
+                        activeSelection = silentPluginCfg.activeSelection;
+                        if (!activeSelection && WebGMEGlobal && WebGMEGlobal.State) {
+                            activeSelection = WebGMEGlobal.State.getActiveSelection();
+                        }
+                        // save config from user
+                        for (i in updatedConfig) {
+                            self._savedConfigs[i] = updatedConfig[i];
+                        }
+
+                        //#2: save it back and run the plugin
+                        if (configSaveCallback) {
+                            configSaveCallback(updatedConfig);
+
+                            // TODO: If global config says try to merge branch then we
+                            // TODO: should pass the name of the branch.
+                            var config = {
+                                project: self._client.getActiveProjectName(),
+                                token: '',
+                                activeNode: activeNode, // active object in the editor
+                                activeSelection: activeSelection || [],
+                                commit: self._client.getActiveCommitHash(), //#668b3babcdf2ddcd7ba38b51acb62d63da859d90,
+                                // This will get loaded too which will provide a sanity check on the client state.
+                                rootHash: self._client.getActiveRootHash(),
+                                branchName: self._client.getActiveBranchName()
+                            };
+
+                            if (globalconfig.runOnServer === true || silentPluginCfg.runOnServer === true) {
+                                var context = {
+                                    managerConfig: config,
+                                    pluginConfig: updatedConfig[name]
+                                };
+                                self._client.runServerPlugin(name, context, function (err, result) {
+                                    if (err) {
+                                        self.logger.error(err);
+                                        callback(new PluginResult()); //TODO return proper error result
+                                    } else {
+                                        var resultObject = new PluginResult(result);
+                                        callback(resultObject);
+                                    }
+                                });
+                            } else {
+                                config.blobClient = new BlobClient();
+
+                                pluginManager.executePlugin(name, config, function (err, result) {
+                                    if (err) {
+                                        self.logger.error(err);
+                                    }
+                                    callback(result);
+                                });
+                            }
+                        }
+                    };
+
+                    if (silentPluginCfg) {
+                        var updatedConfig = {};
+                        for (i in hackedConfig) {
+                            updatedConfig[i] = {};
+                            len = hackedConfig[i].length;
+                            while (len--) {
+                                updatedConfig[i][hackedConfig[i][len].name] = hackedConfig[i][len].value;
+                            }
+
+                            if (silentPluginCfg && silentPluginCfg.pluginConfig) {
+                                for (j in silentPluginCfg.pluginConfig) {
+                                    updatedConfig[i][j] = silentPluginCfg.pluginConfig[j];
+                                }
+                            }
+                        }
+                        runWithConfiguration(updatedConfig);
+                    } else {
+                        d = new PluginConfigDialog();
+                        silentPluginCfg = {};
+                        d.show(hackedConfig, runWithConfiguration);
+                    }
+                });
+            } else {
+                self.logger.error(err);
+                self.logger.error('unable to load plugin');
+                callback(null); //TODO proper result
+            }
+        });
+    };
+
+    //TODO: Somehow it would feel more right if we do run in async mode, but if not then we should provide getState and
+    //TODO: getResult synchronous functions as well.
+
+    return InterpreterManager;
+});
+
+!function(e){if("object"==typeof exports&&"undefined"!=typeof module)module.exports=e();else if("function"==typeof define&&define.amd)define('lib/superagent/superagent-1.2.0',[],e);else{var f;"undefined"!=typeof window?f=window:"undefined"!=typeof global?f=global:"undefined"!=typeof self&&(f=self),f.superagent=e()}}(function(){var define,module,exports;return (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
+/**
+ * Module dependencies.
+ */
+
+var Emitter = require('emitter');
+var reduce = require('reduce');
+
+/**
+ * Root reference for iframes.
+ */
+
+var root = 'undefined' == typeof window
+  ? (this || self)
+  : window;
+
+/**
+ * Noop.
+ */
+
+function noop(){};
+
+/**
+ * Check if `obj` is a host object,
+ * we don't want to serialize these :)
+ *
+ * TODO: future proof, move to compoent land
+ *
+ * @param {Object} obj
+ * @return {Boolean}
+ * @api private
+ */
+
+function isHost(obj) {
+  var str = {}.toString.call(obj);
+
+  switch (str) {
+    case '[object File]':
+    case '[object Blob]':
+    case '[object FormData]':
+      return true;
+    default:
+      return false;
+  }
+}
+
+/**
+ * Determine XHR.
+ */
+
+request.getXHR = function () {
+  if (root.XMLHttpRequest
+      && (!root.location || 'file:' != root.location.protocol
+          || !root.ActiveXObject)) {
+    return new XMLHttpRequest;
+  } else {
+    try { return new ActiveXObject('Microsoft.XMLHTTP'); } catch(e) {}
+    try { return new ActiveXObject('Msxml2.XMLHTTP.6.0'); } catch(e) {}
+    try { return new ActiveXObject('Msxml2.XMLHTTP.3.0'); } catch(e) {}
+    try { return new ActiveXObject('Msxml2.XMLHTTP'); } catch(e) {}
+  }
+  return false;
+};
+
+/**
+ * Removes leading and trailing whitespace, added to support IE.
+ *
+ * @param {String} s
+ * @return {String}
+ * @api private
+ */
+
+var trim = ''.trim
+  ? function(s) { return s.trim(); }
+  : function(s) { return s.replace(/(^\s*|\s*$)/g, ''); };
+
+/**
+ * Check if `obj` is an object.
+ *
+ * @param {Object} obj
+ * @return {Boolean}
+ * @api private
+ */
+
+function isObject(obj) {
+  return obj === Object(obj);
+}
+
+/**
+ * Serialize the given `obj`.
+ *
+ * @param {Object} obj
+ * @return {String}
+ * @api private
+ */
+
+function serialize(obj) {
+  if (!isObject(obj)) return obj;
+  var pairs = [];
+  for (var key in obj) {
+    if (null != obj[key]) {
+      pairs.push(encodeURIComponent(key)
+        + '=' + encodeURIComponent(obj[key]));
+    }
+  }
+  return pairs.join('&');
+}
+
+/**
+ * Expose serialization method.
+ */
+
+ request.serializeObject = serialize;
+
+ /**
+  * Parse the given x-www-form-urlencoded `str`.
+  *
+  * @param {String} str
+  * @return {Object}
+  * @api private
+  */
+
+function parseString(str) {
+  var obj = {};
+  var pairs = str.split('&');
+  var parts;
+  var pair;
+
+  for (var i = 0, len = pairs.length; i < len; ++i) {
+    pair = pairs[i];
+    parts = pair.split('=');
+    obj[decodeURIComponent(parts[0])] = decodeURIComponent(parts[1]);
+  }
+
+  return obj;
+}
+
+/**
+ * Expose parser.
+ */
+
+request.parseString = parseString;
+
+/**
+ * Default MIME type map.
+ *
+ *     superagent.types.xml = 'application/xml';
+ *
+ */
+
+request.types = {
+  html: 'text/html',
+  json: 'application/json',
+  xml: 'application/xml',
+  urlencoded: 'application/x-www-form-urlencoded',
+  'form': 'application/x-www-form-urlencoded',
+  'form-data': 'application/x-www-form-urlencoded'
+};
+
+/**
+ * Default serialization map.
+ *
+ *     superagent.serialize['application/xml'] = function(obj){
+ *       return 'generated xml here';
+ *     };
+ *
+ */
+
+ request.serialize = {
+   'application/x-www-form-urlencoded': serialize,
+   'application/json': JSON.stringify
+ };
+
+ /**
+  * Default parsers.
+  *
+  *     superagent.parse['application/xml'] = function(str){
+  *       return { object parsed from str };
+  *     };
+  *
+  */
+
+request.parse = {
+  'application/x-www-form-urlencoded': parseString,
+  'application/json': JSON.parse
+};
+
+/**
+ * Parse the given header `str` into
+ * an object containing the mapped fields.
+ *
+ * @param {String} str
+ * @return {Object}
+ * @api private
+ */
+
+function parseHeader(str) {
+  var lines = str.split(/\r?\n/);
+  var fields = {};
+  var index;
+  var line;
+  var field;
+  var val;
+
+  lines.pop(); // trailing CRLF
+
+  for (var i = 0, len = lines.length; i < len; ++i) {
+    line = lines[i];
+    index = line.indexOf(':');
+    field = line.slice(0, index).toLowerCase();
+    val = trim(line.slice(index + 1));
+    fields[field] = val;
+  }
+
+  return fields;
+}
+
+/**
+ * Return the mime type for the given `str`.
+ *
+ * @param {String} str
+ * @return {String}
+ * @api private
+ */
+
+function type(str){
+  return str.split(/ *; */).shift();
+};
+
+/**
+ * Return header field parameters.
+ *
+ * @param {String} str
+ * @return {Object}
+ * @api private
+ */
+
+function params(str){
+  return reduce(str.split(/ *; */), function(obj, str){
+    var parts = str.split(/ *= */)
+      , key = parts.shift()
+      , val = parts.shift();
+
+    if (key && val) obj[key] = val;
+    return obj;
+  }, {});
+};
+
+/**
+ * Initialize a new `Response` with the given `xhr`.
+ *
+ *  - set flags (.ok, .error, etc)
+ *  - parse header
+ *
+ * Examples:
+ *
+ *  Aliasing `superagent` as `request` is nice:
+ *
+ *      request = superagent;
+ *
+ *  We can use the promise-like API, or pass callbacks:
+ *
+ *      request.get('/').end(function(res){});
+ *      request.get('/', function(res){});
+ *
+ *  Sending data can be chained:
+ *
+ *      request
+ *        .post('/user')
+ *        .send({ name: 'tj' })
+ *        .end(function(res){});
+ *
+ *  Or passed to `.send()`:
+ *
+ *      request
+ *        .post('/user')
+ *        .send({ name: 'tj' }, function(res){});
+ *
+ *  Or passed to `.post()`:
+ *
+ *      request
+ *        .post('/user', { name: 'tj' })
+ *        .end(function(res){});
+ *
+ * Or further reduced to a single call for simple cases:
+ *
+ *      request
+ *        .post('/user', { name: 'tj' }, function(res){});
+ *
+ * @param {XMLHTTPRequest} xhr
+ * @param {Object} options
+ * @api private
+ */
+
+function Response(req, options) {
+  options = options || {};
+  this.req = req;
+  this.xhr = this.req.xhr;
+  // responseText is accessible only if responseType is '' or 'text' and on older browsers
+  this.text = ((this.req.method !='HEAD' && (this.xhr.responseType === '' || this.xhr.responseType === 'text')) || typeof this.xhr.responseType === 'undefined')
+     ? this.xhr.responseText
+     : null;
+  this.statusText = this.req.xhr.statusText;
+  this.setStatusProperties(this.xhr.status);
+  this.header = this.headers = parseHeader(this.xhr.getAllResponseHeaders());
+  // getAllResponseHeaders sometimes falsely returns "" for CORS requests, but
+  // getResponseHeader still works. so we get content-type even if getting
+  // other headers fails.
+  this.header['content-type'] = this.xhr.getResponseHeader('content-type');
+  this.setHeaderProperties(this.header);
+  this.body = this.req.method != 'HEAD'
+    ? this.parseBody(this.text ? this.text : this.xhr.response)
+    : null;
+}
+
+/**
+ * Get case-insensitive `field` value.
+ *
+ * @param {String} field
+ * @return {String}
+ * @api public
+ */
+
+Response.prototype.get = function(field){
+  return this.header[field.toLowerCase()];
+};
+
+/**
+ * Set header related properties:
+ *
+ *   - `.type` the content type without params
+ *
+ * A response of "Content-Type: text/plain; charset=utf-8"
+ * will provide you with a `.type` of "text/plain".
+ *
+ * @param {Object} header
+ * @api private
+ */
+
+Response.prototype.setHeaderProperties = function(header){
+  // content-type
+  var ct = this.header['content-type'] || '';
+  this.type = type(ct);
+
+  // params
+  var obj = params(ct);
+  for (var key in obj) this[key] = obj[key];
+};
+
+/**
+ * Parse the given body `str`.
+ *
+ * Used for auto-parsing of bodies. Parsers
+ * are defined on the `superagent.parse` object.
+ *
+ * @param {String} str
+ * @return {Mixed}
+ * @api private
+ */
+
+Response.prototype.parseBody = function(str){
+  var parse = request.parse[this.type];
+  return parse && str && (str.length || str instanceof Object)
+    ? parse(str)
+    : null;
+};
+
+/**
+ * Set flags such as `.ok` based on `status`.
+ *
+ * For example a 2xx response will give you a `.ok` of __true__
+ * whereas 5xx will be __false__ and `.error` will be __true__. The
+ * `.clientError` and `.serverError` are also available to be more
+ * specific, and `.statusType` is the class of error ranging from 1..5
+ * sometimes useful for mapping respond colors etc.
+ *
+ * "sugar" properties are also defined for common cases. Currently providing:
+ *
+ *   - .noContent
+ *   - .badRequest
+ *   - .unauthorized
+ *   - .notAcceptable
+ *   - .notFound
+ *
+ * @param {Number} status
+ * @api private
+ */
+
+Response.prototype.setStatusProperties = function(status){
+  // handle IE9 bug: http://stackoverflow.com/questions/10046972/msie-returns-status-code-of-1223-for-ajax-request
+  if (status === 1223) {
+    status = 204;
+  }
+
+  var type = status / 100 | 0;
+
+  // status / class
+  this.status = status;
+  this.statusType = type;
+
+  // basics
+  this.info = 1 == type;
+  this.ok = 2 == type;
+  this.clientError = 4 == type;
+  this.serverError = 5 == type;
+  this.error = (4 == type || 5 == type)
+    ? this.toError()
+    : false;
+
+  // sugar
+  this.accepted = 202 == status;
+  this.noContent = 204 == status;
+  this.badRequest = 400 == status;
+  this.unauthorized = 401 == status;
+  this.notAcceptable = 406 == status;
+  this.notFound = 404 == status;
+  this.forbidden = 403 == status;
+};
+
+/**
+ * Return an `Error` representative of this response.
+ *
+ * @return {Error}
+ * @api public
+ */
+
+Response.prototype.toError = function(){
+  var req = this.req;
+  var method = req.method;
+  var url = req.url;
+
+  var msg = 'cannot ' + method + ' ' + url + ' (' + this.status + ')';
+  var err = new Error(msg);
+  err.status = this.status;
+  err.method = method;
+  err.url = url;
+
+  return err;
+};
+
+/**
+ * Expose `Response`.
+ */
+
+request.Response = Response;
+
+/**
+ * Initialize a new `Request` with the given `method` and `url`.
+ *
+ * @param {String} method
+ * @param {String} url
+ * @api public
+ */
+
+function Request(method, url) {
+  var self = this;
+  Emitter.call(this);
+  this._query = this._query || [];
+  this.method = method;
+  this.url = url;
+  this.header = {};
+  this._header = {};
+  this.on('end', function(){
+    var err = null;
+    var res = null;
+
+    try {
+      res = new Response(self);
+    } catch(e) {
+      err = new Error('Parser is unable to parse the response');
+      err.parse = true;
+      err.original = e;
+      return self.callback(err);
+    }
+
+    self.emit('response', res);
+
+    if (err) {
+      return self.callback(err, res);
+    }
+
+    if (res.status >= 200 && res.status < 300) {
+      return self.callback(err, res);
+    }
+
+    var new_err = new Error(res.statusText || 'Unsuccessful HTTP response');
+    new_err.original = err;
+    new_err.response = res;
+    new_err.status = res.status;
+
+    self.callback(err || new_err, res);
+  });
+}
+
+/**
+ * Mixin `Emitter`.
+ */
+
+Emitter(Request.prototype);
+
+/**
+ * Allow for extension
+ */
+
+Request.prototype.use = function(fn) {
+  fn(this);
+  return this;
+}
+
+/**
+ * Set timeout to `ms`.
+ *
+ * @param {Number} ms
+ * @return {Request} for chaining
+ * @api public
+ */
+
+Request.prototype.timeout = function(ms){
+  this._timeout = ms;
+  return this;
+};
+
+/**
+ * Clear previous timeout.
+ *
+ * @return {Request} for chaining
+ * @api public
+ */
+
+Request.prototype.clearTimeout = function(){
+  this._timeout = 0;
+  clearTimeout(this._timer);
+  return this;
+};
+
+/**
+ * Abort the request, and clear potential timeout.
+ *
+ * @return {Request}
+ * @api public
+ */
+
+Request.prototype.abort = function(){
+  if (this.aborted) return;
+  this.aborted = true;
+  this.xhr.abort();
+  this.clearTimeout();
+  this.emit('abort');
+  return this;
+};
+
+/**
+ * Set header `field` to `val`, or multiple fields with one object.
+ *
+ * Examples:
+ *
+ *      req.get('/')
+ *        .set('Accept', 'application/json')
+ *        .set('X-API-Key', 'foobar')
+ *        .end(callback);
+ *
+ *      req.get('/')
+ *        .set({ Accept: 'application/json', 'X-API-Key': 'foobar' })
+ *        .end(callback);
+ *
+ * @param {String|Object} field
+ * @param {String} val
+ * @return {Request} for chaining
+ * @api public
+ */
+
+Request.prototype.set = function(field, val){
+  if (isObject(field)) {
+    for (var key in field) {
+      this.set(key, field[key]);
+    }
+    return this;
+  }
+  this._header[field.toLowerCase()] = val;
+  this.header[field] = val;
+  return this;
+};
+
+/**
+ * Remove header `field`.
+ *
+ * Example:
+ *
+ *      req.get('/')
+ *        .unset('User-Agent')
+ *        .end(callback);
+ *
+ * @param {String} field
+ * @return {Request} for chaining
+ * @api public
+ */
+
+Request.prototype.unset = function(field){
+  delete this._header[field.toLowerCase()];
+  delete this.header[field];
+  return this;
+};
+
+/**
+ * Get case-insensitive header `field` value.
+ *
+ * @param {String} field
+ * @return {String}
+ * @api private
+ */
+
+Request.prototype.getHeader = function(field){
+  return this._header[field.toLowerCase()];
+};
+
+/**
+ * Set Content-Type to `type`, mapping values from `request.types`.
+ *
+ * Examples:
+ *
+ *      superagent.types.xml = 'application/xml';
+ *
+ *      request.post('/')
+ *        .type('xml')
+ *        .send(xmlstring)
+ *        .end(callback);
+ *
+ *      request.post('/')
+ *        .type('application/xml')
+ *        .send(xmlstring)
+ *        .end(callback);
+ *
+ * @param {String} type
+ * @return {Request} for chaining
+ * @api public
+ */
+
+Request.prototype.type = function(type){
+  this.set('Content-Type', request.types[type] || type);
+  return this;
+};
+
+/**
+ * Set Accept to `type`, mapping values from `request.types`.
+ *
+ * Examples:
+ *
+ *      superagent.types.json = 'application/json';
+ *
+ *      request.get('/agent')
+ *        .accept('json')
+ *        .end(callback);
+ *
+ *      request.get('/agent')
+ *        .accept('application/json')
+ *        .end(callback);
+ *
+ * @param {String} accept
+ * @return {Request} for chaining
+ * @api public
+ */
+
+Request.prototype.accept = function(type){
+  this.set('Accept', request.types[type] || type);
+  return this;
+};
+
+/**
+ * Set Authorization field value with `user` and `pass`.
+ *
+ * @param {String} user
+ * @param {String} pass
+ * @return {Request} for chaining
+ * @api public
+ */
+
+Request.prototype.auth = function(user, pass){
+  var str = btoa(user + ':' + pass);
+  this.set('Authorization', 'Basic ' + str);
+  return this;
+};
+
+/**
+* Add query-string `val`.
+*
+* Examples:
+*
+*   request.get('/shoes')
+*     .query('size=10')
+*     .query({ color: 'blue' })
+*
+* @param {Object|String} val
+* @return {Request} for chaining
+* @api public
+*/
+
+Request.prototype.query = function(val){
+  if ('string' != typeof val) val = serialize(val);
+  if (val) this._query.push(val);
+  return this;
+};
+
+/**
+ * Write the field `name` and `val` for "multipart/form-data"
+ * request bodies.
+ *
+ * ``` js
+ * request.post('/upload')
+ *   .field('foo', 'bar')
+ *   .end(callback);
+ * ```
+ *
+ * @param {String} name
+ * @param {String|Blob|File} val
+ * @return {Request} for chaining
+ * @api public
+ */
+
+Request.prototype.field = function(name, val){
+  if (!this._formData) this._formData = new root.FormData();
+  this._formData.append(name, val);
+  return this;
+};
+
+/**
+ * Queue the given `file` as an attachment to the specified `field`,
+ * with optional `filename`.
+ *
+ * ``` js
+ * request.post('/upload')
+ *   .attach(new Blob(['<a id="a"><b id="b">hey!</b></a>'], { type: "text/html"}))
+ *   .end(callback);
+ * ```
+ *
+ * @param {String} field
+ * @param {Blob|File} file
+ * @param {String} filename
+ * @return {Request} for chaining
+ * @api public
+ */
+
+Request.prototype.attach = function(field, file, filename){
+  if (!this._formData) this._formData = new root.FormData();
+  this._formData.append(field, file, filename);
+  return this;
+};
+
+/**
+ * Send `data`, defaulting the `.type()` to "json" when
+ * an object is given.
+ *
+ * Examples:
+ *
+ *       // querystring
+ *       request.get('/search')
+ *         .end(callback)
+ *
+ *       // multiple data "writes"
+ *       request.get('/search')
+ *         .send({ search: 'query' })
+ *         .send({ range: '1..5' })
+ *         .send({ order: 'desc' })
+ *         .end(callback)
+ *
+ *       // manual json
+ *       request.post('/user')
+ *         .type('json')
+ *         .send('{"name":"tj"})
+ *         .end(callback)
+ *
+ *       // auto json
+ *       request.post('/user')
+ *         .send({ name: 'tj' })
+ *         .end(callback)
+ *
+ *       // manual x-www-form-urlencoded
+ *       request.post('/user')
+ *         .type('form')
+ *         .send('name=tj')
+ *         .end(callback)
+ *
+ *       // auto x-www-form-urlencoded
+ *       request.post('/user')
+ *         .type('form')
+ *         .send({ name: 'tj' })
+ *         .end(callback)
+ *
+ *       // defaults to x-www-form-urlencoded
+  *      request.post('/user')
+  *        .send('name=tobi')
+  *        .send('species=ferret')
+  *        .end(callback)
+ *
+ * @param {String|Object} data
+ * @return {Request} for chaining
+ * @api public
+ */
+
+Request.prototype.send = function(data){
+  var obj = isObject(data);
+  var type = this.getHeader('Content-Type');
+
+  // merge
+  if (obj && isObject(this._data)) {
+    for (var key in data) {
+      this._data[key] = data[key];
+    }
+  } else if ('string' == typeof data) {
+    if (!type) this.type('form');
+    type = this.getHeader('Content-Type');
+    if ('application/x-www-form-urlencoded' == type) {
+      this._data = this._data
+        ? this._data + '&' + data
+        : data;
+    } else {
+      this._data = (this._data || '') + data;
+    }
+  } else {
+    this._data = data;
+  }
+
+  if (!obj || isHost(data)) return this;
+  if (!type) this.type('json');
+  return this;
+};
+
+/**
+ * Invoke the callback with `err` and `res`
+ * and handle arity check.
+ *
+ * @param {Error} err
+ * @param {Response} res
+ * @api private
+ */
+
+Request.prototype.callback = function(err, res){
+  var fn = this._callback;
+  this.clearTimeout();
+  fn(err, res);
+};
+
+/**
+ * Invoke callback with x-domain error.
+ *
+ * @api private
+ */
+
+Request.prototype.crossDomainError = function(){
+  var err = new Error('Origin is not allowed by Access-Control-Allow-Origin');
+  err.crossDomain = true;
+  this.callback(err);
+};
+
+/**
+ * Invoke callback with timeout error.
+ *
+ * @api private
+ */
+
+Request.prototype.timeoutError = function(){
+  var timeout = this._timeout;
+  var err = new Error('timeout of ' + timeout + 'ms exceeded');
+  err.timeout = timeout;
+  this.callback(err);
+};
+
+/**
+ * Enable transmission of cookies with x-domain requests.
+ *
+ * Note that for this to work the origin must not be
+ * using "Access-Control-Allow-Origin" with a wildcard,
+ * and also must set "Access-Control-Allow-Credentials"
+ * to "true".
+ *
+ * @api public
+ */
+
+Request.prototype.withCredentials = function(){
+  this._withCredentials = true;
+  return this;
+};
+
+/**
+ * Initiate request, invoking callback `fn(res)`
+ * with an instanceof `Response`.
+ *
+ * @param {Function} fn
+ * @return {Request} for chaining
+ * @api public
+ */
+
+Request.prototype.end = function(fn){
+  var self = this;
+  var xhr = this.xhr = request.getXHR();
+  var query = this._query.join('&');
+  var timeout = this._timeout;
+  var data = this._formData || this._data;
+
+  // store callback
+  this._callback = fn || noop;
+
+  // state change
+  xhr.onreadystatechange = function(){
+    if (4 != xhr.readyState) return;
+
+    // In IE9, reads to any property (e.g. status) off of an aborted XHR will
+    // result in the error "Could not complete the operation due to error c00c023f"
+    var status;
+    try { status = xhr.status } catch(e) { status = 0; }
+
+    if (0 == status) {
+      if (self.timedout) return self.timeoutError();
+      if (self.aborted) return;
+      return self.crossDomainError();
+    }
+    self.emit('end');
+  };
+
+  // progress
+  var handleProgress = function(e){
+    if (e.total > 0) {
+      e.percent = e.loaded / e.total * 100;
+    }
+    self.emit('progress', e);
+  };
+  if (this.hasListeners('progress')) {
+    xhr.onprogress = handleProgress;
+  }
+  try {
+    if (xhr.upload && this.hasListeners('progress')) {
+      xhr.upload.onprogress = handleProgress;
+    }
+  } catch(e) {
+    // Accessing xhr.upload fails in IE from a web worker, so just pretend it doesn't exist.
+    // Reported here:
+    // https://connect.microsoft.com/IE/feedback/details/837245/xmlhttprequest-upload-throws-invalid-argument-when-used-from-web-worker-context
+  }
+
+  // timeout
+  if (timeout && !this._timer) {
+    this._timer = setTimeout(function(){
+      self.timedout = true;
+      self.abort();
+    }, timeout);
+  }
+
+  // querystring
+  if (query) {
+    query = request.serializeObject(query);
+    this.url += ~this.url.indexOf('?')
+      ? '&' + query
+      : '?' + query;
+  }
+
+  // initiate request
+  xhr.open(this.method, this.url, true);
+
+  // CORS
+  if (this._withCredentials) xhr.withCredentials = true;
+
+  // body
+  if ('GET' != this.method && 'HEAD' != this.method && 'string' != typeof data && !isHost(data)) {
+    // serialize stuff
+    var serialize = request.serialize[this.getHeader('Content-Type')];
+    if (serialize) data = serialize(data);
+  }
+
+  // set header fields
+  for (var field in this.header) {
+    if (null == this.header[field]) continue;
+    xhr.setRequestHeader(field, this.header[field]);
+  }
+
+  // send stuff
+  this.emit('request', this);
+  xhr.send(data);
+  return this;
+};
+
+/**
+ * Expose `Request`.
+ */
+
+request.Request = Request;
+
+/**
+ * Issue a request:
+ *
+ * Examples:
+ *
+ *    request('GET', '/users').end(callback)
+ *    request('/users').end(callback)
+ *    request('/users', callback)
+ *
+ * @param {String} method
+ * @param {String|Function} url or callback
+ * @return {Request}
+ * @api public
+ */
+
+function request(method, url) {
+  // callback
+  if ('function' == typeof url) {
+    return new Request('GET', method).end(url);
+  }
+
+  // url first
+  if (1 == arguments.length) {
+    return new Request('GET', method);
+  }
+
+  return new Request(method, url);
+}
+
+/**
+ * GET `url` with optional callback `fn(res)`.
+ *
+ * @param {String} url
+ * @param {Mixed|Function} data or fn
+ * @param {Function} fn
+ * @return {Request}
+ * @api public
+ */
+
+request.get = function(url, data, fn){
+  var req = request('GET', url);
+  if ('function' == typeof data) fn = data, data = null;
+  if (data) req.query(data);
+  if (fn) req.end(fn);
+  return req;
+};
+
+/**
+ * HEAD `url` with optional callback `fn(res)`.
+ *
+ * @param {String} url
+ * @param {Mixed|Function} data or fn
+ * @param {Function} fn
+ * @return {Request}
+ * @api public
+ */
+
+request.head = function(url, data, fn){
+  var req = request('HEAD', url);
+  if ('function' == typeof data) fn = data, data = null;
+  if (data) req.send(data);
+  if (fn) req.end(fn);
+  return req;
+};
+
+/**
+ * DELETE `url` with optional callback `fn(res)`.
+ *
+ * @param {String} url
+ * @param {Function} fn
+ * @return {Request}
+ * @api public
+ */
+
+request.del = function(url, fn){
+  var req = request('DELETE', url);
+  if (fn) req.end(fn);
+  return req;
+};
+
+/**
+ * PATCH `url` with optional `data` and callback `fn(res)`.
+ *
+ * @param {String} url
+ * @param {Mixed} data
+ * @param {Function} fn
+ * @return {Request}
+ * @api public
+ */
+
+request.patch = function(url, data, fn){
+  var req = request('PATCH', url);
+  if ('function' == typeof data) fn = data, data = null;
+  if (data) req.send(data);
+  if (fn) req.end(fn);
+  return req;
+};
+
+/**
+ * POST `url` with optional `data` and callback `fn(res)`.
+ *
+ * @param {String} url
+ * @param {Mixed} data
+ * @param {Function} fn
+ * @return {Request}
+ * @api public
+ */
+
+request.post = function(url, data, fn){
+  var req = request('POST', url);
+  if ('function' == typeof data) fn = data, data = null;
+  if (data) req.send(data);
+  if (fn) req.end(fn);
+  return req;
+};
+
+/**
+ * PUT `url` with optional `data` and callback `fn(res)`.
+ *
+ * @param {String} url
+ * @param {Mixed|Function} data or fn
+ * @param {Function} fn
+ * @return {Request}
+ * @api public
+ */
+
+request.put = function(url, data, fn){
+  var req = request('PUT', url);
+  if ('function' == typeof data) fn = data, data = null;
+  if (data) req.send(data);
+  if (fn) req.end(fn);
+  return req;
+};
+
+/**
+ * Expose `request`.
+ */
+
+module.exports = request;
+
+},{"emitter":2,"reduce":3}],2:[function(require,module,exports){
+
+/**
+ * Expose `Emitter`.
+ */
+
+module.exports = Emitter;
+
+/**
+ * Initialize a new `Emitter`.
+ *
+ * @api public
+ */
+
+function Emitter(obj) {
+  if (obj) return mixin(obj);
+};
+
+/**
+ * Mixin the emitter properties.
+ *
+ * @param {Object} obj
+ * @return {Object}
+ * @api private
+ */
+
+function mixin(obj) {
+  for (var key in Emitter.prototype) {
+    obj[key] = Emitter.prototype[key];
+  }
+  return obj;
+}
+
+/**
+ * Listen on the given `event` with `fn`.
+ *
+ * @param {String} event
+ * @param {Function} fn
+ * @return {Emitter}
+ * @api public
+ */
+
+Emitter.prototype.on =
+Emitter.prototype.addEventListener = function(event, fn){
+  this._callbacks = this._callbacks || {};
+  (this._callbacks[event] = this._callbacks[event] || [])
+    .push(fn);
+  return this;
+};
+
+/**
+ * Adds an `event` listener that will be invoked a single
+ * time then automatically removed.
+ *
+ * @param {String} event
+ * @param {Function} fn
+ * @return {Emitter}
+ * @api public
+ */
+
+Emitter.prototype.once = function(event, fn){
+  var self = this;
+  this._callbacks = this._callbacks || {};
+
+  function on() {
+    self.off(event, on);
+    fn.apply(this, arguments);
+  }
+
+  on.fn = fn;
+  this.on(event, on);
+  return this;
+};
+
+/**
+ * Remove the given callback for `event` or all
+ * registered callbacks.
+ *
+ * @param {String} event
+ * @param {Function} fn
+ * @return {Emitter}
+ * @api public
+ */
+
+Emitter.prototype.off =
+Emitter.prototype.removeListener =
+Emitter.prototype.removeAllListeners =
+Emitter.prototype.removeEventListener = function(event, fn){
+  this._callbacks = this._callbacks || {};
+
+  // all
+  if (0 == arguments.length) {
+    this._callbacks = {};
+    return this;
+  }
+
+  // specific event
+  var callbacks = this._callbacks[event];
+  if (!callbacks) return this;
+
+  // remove all handlers
+  if (1 == arguments.length) {
+    delete this._callbacks[event];
+    return this;
+  }
+
+  // remove specific handler
+  var cb;
+  for (var i = 0; i < callbacks.length; i++) {
+    cb = callbacks[i];
+    if (cb === fn || cb.fn === fn) {
+      callbacks.splice(i, 1);
+      break;
+    }
+  }
+  return this;
+};
+
+/**
+ * Emit `event` with the given args.
+ *
+ * @param {String} event
+ * @param {Mixed} ...
+ * @return {Emitter}
+ */
+
+Emitter.prototype.emit = function(event){
+  this._callbacks = this._callbacks || {};
+  var args = [].slice.call(arguments, 1)
+    , callbacks = this._callbacks[event];
+
+  if (callbacks) {
+    callbacks = callbacks.slice(0);
+    for (var i = 0, len = callbacks.length; i < len; ++i) {
+      callbacks[i].apply(this, args);
+    }
+  }
+
+  return this;
+};
+
+/**
+ * Return array of callbacks for `event`.
+ *
+ * @param {String} event
+ * @return {Array}
+ * @api public
+ */
+
+Emitter.prototype.listeners = function(event){
+  this._callbacks = this._callbacks || {};
+  return this._callbacks[event] || [];
+};
+
+/**
+ * Check if this emitter has `event` handlers.
+ *
+ * @param {String} event
+ * @return {Boolean}
+ * @api public
+ */
+
+Emitter.prototype.hasListeners = function(event){
+  return !! this.listeners(event).length;
+};
+
+},{}],3:[function(require,module,exports){
+
+/**
+ * Reduce `arr` with `fn`.
+ *
+ * @param {Array} arr
+ * @param {Function} fn
+ * @param {Mixed} initial
+ *
+ * TODO: combatible error handling?
+ */
+
+module.exports = function(arr, fn, initial){
+  var idx = 0;
+  var len = arr.length;
+  var curr = arguments.length == 3
+    ? initial
+    : arr[idx++];
+
+  while (idx < len) {
+    curr = fn.call(null, curr, arr[idx], ++idx, arr);
+  }
+
+  return curr;
+};
+},{}]},{},[1])(1)
+});
+/*globals define, alert*/
+/*jshint browser: true*/
+/**
+ * @author pmeijer / https://github.com/pmeijer
+ */
+var CREATE_BRANCH = false;
+//PROJECT_NAME = 'IBug',
+//BRANCH_NAME = 'master',
+//NEW_BRANCH_HASH = '#d2d00cdd50a1ca144666a52a471af59d280ac751';
+
+define('teststorage/teststorage',[
+    'js/logger',
+    'common/storage/browserstorage',
+    'common/core/core',
+    'common/storage/constants'
+], function (Logger, Storage, Core, CONSTANTS) {
+
+    function Client(gmeConfig, projectName, branchName) {
+        var logger = Logger.create('gme:client', gmeConfig.client.log),
+            storage = Storage.getStorage(logger, gmeConfig),
+            currRootNode,
+            currCommitObject,
+            intervalId,
+            core,
+            PROJECT_NAME = projectName,
+            BRANCH_NAME = branchName;
+
+        logger.debug('ctor');
+        function loadChildrenAndSetAttribute(rootNode, commitObject) {
+            core.loadChildren(rootNode, function (err, children) {
+                if (err) {
+                    throw new Error(err);
+                }
+                logger.debug('children loaded', children);
+                //children.map(function (child) {
+                var newPos;
+                logger.debug('child name', core.getAttribute(children[0], 'name'));
+                //if (core.getAttribute(children[0], 'name') === 'newName') {
+                newPos = {x: 70 + getRandomInt(0, 100), y: 70 + getRandomInt(0, 100)};
+                core.setRegistry(children[0], 'position', newPos);
+                logger.debug('setting new position', newPos);
+                //}
+                //});
+                currRootNode = rootNode;
+                core.persist(rootNode, function (err, persisted) {
+                    if (err) {
+                        throw new Error(err);
+                    }
+                    logger.debug('cb persist data', persisted);
+                    currCommitObject = storage.makeCommit(PROJECT_NAME, BRANCH_NAME,
+                        [commitObject._id],
+                        persisted.rootHash,
+                        persisted.objects,
+                        'First commit from new storage'
+                    );
+
+                });
+                //logger.debug('persistData', persistData);
+                //core.loadChildren(rootNode, function (err, children) {
+                //    if (err) {
+                //        throw new Error(err);
+                //    }
+                //    logger.debug('children loaded again (should come from cache)', children);
+                //});
+            });
+        }
+
+        storage.open(function (status) {
+            logger.debug('storage is open');
+            if (status === CONSTANTS.CONNECTED) {
+                storage.getProjectNames({}, function (err, projectNames) {
+                    if (err) {
+                        throw new Error(err);
+                    }
+                    if (projectNames.indexOf(projectName) < 0) {
+                        throw new Error('Project does not exist');
+                    }
+                    logger.debug(projectNames);
+                    storage.watchProject(PROJECT_NAME, function (_ws, data) {
+                        logger.debug('watchProject event', data);
+                    });
+                    storage.openProject(PROJECT_NAME, function (err, project, branches) {
+                        if (err) {
+                            throw new Error(err);
+                        }
+                        var updateHandler = function (newCommitData) {
+                            logger.debug('updateHandler invoked', newCommitData);
+                            logger.debug('would call loadNodes...');
+                            currCommitObject = newCommitData.commitObject;
+                            core.loadRoot(newCommitData.commitObject.root, function (err, rootNode) {
+                                if (err) {
+                                    throw new Error(err);
+                                }
+                                logger.debug('rootNode loaded', rootNode);
+                                currRootNode = rootNode;
+                                core.loadChildren(rootNode, function (err, children) {
+                                    if (err) {
+                                        throw new Error(err);
+                                    }
+                                    logger.debug('children loaded', children);
+                                    children.map(function (child) {
+                                        logger.debug('child name', core.getAttribute(child, 'name'));
+                                        if (core.getAttribute(child, 'name') === 'newName') {
+                                            logger.debug('Got new position', core.getRegistry(child, 'position'));
+                                        }
+                                    });
+                                });
+                            });
+                        };
+                        var commitHandler = function (commitQueue, result, callback) {
+                            logger.debug('commitHandler', result);
+                            if (result.status === CONSTANTS.SYNCH) {
+                                callback(true); // All is fine, continue with the commitQueue..
+                            } else if (result.status === CONSTANTS.FORKED) {
+                                logger.debug('You got forked, queued commits', commitQueue);
+                                callback(false);
+                            } else {
+                                throw new Error('Unexpected result', result);
+                            }
+                        };
+                        logger.debug('openProject project', project);
+                        logger.debug('openProject returned branches', branches);
+                        storage.openBranch(PROJECT_NAME, BRANCH_NAME, updateHandler, commitHandler,
+                            function (err, latestCommit) {
+                                if (err) {
+                                    throw new Error(err);
+                                }
+                                logger.debug('latestCommit', latestCommit);
+                                currCommitObject = latestCommit.commitObject;
+                                core = new Core(project, {
+                                    globConf: gmeConfig,
+                                    logger: logger.fork('core')
+                                });
+                                logger.debug('core instantiated');
+                                core.loadRoot(latestCommit.commitObject.root, function (err, rootNode) {
+                                    if (err) {
+                                        throw new Error(err);
+                                    }
+                                    logger.debug('rootNode loaded', rootNode);
+                                    loadChildrenAndSetAttribute(rootNode, latestCommit.commitObject);
+                                });
+                            }
+                        );
+                        //storage.deleteBranch(PROJECT_NAME, 'b535', branches['b535'], function () {
+                        //    logger.debug('branch deleted', arguments);
+                        //});
+                    });
+                    if (CREATE_BRANCH) {
+                        storage.getBranches(PROJECT_NAME, {}, function (err, data) {
+                            if (err) {
+                                throw new Error(err);
+                            }
+                            logger.debug('getBranches return', data);
+                        });
+                        var newBranchName = 'br' + getRandomInt(2, 9999);
+                        logger.debug('will create', newBranchName);
+                        setTimeout(function () {
+                            storage.createBranch(PROJECT_NAME,
+                                newBranchName,
+                                NEW_BRANCH_HASH,
+                                function (err) {
+                                    if (err) {
+                                        throw new Error(err);
+                                    }
+                                    storage.getBranches(PROJECT_NAME, {}, function (err, data) {
+                                        if (err) {
+                                            throw new Error(err);
+                                        }
+                                        logger.debug('getBranches after create returned', data);
+                                    });
+                                });
+                        }, 2000);
+                    }
+                });
+            } else if (status === CONSTANTS.RECONNECTED) {
+                logger.debug('Reconnected!');
+                clearInterval(intervalId);
+            } else if (status === CONSTANTS.DISCONNECTED) {
+                logger.debug('Got disconnect, waiting for reconnect...');
+                intervalId = setInterval(function () {
+                    loadChildrenAndSetAttribute(currRootNode, currCommitObject);
+                }, 2000);
+            } else if (status === CONSTANTS.ERROR) {
+                throw new Error('Could not connect');
+            }
+        });
+
+        function getRandomInt(min, max) {
+            return Math.floor(Math.random() * (max - min + 1)) + min;
+        }
+    }
+
+    return Client;
 });
 /*globals define, document, console, window, GME, docReady, setTimeout*/
 /*jshint browser:true, evil:true*/
@@ -25153,12 +23337,21 @@ define('webgme.classes', [
     'executor/ExecutorClient',
     'js/Utils/InterpreterManager',
     'common/core/core',
-    'common/storage/clientstorage',
+    'common/storage/browserstorage',
     'js/logger',
-    'lib/superagent/superagent-1.1.0'
-], function (Client, BlobClient, ExecutorClient, InterpreterManager, Core, Storage, Logger, superagent) {
+    'lib/superagent/superagent-1.2.0',
+    'teststorage/teststorage'
+], function (Client,
+             BlobClient,
+             ExecutorClient,
+             InterpreterManager,
+             Core,
+             Storage,
+             Logger,
+             superagent,
+             TestStorage) {
 
-    
+
     // Setting global classes
 
     GME.classes.Client = Client;
@@ -25168,6 +23361,7 @@ define('webgme.classes', [
     GME.classes.Core = Core;
     GME.classes.Storage = Storage;
     GME.classes.Logger = Logger;
+    GME.classes.TestStorage = TestStorage;
 
     // Exposing built in libraries
     GME.utils.superagent = superagent;

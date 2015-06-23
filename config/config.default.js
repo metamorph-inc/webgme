@@ -73,7 +73,7 @@ var path = require('path'),
         },
 
         mongo: {
-            uri: 'mongodb://127.0.0.1:27017/multi',
+            uri: 'mongodb://127.0.0.1:27017/CyPhy',
             options: {
                 db: {
                     w: 1,

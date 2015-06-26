@@ -2605,7 +2605,7 @@ define("debug", function(){});
  */
 
 define('js/logger',['debug'], function (_debug) {
-
+    
     // Separate namespaces using ',' a leading '-' will disable the namespace.
     // Each part takes a regex.
     //      ex: localStorage.debug = '*,-socket\.io*,-engine\.io*'
@@ -2695,7 +2695,7 @@ define('js/logger',['debug'], function (_debug) {
  */
 
 define('common/storage/constants',[], function () {
-
+    
     return {
 
         // Database related
@@ -2737,7 +2737,7 @@ define('common/storage/constants',[], function () {
  */
 
 define('common/storage/storageclasses/watchers',['common/storage/constants'], function (CONSTANTS) {
-
+    
 
     function StorageWatcher(webSocket, logger, gmeConfig) {
         // watcher counters determining when to join/leave a room on the sever
@@ -2866,7 +2866,7 @@ define('common/storage/storageclasses/watchers',['common/storage/constants'], fu
  */
 
 define('common/storage/storageclasses/simpleapi',['common/storage/storageclasses/watchers'], function (StorageWatcher) {
-
+    
 
     /**
      *
@@ -3060,7 +3060,7 @@ define('common/storage/storageclasses/simpleapi',['common/storage/storageclasses
  */
 
 define('common/storage/storageclasses/objectloaders',['common/storage/storageclasses/simpleapi'], function (SimpleAPI) {
-
+    
 
     function StorageObjectLoaders(webSocket, logger, gmeConfig) {
         // watcher counters determining when to join/leave a room on the sever
@@ -3101,7 +3101,7 @@ define('common/storage/storageclasses/objectloaders',['common/storage/storagecla
                 resetBucketAndLoadObjects();
             }, self.gmeConfig.storage.loadBucketTimer);
         }
-
+        
         if (self.loadBucketSize === self.gmeConfig.storage.loadBucketSize) {
             self.logger.debug('loadBuckSize reached will loadObjects, bucketSize:', self.loadBucketSize);
             clearTimeout(self.loadBucketTimer);
@@ -3151,7 +3151,7 @@ define('common/storage/storageclasses/objectloaders',['common/storage/storagecla
 
 
 define('common/util/assert',[],function () {
-
+    
 
     var assert = function (cond, msg) {
         if (!cond) {
@@ -3180,7 +3180,7 @@ define('common/util/assert',[],function () {
  */
 
 define('common/storage/project/cache',['common/util/assert', 'common/storage/constants'], function (ASSERT, CONSTANTS) {
-
+    
     function ProjectCache(storage, projectName, mainLogger, gmeConfig) {
         var missing = {},
             backup = {},
@@ -3292,7 +3292,7 @@ define('common/storage/project/cache',['common/util/assert', 'common/storage/con
  */
 
 define('common/storage/project/branch',['common/storage/constants'], function (CONSTANTS) {
-
+    
 
     function Branch(name, mainLogger) {
         var self = this,
@@ -3446,7 +3446,7 @@ define('common/storage/project/project',[
     'common/storage/constants',
     'common/util/assert'
 ], function (ProjectCache, Branch, CONSTANTS, ASSERT) {
-
+    
 
     function Project(name, storage, mainLogger, gmeConfig) {
         this.name = name;
@@ -3720,7 +3720,7 @@ define('common/util/key',[
     'common/util/assert',
     'common/util/canon'
 ], function (SHA1, ZS, ASSERT, CANON) {
-
+    
 
     var keyType = null,
         ZSSHA = new ZS();
@@ -3774,7 +3774,7 @@ define('common/storage/storageclasses/editorstorage',[
     'common/util/assert',
     'common/util/key'
 ], function (StorageObjectLoaders, CONSTANTS, Project, ASSERT, GENKEY) {
-
+    
 
     function EditorStorage(webSocket, mainLogger, gmeConfig) {
         var self = this,
@@ -4240,7 +4240,7 @@ define('common/storage/storageclasses/editorstorage',[
  */
 
 define('common/storage/socketio/browserclient',[], function () {
-
+    
 
     function IoClient (gmeConfig) {
         this.connect = function (callback) {
@@ -4269,7 +4269,7 @@ define('common/storage/socketio/browserclient',[], function () {
  */
 
 define('common/EventDispatcher',[], function () {
-
+    
 
     var EventDispatcher = function () {
         this._eventList = {};
@@ -4382,7 +4382,7 @@ define('common/storage/socketio/websocket',[
     'common/storage/constants'
 ], function (EventDispatcher, CONSTANTS) {
 
-
+    
 
     function WebSocket(ioClient, mainLogger, gmeConfig) {
         var self = this,
@@ -4579,7 +4579,7 @@ define('common/storage/browserstorage',[
     'common/storage/socketio/browserclient',
     'common/storage/socketio/websocket',
 ], function (EditorStorage, BrowserIoClient, WebSocket) {
-
+    
 
     var _storage;
 
@@ -4621,7 +4621,7 @@ define('common/storage/browserstorage',[
  */
 
 define('common/core/future',[], function () {
-
+    
 
     var maxDepth = 5;
 
@@ -5017,7 +5017,7 @@ define('common/core/future',[], function () {
  */
 
 (function () {
-
+    
 
     // ------- assert -------
 
@@ -5777,7 +5777,7 @@ define('common/core/coretree',[
     'common/core/tasync'
 ], function (ASSERT, GENKEY, FUTURE, TASYNC) {
 
-
+    
 
     var HASH_REGEXP = new RegExp('#[0-9a-f]{40}');
     var isValidHash = function (key) {
@@ -6709,7 +6709,7 @@ define('common/core/coretree',[
 
                 return true;
             } catch (error) {
-                console.log('Wrong node', error.stack);
+                logger.error(error.message, {stack: error.stack, node: node});
                 return false;
             }
         };
@@ -6773,7 +6773,7 @@ define('common/core/coretree',[
 
 define('common/core/corerel',['common/util/assert', 'common/core/coretree', 'common/core/tasync'], function (ASSERT, CoreTree, TASYNC) {
 
-
+    
 
     // ----------------- RELID -----------------
 
@@ -6820,7 +6820,7 @@ define('common/core/corerel',['common/util/assert', 'common/core/coretree', 'com
 
                 return true;
             } catch (error) {
-                console.log('Wrong node', error.stack);
+                logger.error(error.message, {stack: error.stack, node: node});
                 return false;
             }
         }
@@ -6963,7 +6963,7 @@ define('common/core/corerel',['common/util/assert', 'common/core/coretree', 'com
                 if (path === prefix || path.substr(0, prefix2.length) === prefix2) {
                     var node = coretree.getChild(overlays, path);
                     var names = coretree.getKeys(node);
-
+                    
                     for (var j = 0; j < names.length; ++j) {
                         var name = names[j];
                         if (isPointerName(name)) {
@@ -7622,7 +7622,7 @@ define('common/core/corerel',['common/util/assert', 'common/core/coretree', 'com
  */
 
 define('common/core/setcore',['common/util/assert'], function (ASSERT) {
-
+    
 
     var SETS_ID = '_sets';
     var REL_ID = 'member';
@@ -8026,7 +8026,7 @@ define('common/core/setcore',['common/util/assert'], function (ASSERT) {
  */
 
 define('common/util/guid',[],function () {
-
+    
 
     var guid = function () {
         var S4 = function () {
@@ -8046,7 +8046,7 @@ define('common/util/guid',[],function () {
  */
 
 define('common/regexp',[], function () {
-
+    
     var HASH = new RegExp('^#[0-9a-zA-Z_]*$'),
         BRANCH = new RegExp('^[0-9a-zA-Z_]*$'),
         RAW_BRANCH = new RegExp('^\\*[0-9a-zA-Z_]*$'),// This is how it's stored in mongodb, i.e. with a prefixed *.
@@ -8076,7 +8076,7 @@ define('common/core/guidcore',[
     'common/regexp'
 ], function (ASSERT, GUID, TASYNC, REGEXP) {
 
-
+    
 
     var OWN_GUID = '_relguid';
 
@@ -8261,7 +8261,7 @@ define('common/core/guidcore',[
  */
 
 define('common/core/nullpointercore',['common/util/assert'], function (ASSERT) {
-
+    
 
     var NULLPTR_NAME = '_null_pointer';
     var NULLPTR_RELID = '_nullptr';
@@ -8323,7 +8323,7 @@ define('common/core/nullpointercore',['common/util/assert'], function (ASSERT) {
  */
 
 define('common/core/coreunwrap',['common/util/assert', 'common/core/tasync'], function (ASSERT, TASYNC) {
-
+    
 
     // ----------------- CoreUnwrap -----------------
 
@@ -8411,7 +8411,7 @@ define('common/core/coreunwrap',['common/util/assert', 'common/core/tasync'], fu
  */
 
 define('common/core/coretype',['common/util/assert', 'common/core/core', 'common/core/tasync'], function (ASSERT, Core, TASYNC) {
-
+    
 
     // ----------------- CoreType -----------------
 
@@ -8444,7 +8444,7 @@ define('common/core/coretype',['common/util/assert', 'common/core/core', 'common
                 __test('base', typeof node.base === 'object');
                 return true;
             } catch (error) {
-                console.log('Wrong node', error.stack);
+                logger.error(error.message, {stack: error.stack, node: node});
                 return false;
             }
         }
@@ -8495,7 +8495,7 @@ define('common/core/coretype',['common/util/assert', 'common/core/core', 'common
                 basechild = null;
             if (base) {
                 //the parent is inherited
-                if (oldcore.getChildrenRelids(base).indexOf(relid) !== -1) {
+                if (core.getChildrenRelids(base).indexOf(relid) !== -1) {
                     //inherited child
                     if (oldcore.getChildrenRelids(node).indexOf(relid) !== -1) {
                         //but it is overwritten so we should load it
@@ -8508,9 +8508,10 @@ define('common/core/coretype',['common/util/assert', 'common/core/core', 'common
                             child.base = b;
                             return child;
                         } else {
-                            child = core.getChild(n, r);
+                            child = oldcore.getChild(n, r);
                             core.setHashed(child, true, true);
                             child.base = b;
+
                             return child;
                         }
                     }, basechild, child, node, relid);
@@ -9227,7 +9228,7 @@ define('common/core/coretype',['common/util/assert', 'common/core/core', 'common
  */
 
 define('common/core/constraintcore',['common/util/assert'], function (ASSERT) {
-
+    
     var CONSTRAINTS_RELID = '_constraints';
     var C_DEF_PRIORITY = 1;
 
@@ -10067,7 +10068,7 @@ define('common/core/metacore',[
     'common/util/jjv',
     'common/util/canon'
 ], function (ASSERT, Core, TASYNC, JsonValidator, CANON) {
-
+    
 
     // ----------------- CoreType -----------------
 
@@ -10573,7 +10574,7 @@ define('common/core/metacore',[
  */
 
 define('common/core/coretreeloader',['common/util/assert', 'common/core/core', 'common/core/tasync'], function (ASSERT, Core, TASYNC) {
-
+    
 
     // ----------------- CoreTreeLoader -----------------
 
@@ -10632,7 +10633,7 @@ define('common/core/coretreeloader',['common/util/assert', 'common/core/core', '
  */
 
 define('common/core/corediff',['common/util/canon', 'common/core/tasync', 'common/util/assert'], function (CANON, TASYNC, ASSERT) {
-
+    
 
     function diffCore(_innerCore, options) {
         ASSERT(typeof options === 'object');
@@ -12924,7 +12925,7 @@ define('common/core/core',[
     'common/core/coretreeloader',
     'common/core/corediff'
 ], function (CoreRel, Set, Guid, NullPtr, UnWrap, Type, Constraint, CoreTree, MetaCore, TreeLoader, CoreDiff) {
-
+    
 
     function Core(storage, options) {
         var core,
@@ -12961,7 +12962,7 @@ define('common/core/core',[
  */
 
 define('js/client/constants',['common/storage/constants'], function (STORAGE_CONSTANTS) {
-
+    
 
     return {
 
@@ -12994,7 +12995,7 @@ define('js/client/constants',['common/storage/constants'], function (STORAGE_CON
  */
 
 define('common/core/users/meta',[], function () {
-
+    
 
     function metaStorage() {
         var _core = null,
@@ -13821,7 +13822,7 @@ define('common/core/users/meta',[], function () {
  */
 
 define('common/util/url',[],function () {
-
+    
 
     function decodeUrl(url) {
         var start = url.indexOf('%');
@@ -13885,7 +13886,7 @@ define('common/util/url',[],function () {
  */
 
 define('common/core/users/tojson',['common/core/users/meta', 'common/util/url'], function (BaseMeta, URL) {
-
+    
 
     var META = new BaseMeta(),
         _refTypes = {
@@ -14418,7 +14419,7 @@ define('common/core/users/tojson',['common/core/users/meta', 'common/util/url'],
  * @author kecso / https://github.com/kecso
  */
 define('js/client/gmeNodeGetter',['common/core/users/tojson'], function (toJson) {
-
+    
 
     //getNode
     function getNode(_id, logger, state, meta, storeNode) {
@@ -14680,7 +14681,7 @@ define('js/client/gmeNodeGetter',['common/core/users/tojson'], function (toJson)
  * @author kecso / https://github.com/kecso
  */
 define('js/client/gmeNodeSetter',[], function () {
-
+    
     function gmeNodeSetter(logger, state, saveRoot, storeNode) {
 
         function setAttributes(path, name, value, msg) {
@@ -15199,7 +15200,7 @@ define('js/client/gmeNodeSetter',[], function () {
 
 define('common/core/users/serialization',['common/util/assert'], function (ASSERT) {
 
-
+    
     var _nodes = {},
         _core = null,
         _pathToGuidMap = {},
@@ -16116,7 +16117,7 @@ define('common/core/users/serialization',['common/util/assert'], function (ASSER
  * @author kecso / https://github.com/kecso
  */
 define('js/client/addon',[], function () {
-
+    
 
     function AddOn(state, storage, logger__, gmeConfig) {
         var _addOns = {},
@@ -16322,7 +16323,7 @@ define('client/js/client',[
              getNodeSetters,
              Serialization,
              AddOn) {
-
+    
 
     function Client(gmeConfig) {
         var self = this,
@@ -18039,6 +18040,20 @@ define('client/js/client',[
                 }
             });
         };
+
+        this.resolve = function (mergeResult, callback) {
+            var command = {
+                command: 'resolve',
+                partial: mergeResult
+            };
+            storage.simpleRequest(command, function (err, resId) {
+                if (err) {
+                    callback(err);
+                } else {
+                    storage.simpleResult(resId, callback);
+                }
+            });
+        };
     }
 
 
@@ -18059,7 +18074,7 @@ define('client/js/client',[
  */
 
 define('blob/BlobConfig',[], function () {
-
+    
     var BlobConfig = {
         hashMethod: 'sha1', // TODO: in the future we may switch to sha512
         hashRegex: new RegExp('^[0-9a-f]{40}$')
@@ -18077,7 +18092,7 @@ define('blob/BlobConfig',[], function () {
  */
 
 define('blob/BlobMetadata',['blob/BlobConfig'], function (BlobConfig) {
-
+    
 
     /**
      * Initializes a new instance of BlobMetadata
@@ -18173,7 +18188,7 @@ define('blob/BlobMetadata',['blob/BlobConfig'], function (BlobConfig) {
  */
 
 define('blob/Artifact',['blob/BlobMetadata', 'blob/BlobConfig', 'common/core/tasync'], function (BlobMetadata, BlobConfig, tasync) {
-
+    
     /**
      * Creates a new instance of artifact, i.e. complex object, in memory. This object can be saved in the storage.
      * @param {string} name Artifact's name without extension
@@ -19768,7 +19783,7 @@ Emitter.prototype.hasListeners = function(event){
  * TODO: combatible error handling?
  */
 
-module.exports = function(arr, fn, initial){
+module.exports = function(arr, fn, initial){  
   var idx = 0;
   var len = arr.length;
   var curr = arguments.length == 3
@@ -19778,7 +19793,7 @@ module.exports = function(arr, fn, initial){
   while (idx < len) {
     curr = fn.call(null, curr, arr[idx], ++idx, arr);
   }
-
+  
   return curr;
 };
 },{}]},{},[1])(1)
@@ -19794,7 +19809,7 @@ module.exports = function(arr, fn, initial){
  */
 
 define('blob/BlobClient',['blob/Artifact', 'blob/BlobMetadata', 'superagent'], function (Artifact, BlobMetadata, superagent) {
-
+    
 
     var BlobClient = function (parameters) {
         this.artifacts = [];
@@ -20157,7 +20172,7 @@ define('blob/BlobClient',['blob/Artifact', 'blob/BlobMetadata', 'superagent'], f
 
 
 define('executor/ExecutorClient',['superagent'], function (superagent) {
-
+    
 
     var ExecutorClient = function (parameters) {
         parameters = parameters || {};
@@ -20328,7 +20343,7 @@ define('executor/ExecutorClient',['superagent'], function (superagent) {
  */
 
 define('plugin/PluginConfig',[], function () {
-
+    
     /**
      * Initializes a new instance of plugin configuration.
      *
@@ -20376,7 +20391,7 @@ define('plugin/PluginConfig',[], function () {
 
 
 define('plugin/PluginNodeDescription',[], function () {
-
+    
     /**
      * Initializes a new instance of plugin node description object.
      *
@@ -20424,7 +20439,7 @@ define('plugin/PluginNodeDescription',[], function () {
 
 
 define('plugin/PluginMessage',['plugin/PluginNodeDescription'], function (PluginNodeDescription) {
-
+    
 
     /**
      * Initializes a new instance of plugin message.
@@ -20484,7 +20499,7 @@ define('plugin/PluginMessage',['plugin/PluginNodeDescription'], function (Plugin
 
 
 define('plugin/PluginResult',['plugin/PluginMessage'], function (PluginMessage) {
-
+    
     /**
      * Initializes a new instance of a plugin result object.
      *
@@ -20700,7 +20715,7 @@ define('plugin/PluginBase',[
     'plugin/PluginNodeDescription',
     'common/storage/constants',
 ], function (PluginConfig, PluginResult, PluginMessage, PluginNodeDescription, STORAGE_CONSTANTS) {
-
+    
 
     /**
      * Initializes a new instance of a plugin object, which should be a derived class.
@@ -21255,7 +21270,7 @@ define('plugin/PluginBase',[
  */
 
 define('plugin/PluginContext',[], function () {
-
+    
 
     /**
      * Initializes a new instance of PluginContext. This context is set through PluginBase.configure method for a given
@@ -21626,7 +21641,7 @@ define('js/Utils/InterpreterManager',[
     'js/logger'
 ], function (Core, PluginManagerBase, PluginResult, BlobClient, PluginConfigDialog, Logger) {
 
-
+    
 
     var InterpreterManager = function (client, gmeConfig) {
         this._client = client;
@@ -23111,7 +23126,7 @@ Emitter.prototype.hasListeners = function(event){
  * TODO: combatible error handling?
  */
 
-module.exports = function(arr, fn, initial){
+module.exports = function(arr, fn, initial){  
   var idx = 0;
   var len = arr.length;
   var curr = arguments.length == 3
@@ -23121,7 +23136,7 @@ module.exports = function(arr, fn, initial){
   while (idx < len) {
     curr = fn.call(null, curr, arr[idx], ++idx, arr);
   }
-
+  
   return curr;
 };
 },{}]},{},[1])(1)
@@ -23142,7 +23157,7 @@ define('teststorage/teststorage',[
     'common/core/core',
     'common/storage/constants'
 ], function (Logger, Storage, Core, CONSTANTS) {
-
+    
     function Client(gmeConfig, projectName, branchName) {
         var logger = Logger.create('gme:client', gmeConfig.client.log),
             storage = Storage.getStorage(logger, gmeConfig),
@@ -23351,7 +23366,7 @@ define('webgme.classes', [
              superagent,
              TestStorage) {
 
-
+    
     // Setting global classes
 
     GME.classes.Client = Client;

@@ -188,15 +188,14 @@ define([
                                     logger.error('Failed to connect to database', err);
                                     return;
                                 }
-                                client.selectProject(initialThingsToDo.projectToLoad, function (err) {
+                                client.selectProject(initialThingsToDo.projectToLoad, initialThingsToDo.branchToLoad,
+                                    function (err) {
                                     if (err) {
                                         logger.error(err);
                                         openProjectLoadDialog(false);
                                         return;
                                     }
-                                    if (initialThingsToDo.branchToLoad) {
-                                        loadBranch(initialThingsToDo.branchToLoad);
-                                    } else if (initialThingsToDo.commitToLoad) {
+                                    if (initialThingsToDo.commitToLoad) {
                                         client.selectCommit(initialThingsToDo.commitToLoad, function (err) {
                                             if (err) {
                                                 logger.error(err);
@@ -323,10 +322,15 @@ define([
                     logger.error('Failed to connect to database', err);
                     return;
                 }
-                client.getProjects(function (err, projectArray) {
+                client.getProjects({}, function (err, projectArray) {
                     var seedParameters,
                         projectExisted = false,
+                        userId = client.getUserId() === 'n/a' ?
+                            gmeConfig.authentication.guestAccount : client.getUserId(),
+                        newProjectId = userId + client.CONSTANTS.STORAGE.PROJECT_ID_SEP +
+                            initialThingsToDo.projectToLoad,
                         i;
+
                     if (err) {
                         logger.error(err);
                         openProjectLoadDialog(false);
@@ -334,7 +338,7 @@ define([
                     }
 
                     for (i = 0; i < projectArray.length; i += 1) {
-                        if (projectArray[i].name === initialThingsToDo.projectToLoad) {
+                        if (projectArray[i]._id === newProjectId) {
                             projectExisted = true;
                             break;
                         }
@@ -342,15 +346,13 @@ define([
 
                     if (projectExisted) {
                         // we fallback to loading
-                        client.selectProject(initialThingsToDo.projectToLoad, function (err) {
+                        client.selectProject(newProjectId, initialThingsToDo.branchToLoad, function (err) {
                             if (err) {
                                 logger.error(err);
                                 openProjectLoadDialog(false);
                                 return;
                             }
-                            if (initialThingsToDo.branchToLoad) {
-                                loadBranch(initialThingsToDo.branchToLoad);
-                            } else if (initialThingsToDo.commitToLoad && initialThingsToDo.commitToLoad !== '') {
+                            if (initialThingsToDo.commitToLoad && initialThingsToDo.commitToLoad !== '') {
                                 client.selectCommit(initialThingsToDo.commitToLoad, function (err) {
                                     if (err) {
                                         logger.error(err);
@@ -381,7 +383,7 @@ define([
                             }
                             //FIXME: this is not necessarily safe
                             setTimeout(function () {
-                                client.selectProject(initialThingsToDo.projectToLoad, function (err) {
+                                client.selectProject(newProjectId, null, function (err) {
                                     if (err) {
                                         logger.error(err);
                                         openProjectLoadDialog(false);

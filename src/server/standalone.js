@@ -539,13 +539,14 @@ function StandAloneServer(gmeConfig) {
                 logger.debug('adding rest component [' + gmeConfig.rest.components[keys[i]] + '] to' +
                     ' - /rest/external/' + keys[i]);
                 if (restComponent.hasOwnProperty('initialize') && restComponent.hasOwnProperty('router')) {
+                    // FIXME: initialize may return with a promise
                     restComponent.initialize(middlewareOpts);
                     __app.use('/rest/external/' + keys[i], restComponent.router);
                 } else {
                     __app.use('/rest/external/' + keys[i], restComponent(gmeConfig, ensureAuthenticated, logger));
                 }
             } else {
-                throw new Error('Loading ' + gmeConfig.rest.components[keys[i]] + ' failed.');
+                throw new Error('Loading rest component ' + gmeConfig.rest.components[keys[i]] + ' failed.');
             }
         }
     }
@@ -930,9 +931,11 @@ function StandAloneServer(gmeConfig) {
     logger.debug('creating server-worker related routing rules');
     __app.get('/worker/simpleResult/*', function (req, res) {
         var urlArray = req.url.split('/');
+        logger.debug('worker/simpleResult requested, urlArray', {metadata: urlArray});
         if (urlArray.length > 3) {
             __workerManager.result(urlArray[3], function (err, result) {
                 if (err) {
+                    logger.error('worker/simpleResult err', err);
                     res.sendStatus(500);
                 } else {
                     var filename = 'exportedNodes.json';

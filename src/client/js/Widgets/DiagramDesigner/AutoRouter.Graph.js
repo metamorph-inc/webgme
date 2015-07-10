@@ -1122,7 +1122,7 @@ define([
             assert(nnnedge.startpointPrev.equals(npoint) && nnnedge.startpoint.equals(nnpoint),
                 'ARGraph.deleteTwoEdgesAt: nnnedge.startpointPrev.equals(npoint)' +
                 '&& nnnedge.startpoint.equals(nnpoint) FAILED');
-            nnnedge.setStartPointPrev(ppoint);
+            nnnedge.startpointPrev = ppoint;
         }
 
         if (nnpoint.equals(newpoint)) {
@@ -1194,14 +1194,14 @@ define([
             'ARGraph.deleteSamePointsAt: nnedge.startpoint.equals(npoint) && nnedge.startpointPrev.equals(point)' +
             ' FAILED');
         nnedge.setStartPoint(ppoint);
-        nnedge.setStartPointPrev(pppoint);
+        nnedge.startpointPrev = pppoint;
 
         if (nnnpointpos < points.length) {
             var nnnedge = vlist.getEdgeByPointer(nnpoint, (nnnpointpos)); //&*
             assert(nnnedge !== null && nnnedge.startpointPrev.equals(npoint) && nnnedge.startpoint.equals(nnpoint),
                 'ARGraph.deleteSamePointsAt: nnnedge !== null && nnnedge.startpointPrev.equals(npoint) && ' +
                 'nnnedge.startpoint.equals(nnpoint) FAILED');
-            nnnedge.setStartPointPrev(ppoint);
+            nnnedge.startpointPrev = ppoint;
         }
 
         if (CONSTANTS.DEBUG_DEEP) {
@@ -1950,8 +1950,13 @@ define([
             time = options.time || 5,
             optimizeFn = function (state) {
 
+                // If a path has been disconnected, start the routing over
+                if (!self.completelyConnected) {
+                    return setTimeout(startRouting, time);
+                }
+
                 updateFn(self.paths);
-                if (state.finished || !self.completelyConnected) {
+                if (state.finished) {
                     return callbackFn(self.paths);
                 } else {
                     state = self._optimize(state);

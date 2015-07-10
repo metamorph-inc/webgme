@@ -31,6 +31,9 @@ function createAPI(app, mountPath, middlewareOpts) {
         gmeAuth = middlewareOpts.gmeAuth,
         safeStorage = middlewareOpts.safeStorage,
         ensureAuthenticated = middlewareOpts.ensureAuthenticated,
+        webgme = require('../../../webgme'),
+        ServerUserProject = require('../storage/userproject'),
+        merge = webgme.requirejs('common/core/users/merge'),
 
         versionedAPIPath = mountPath + '/v1',
         latestAPIPath = mountPath;
@@ -468,7 +471,7 @@ function createAPI(app, mountPath, middlewareOpts) {
 
     router.get('/projects', ensureAuthenticated, function (req, res, next) {
         var userId = getUserId(req);
-        safeStorage.getProjectNames({username: userId})
+        safeStorage.getProjects({username: userId})
             .then(function (result) {
                 res.json(result);
             })
@@ -496,7 +499,7 @@ function createAPI(app, mountPath, middlewareOpts) {
         var userId = getUserId(req),
             data = {
                 username: userId,
-                projectName: req.params.projectId
+                projectId: req.params.projectId
             };
 
         safeStorage.deleteProject(data)
@@ -512,7 +515,7 @@ function createAPI(app, mountPath, middlewareOpts) {
         var userId = getUserId(req),
             data = {
                 username: userId,
-                projectName: req.params.projectId,
+                projectId: req.params.projectId,
                 before: (new Date()).getTime(), // current time
                 number: 100 // asks for the last 100 commits from the time specified above
             };
@@ -526,11 +529,43 @@ function createAPI(app, mountPath, middlewareOpts) {
             });
     });
 
+
+    router.get('/projects/:projectId/compare/:branchOrCommitA...:branchOrCommitB', ensureAuthenticated, function (req, res, next) {
+        var userId = getUserId(req),
+            loggerCompare = logger.fork('compare'),
+            data = {
+                username: userId,
+                projectId: req.params.projectId
+            };
+
+
+        safeStorage.openProject(data)
+            .then(function (dbProject) {
+                var serverUserProject = new ServerUserProject(dbProject, safeStorage, loggerCompare, middlewareOpts.gmeConfig);
+
+                return merge.diff({
+                    project: serverUserProject,
+                    branchOrCommitA: req.params.branchOrCommitA,
+                    branchOrCommitB: req.params.branchOrCommitB,
+                    logger: loggerCompare,
+                    gmeConfig: middlewareOpts.gmeConfig
+
+                });
+
+            })
+            .then(function (diff) {
+                res.json(diff);
+            })
+            .catch(function (err) {
+                next(err);
+            });
+    });
+
     router.get('/projects/:projectId/branches', ensureAuthenticated, function (req, res, next) {
         var userId = getUserId(req),
             data = {
                 username: userId,
-                projectName: req.params.projectId
+                projectId: req.params.projectId
             };
 
         safeStorage.getBranches(data)
@@ -547,7 +582,7 @@ function createAPI(app, mountPath, middlewareOpts) {
         var userId = getUserId(req),
             data = {
                 username: userId,
-                projectName: req.params.projectId,
+                projectId: req.params.projectId,
                 branchName: req.params.branchId
             };
 
@@ -567,7 +602,7 @@ function createAPI(app, mountPath, middlewareOpts) {
         var userId = getUserId(req),
             data = {
                 username: userId,
-                projectName: req.params.projectId,
+                projectId: req.params.projectId,
                 branchName: req.params.branchId,
                 hash: req.body.hash
             };
@@ -585,7 +620,7 @@ function createAPI(app, mountPath, middlewareOpts) {
         var userId = getUserId(req),
             data = {
                 username: userId,
-                projectName: req.params.projectId,
+                projectId: req.params.projectId,
                 branchName: req.params.branchId,
                 hash: req.body.hash
             };
@@ -603,7 +638,7 @@ function createAPI(app, mountPath, middlewareOpts) {
         var userId = getUserId(req),
             data = {
                 username: userId,
-                projectName: req.params.projectId,
+                projectId: req.params.projectId,
                 branchName: req.params.branchId
             };
 

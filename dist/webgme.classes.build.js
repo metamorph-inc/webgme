@@ -2702,6 +2702,8 @@ define('common/storage/constants',[], function () {
         MONGO_ID: '_id',
         PROJECT_INFO_ID: '*info*',
         EMPTY_PROJECT_DATA: 'empty',
+        PROJECT_ID_SEP: '+',
+        PROJECT_DISPLAYED_NAME_SEP: '/',
 
         // Socket IO
         DATABASE_ROOM: 'database',
@@ -2787,43 +2789,43 @@ define('common/storage/storageclasses/watchers',['common/storage/constants'], fu
         }
     };
 
-    StorageWatcher.prototype.watchProject = function (projectName, eventHandler, callback) {
-        this.logger.debug('watchProject - handler added for project', projectName);
-        this.webSocket.addEventListener(CONSTANTS.BRANCH_DELETED + projectName, eventHandler);
-        this.webSocket.addEventListener(CONSTANTS.BRANCH_CREATED + projectName, eventHandler);
-        this.webSocket.addEventListener(CONSTANTS.BRANCH_HASH_UPDATED + projectName, eventHandler);
+    StorageWatcher.prototype.watchProject = function (projectId, eventHandler, callback) {
+        this.logger.debug('watchProject - handler added for project', projectId);
+        this.webSocket.addEventListener(CONSTANTS.BRANCH_DELETED + projectId, eventHandler);
+        this.webSocket.addEventListener(CONSTANTS.BRANCH_CREATED + projectId, eventHandler);
+        this.webSocket.addEventListener(CONSTANTS.BRANCH_HASH_UPDATED + projectId, eventHandler);
 
-        this.watchers.projects[projectName] = this.watchers.projects.hasOwnProperty(projectName) ?
-        this.watchers.projects[projectName] + 1 : 1;
-        this.logger.debug('Nbr of watchers for project:', projectName, this.watchers.projects[projectName]);
-        if (this.watchers.projects[projectName] === 1) {
-            this.logger.debug('First watcher will enter project room:', projectName);
-            this.webSocket.watchProject({projectName: projectName, join: true}, callback);
+        this.watchers.projects[projectId] = this.watchers.projects.hasOwnProperty(projectId) ?
+        this.watchers.projects[projectId] + 1 : 1;
+        this.logger.debug('Nbr of watchers for project:', projectId, this.watchers.projects[projectId]);
+        if (this.watchers.projects[projectId] === 1) {
+            this.logger.debug('First watcher will enter project room:', projectId);
+            this.webSocket.watchProject({projectId: projectId, join: true}, callback);
         } else {
             callback(null);
         }
     };
 
-    StorageWatcher.prototype.unwatchProject = function (projectName, eventHandler, callback) {
-        this.logger.debug('unwatchProject - handler will be removed', projectName);
-        this.logger.debug('Nbr of database watchers (before removal):', projectName,
-            this.watchers.projects[projectName]);
-        this.webSocket.removeEventListener(CONSTANTS.BRANCH_DELETED + projectName, eventHandler);
-        this.webSocket.removeEventListener(CONSTANTS.BRANCH_CREATED + projectName, eventHandler);
-        this.webSocket.removeEventListener(CONSTANTS.BRANCH_HASH_UPDATED + projectName, eventHandler);
+    StorageWatcher.prototype.unwatchProject = function (projectId, eventHandler, callback) {
+        this.logger.debug('unwatchProject - handler will be removed', projectId);
+        this.logger.debug('Nbr of database watchers (before removal):', projectId,
+            this.watchers.projects[projectId]);
+        this.webSocket.removeEventListener(CONSTANTS.BRANCH_DELETED + projectId, eventHandler);
+        this.webSocket.removeEventListener(CONSTANTS.BRANCH_CREATED + projectId, eventHandler);
+        this.webSocket.removeEventListener(CONSTANTS.BRANCH_HASH_UPDATED + projectId, eventHandler);
 
-        this.watchers.projects[projectName] = this.watchers.projects.hasOwnProperty(projectName) ?
-        this.watchers.projects[projectName] - 1 : -1;
-        if (this.watchers.projects[projectName] === 0) {
-            this.logger.debug('No more watchers will exit project room:', projectName);
-            delete this.watchers.projects[projectName];
+        this.watchers.projects[projectId] = this.watchers.projects.hasOwnProperty(projectId) ?
+        this.watchers.projects[projectId] - 1 : -1;
+        if (this.watchers.projects[projectId] === 0) {
+            this.logger.debug('No more watchers will exit project room:', projectId);
+            delete this.watchers.projects[projectId];
             if (this.connected) {
-                this.webSocket.watchProject({projectName: projectName, join: false}, callback);
+                this.webSocket.watchProject({projectId: projectId, join: false}, callback);
             } else {
                 callback(null);
             }
         } else if (this.watchers.database < 0) {
-            this.logger.error('Number of project watchers became negative!:', projectName);
+            this.logger.error('Number of project watchers became negative!:', projectId);
             callback('Number of project watchers became negative!');
         } else {
             callback(null);
@@ -2832,7 +2834,7 @@ define('common/storage/storageclasses/watchers',['common/storage/constants'], fu
 
     StorageWatcher.prototype._rejoinWatcherRooms = function () {
         var self = this,
-            projectName,
+            projectId,
             callback = function (err) {
                 //TODO: Add a callback here too.
                 if (err) {
@@ -2844,10 +2846,10 @@ define('common/storage/storageclasses/watchers',['common/storage/constants'], fu
             this.logger.debug('Rejoining database room.');
             this.webSocket.watchDatabase({join: true}, callback);
         }
-        for (projectName in this.watchers.projects) {
-            if (this.watchers.projects.hasOwnProperty(projectName) && this.watchers.projects[projectName] > 0) {
-                this.logger.debug('Rejoining project room', projectName, this.watchers.projects[projectName]);
-                this.webSocket.watchProject({projectName: projectName, join: true}, callback);
+        for (projectId in this.watchers.projects) {
+            if (this.watchers.projects.hasOwnProperty(projectId) && this.watchers.projects[projectId] > 0) {
+                this.logger.debug('Rejoining project room', projectId, this.watchers.projects[projectId]);
+                this.webSocket.watchProject({projectId: projectId, join: true}, callback);
             }
         }
     };
@@ -2889,25 +2891,6 @@ define('common/storage/storageclasses/simpleapi',['common/storage/storageclasses
     StorageSimpleAPI.prototype.constructor = StorageSimpleAPI;
 
     /**
-     * Callback for getProjectNames.
-     *
-     * @callback StorageSimpleAPI~getProjectNamesCallback
-     * @param {string} err - error string.
-     * @param {string[]} projectNames - Names of all projects the user has at least read-access to.
-     */
-
-    /**
-     * Retrieves all the project names where the user has at least read access.
-     *
-     * @param {StorageSimpleAPI~getProjectNamesCallback} callback
-     */
-    StorageSimpleAPI.prototype.getProjectNames = function (callback) {
-        var data = {};
-        this.logger.debug('invoking getProjectNames', data);
-        this.webSocket.getProjectNames(data, callback);
-    };
-
-    /**
      * Callback for getProjects.
      *
      * @callback StorageSimpleAPI~getProjectsCallback
@@ -2915,7 +2898,7 @@ define('common/storage/storageclasses/simpleapi',['common/storage/storageclasses
      * @param {{object[]} projects - All projects in the database.
      * @example
      * // projects is of the form
-     * // [{ name: 'ProjectName', read: true, write: false, delete: false} ]
+     * // [{ name: 'projectId', read: true, write: false, delete: false} ]
      */
 
     /**
@@ -2923,10 +2906,9 @@ define('common/storage/storageclasses/simpleapi',['common/storage/storageclasses
      *
      * @param {StorageSimpleAPI~getProjectsCallback} callback
      */
-    StorageSimpleAPI.prototype.getProjects = function (callback) {
-        var data = {};
-        this.logger.debug('invoking getProjects', data);
-        this.webSocket.getProjects(data, callback);
+    StorageSimpleAPI.prototype.getProjects = function (options, callback) {
+        this.logger.debug('invoking getProjects', {metadata: options});
+        this.webSocket.getProjects(options, callback);
     };
 
     /**
@@ -2938,7 +2920,7 @@ define('common/storage/storageclasses/simpleapi',['common/storage/storageclasses
      * @example
      * // projectsWithBranches is of the form
      * // [{
-     * //    name: 'ProjectName',
+     * //    name: 'projectId',
      * //    read: true, //will always be true
      * //    write: false,
      * //    delete: false
@@ -2949,89 +2931,109 @@ define('common/storage/storageclasses/simpleapi',['common/storage/storageclasses
      * // }]
      */
 
-    /**
-     * Retrieves all the access info for all projects.
-     *
-     * @param {StorageSimpleAPI~getProjectsAndBranches} callback
-     */
-    StorageSimpleAPI.prototype.getProjectsAndBranches = function (callback) {
-        var data = {};
-        this.logger.debug('invoking getProjectsAndBranches', data);
-        this.webSocket.getProjectsAndBranches(data, callback);
-    };
 
-
-    StorageSimpleAPI.prototype.getBranches = function (projectName, callback) {
+    StorageSimpleAPI.prototype.getBranches = function (projectId, callback) {
         var data = {
-            projectName: projectName
+            projectId: projectId
         };
-        this.logger.debug('invoking getBranches', data);
+        this.logger.debug('invoking getBranches', {metadata: data});
         this.webSocket.getBranches(data, callback);
     };
 
-    StorageSimpleAPI.prototype.getCommits = function (projectName, before, number, callback) {
+    StorageSimpleAPI.prototype.getCommits = function (projectId, before, number, callback) {
         var data = {
-            projectName: projectName,
+            projectId: projectId,
             before: before,
             number: number
         };
-        this.logger.debug('invoking getCommits', data);
+        this.logger.debug('invoking getCommits', {metadata: data});
         this.webSocket.getCommits(data, callback);
     };
 
-    StorageSimpleAPI.prototype.getLatestCommitData = function (projectName, branchName, callback) {
+    StorageSimpleAPI.prototype.getLatestCommitData = function (projectId, branchName, callback) {
         var data = {
-            projectName: projectName,
+            projectId: projectId,
             branchName: branchName
         };
-        this.logger.debug('invoking getLatestCommitData', data);
+        this.logger.debug('invoking getLatestCommitData', {metadata: data});
         this.webSocket.getLatestCommitData(data, callback);
     };
 
-    // Setters
-    //StorageSimpleAPI.prototype.createProject = function (projectName, parameters, callback) {
-    //    var data = {
-    //        projectName: projectName,
-    //        parameters: parameters
-    //    };
-    //
-    //    this.logger.debug('invoking createProject');
-    //    this.webSocket.createProject(data, callback);
-    //};
+    StorageSimpleAPI.prototype.getCommonAncestorCommit = function (projectId, commitA, commitB, callback) {
+        var data = {
+            commitA: commitA,
+            commitB: commitB,
+            projectId: projectId
+        };
+        this.logger.debug('invoking getCommonAncestorCommit', {metadata: data});
+        this.webSocket.getCommonAncestorCommit(data, callback);
+    };
 
-    StorageSimpleAPI.prototype.deleteProject = function (projectName, callback) {
+    // Setters
+    StorageSimpleAPI.prototype.createProject = function (projectName, callback) {
         var data = {
             projectName: projectName
+        },
+            self = this;
+
+        this.logger.debug('invoking createProject', {metadata: data});
+
+        this.webSocket.createProject(data, function (err, projectId) {
+            if (err) {
+                self.logger.error('cannot create project ', projectName, err);
+                callback(err);
+                return;
+            }
+            self.logger.debug('Project created, projectId', projectId);
+
+            callback(err, projectId);
+        });
+    };
+
+    StorageSimpleAPI.prototype.deleteProject = function (projectId, callback) {
+        var data = {
+            projectId: projectId
         };
-        this.logger.debug('invoking deleteProject', data);
+        this.logger.debug('invoking deleteProject', {metadata: data});
         this.webSocket.deleteProject(data, callback);
     };
 
-    StorageSimpleAPI.prototype.createBranch = function (projectName, branchName, newHash, callback) {
+    StorageSimpleAPI.prototype.setBranchHash = function (projectId, branchName, newHash, oldHash, callback) {
         var data = {
-            projectName: projectName,
+            projectId: projectId,
+            branchName: branchName,
+            newHash: newHash,
+            oldHash: oldHash
+        };
+        this.logger.debug('invoking setBranchHash', {metadata: data});
+        this.webSocket.setBranchHash(data, callback);
+    };
+
+    StorageSimpleAPI.prototype.createBranch = function (projectId, branchName, newHash, callback) {
+        var data = {
+            projectId: projectId,
             branchName: branchName,
             newHash: newHash,
             oldHash: ''
         };
-        this.logger.debug('invoking createBranch', data);
+        this.logger.debug('invoking createBranch', {metadata: data});
         this.webSocket.setBranchHash(data, callback);
     };
 
-    StorageSimpleAPI.prototype.deleteBranch = function (projectName, branchName, oldHash, callback) {
+    StorageSimpleAPI.prototype.deleteBranch = function (projectId, branchName, oldHash, callback) {
         var data = {
-            projectName: projectName,
+            projectId: projectId,
             branchName: branchName,
             newHash: '',
             oldHash: oldHash
         };
-        this.logger.debug('invoking deleteBranch', data);
+        this.logger.debug('invoking deleteBranch', {metadata: data});
         this.webSocket.setBranchHash(data, callback);
     };
 
     //temporary simple request and result functions
     StorageSimpleAPI.prototype.simpleRequest = function (parameters, callback) {
-        this.logger.debug('invoking simpleRequest', parameters);
+        this.logger.debug('invoking simpleRequest', {metadata: parameters});
         this.webSocket.simpleRequest(parameters, callback);
     };
 
@@ -3041,7 +3043,7 @@ define('common/storage/storageclasses/simpleapi',['common/storage/storageclasses
     };
 
     StorageSimpleAPI.prototype.simpleQuery = function (workerId, parameters, callback) {
-        this.logger.debug('invoking simpleQuery; workerId, parameters', workerId, parameters);
+        this.logger.debug('invoking simpleQuery; workerId, parameters', workerId, {metadata: parameters});
         this.webSocket.simpleQuery(workerId, parameters, callback);
     };
 
@@ -3079,11 +3081,11 @@ define('common/storage/storageclasses/objectloaders',['common/storage/storagecla
     StorageObjectLoaders.prototype.constructor = StorageObjectLoaders;
 
     // Getters
-    StorageObjectLoaders.prototype.loadObject = function (projectName, hash, callback) {
+    StorageObjectLoaders.prototype.loadObject = function (projectId, hash, callback) {
         var self = this;
-        this.logger.debug('loadObject', projectName, hash);
+        this.logger.debug('loadObject', projectId, hash);
 
-        self.loadBucket.push({projectName: projectName, hash: hash, cb: callback});
+        self.loadBucket.push({projectId: projectId, hash: hash, cb: callback});
         self.loadBucketSize += 1;
 
         function resetBucketAndLoadObjects() {
@@ -3091,7 +3093,7 @@ define('common/storage/storageclasses/objectloaders',['common/storage/storagecla
             self.loadBucket = [];
             self.loadBucketTimer = null;
             self.loadBucketSize = 0;
-            self.loadObjects(projectName, myBucket);
+            self.loadObjects(projectId, myBucket);
         }
 
         if (self.loadBucketSize === 1) {
@@ -3109,7 +3111,7 @@ define('common/storage/storageclasses/objectloaders',['common/storage/storagecla
         }
     };
 
-    StorageObjectLoaders.prototype.loadObjects = function (projectName, hashedObjects) {
+    StorageObjectLoaders.prototype.loadObjects = function (projectId, hashedObjects) {
         var self = this,
             hashes = {},
             data,
@@ -3120,14 +3122,14 @@ define('common/storage/storageclasses/objectloaders',['common/storage/storagecla
         hashes = Object.keys(hashes);
         data = {
             hashes: hashes,
-            projectName: projectName
+            projectId: projectId
         };
 
         this.webSocket.loadObjects(data, function (err, result) {
             if (err) {
                 throw new Error(err);
             }
-            self.logger.debug('loadObjects returned', result);
+            self.logger.debug('loadObjects returned', {metadata: result});
             for (i = 0; i < hashedObjects.length; i++) {
                 if (typeof result[hashedObjects[i].hash] === 'string') {
                     self.logger.error(result[hashedObjects[i].hash]);
@@ -3181,14 +3183,14 @@ define('common/util/assert',[],function () {
 
 define('common/storage/project/cache',['common/util/assert', 'common/storage/constants'], function (ASSERT, CONSTANTS) {
     
-    function ProjectCache(storage, projectName, mainLogger, gmeConfig) {
+    function ProjectCache(storage, projectId, mainLogger, gmeConfig) {
         var missing = {},
             backup = {},
             cache = {},
             logger = mainLogger.fork('ProjectCache'),
             cacheSize = 0;
 
-        logger.debug('ctor');
+        logger.debug('ctor', projectId);
         function cacheInsert(key, obj) {
             ASSERT(typeof cache[key] === 'undefined' && obj[CONSTANTS.MONGO_ID] === key);
             logger.debug('cacheInsert', key);
@@ -3216,7 +3218,7 @@ define('common/storage/project/cache',['common/util/assert', 'common/storage/con
                         obj = [callback];
                         missing[key] = obj;
                         logger.debug('object set to be loaded from storage');
-                        storage.loadObject(projectName, key, function (err, obj2) {
+                        storage.loadObject(projectId, key, function (err, obj2) {
                             ASSERT(typeof obj2 === 'object' || typeof obj2 === 'undefined');
 
                             if (obj.length !== 0) {
@@ -3284,6 +3286,66 @@ define('common/storage/project/cache',['common/util/assert', 'common/storage/con
     }
 
     return ProjectCache;
+});
+/*globals define*/
+/*jshint node:true, browser: true*/
+/**
+ * This class defines the common interface for a storage-project
+ * @author pmeijer / https://github.com/pmeijer
+ */
+
+define('common/storage/project/interface',[
+    'common/storage/project/cache',
+    'common/storage/constants',
+], function (ProjectCache, CONSTANTS) {
+    
+
+    function ProjectInterface(projectId, storageObjectsAccessor, mainLogger, gmeConfig) {
+        this.projectId = projectId;
+        this.ID_NAME = CONSTANTS.MONGO_ID;
+        this.logger = mainLogger.fork('Project:' + this.projectId);
+        this.logger.debug('ctor', projectId);
+        this.projectCache = new ProjectCache(storageObjectsAccessor, this.projectId, this.logger, gmeConfig);
+
+        this.getBranch = function (branchName, shouldExist) {
+            throw new Error('getBranch must be overridden in derived class');
+        };
+
+        // Functions forwarded to project cache.
+        this.insertObject = this.projectCache.insertObject;
+        this.loadObject = this.projectCache.loadObject;
+
+        // Functions forwarded to storage.
+        this.makeCommit = function (branchName, parents, rootHash, coreObjects, msg, callback) {
+            throw new Error('makeCommit must be overridden in derived class');
+        };
+
+        this.setBranchHash = function (branchName, newHash, oldHash, callback) {
+            throw new Error('setBranchHash must be overridden in derived class');
+        };
+
+        this.getBranchHash = function (branchName, callback) {
+            throw new Error('setBranchHash must be overridden in derived class');
+        };
+
+        this.createBranch = function (branchName, newHash, callback) {
+            throw new Error('createBranch must be overridden in derived class');
+        };
+
+        this.getBranches = function (callback) {
+            throw new Error('getBranches must be overridden in derived class');
+        };
+
+        this.getCommits = function (before, number, callback) {
+            throw new Error('getCommits must be overridden in derived class');
+        };
+
+        this.getCommonAncestorCommit = function (commitA, commitB, callback) {
+            throw new Error('getCommonAncestorCommit must be overridden in derived class');
+        };
+    }
+
+    return ProjectInterface;
 });
 /*globals define*/
 /*jshint browser: true, node:true*/
@@ -3441,23 +3503,20 @@ define('common/storage/project/branch',['common/storage/constants'], function (C
  */
 
 define('common/storage/project/project',[
-    'common/storage/project/cache',
+    'common/storage/project/interface',
     'common/storage/project/branch',
-    'common/storage/constants',
     'common/util/assert'
-], function (ProjectCache, Branch, CONSTANTS, ASSERT) {
+    //'q'
+], function (ProjectInterface, Branch, ASSERT) {
     
 
-    function Project(name, storage, mainLogger, gmeConfig) {
-        this.name = name;
+    function Project(projectId, storage, mainLogger, gmeConfig) {
+        var self = this;
         this.branches = {};
-        this.ID_NAME = CONSTANTS.MONGO_ID;
 
-        var self = this,
-            logger = mainLogger.fork('Project:' + self.name),
-            projectCache = new ProjectCache(storage, self.name, logger, gmeConfig);
+        ProjectInterface.call(this, projectId, storage, mainLogger, gmeConfig);
 
-        logger.debug('ctor');
+        // Functions for client specific branch handling
         this.getBranch = function (branchName, shouldExist) {
 
             if (shouldExist === true) {
@@ -3467,7 +3526,7 @@ define('common/storage/project/project',[
             }
 
             if (this.branches.hasOwnProperty(branchName) === false) {
-                this.branches[branchName] = new Branch(branchName, logger);
+                this.branches[branchName] = new Branch(branchName, self.logger);
             }
 
             return this.branches[branchName];
@@ -3481,40 +3540,38 @@ define('common/storage/project/project',[
             return existed;
         };
 
-        // Functions forwarded to storage.
+        // Functions defined in ProjectInterface
+        this.makeCommit = function (branchName, parents, rootHash, coreObjects, msg, callback) {
+            return storage.makeCommit(self.projectId, branchName, parents, rootHash, coreObjects, msg, callback);
+        };
+
         this.setBranchHash = function (branchName, newHash, oldHash, callback) {
-            storage.setBranchHash(self.name, branchName, newHash, oldHash, callback);
+            return storage.setBranchHash(self.projectId, branchName, newHash, oldHash, callback);
+        };
+
+        this.getBranchHash = function (branchName, callback) {
+            storage.setBranchHash(self.projectId, branchName, callback);
         };
 
         this.createBranch = function (branchName, newHash, callback) {
-            storage.createBranch(self.name, branchName, newHash, callback);
-        };
-
-        this.makeCommit = function (branchName, parents, rootHash, coreObjects, msg, callback) {
-            return storage.makeCommit(self.name, branchName, parents, rootHash, coreObjects, msg, callback);
+            storage.createBranch(self.projectId, branchName, newHash, callback);
         };
 
         this.getBranches = function (callback) {
-            storage.getBranches(self.name, callback);
+            storage.getBranches(self.projectId, callback);
         };
 
         this.getCommits = function (before, number, callback) {
-            storage.getCommits(self.name, before, number, callback);
+            storage.getCommits(self.projectId, before, number, callback);
         };
 
         this.getCommonAncestorCommit = function (commitA, commitB, callback) {
-            storage.getCommonAncestorCommit(self.name, commitA, commitB, callback);
-        };
-
-        // Functions forwarded to project cache.
-        this.insertObject = function (obj, stageBucket) {
-            projectCache.insertObject(obj, stageBucket);
-        };
-
-        this.loadObject = function (key, callback) {
-            projectCache.loadObject(key, callback);
+            storage.getCommonAncestorCommit(self.projectId, commitA, commitB, callback);
         };
     }
+
+    Project.prototype = Object.create(ProjectInterface);
+    Project.prototype.constructor = Project;
 
     return Project;
 });
@@ -3522,67 +3579,6 @@ define('common/storage/project/project',[
 //SHA1 in Javascript 862 bytes, MIT License, http://antimatter15.com/
 define('common/util/sha1',[],function() {
 return function(l){function p(b,a){return b<<a|b>>>32-a}l+="";for(var n=Math,c=[1518500249,1859775393,2400959708,3395469782,1732584193,4023233417,2562383102,271733878,3285377520,4294967295],s=n.ceil(l.length/4)+2,q=n.ceil(s/16),g=[],a=0,h=[],j,d,e,f,m,i,b,k;a<q;a++){g[a]=[];for(k=0;k<16;k++){function o(b,c){return l.charCodeAt(a*64+k*4+b)<<c}g[a][k]=o(0,24)|o(1,16)|o(2,8)|o(3,0)}}i=l.length*8-8;a=q-1;g[a][14]=i/(c[9]+1);g[a][14]=n.floor(g[a][14]);g[a][15]=i&c[9];for(a=0;a<q;a++){for(b=0;b<16;b++)h[b]=g[a][b];for(b=16;b<80;b++)h[b]=p(h[b-3]^h[b-8]^h[b-14]^h[b-16],1);j=c[4];d=c[5];e=c[6];f=c[7];m=c[8];for(b=0;b<80;b++){var r=n.floor(b/20),t=p(j,5)+(r<1?d&e^~d&f:r==2?d&e^d&f^e&f:d^e^f)+m+c[r]+h[b]&c[9];m=f;f=e;e=p(d,30);d=j;j=t}c[4]+=j;c[5]+=d;c[6]+=e;c[7]+=f;c[8]+=m}i="";for(z=4;z<9;z++)for(a=7;a>=0;a--)i+=((c[z]&c[9])>>>a*4&15).toString(16);return i};
-});
-
-//jshint ignore: start
-define('common/util/zssha1.min',[],function(){
-    function SHA1() {
-
-        this.pp = function (b, a) {
-            return b << a | b >>> 32 - a
-        };
-
-        this.oo = function (l, a, k, b, c) {
-            try{
-                return l.charCodeAt(a * 64 + k * 4 + b) << c
-            } catch(e){}
-        };
-
-        this.getHash = function(l) {
-
-            l += "";
-            for (var n = Math, c = [1518500249, 1859775393, 2400959708, 3395469782, 1732584193, 4023233417, 2562383102, 271733878, 3285377520, 4294967295], s = n.ceil(l.length / 4) + 2, q = n.ceil(s / 16), g = [], a = 0, h = [], j, d, e, f, m, i, b, k; a < q; a++) {
-                g[a] = [];
-                for (k = 0; k < 16; k++) {
-                    g[a][k] = this.oo(l, a, k, 0, 24) | this.oo(l, a, k, 1, 16) | this.oo(l, a, k, 2, 8) | this.oo(l, a, k, 3, 0)
-                }
-            }
-            i = l.length * 8 - 8;
-            a = q - 1;
-            g[a][14] = i / (c[9] + 1);
-            g[a][14] = n.floor(g[a][14]);
-            g[a][15] = i & c[9];
-            for (a = 0; a < q; a++) {
-                for (b = 0; b < 16; b++)h[b] = g[a][b];
-                for (b = 16; b < 80; b++)h[b] = this.pp(h[b - 3] ^ h[b - 8] ^ h[b - 14] ^ h[b - 16], 1);
-                j = c[4];
-                d = c[5];
-                e = c[6];
-                f = c[7];
-                m = c[8];
-                for (b = 0; b < 80; b++) {
-                    var r = n.floor(b / 20), t = this.pp(j, 5) + (r < 1 ? d & e ^ ~d & f : r == 2 ? d & e ^ d & f ^ e & f : d ^ e ^ f) + m + c[r] + h[b] & c[9];
-                    m = f;
-                    f = e;
-                    e = this.pp(d, 30);
-                    d = j;
-                    j = t
-                }
-                c[4] += j;
-                c[5] += d;
-                c[6] += e;
-                c[7] += f;
-                c[8] += m
-            }
-            i = "";
-            for (z = 4; z < 9; z++)
-                for (a = 7; a >= 0; a--)
-                    i += ((c[z] & c[9]) >>> a * 4 & 15).toString(16);
-            return i
-        };
-    }
-
-    return SHA1;
 });
 
 //jshint ignore: start
@@ -3716,14 +3712,12 @@ define('common/util/canon',[], function() {
 
 define('common/util/key',[
     'common/util/sha1',
-    'common/util/zssha1.min',
     'common/util/assert',
     'common/util/canon'
-], function (SHA1, ZS, ASSERT, CANON) {
+], function (SHA1, ASSERT, CANON) {
     
 
-    var keyType = null,
-        ZSSHA = new ZS();
+    var keyType = null;
 
     function rand160Bits() {
         var result = '',
@@ -3743,8 +3737,6 @@ define('common/util/key',[
         switch (keyType) {
             case 'rand160Bits':
                 return rand160Bits();
-            case 'ZSSHA':
-                return ZSSHA.getHash(CANON.stringify(object));
             default: //plainSHA1
                 return SHA1(CANON.stringify(object));
         }
@@ -3825,9 +3817,11 @@ define('common/storage/storageclasses/editorstorage',[
                 logger.debug('inside afterProjectClosed projectCnt', projectCnt);
                 if (projectCnt === 0) {
                     // Remove the handler for the socket.io events 'connect' and 'disconnect'.
+                    logger.debug('Removing connect and disconnect events');
                     webSocket.socket.removeAllListeners('connect');
                     webSocket.socket.removeAllListeners('disconnect');
                     // Disconnect from the server.
+                    logger.debug('Disconnecting web-socket');
                     webSocket.disconnect();
                     self.connected = false;
                     // Remove all local event-listeners.
@@ -3861,15 +3855,15 @@ define('common/storage/storageclasses/editorstorage',[
 
         /**
          *
-         * @param {string} projectName - name of project to open.
+         * @param {string} projectId - name of project to open.
          * @param {EditorStorage~openProjectCallback} - callback
          */
-        this.openProject = function (projectName, callback) {
+        this.openProject = function (projectId, callback) {
             var data = {
-                projectName: projectName
+                projectId: projectId
             };
-            if (projects[projectName]) {
-                logger.error('project is already open', projectName);
+            if (projects[projectId]) {
+                logger.error('project is already open', projectId);
                 callback('project is already open');
             }
             webSocket.openProject(data, function (err, branches, access) {
@@ -3877,40 +3871,18 @@ define('common/storage/storageclasses/editorstorage',[
                     callback(err);
                     return;
                 }
-                var project = new Project(projectName, self, logger, gmeConfig);
-                projects[projectName] = project;
+                var project = new Project(projectId, self, logger, gmeConfig);
+                projects[projectId] = project;
                 callback(err, project, branches, access);
             });
         };
 
-        this.createProject = function (projectName, callback) {
-            var data = {
-                projectName: projectName
-            };
-            if (projects[projectName]) {
-                logger.error('project already exists', projectName);
-                callback('project already exists');
-                return;
-            }
-            webSocket.createProject(data, function (err) {
-                if (err) {
-                    logger.error('cannot create project ', projectName, err);
-                    callback(err);
-                    return;
-                }
-
-                var project = new Project(projectName, self, logger, gmeConfig);
-                projects[projectName] = project;
-                callback(err, project);
-            });
-        };
-
-        this.closeProject = function (projectName, callback) {
-            var project = projects[projectName],
+        this.closeProject = function (projectId, callback) {
+            var project = projects[projectId],
                 error = '',
                 branchCnt,
                 branchNames;
-            logger.debug('closeProject', projectName);
+            logger.debug('closeProject', projectId);
 
             function closeAndDelete(err) {
                 if (err) {
@@ -3919,9 +3891,9 @@ define('common/storage/storageclasses/editorstorage',[
                 }
                 logger.debug('inside closeAndDelete branchCnt', branchCnt);
                 if (branchCnt === 0) {
-                    delete projects[projectName];
+                    delete projects[projectId];
                     logger.debug('project reference deleted, sending close to server.');
-                    webSocket.closeProject({projectName: projectName}, function (err) {
+                    webSocket.closeProject({projectId: projectId}, function (err) {
                         logger.debug('project closed on server.');
                         callback(err || error);
                     });
@@ -3932,27 +3904,27 @@ define('common/storage/storageclasses/editorstorage',[
                 branchNames = Object.keys(project.branches);
                 branchCnt = branchNames.length;
                 if (branchCnt > 0) {
-                    logger.warn('Branches still open for project, will be closed.', projectName, branchNames);
+                    logger.warn('Branches still open for project, will be closed.', projectId, branchNames);
                     while (branchCnt) {
                         branchCnt -= 1;
-                        this.closeBranch(projectName, branchNames[branchCnt], closeAndDelete);
+                        this.closeBranch(projectId, branchNames[branchCnt], closeAndDelete);
                     }
                 } else {
                     closeAndDelete(null);
                 }
             } else {
-                logger.warn('Project is not open ', projectName);
+                logger.warn('Project is not open ', projectId);
                 callback(null);
             }
 
         };
 
-        this.openBranch = function (projectName, branchName, updateHandler, commitHandler, callback) {
-            ASSERT(projects.hasOwnProperty(projectName), 'Project not opened: ' + projectName);
+        this.openBranch = function (projectId, branchName, updateHandler, commitHandler, callback) {
+            ASSERT(projects.hasOwnProperty(projectId), 'Project not opened: ' + projectId);
             var self = this,
-                project = projects[projectName],
+                project = projects[projectId],
                 data = {
-                    projectName: projectName,
+                    projectId: projectId,
                     branchName: branchName
                 };
 
@@ -3973,7 +3945,7 @@ define('common/storage/storageclasses/editorstorage',[
                 branch.updateHandler = function (_ws, updateData) {
                     var j,
                         originHash = updateData.commitObject[CONSTANTS.MONGO_ID];
-                    logger.debug('updateHandler invoked for project, branch', projectName, branchName);
+                    logger.debug('updateHandler invoked for project, branch', projectId, branchName);
                     for (j = 0; j < updateData.coreObjects.length; j += 1) {
                         project.insertObject(updateData.coreObjects[j]);
                     }
@@ -3983,14 +3955,14 @@ define('common/storage/storageclasses/editorstorage',[
 
                     if (branch.getCommitQueue().length === 0) {
                         if (branch.getUpdateQueue().length === 1) {
-                            self._pullNextQueuedCommit(projectName, branchName);
+                            self._pullNextQueuedCommit(projectId, branchName);
                         }
                     } else {
                         logger.debug('commitQueue is not empty, only updating originHash.');
                     }
                 };
 
-                webSocket.addEventListener(webSocket.getBranchUpdateEventName(projectName, branchName),
+                webSocket.addEventListener(webSocket.getBranchUpdateEventName(projectId, branchName),
                     branch.updateHandler);
 
                 // Insert the objects from the latest commit into the project cache.
@@ -4002,11 +3974,11 @@ define('common/storage/storageclasses/editorstorage',[
             });
         };
 
-        this.closeBranch = function (projectName, branchName, callback) {
-            ASSERT(projects.hasOwnProperty(projectName), 'Project not opened: ' + projectName);
-            logger.debug('closeBranch', projectName, branchName);
+        this.closeBranch = function (projectId, branchName, callback) {
+            ASSERT(projects.hasOwnProperty(projectId), 'Project not opened: ' + projectId);
+            logger.debug('closeBranch', projectId, branchName);
 
-            var project = projects[projectName],
+            var project = projects[projectId],
                 branch = project.branches[branchName];
 
             if (branch) {
@@ -4015,23 +3987,23 @@ define('common/storage/storageclasses/editorstorage',[
                 branch.cleanUp();
 
                 // Stop listening to events from the sever
-                webSocket.removeEventListener(webSocket.getBranchUpdateEventName(projectName, branchName),
+                webSocket.removeEventListener(webSocket.getBranchUpdateEventName(projectId, branchName),
                     branch.updateHandler);
             } else {
-                logger.warn('Branch is not open', projectName, branchName);
+                logger.warn('Branch is not open', projectId, branchName);
                 callback(null);
                 return;
             }
 
             project.removeBranch(branchName);
-            webSocket.closeBranch({projectName: projectName, branchName: branchName}, callback);
+            webSocket.closeBranch({projectId: projectId, branchName: branchName}, callback);
         };
 
-        this.forkBranch = function (projectName, branchName, forkName, commitHash, callback) {
-            ASSERT(projects.hasOwnProperty(projectName), 'Project not opened: ' + projectName);
-            this.logger.debug('forkBranch', projectName, branchName, forkName, commitHash);
+        this.forkBranch = function (projectId, branchName, forkName, commitHash, callback) {
+            ASSERT(projects.hasOwnProperty(projectId), 'Project not opened: ' + projectId);
+            this.logger.debug('forkBranch', projectId, branchName, forkName, commitHash);
             var self = this,
-                project = projects[projectName],
+                project = projects[projectId],
                 branch = project.getBranch(branchName, true),
                 forkData;
 
@@ -4056,7 +4028,7 @@ define('common/storage/storageclasses/editorstorage',[
                         commitNext();
                     });
                 } else {
-                    self.createBranch(projectName, forkName, forkData.commitHash, function (err) {
+                    self.createBranch(projectId, forkName, forkData.commitHash, function (err) {
                         if (err) {
                             logger.error('forkBranch - failed creating new branch', err);
                             callback(err);
@@ -4070,25 +4042,15 @@ define('common/storage/storageclasses/editorstorage',[
             commitNext();
         };
 
-        this.setBranchHash = function (projectName, branchName, newHash, oldHash, callback) {
-            var setBranchHashData = {
-                projectName: projectName,
-                branchName: branchName,
-                newHash: newHash,
-                oldHash: oldHash
-            };
-            webSocket.setBranchHash(setBranchHashData, callback);
-        };
-
-        this.makeCommit = function (projectName, branchName, parents, rootHash, coreObjects, msg, callback) {
-            ASSERT(projects.hasOwnProperty(projectName), 'Project not opened: ' + projectName);
-            var project = projects[projectName],
+        this.makeCommit = function (projectId, branchName, parents, rootHash, coreObjects, msg, callback) {
+            ASSERT(projects.hasOwnProperty(projectId), 'Project not opened: ' + projectId);
+            var project = projects[projectId],
                 branch,
                 commitData = {
-                    projectName: projectName
+                    projectId: projectId
                 };
 
-            commitData.commitObject = self._getCommitObject(projectName, parents, rootHash, msg);
+            commitData.commitObject = self._getCommitObject(projectId, parents, rootHash, msg);
             commitData.coreObjects = coreObjects;
             if (typeof branchName === 'string') {
                 commitData.branchName = branchName;
@@ -4096,7 +4058,7 @@ define('common/storage/storageclasses/editorstorage',[
                 branch.updateHashes(commitData.commitObject[CONSTANTS.MONGO_ID], null);
                 branch.queueCommit(commitData);
                 if (branch.getCommitQueue().length === 1) {
-                    self._pushNextQueuedCommit(projectName, branchName, callback);
+                    self._pushNextQueuedCommit(projectId, branchName, callback);
                 }
             } else {
                 ASSERT(typeof callback === 'function', 'Making commit without updating branch requires a callback.');
@@ -4106,19 +4068,9 @@ define('common/storage/storageclasses/editorstorage',[
             return commitData.commitObject; //commitHash
         };
 
-        this.getCommonAncestorCommit = function (projectName, commitA, commitB, callback) {
-            var parameters = {
-                commitA: commitA,
-                commitB: commitB,
-                projectName: projectName
-            };
-
-            return webSocket.getCommonAncestorCommit(parameters, callback);
-        };
-
-        this._pushNextQueuedCommit = function (projectName, branchName, callback) {
-            ASSERT(projects.hasOwnProperty(projectName), 'Project not opened: ' + projectName);
-            var project = projects[projectName],
+        this._pushNextQueuedCommit = function (projectId, branchName, callback) {
+            ASSERT(projects.hasOwnProperty(projectId), 'Project not opened: ' + projectId);
+            var project = projects[projectId],
                 branch = project.getBranch(branchName, true),
                 commitData;
             logger.debug('_pushNextQueuedCommit', branch.getCommitQueue());
@@ -4145,17 +4097,17 @@ define('common/storage/storageclasses/editorstorage',[
                         if (push) {
                             branch.getFirstCommit(true); // Remove the commit from the queue.
                             branch.updateHashes(null, commitData.commitObject[CONSTANTS.MONGO_ID]);
-                            self._pushNextQueuedCommit(projectName, branchName);
+                            self._pushNextQueuedCommit(projectId, branchName);
                         }
                     });
                 } else {
                     logger.error('_pushNextQueuedCommit returned from server but the branch was closed, ' +
-                        'the branch has probably been closed while waiting for the response.', projectName, branchName);
+                        'the branch has probably been closed while waiting for the response.', projectId, branchName);
                 }
             });
         };
 
-        this._getCommitObject = function (projectName, parents, rootHash, msg) {
+        this._getCommitObject = function (projectId, parents, rootHash, msg) {
             msg = msg || 'n/a';
             var commitObj = {
                     root: rootHash,
@@ -4172,14 +4124,14 @@ define('common/storage/storageclasses/editorstorage',[
             return commitObj;
         };
 
-        this._pullNextQueuedCommit = function (projectName, branchName) {
-            ASSERT(projects.hasOwnProperty(projectName), 'Project not opened: ' + projectName);
+        this._pullNextQueuedCommit = function (projectId, branchName) {
+            ASSERT(projects.hasOwnProperty(projectId), 'Project not opened: ' + projectId);
             var self = this,
-                project = projects[projectName],
+                project = projects[projectId],
                 branch = project.getBranch(branchName, true),
                 updateData;
 
-            logger.debug('About to update, updateQueue', branch.getUpdateQueue());
+            logger.debug('About to update, updateQueue', {metadata: branch.getUpdateQueue()});
             if (branch.getUpdateQueue().length === 0) {
                 logger.debug('No queued updates, returns');
                 return;
@@ -4193,31 +4145,31 @@ define('common/storage/storageclasses/editorstorage',[
                         logger.debug('New commit was successfully loaded, updating localHash.');
                         branch.updateHashes(originHash, null);
                         branch.getFirstUpdate(true);
-                        self._pullNextQueuedCommit(projectName, branchName);
+                        self._pullNextQueuedCommit(projectId, branchName);
                     } else {
-                        logger.warn('Loading of update commit was aborted or failed.', updateData);
+                        logger.warn('Loading of update commit was aborted or failed.', {metadat: updateData});
                     }
                 });
             } else {
                 logger.error('_pullNextQueuedCommit returned from server but the branch was closed.',
-                    projectName, branchName);
+                    projectId, branchName);
             }
         };
 
         this._rejoinBranchRooms = function () {
-            var projectName,
+            var projectId,
                 project,
                 branchName;
             logger.debug('_rejoinBranchRooms');
-            for (projectName in projects) {
-                if (projects.hasOwnProperty(projectName)) {
-                    project = projects[projectName];
-                    logger.debug('_rejoinBranchRooms found project', projectName);
+            for (projectId in projects) {
+                if (projects.hasOwnProperty(projectId)) {
+                    project = projects[projectId];
+                    logger.debug('_rejoinBranchRooms found project', projectId);
                     for (branchName in project.branches) {
                         if (project.branches.hasOwnProperty(branchName)) {
-                            logger.debug('_rejoinBranchRooms joining branch', projectName, branchName);
+                            logger.debug('_rejoinBranchRooms joining branch', projectId, branchName);
                             webSocket.watchBranch({
-                                projectName: projectName,
+                                projectId: projectId,
                                 branchName: branchName,
                                 join: true
                             });
@@ -4242,18 +4194,27 @@ define('common/storage/storageclasses/editorstorage',[
 define('common/storage/socketio/browserclient',[], function () {
     
 
-    function IoClient (gmeConfig) {
+    function IoClient (mainLogger, gmeConfig) {
+        var logger = mainLogger.fork('socketio-browserclient');
+
         this.connect = function (callback) {
-            var hostAddress = window.location.protocol + '//' + window.location.host;
+            var hostAddress = window.location.protocol + '//' + window.location.host,
+                socketIoUrl;
 
             if (window.__karma__) {
                 // TRICKY: karma uses web sockets too, we need to use the gme server's port
                 hostAddress = window.location.protocol + '//localhost:' + gmeConfig.server.port;
             }
 
-            require([hostAddress + '/socket.io/socket.io.js'], function (io_) {
+            socketIoUrl = hostAddress + '/socket.io/socket.io.js';
+            logger.debug('Will require socketIO from', socketIoUrl);
+
+            require([socketIoUrl], function (io_) {
                 var io = io_ || window.io,
-                    socket = io.connect(hostAddress, gmeConfig.socketIO);
+                    socket;
+
+                logger.debug('Connecting to "' + hostAddress + '" with options', gmeConfig.socketIO);
+                socket = io.connect(hostAddress, gmeConfig.socketIO);
                 callback(null, socket);
             });
         };
@@ -4430,31 +4391,37 @@ define('common/storage/socketio/websocket',[
 
                 self.socket.on(CONSTANTS.PROJECT_DELETED, function (data) {
                     data.etype = CONSTANTS.PROJECT_DELETED;
+                    logger.debug('PROJECT_DELETED event', {metadata: data});
                     self.dispatchEvent(CONSTANTS.PROJECT_DELETED, data);
                 });
 
                 self.socket.on(CONSTANTS.PROJECT_CREATED, function (data) {
                     data.etype = CONSTANTS.PROJECT_CREATED;
+                    logger.debug('PROJECT_CREATED event', {metadata: data});
                     self.dispatchEvent(CONSTANTS.PROJECT_CREATED, data);
                 });
 
                 self.socket.on(CONSTANTS.BRANCH_CREATED, function (data) {
                     data.etype = CONSTANTS.BRANCH_CREATED;
-                    self.dispatchEvent(CONSTANTS.BRANCH_CREATED + data.projectName, data);
+                    logger.debug('BRANCH_CREATED event', {metadata: data});
+                    self.dispatchEvent(CONSTANTS.BRANCH_CREATED + data.projectId, data);
                 });
 
                 self.socket.on(CONSTANTS.BRANCH_DELETED, function (data) {
                     data.etype = CONSTANTS.BRANCH_DELETED;
-                    self.dispatchEvent(CONSTANTS.BRANCH_DELETED + data.projectName, data);
+                    logger.debug('BRANCH_DELETED event', {metadata: data});
+                    self.dispatchEvent(CONSTANTS.BRANCH_DELETED + data.projectId, data);
                 });
 
                 self.socket.on(CONSTANTS.BRANCH_HASH_UPDATED, function (data) {
                     data.etype = CONSTANTS.BRANCH_HASH_UPDATED;
-                    self.dispatchEvent(CONSTANTS.BRANCH_HASH_UPDATED + data.projectName, data);
+                    logger.debug('BRANCH_HASH_UPDATED event', {metadata: data});
+                    self.dispatchEvent(CONSTANTS.BRANCH_HASH_UPDATED + data.projectId, data);
                 });
 
                 self.socket.on(CONSTANTS.BRANCH_UPDATED, function (data) {
-                    self.dispatchEvent(self.getBranchUpdateEventName(data.projectName, data.branchName), data);
+                    logger.debug('BRANCH_UPDATED event', {metadata: data});
+                    self.dispatchEvent(self.getBranchUpdateEventName(data.projectId, data.branchName), data);
                 });
             });
         };
@@ -4507,16 +4474,8 @@ define('common/storage/socketio/websocket',[
         };
 
         // REST like functions
-        this.getProjectNames = function (data, callback) {
-            self.socket.emit('getProjectNames', data, callback);
-        };
-
         this.getProjects = function (data, callback) {
             self.socket.emit('getProjects', data, callback);
-        };
-
-        this.getProjectsAndBranches = function (data, callback) {
-            self.socket.emit('getProjectsAndBranches', data, callback);
         };
 
         this.deleteProject = function (data, callback) {
@@ -4539,6 +4498,10 @@ define('common/storage/socketio/websocket',[
             self.socket.emit('getLatestCommitData', data, callback);
         };
 
+        this.getCommonAncestorCommit = function (data, callback) {
+            self.socket.emit('getCommonAncestorCommit', data, callback);
+        };
+
         //temporary simple request / result functions
         this.simpleRequest = function (data, callback) {
             self.socket.emit('simpleRequest', data, callback);
@@ -4550,10 +4513,6 @@ define('common/storage/socketio/websocket',[
 
         this.simpleQuery = function (workerId, data, callback) {
             self.socket.emit('simpleQuery', workerId, data, callback);
-        };
-
-        this.getCommonAncestorCommit = function (data, callback) {
-            self.socket.emit('getCommonAncestorCommit', data, callback);
         };
 
         // Helper functions
@@ -4584,7 +4543,7 @@ define('common/storage/browserstorage',[
     var _storage;
 
     function _createStorage(logger, gmeConfig) {
-        var ioClient = new BrowserIoClient(gmeConfig),
+        var ioClient = new BrowserIoClient(logger, gmeConfig),
             webSocket = new WebSocket(ioClient, logger, gmeConfig),
             storage = new EditorStorage(webSocket, logger, gmeConfig);
 
@@ -4613,402 +4572,6 @@ define('common/storage/browserstorage',[
         getStorage: getStorage
     };
 });
-/*globals define*/
-/*jshint node: true, browser: true*/
-
-/**
- * @author mmaroti / https://github.com/mmaroti
- */
-
-define('common/core/future',[], function () {
-    
-
-    var maxDepth = 5;
-
-    var ASSERT = function (cond) {
-        if (!cond) {
-            var error = new Error('future assertion failed');
-            console.log(error.stack);
-            throw error;
-        }
-    };
-
-    // ------- Future -------
-
-    var UNRESOLVED = {};
-
-    var Future = function () {
-        this.value = UNRESOLVED;
-        this.listener = null;
-        this.param = null;
-    };
-
-    var setValue = function (future, value) {
-        ASSERT(future instanceof Future && future.value === UNRESOLVED);
-
-        if (value instanceof Future) {
-            setListener(value, setValue, future);
-        } else {
-            future.value = value;
-
-            if (future.listener !== null) {
-                future.listener(future.param, value);
-            }
-        }
-    };
-
-    var setListener = function (future, listener, param) {
-        ASSERT(future instanceof Future && future.listener === null && future.value === UNRESOLVED);
-        ASSERT(typeof listener === 'function' && listener.length === 2);
-
-        future.listener = listener;
-        future.param = param;
-
-        if (future.value !== UNRESOLVED) {
-            listener(param, future);
-        }
-    };
-
-    var isUnresolved = function (value) {
-        return (value instanceof Future) && value.value === UNRESOLVED;
-    };
-
-    var getValue = function (value) {
-        if (value instanceof Future) {
-            if (value.value instanceof Error) {
-                throw value.value;
-            } else if (value.value !== UNRESOLVED) {
-                return value.value;
-            }
-        }
-        return value;
-    };
-
-    // ------- adapt
-
-    var adapt = function (func) {
-        ASSERT(typeof func === 'function');
-
-        return function adaptx() {
-            var args = arguments;
-            var future = new Future();
-
-            args[args.length++] = function adaptCallback(error, value) {
-                if (error) {
-                    value = error instanceof Error ? error : new Error(error);
-                } else {
-                    ASSERT(!(value instanceof Error));
-                }
-                setValue(future, value);
-            };
-
-            func.apply(this, args);
-
-            return getValue(future);
-        };
-    };
-
-    var unadapt = function (func) {
-        ASSERT(typeof func === 'function');
-
-        if (func.length === 0) {
-            return function unadapt0(callback) {
-                var value;
-                try {
-                    value = func.call(this);
-                } catch (error) {
-                    callback(error);
-                    return;
-                }
-                then(value, callback);
-            };
-        } else if (func.length === 1) {
-            return function unadapt1(arg, callback) {
-                var value;
-                try {
-                    value = func.call(this, arg);
-                } catch (error) {
-                    callback(error);
-                    return;
-                }
-                then(value, callback);
-            };
-        } else {
-            return function unadaptx() {
-                var args = arguments;
-
-                var callback = args[--args.length];
-                ASSERT(typeof callback === 'function');
-
-                var value;
-                try {
-                    value = func.apply(this, args);
-                } catch (error) {
-                    callback(error);
-                    return;
-                }
-                then(value, callback);
-            };
-        }
-    };
-
-    var delay = function (delay, value) {
-        var future = new Future();
-        setTimeout(setValue, delay, future, value);
-        return future;
-    };
-
-    // ------- call -------
-
-    var Func = function (func, that, args, index) {
-        this.value = UNRESOLVED;
-        this.listener = null;
-        this.param = null;
-
-        this.func = func;
-        this.that = that;
-        this.args = args;
-        this.index = index;
-
-        setListener(args[index], setArgument, this);
-    };
-
-    Func.prototype = Future.prototype;
-
-    var setArgument = function (future, value) {
-        if (!(value instanceof Error)) {
-            try {
-                var args = future.args;
-                args[future.index] = value;
-
-                while (++future.index < args.length) {
-                    value = args[future.index];
-                    if (isUnresolved(value)) {
-                        setListener(value, setArgument, future);
-                        return;
-                    } else {
-                        args[future.index] = getValue(value);
-                    }
-                }
-
-                value = future.func.apply(future.that, args);
-                ASSERT(!(value instanceof Error));
-            } catch (error) {
-                value = error instanceof Error ? error : new Error(error);
-            }
-        }
-
-        setValue(future, value);
-    };
-
-    var call = function () {
-        var args = arguments;
-
-        var func = args[--args.length];
-        ASSERT(typeof func === 'function');
-
-        for (var i = 0; i < args.length; ++i) {
-            if (isUnresolved(args[i])) {
-                return new Func(func, this, args, i);
-            } else {
-                args[i] = getValue(args[i]);
-            }
-        }
-        return func.apply(this, args);
-    };
-
-    // ------- join -------
-
-    var Join = function (first, second) {
-        this.value = UNRESOLVED;
-        this.listener = null;
-        this.param = null;
-
-        this.missing = 2;
-        setListener(first, setJoinand, this);
-        setListener(second, setJoinand, this);
-    };
-
-    Join.prototype = Object.create(Future.prototype);
-
-    var setJoinand = function (future, value) {
-        if (value instanceof Error) {
-            setValue(future, value);
-        } else if (--future.missing <= 0) {
-            setValue(future, undefined);
-        }
-    };
-
-    var join = function (first, second) {
-        if (getValue(first) instanceof Future) {
-            if (getValue(second) instanceof Future) {
-                if (first instanceof Join) {
-                    first.missing += 1;
-                    setListener(second, setJoinand, first);
-                    return first;
-                } else if (second instanceof Join) {
-                    second.missing += 1;
-                    setListener(first, setJoinand, second);
-                    return second;
-                } else {
-                    return new Join(first, second);
-                }
-            } else {
-                return first;
-            }
-        } else {
-            return getValue(second);
-        }
-    };
-
-    // ------- hide -------
-
-    var Hide = function (future, handler) {
-        this.value = UNRESOLVED;
-        this.listener = null;
-        this.param = null;
-
-        this.handler = handler;
-        setListener(future, hideValue, this);
-    };
-
-    Hide.prototype = Future.prototype;
-
-    var hideValue = function (future, value) {
-        try {
-            if (value instanceof Error) {
-                value = future.handler(value);
-            }
-        } catch (error) {
-            value = error instanceof Error ? error : new Error(error);
-        }
-
-        setValue(future, value);
-    };
-
-    var printStack = function (error) {
-        console.log(error.stack);
-    };
-
-    var hide = function (future, handler) {
-        if (typeof handler !== 'function') {
-            handler = printStack;
-        }
-
-        if (isUnresolved(future)) {
-            return new Hide(future, handler);
-        } else if (future.value instanceof Error) {
-            return handler(future.value);
-        } else {
-            return getValue(future);
-        }
-    };
-
-    // ------- array -------
-
-    var Arr = function (array, index) {
-        this.value = UNRESOLVED;
-        this.listener = null;
-        this.param = null;
-
-        this.array = array;
-        this.index = index;
-
-        setListener(array[index], setMember, this);
-    };
-
-    Arr.prototype = Future.prototype;
-
-    var setMember = function (future, value) {
-        if (!(value instanceof Error)) {
-            try {
-                var array = future.array;
-                array[future.index] = value;
-
-                while (++future.index < array.length) {
-                    value = array[future.index];
-                    if (isUnresolved(value)) {
-                        setListener(value, setMember, future);
-                        return;
-                    } else {
-                        array[future.index] = getValue(value);
-                    }
-                }
-
-                value = array;
-            } catch (error) {
-                value = error instanceof Error ? error : new Error(error);
-            }
-        }
-
-        setValue(future, value);
-    };
-
-    var array = function (array) {
-        ASSERT(array instanceof Array);
-
-        for (var i = 0; i < array.length; ++i) {
-            if (isUnresolved(array[i])) {
-                return new Arr(array, i);
-            }
-        }
-
-        return array;
-    };
-
-    // ------- then -------
-
-    var thenHandler = function (callback, value) {
-        if (value instanceof Error) {
-            callback(value);
-        } else {
-            callback(null, value);
-        }
-    };
-
-    var calldepth = 0;
-    var then = function (future, callback) {
-        var error = null,
-            value;
-
-        if (!(future instanceof Future)) {
-            value = future;
-        } else if (future.value === UNRESOLVED) {
-            setListener(future, thenHandler, callback);
-            return;
-        } else if (future.value instanceof Error) {
-            error = future.value;
-        } else {
-            value = future.value;
-        }
-
-        if (calldepth < maxDepth) {
-            ++calldepth;
-            try {
-                callback(error, value);
-            } catch (err) {
-                console.log('unhandled error from callback', err);
-            }
-            --calldepth;
-        } else {
-            setTimeout(callback, 0, error, value);
-        }
-    };
-
-    // -------
-
-    return {
-        adapt: adapt,
-        unadapt: unadapt,
-        delay: delay,
-        call: call,
-        array: array,
-        join: join,
-        hide: hide,
-        then: then
-    };
-});
-
 /*globals define*/
 /*jshint node: true, browser: true, camelcase: false*/
 
@@ -5773,9 +5336,8 @@ define('common/core/future',[], function () {
 define('common/core/coretree',[
     'common/util/assert',
     'common/util/key',
-    'common/core/future',
     'common/core/tasync'
-], function (ASSERT, GENKEY, FUTURE, TASYNC) {
+], function (ASSERT, GENKEY, TASYNC) {
 
     
 
@@ -6820,7 +6382,7 @@ define('common/core/corerel',['common/util/assert', 'common/core/coretree', 'com
 
                 return true;
             } catch (error) {
-                logger.error(error.message, {stack: error.stack, node: node});
+                logger.error(error.message, {metadata: {stack: error.stack, node: node}});
                 return false;
             }
         }
@@ -6928,6 +6490,10 @@ define('common/core/corerel',['common/util/assert', 'common/core/coretree', 'com
             ASSERT(node && coretree.getProperty(node, name) === target);
             coretree.deleteProperty(node, name);
 
+            if (coretree.getKeys(node).length === 0) {
+                coretree.deleteProperty(overlays, source);
+            }
+
             node = coretree.getChild(overlays, target);
             ASSERT(node);
 
@@ -6949,6 +6515,10 @@ define('common/core/corerel',['common/util/assert', 'common/core/coretree', 'com
 
                 coretree.setProperty(node, name, array);
             }
+
+            if (coretree.getKeys(node).length === 0) {
+                coretree.deleteProperty(overlays, target);
+            }
         }
 
         function overlayQuery(overlays, prefix) {
@@ -6963,7 +6533,7 @@ define('common/core/corerel',['common/util/assert', 'common/core/coretree', 'com
                 if (path === prefix || path.substr(0, prefix2.length) === prefix2) {
                     var node = coretree.getChild(overlays, path);
                     var names = coretree.getKeys(node);
-                    
+
                     for (var j = 0; j < names.length; ++j) {
                         var name = names[j];
                         if (isPointerName(name)) {
@@ -8050,7 +7620,7 @@ define('common/regexp',[], function () {
     var HASH = new RegExp('^#[0-9a-zA-Z_]*$'),
         BRANCH = new RegExp('^[0-9a-zA-Z_]*$'),
         RAW_BRANCH = new RegExp('^\\*[0-9a-zA-Z_]*$'),// This is how it's stored in mongodb, i.e. with a prefixed *.
-        PROJECT = new RegExp('^(?!system\\.)(?!_)[0-9a-zA-Z_]*$'), // project name may not start with system. or _
+        PROJECT = new RegExp('^(?!system\\.)(?!_)[0-9a-zA-Z_+]*$'), // project name may not start with system. or _
 
         GUID = new RegExp('[a-z0-9]{8}(-[a-z0-9]{4}){3}-[a-z0-9]{12}', 'i');
 
@@ -9355,705 +8925,6 @@ define('common/core/constraintcore',['common/util/assert'], function (ASSERT) {
     return constraintCore;
 });
 
-//jshint ignore: start
-/* jshint proto: true */
-
-/**
- * jjv.js -- A javascript library to validate json input through a json-schema.
- *
- * Copyright (c) 2013 Alex Cornejo.
- *
- * Redistributable under a MIT-style open source license.
- */
-
-(function () {
-  var clone = function (obj) {
-      // Handle the 3 simple types (string, number, function), and null or undefined
-      if (obj === null || typeof obj !== 'object') return obj;
-      var copy;
-
-      // Handle Date
-      if (obj instanceof Date) {
-          copy = new Date();
-          copy.setTime(obj.getTime());
-          return copy;
-      }
-
-      // handle RegExp
-      if (obj instanceof RegExp) {
-        copy = new RegExp(obj);
-        return copy;
-      }
-
-      // Handle Array
-      if (obj instanceof Array) {
-          copy = [];
-          for (var i = 0, len = obj.length; i < len; i++)
-              copy[i] = clone(obj[i]);
-          return copy;
-      }
-
-      // Handle Object
-      if (obj instanceof Object) {
-          copy = {};
-//           copy = Object.create(Object.getPrototypeOf(obj));
-          for (var attr in obj) {
-              if (obj.hasOwnProperty(attr))
-                copy[attr] = clone(obj[attr]);
-          }
-          return copy;
-      }
-
-      throw new Error("Unable to clone object!");
-  };
-
-  var clone_stack = function (stack) {
-    var stack_last = stack.length-1, key = stack[stack_last].key;
-    var new_stack = stack.slice(0);
-    new_stack[stack_last].object[key] = clone(new_stack[stack_last].object[key]);
-    return new_stack;
-  };
-
-  var copy_stack = function (new_stack, old_stack) {
-    var stack_last = new_stack.length-1, key = new_stack[stack_last].key;
-    old_stack[stack_last].object[key] = new_stack[stack_last].object[key];
-  };
-
-  var handled = {
-    'type': true,
-    'not': true,
-    'anyOf': true,
-    'allOf': true,
-    'oneOf': true,
-    '$ref': true,
-    '$schema': true,
-    'id': true,
-    'exclusiveMaximum': true,
-    'exclusiveMininum': true,
-    'properties': true,
-    'patternProperties': true,
-    'additionalProperties': true,
-    'items': true,
-    'additionalItems': true,
-    'required': true,
-    'default': true,
-    'title': true,
-    'description': true,
-    'definitions': true,
-    'dependencies': true
-  };
-
-  var fieldType = {
-    'null': function (x) {
-      return x === null;
-    },
-    'string': function (x) {
-      return typeof x === 'string';
-    },
-    'boolean': function (x) {
-      return typeof x === 'boolean';
-    },
-    'number': function (x) {
-      return typeof x === 'number' && !isNaN(x);
-    },
-    'integer': function (x) {
-      return typeof x === 'number' && x%1 === 0;
-    },
-    'object': function (x) {
-      return x && typeof x === 'object' && !Array.isArray(x);
-    },
-    'array': function (x) {
-      return Array.isArray(x);
-    },
-    'date': function (x) {
-      return x instanceof Date;
-    }
-  };
-
-  // missing: uri, date-time, ipv4, ipv6
-  var fieldFormat = {
-    'alpha': function (v) {
-      return (/^[a-zA-Z]+$/).test(v);
-    },
-    'alphanumeric': function (v) {
-      return (/^[a-zA-Z0-9]+$/).test(v);
-    },
-    'identifier': function (v) {
-      return (/^[-_a-zA-Z0-9]+$/).test(v);
-    },
-    'hexadecimal': function (v) {
-      return (/^[a-fA-F0-9]+$/).test(v);
-    },
-    'numeric': function (v) {
-      return (/^[0-9]+$/).test(v);
-    },
-    'date-time': function (v) {
-      return !isNaN(Date.parse(v)) && v.indexOf('/') === -1;
-    },
-    'uppercase': function (v) {
-      return v === v.toUpperCase();
-    },
-    'lowercase': function (v) {
-      return v === v.toLowerCase();
-    },
-    'hostname': function (v) {
-      return v.length < 256 && (/^([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])(\.([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]{0,61}[a-zA-Z0-9]))*$/).test(v);
-    },
-    'uri': function (v) {
-      return (/[-a-zA-Z0-9@:%_\+.~#?&//=]{2,256}\.[a-z]{2,4}\b(\/[-a-zA-Z0-9@:%_\+.~#?&//=]*)?/).test(v);
-    },
-    'email': function (v) { // email, ipv4 and ipv6 adapted from node-validator
-      return (/^(?:[\w\!\#\$\%\&\'\*\+\-\/\=\?\^\`\{\|\}\~]+\.)*[\w\!\#\$\%\&\'\*\+\-\/\=\?\^\`\{\|\}\~]+@(?:(?:(?:[a-zA-Z0-9](?:[a-zA-Z0-9\-](?!\.)){0,61}[a-zA-Z0-9]?\.)+[a-zA-Z0-9](?:[a-zA-Z0-9\-](?!$)){0,61}[a-zA-Z0-9]?)|(?:\[(?:(?:[01]?\d{1,2}|2[0-4]\d|25[0-5])\.){3}(?:[01]?\d{1,2}|2[0-4]\d|25[0-5])\]))$/).test(v);
-    },
-    'ipv4': function (v) {
-      if ((/^(\d?\d?\d)\.(\d?\d?\d)\.(\d?\d?\d)\.(\d?\d?\d)$/).test(v)) {
-        var parts = v.split('.').sort();
-        if (parts[3] <= 255)
-          return true;
-      }
-      return false;
-    },
-    'ipv6': function(v) {
-      return (/^((?=.*::)(?!.*::.+::)(::)?([\dA-F]{1,4}:(:|\b)|){5}|([\dA-F]{1,4}:){6})((([\dA-F]{1,4}((?!\3)::|:\b|$))|(?!\2\3)){2}|(((2[0-4]|1\d|[1-9])?\d|25[0-5])\.?\b){4})$/).test(v);
-     /*  return (/^::|^::1|^([a-fA-F0-9]{1,4}::?){1,7}([a-fA-F0-9]{1,4})$/).test(v); */
-    }
-  };
-
-  var fieldValidate = {
-    'readOnly': function (v, p) {
-      return false;
-    },
-    // ****** numeric validation ********
-    'minimum': function (v, p, schema) {
-      return !(v < p || schema.exclusiveMinimum && v <= p);
-    },
-    'maximum': function (v, p, schema) {
-      return !(v > p || schema.exclusiveMaximum && v >= p);
-    },
-    'multipleOf': function (v, p) {
-      return (v/p)%1 === 0 || typeof v !== 'number';
-    },
-    // ****** string validation ******
-    'pattern': function (v, p) {
-      if (typeof v !== 'string')
-        return true;
-      var pattern, modifiers;
-      if (typeof p === 'string')
-        pattern=p;
-      else {
-        pattern=p[0];
-        modifiers=p[1];
-      }
-      var regex = new RegExp(pattern, modifiers);
-      return regex.test(v);
-    },
-    'minLength': function (v, p) {
-      return v.length >= p || typeof v !== 'string';
-    },
-    'maxLength': function (v, p) {
-      return v.length <= p || typeof v !== 'string';
-    },
-    // ***** array validation *****
-    'minItems': function (v, p) {
-      return v.length >= p || !Array.isArray(v);
-    },
-    'maxItems': function (v, p) {
-      return v.length <= p || !Array.isArray(v);
-    },
-    'uniqueItems': function (v, p) {
-      var hash = {}, key;
-      for (var i = 0, len = v.length; i < len; i++) {
-        key = JSON.stringify(v[i]);
-        if (hash.hasOwnProperty(key))
-          return false;
-        else
-          hash[key] = true;
-      }
-      return true;
-    },
-    // ***** object validation ****
-    'minProperties': function (v, p) {
-      if (typeof v !== 'object')
-        return true;
-      var count = 0;
-      for (var attr in v) if (v.hasOwnProperty(attr)) count = count + 1;
-      return count >= p;
-    },
-    'maxProperties': function (v, p) {
-      if (typeof v !== 'object')
-        return true;
-      var count = 0;
-      for (var attr in v) if (v.hasOwnProperty(attr)) count = count + 1;
-      return count <= p;
-    },
-    // ****** all *****
-    'enum': function (v, p) {
-      var i, len, vs;
-      if (typeof v === 'object') {
-        vs = JSON.stringify(v);
-        for (i = 0, len = p.length; i < len; i++)
-          if (vs === JSON.stringify(p[i]))
-            return true;
-      } else {
-        for (i = 0, len = p.length; i < len; i++)
-          if (v === p[i])
-            return true;
-      }
-      return false;
-    }
-  };
-
-  var normalizeID = function (id) {
-    return id.indexOf("://") === -1 ? id : id.split("#")[0];
-  };
-
-  var resolveURI = function (env, schema_stack, uri) {
-    var curschema, components, hash_idx, name;
-
-    hash_idx = uri.indexOf('#');
-
-    if (hash_idx === -1) {
-      if (!env.schema.hasOwnProperty(uri))
-        return null;
-      return [env.schema[uri]];
-    }
-
-    if (hash_idx > 0) {
-      name = uri.substr(0, hash_idx);
-      uri = uri.substr(hash_idx+1);
-      if (!env.schema.hasOwnProperty(name)) {
-        if (schema_stack && schema_stack[0].id === name)
-          schema_stack = [schema_stack[0]];
-        else
-          return null;
-      } else
-        schema_stack = [env.schema[name]];
-    } else {
-      if (!schema_stack)
-        return null;
-      uri = uri.substr(1);
-    }
-
-    if (uri === '')
-      return [schema_stack[0]];
-
-    if (uri.charAt(0) === '/') {
-      uri = uri.substr(1);
-      curschema = schema_stack[0];
-      components = uri.split('/');
-      while (components.length > 0) {
-        if (!curschema.hasOwnProperty(components[0]))
-          return null;
-        curschema = curschema[components[0]];
-        schema_stack.push(curschema);
-        components.shift();
-      }
-      return schema_stack;
-    } else // FIX: should look for subschemas whose id matches uri
-      return null;
-  };
-
-  var resolveObjectRef = function (object_stack, uri) {
-    var components, object, last_frame = object_stack.length-1, skip_frames, frame, m = /^(\d+)/.exec(uri);
-
-    if (m) {
-      uri = uri.substr(m[0].length);
-      skip_frames = parseInt(m[1], 10);
-      if (skip_frames < 0 || skip_frames > last_frame)
-        return;
-      frame = object_stack[last_frame-skip_frames];
-      if (uri === '#')
-        return frame.key;
-    } else
-      frame = object_stack[0];
-
-    object = frame.object[frame.key];
-
-    if (uri === '')
-      return object;
-
-    if (uri.charAt(0) === '/') {
-      uri = uri.substr(1);
-      components = uri.split('/');
-      while (components.length > 0) {
-        components[0] = components[0].replace(/~1/g, '/').replace(/~0/g, '~');
-        if (!object.hasOwnProperty(components[0]))
-          return;
-        object = object[components[0]];
-        components.shift();
-      }
-      return object;
-    } else
-      return;
-  };
-
-  var checkValidity = function (env, schema_stack, object_stack, options) {
-    var i, len, count, hasProp, hasPattern;
-    var p, v, malformed = false, objerrs = {}, objerr, objreq, errors = {}, props, matched, isArray;
-    var sl = schema_stack.length-1, schema = schema_stack[sl];
-    var ol = object_stack.length-1, object = object_stack[ol].object, name = object_stack[ol].key, prop = object[name];
-
-    if (schema.hasOwnProperty('$ref')) {
-      schema_stack= resolveURI(env, schema_stack, schema.$ref);
-      if (!schema_stack)
-        return {'$ref': schema.$ref};
-      else
-        return checkValidity(env, schema_stack, object_stack, options);
-    }
-
-    if (schema.hasOwnProperty('type')) {
-      if (typeof schema.type === 'string') {
-        if (options.useCoerce && env.coerceType.hasOwnProperty(schema.type))
-          prop = object[name] = env.coerceType[schema.type](prop);
-        if (!env.fieldType[schema.type](prop))
-          return {'type': schema.type};
-      } else {
-        malformed = true;
-        for (i = 0, len = schema.type.length; i < len && malformed; i++)
-          if (env.fieldType[schema.type[i]](prop))
-            malformed = false;
-        if (malformed)
-          return {'type': schema.type};
-      }
-    }
-
-    if (schema.hasOwnProperty('allOf')) {
-      for (i = 0, len = schema.allOf.length; i < len; i++) {
-        objerr = checkValidity(env, schema_stack.concat(schema.allOf[i]), object_stack, options);
-        if (objerr)
-          return objerr;
-      }
-    }
-
-    if (!options.useCoerce && !options.useDefault && !options.removeAdditional) {
-      if (schema.hasOwnProperty('oneOf')) {
-        for (i = 0, len = schema.oneOf.length, count = 0; i < len; i++) {
-          objerr = checkValidity(env, schema_stack.concat(schema.oneOf[i]), object_stack, options);
-          if (!objerr) {
-            count = count + 1;
-            if (count > 1)
-              break;
-          } else {
-            objerrs = objerr;
-          }
-        }
-        if (count > 1)
-          return {'oneOf': true};
-        else if (count < 1)
-          return objerrs;
-        objerrs = {};
-      }
-
-      if (schema.hasOwnProperty('anyOf')) {
-        for (i = 0, len = schema.anyOf.length; i < len; i++) {
-          objerr = checkValidity(env, schema_stack.concat(schema.anyOf[i]), object_stack, options);
-          if (!objerr)
-            break;
-        }
-        if (objerr)
-          return objerr;
-      }
-
-      if (schema.hasOwnProperty('not')) {
-        objerr = checkValidity(env, schema_stack.concat(schema.not), object_stack, options);
-        if (!objerr)
-          return {'not': true};
-      }
-    } else {
-      if (schema.hasOwnProperty('oneOf')) {
-        for (i = 0, len = schema.oneOf.length, count = 0; i < len; i++) {
-          new_stack = clone_stack(object_stack);
-          objerr = checkValidity(env, schema_stack.concat(schema.oneOf[i]), new_stack, options);
-          if (!objerr) {
-            count = count + 1;
-            if (count > 1)
-              break;
-            else
-              copy_stack(new_stack, object_stack);
-          } else {
-            objerrs = objerr;
-          }
-        }
-        if (count > 1)
-          return {'oneOf': true};
-        else if (count < 1)
-          return objerrs;
-        objerrs = {};
-      }
-
-      if (schema.hasOwnProperty('anyOf')) {
-        for (i = 0, len = schema.anyOf.length; i < len; i++) {
-          new_stack = clone_stack(object_stack);
-          objerr = checkValidity(env, schema_stack.concat(schema.anyOf[i]), new_stack, options);
-          if (!objerr) {
-            copy_stack(new_stack, object_stack);
-            break;
-          }
-        }
-        if (objerr)
-          return objerr;
-      }
-
-      if (schema.hasOwnProperty('not')) {
-        objerr = checkValidity(env, schema_stack.concat(schema.not), clone_stack(object_stack), options);
-        if (!objerr)
-          return {'not': true};
-      }
-    }
-
-    if (schema.hasOwnProperty('dependencies')) {
-      for (p in schema.dependencies)
-        if (schema.dependencies.hasOwnProperty(p) && prop.hasOwnProperty(p)) {
-          if (Array.isArray(schema.dependencies[p])) {
-            for (i = 0, len = schema.dependencies[p].length; i < len; i++)
-              if (!prop.hasOwnProperty(schema.dependencies[p][i])) {
-                return {'dependencies': true};
-              }
-          } else {
-            objerr = checkValidity(env, schema_stack.concat(schema.dependencies[p]), object_stack, options);
-            if (objerr)
-              return objerr;
-          }
-        }
-    }
-
-    if (!Array.isArray(prop)) {
-      props = [];
-      objerrs = {};
-      for (p in prop)
-        if (prop.hasOwnProperty(p))
-          props.push(p);
-
-      if (options.checkRequired && schema.required) {
-        for (i = 0, len = schema.required.length; i < len; i++)
-          if (!prop.hasOwnProperty(schema.required[i])) {
-            objerrs[schema.required[i]] = {'required': true};
-            malformed = true;
-          }
-      }
-
-      hasProp = schema.hasOwnProperty('properties');
-      hasPattern = schema.hasOwnProperty('patternProperties');
-      if (hasProp || hasPattern) {
-        i = props.length;
-        while (i--) {
-          matched = false;
-          if (hasProp && schema.properties.hasOwnProperty(props[i])) {
-            matched = true;
-            objerr = checkValidity(env, schema_stack.concat(schema.properties[props[i]]), object_stack.concat({object: prop, key: props[i]}), options);
-            if (objerr !== null) {
-              objerrs[props[i]] = objerr;
-              malformed = true;
-            }
-          }
-          if (hasPattern) {
-            for (p in schema.patternProperties)
-              if (schema.patternProperties.hasOwnProperty(p) && props[i].match(p)) {
-                matched = true;
-                objerr = checkValidity(env, schema_stack.concat(schema.patternProperties[p]), object_stack.concat({object: prop, key: props[i]}), options);
-                if (objerr !== null) {
-                  objerrs[props[i]] = objerr;
-                  malformed = true;
-                }
-              }
-          }
-          if (matched)
-            props.splice(i, 1);
-        }
-      }
-
-      if (options.useDefault && hasProp && !malformed) {
-        for (p in schema.properties)
-          if (schema.properties.hasOwnProperty(p) && !prop.hasOwnProperty(p) && schema.properties[p].hasOwnProperty('default'))
-            prop[p] = schema.properties[p]['default'];
-      }
-
-      if (options.removeAdditional && hasProp && schema.additionalProperties !== true && typeof schema.additionalProperties !== 'object') {
-        for (i = 0, len = props.length; i < len; i++)
-          delete prop[props[i]];
-      } else {
-        if (schema.hasOwnProperty('additionalProperties')) {
-          if (typeof schema.additionalProperties === 'boolean') {
-            if (!schema.additionalProperties) {
-              for (i = 0, len = props.length; i < len; i++) {
-                objerrs[props[i]] = {'additional': true};
-                malformed = true;
-              }
-            }
-          } else {
-            for (i = 0, len = props.length; i < len; i++) {
-              objerr = checkValidity(env, schema_stack.concat(schema.additionalProperties), object_stack.concat({object: prop, key: props[i]}), options);
-              if (objerr !== null) {
-                objerrs[props[i]] = objerr;
-                malformed = true;
-              }
-            }
-          }
-        }
-      }
-      if (malformed)
-        return {'schema': objerrs};
-    } else {
-      if (schema.hasOwnProperty('items')) {
-        if (Array.isArray(schema.items)) {
-          for (i = 0, len = schema.items.length; i < len; i++) {
-            objerr = checkValidity(env, schema_stack.concat(schema.items[i]), object_stack.concat({object: prop, key: i}), options);
-            if (objerr !== null) {
-              objerrs[i] = objerr;
-              malformed = true;
-            }
-          }
-          if (prop.length > len && schema.hasOwnProperty('additionalItems')) {
-            if (typeof schema.additionalItems === 'boolean') {
-              if (!schema.additionalItems)
-                return {'additionalItems': true};
-            } else {
-              for (i = len, len = prop.length; i < len; i++) {
-                objerr = checkValidity(env, schema_stack.concat(schema.additionalItems), object_stack.concat({object: prop, key: i}), options);
-                if (objerr !== null) {
-                  objerrs[i] = objerr;
-                  malformed = true;
-                }
-              }
-            }
-          }
-        } else {
-          for (i = 0, len = prop.length; i < len; i++) {
-            objerr = checkValidity(env, schema_stack.concat(schema.items), object_stack.concat({object: prop, key: i}), options);
-            if (objerr !== null) {
-              objerrs[i] = objerr;
-              malformed = true;
-            }
-          }
-        }
-      } else if (schema.hasOwnProperty('additionalItems')) {
-        if (typeof schema.additionalItems !== 'boolean') {
-          for (i = 0, len = prop.length; i < len; i++) {
-            objerr = checkValidity(env, schema_stack.concat(schema.additionalItems), object_stack.concat({object: prop, key: i}), options);
-            if (objerr !== null) {
-              objerrs[i] = objerr;
-              malformed = true;
-            }
-          }
-        }
-      }
-      if (malformed)
-        return {'schema': objerrs};
-    }
-
-    for (v in schema) {
-      if (schema.hasOwnProperty(v) && !handled.hasOwnProperty(v)) {
-        if (v === 'format') {
-          if (env.fieldFormat.hasOwnProperty(schema[v]) && !env.fieldFormat[schema[v]](prop, schema, object_stack, options)) {
-            objerrs[v] = true;
-            malformed = true;
-          }
-        } else {
-          if (env.fieldValidate.hasOwnProperty(v) && !env.fieldValidate[v](prop, schema[v].hasOwnProperty('$data') ? resolveObjectRef(object_stack, schema[v].$data) : schema[v], schema, object_stack, options)) {
-            objerrs[v] = true;
-            malformed = true;
-          }
-        }
-      }
-    }
-
-    if (malformed)
-      return objerrs;
-    else
-      return null;
-  };
-
-  var defaultOptions = {
-    useDefault: false,
-    useCoerce: false,
-    checkRequired: true,
-    removeAdditional: false
-  };
-
-  function Environment() {
-    if (!(this instanceof Environment))
-      return new Environment();
-
-    this.coerceType = {};
-    this.fieldType = clone(fieldType);
-    this.fieldValidate = clone(fieldValidate);
-    this.fieldFormat = clone(fieldFormat);
-    this.defaultOptions = clone(defaultOptions);
-    this.schema = {};
-  }
-
-  Environment.prototype = {
-    validate: function (name, object, options) {
-      var schema_stack = [name], errors = null, object_stack = [{object: {'__root__': object}, key: '__root__'}];
-
-      if (typeof name === 'string') {
-        schema_stack = resolveURI(this, null, name);
-        if (!schema_stack)
-          throw new Error('jjv: could not find schema \'' + name + '\'.');
-      }
-
-      if (!options) {
-        options = this.defaultOptions;
-      } else {
-        for (var p in this.defaultOptions)
-          if (this.defaultOptions.hasOwnProperty(p) && !options.hasOwnProperty(p))
-            options[p] = this.defaultOptions[p];
-      }
-
-      errors = checkValidity(this, schema_stack, object_stack, options);
-
-      if (errors)
-        return {validation: errors.hasOwnProperty('schema') ? errors.schema : errors};
-      else
-        return null;
-    },
-
-    resolveRef: function (schema_stack, $ref) {
-      return resolveURI(this, schema_stack, $ref);
-    },
-
-    addType: function (name, func) {
-      this.fieldType[name] = func;
-    },
-
-    addTypeCoercion: function (type, func) {
-      this.coerceType[type] = func;
-    },
-
-    addCheck: function (name, func) {
-      this.fieldValidate[name] = func;
-    },
-
-    addFormat: function (name, func) {
-      this.fieldFormat[name] = func;
-    },
-
-    addSchema: function (name, schema) {
-      if (!schema && name) {
-        schema = name;
-        name = undefined;
-      }
-      if (schema.hasOwnProperty('id') && typeof schema.id === 'string' && schema.id !== name) {
-        if (schema.id.charAt(0) === '/')
-          throw new Error('jjv: schema id\'s starting with / are invalid.');
-        this.schema[normalizeID(schema.id)] = schema;
-      } else if (!name) {
-        throw new Error('jjv: schema needs either a name or id attribute.');
-      }
-      if (name)
-        this.schema[normalizeID(name)] = schema;
-    }
-  };
-
-  // Export for use in server and client.
-  if (typeof module !== 'undefined' && typeof module.exports !== 'undefined')
-    module.exports = Environment;
-  else if (typeof define === 'function' && define.amd)
-    define('common/util/jjv',[],function () {return Environment;});
-  else
-    window.jjv = Environment;
-})();
-
 /*globals define*/
 /*jshint node: true, browser: true*/
 
@@ -10065,9 +8936,8 @@ define('common/core/metacore',[
     'common/util/assert',
     'common/core/core',
     'common/core/tasync',
-    'common/util/jjv',
     'common/util/canon'
-], function (ASSERT, Core, TASYNC, JsonValidator, CANON) {
+], function (ASSERT, Core, TASYNC, CANON) {
     
 
     // ----------------- CoreType -----------------
@@ -10669,6 +9539,10 @@ define('common/core/corediff',['common/util/canon', 'common/core/tasync', 'commo
             }
             var keys = Object.keys(obj),
                 i;
+            if (JSON.stringify(obj.set) === JSON.stringify({})) {
+                delete obj.set;
+            }
+
             for (i = 0; i < keys.length; i++) {
                 /*if (Array.isArray(obj[keys[i]])) {
                  if (obj[keys[i]].length === 0) {
@@ -10678,6 +9552,8 @@ define('common/core/corediff',['common/util/canon', 'common/core/tasync', 'commo
                     //do nothing, leave the array as is
                 } else if (obj[keys[i]] === undefined) {
                     delete obj[keys[i]]; //there cannot be undefined in the object
+                } else if (keys[i] === 'set') {
+                    //do nothing with set as it can include empty set's as well
                 } else if (typeof obj[keys[i]] === 'object') {
                     normalize(obj[keys[i]]);
                     if (obj[keys[i]] && Object.keys(obj[keys[i]]).length === 0) {
@@ -10802,8 +9678,8 @@ define('common/core/corediff',['common/util/canon', 'common/core/tasync', 'commo
                             data[names[i]][targets[j]] = {attr: {}, reg: {}};
                             keys = _core.getMemberOwnAttributeNames(node, names[i], targets[j]);
                             for (k = 0; k < keys.length; k++) {
-                                data[names[i]][targets[j]].attr[keys[i]] = _core.getMemberAttribute(node,
-                                    names[i], targets[j], keys[i]);
+                                data[names[i]][targets[j]].attr[keys[k]] = _core.getMemberAttribute(node,
+                                    names[i], targets[j], keys[k]);
                             }
                             keys = _core.getMemberRegistryNames(node, names[i], targets[j]);
                             for (k = 0; k < keys.length; k++) {
@@ -10860,8 +9736,43 @@ define('common/core/corediff',['common/util/canon', 'common/core/tasync', 'commo
         }
 
         function metaDiff(source, target) {
-            var sMeta = _core.getOwnJsonMeta(source),
-                tMeta = _core.getOwnJsonMeta(target);
+            //TODO jsonMeta format should be changed in all places!!!
+            var convertJsonMeta = function (jsonMeta) {
+                    var i, j, names, itemsObject;
+                    //children
+                    if (jsonMeta.children) {
+                        itemsObject = jsonMeta.children;
+                        for (i = 0; i < itemsObject.items.length; i += 1) {
+                            itemsObject[itemsObject.items[i]] = {
+                                min: itemsObject.minItems[i],
+                                max: itemsObject.maxItems[i]
+                            };
+                        }
+                        delete itemsObject.items;
+                        delete itemsObject.minItems;
+                        delete itemsObject.maxItems;
+                    }
+                    //ptr
+                    if (jsonMeta.pointers) {
+                        names = Object.keys(jsonMeta.pointers);
+
+                        for (j = 0; j < names.length; j += 1) {
+                            itemsObject = jsonMeta.pointers[names[j]];
+                            for (i = 0; i < itemsObject.items.length; i += 1) {
+                                itemsObject[itemsObject.items[i]] = {
+                                    min: itemsObject.minItems[i],
+                                    max: itemsObject.maxItems[i]
+                                };
+                            }
+                            delete itemsObject.items;
+                            delete itemsObject.minItems;
+                            delete itemsObject.maxItems;
+                        }
+                    }
+                    return jsonMeta;
+                },
+                sMeta = convertJsonMeta(_core.getOwnJsonMeta(source)),
+                tMeta = convertJsonMeta(_core.getOwnJsonMeta(target));
             if (CANON.stringify(sMeta) !== CANON.stringify(tMeta)) {
                 return {source: sMeta, target: tMeta};
             }
@@ -10959,7 +9870,7 @@ define('common/core/corediff',['common/util/canon', 'common/core/tasync', 'commo
         }
 
         function getPathOfDiff(diff, path) {
-            var pathArray = (path || '').split('/'),
+            var pathArray = path.split('/'),
                 i;
             pathArray.shift();
             for (i = 0; i < pathArray.length; i++) {
@@ -11038,14 +9949,11 @@ define('common/core/corediff',['common/util/canon', 'common/core/tasync', 'commo
                     if (child) {
                         guid = _core.getGuid(child);
                         base = _core.getBase(child);
-                        if (base) {
-                            base = _core.getPath(base);
-                        }
                         diff[tDiff[i].relid] = {
                             guid: guid,
                             removed: false,
                             hash: _core.getHash(child),
-                            pointer: {source: {}, target: {base: base}}
+                            pointer: {source: {}, target: {base: base === null ? null : _core.getPath(base)}}
                         };
                         _yetToCompute[guid] = _yetToCompute[guid] || {};
                         _yetToCompute[guid].to = child;
@@ -11219,15 +10127,15 @@ define('common/core/corediff',['common/util/canon', 'common/core/tasync', 'commo
         }
 
         function removePathFromDiff(diff, path) {
-            var relId, i;
+            var relId, i, pathArray;
             if (path === '') {
                 diff = null;
             } else {
-                path = path.split('/');
-                path.shift();
-                relId = path.pop();
-                for (i = 0; i < path.length; i++) {
-                    diff = diff[path[i]];
+                pathArray = path.split('/');
+                pathArray.shift();
+                relId = pathArray.pop();
+                for (i = 0; i < pathArray.length; i++) {
+                    diff = diff[pathArray[i]];
                 }
                 delete diff[relId];
             }
@@ -11258,7 +10166,7 @@ define('common/core/corediff',['common/util/canon', 'common/core/tasync', 'commo
                     }
                 }
             };
-            _shrink(rootDiff, false);
+            _shrink(rootDiff);
         }
 
         function checkRound() {
@@ -11315,9 +10223,7 @@ define('common/core/corediff',['common/util/canon', 'common/core/tasync', 'commo
                     }
                 }
             }
-            return TASYNC.call(function () {
-                return checkRound();
-            }, done);
+            return TASYNC.call(checkRound, done);
         }
 
         _core.nodeDiff = function (source, target) {
@@ -11395,19 +10301,18 @@ define('common/core/corediff',['common/util/canon', 'common/core/tasync', 'commo
         function getAncestor(node, path) {
             var ownPath = _core.getPath(node),
                 ancestorPath = '',
-                i;
-            path = path.split('/');
-            ownPath = ownPath.split('/');
-            ownPath.shift();
-            path.shift();
-            for (i = 0; i < ownPath.length; i++) {
-                if (ownPath[i] === path[i]) {
-                    ancestorPath = ancestorPath + '/' + ownPath[i];
+                i, ownPathArray, pathArray;
+            pathArray = path.split('/');
+            ownPathArray = ownPath.split('/');
+            ownPathArray.shift();
+            pathArray.shift();
+            for (i = 0; i < ownPathArray.length; i++) {
+                if (ownPathArray[i] === pathArray[i]) {
+                    ancestorPath = ancestorPath + '/' + ownPathArray[i];
                 } else {
                     break;
                 }
             }
-            ownPath = _core.getPath(node);
             while (ownPath !== ancestorPath) {
                 node = _core.getParent(node);
                 ownPath = _core.getPath(node);
@@ -11601,6 +10506,7 @@ define('common/core/corediff',['common/util/canon', 'common/core/tasync', 'commo
                 if (setDiff[setNames[i]] === TODELETESTRING) {
                     _core.deleteSet(node, setNames[i]);
                 } else {
+                    _core.createSet(node, setNames[i]);
                     elements = Object.keys(setDiff[setNames[i]]);
                     for (j = 0; j < elements.length; j++) {
                         if (setDiff[setNames[i]][elements[j]] === TODELETESTRING) {
@@ -11756,7 +10662,7 @@ define('common/core/corediff',['common/util/canon', 'common/core/tasync', 'commo
                 if (metaAspectsDiff[names[i]] === TODELETESTRING) {
                     _core.delAspectMeta(node, names[i]);
                 } else {
-                    targets = Object.keys(metaAspectsDiff[names[i]]);
+                    targets = metaAspectsDiff[names[i]];
                     for (j = 0; j < targets.length; j++) {
                         if (metaAspectsDiff[names[i]][targets[j]] === TODELETESTRING) {
                             _core.delAspectMetaTarget(node, names[i], targets[j]);
@@ -11796,16 +10702,16 @@ define('common/core/corediff',['common/util/canon', 'common/core/tasync', 'commo
         };
 
         function getNodeByGuid(diff, guid) {
-            var relids, i, temp;
+            var relids, i, node;
             if (diff.guid === guid) {
                 return diff;
             }
 
             relids = getDiffChildrenRelids(diff);
             for (i = 0; i < relids.length; i++) {
-                temp = getNodeByGuid(diff[relids[i]], guid);
-                if (temp) {
-                    return temp;
+                node = getNodeByGuid(diff[relids[i]], guid);
+                if (node) {
+                    return node;
                 }
             }
             return null;
@@ -12238,7 +11144,7 @@ define('common/core/corediff',['common/util/canon', 'common/core/tasync', 'commo
 
         function gatherFullMetaConflicts(diffMeta, mine, path, opposingPath) {
             var conflict, opposingConflict,
-                relids, i, j, keys, tPath;
+                relids, i, j, keys, tPath, key;
 
             if (mine) {
                 conflict = _conflictMine;
@@ -12304,12 +11210,13 @@ define('common/core/corediff',['common/util/canon', 'common/core/tasync', 'commo
                 } else {
                     keys = Object.keys(diffMeta.attributes);
                     for (i = 0; i < keys.length; i++) {
-                        conflict[path + '/attributes/' + keys[i]] = conflict[path + '/attributes/' + keys[i]] || {
+                        key = path + '/attributes/' + keys[i];
+                        conflict[key] = conflict[key] || {
                                 value: diffMeta.attributes[keys[i]],
                                 conflictingPaths: {}
                             };
-                        conflict[path + '/attributes'].conflictingPaths[opposingPath] = true;
-                        opposingConflict.conflictingPaths[path + '/attributes'] = true;
+                        conflict[key].conflictingPaths[opposingPath] = true;
+                        opposingConflict.conflictingPaths[key] = true;
                     }
                 }
             }
@@ -12418,7 +11325,7 @@ define('common/core/corediff',['common/util/canon', 'common/core/tasync', 'commo
                                     };
                                 _conflictTheirs[tPath].conflictingPaths[tPath] = true;
                             } else {
-                                bData.max = eData.min;
+                                bData.min = eData.min;
                             }
                         }
                         //targets
@@ -13819,48 +12726,27 @@ define('common/core/users/meta',[], function () {
 
 /**
  * @author kecso / https://github.com/kecso
+ *
+ * FIXME: is there a built in function to JavaScript to parse cookies?
  */
 
 define('common/util/url',[],function () {
     
 
-    function decodeUrl(url) {
-        var start = url.indexOf('%');
-        while (start > -1) {
-            var char = String.fromCharCode(parseInt(url.substr(start + 1, 2), 16));
-            url = url.replace(url.substr(start, 3), char);
-            start = url.indexOf('%');
-        }
-        return url;
-    }
-
     function parseCookie(cookie) {
-        cookie = decodeUrl(cookie);
-        var parsed = {};
-        var elements = cookie.split(/[;,] */);
-        for (var i = 0; i < elements.length; i++) {
-            var pair = elements[i].split('=');
+        var parsed,
+            elements,
+            i,
+            pair;
+
+        cookie = decodeURIComponent(cookie);
+        parsed = {};
+        elements = cookie.split(/[;] */);
+        for (i = 0; i < elements.length; i++) {
+            pair = elements[i].split('=');
             parsed[pair[0]] = pair[1];
         }
         return parsed;
-    }
-
-    function removeSpecialChars(text) {
-        text = text.replace(/%23/g, '#');
-        text = text.replace(/%26/g, '&');
-        text = text.replace(/%2f/g, '/');
-        text = text.replace(/%2F/g, '/');
-        return text;
-    }
-
-    function addSpecialChars(text) {
-        if (text === undefined) {
-            return text;
-        }
-        text = text.replace(/#/g, '%23');
-        text = text.replace(/&/g, '%26');
-        text = text.replace(/\//g, '%2F');
-        return text;
     }
 
     function urlToRefObject(url) {
@@ -13870,10 +12756,7 @@ define('common/util/url',[],function () {
     }
 
     return {
-        decodeUrl: decodeUrl,
         parseCookie: parseCookie,
-        removeSpecialChars: removeSpecialChars,
-        addSpecialChars: addSpecialChars,
         urlToRefObject: urlToRefObject
     };
 });
@@ -13945,7 +12828,7 @@ define('common/core/users/tojson',['common/core/users/meta', 'common/util/url'],
                 if (path === null) {
                     result = URL.urlToRefObject(null);
                 } else {
-                    result = URL.urlToRefObject(urlPrefix + '&path=' + URL.addSpecialChars(path));
+                    result = URL.urlToRefObject(urlPrefix + '&path=' + encodeURIComponent(path));
                 }
                 break;
             case _refTypes.path:
@@ -13972,7 +12855,7 @@ define('common/core/users/tojson',['common/core/users/meta', 'common/util/url'],
                 if (path === null) {
                     result = URL.urlToRefObject(null);
                 } else {
-                    result = URL.urlToRefObject(urlPrefix + '&path=' + URL.addSpecialChars(path));
+                    result = URL.urlToRefObject(urlPrefix + '&path=' + encodeURIComponent(path));
                 }
                 break;
             case _refTypes.path:
@@ -13998,7 +12881,7 @@ define('common/core/users/tojson',['common/core/users/meta', 'common/util/url'],
                 if (path === null) {
                     callback(null, URL.urlToRefObject(null));
                 }
-                callback(null, URL.urlToRefObject(urlPrefix + '&path=' + URL.addSpecialChars(path)));
+                callback(null, URL.urlToRefObject(urlPrefix + '&path=' + encodeURIComponent(path)));
                 break;
             case _refTypes.path:
                 callback(null, URL.urlToRefObject(path));
@@ -15319,7 +14202,6 @@ define('common/core/users/serialization',['common/util/assert'], function (ASSER
                 }
             }
         }
-        console.log('sheets', sheets);
         return sheets;
     }
 
@@ -16132,7 +15014,7 @@ define('js/client/addon',[], function () {
                 storage.simpleRequest({
                         command: 'connectedWorkerStart',
                         workerName: name,
-                        project: state.project.name,
+                        projectId: state.project.projectId,
                         branch: state.branchName
                     },
                     function (err, id) {
@@ -16446,7 +15328,7 @@ define('client/js/client',[
             } else {
                 lightState = {
                     connection: self.getNetworkStatus(),
-                    projectName: self.getActiveProjectName(),
+                    projectId: self.getActiveProjectId(),
                     branchName: self.getActiveBranchName(),
                     branchStatus: self.getBranchStatus(),
                     commitHash: self.getActiveCommitHash(),
@@ -16507,7 +15389,7 @@ define('client/js/client',[
 
                     beforeLoading = false;
                     newCommitObject = storage.makeCommit(
-                        state.project.name,
+                        state.project.projectId,
                         state.branchName,
                         [state.commit.current],
                         persisted.rootHash,
@@ -16613,7 +15495,7 @@ define('client/js/client',[
 
             if (isConnected()) {
                 if (state.project) {
-                    closeProject(state.project.name, closeStorage);
+                    closeProject(state.project.projectId, closeStorage);
                 } else {
                     closeStorage(null);
                 }
@@ -16623,12 +15505,18 @@ define('client/js/client',[
             }
         };
 
-        this.selectProject = function (projectName, callback) {
+        this.selectProject = function (projectId, branchName, callback) {
+            if (callback === undefined && typeof branchName === 'function') {
+                callback = branchName;
+                branchName = undefined;
+            }
             if (isConnected() === false) {
                 callback(new Error('There is no open database connection!'));
             }
-            var prevProjectName,
-                branchToOpen = 'master';
+            var prevProjectId,
+                branchToOpen = branchName || 'master';
+
+            logger.debug('selectProject', projectId, branchToOpen);
 
             function projectOpened(err, project, branches, access) {
                 if (err) {
@@ -16643,13 +15531,27 @@ define('client/js/client',[
                 });
                 self.meta.initialize(state.core, state.metaNodes, saveRoot);
                 logState('info', 'projectOpened');
-                self.dispatchEvent(CONSTANTS.PROJECT_OPENED, projectName);
+                logger.debug('projectOpened, branches: ', branches);
+                self.dispatchEvent(CONSTANTS.PROJECT_OPENED, projectId);
 
-                if (branches.hasOwnProperty('master') === false) {
+                if (branches.hasOwnProperty(branchToOpen) === false) {
+                    if (branchName) {
+                        logger.error('Given branch does not exist "' + branchName + '"');
+                        closeProject(projectId, function (err) {
+                            if (err) {
+                                logger.error('closeProject after missing branch failed with err', err);
+                            }
+                            callback(new Error('Given branch does not exist "' + branchName + '"'));
+                        });
+                        return;
+                    }
+                    logger.warn('Project "' + projectId + '" did not have branch', branchToOpen);
                     branchToOpen = Object.keys(branches)[0] || null;
-                    logger.debug('Project "' + projectName + '" did not have a master branch, picked:', branchToOpen);
+                    logger.debug('Picked "' + branchToOpen + '".');
                 }
-                ASSERT(branchToOpen, 'No branch avaliable in project'); // TODO: Deal with this
+
+                ASSERT(branchToOpen, 'No branch avaliable in project');
+
                 self.selectBranch(branchToOpen, null, function (err) {
                     if (err) {
                         callback(err);
@@ -16662,31 +15564,31 @@ define('client/js/client',[
             }
 
             if (state.project) {
-                prevProjectName = state.project.name;
-                logger.debug('A project was open, closing it', prevProjectName);
+                prevProjectId = state.project.projectId;
+                logger.debug('A project was open, closing it', prevProjectId);
 
-                if (prevProjectName === projectName) {
-                    logger.warn('projectName is already opened', projectName);
+                if (prevProjectId === projectId) {
+                    logger.warn('projectId is already opened', projectId);
                     callback(null);
                     return;
                 }
-                closeProject(prevProjectName, function (err) {
+                closeProject(prevProjectId, function (err) {
                     if (err) {
                         logger.error('problems closing previous project', err);
-                        callback(err);
+                        callback(new Error(err));
                         return;
                     }
-                    storage.openProject(projectName, projectOpened);
+                    storage.openProject(projectId, projectOpened);
                 });
             } else {
-                storage.openProject(projectName, projectOpened);
+                storage.openProject(projectId, projectOpened);
             }
         };
 
-        function closeProject(projectName, callback) {
+        function closeProject(projectId, callback) {
             state.project = null;
             //TODO what if for some reason we are in transaction?
-            storage.closeProject(projectName, function (err) {
+            storage.closeProject(projectId, function (err) {
                 if (err) {
                     callback(err);
                     return;
@@ -16707,7 +15609,7 @@ define('client/js/client',[
                 state.msg = '';
 
                 cleanUsersTerritories();
-                self.dispatchEvent(CONSTANTS.PROJECT_CLOSED, projectName);
+                self.dispatchEvent(CONSTANTS.PROJECT_CLOSED, projectId);
                 callback(null);
             });
         }
@@ -16738,7 +15640,7 @@ define('client/js/client',[
                     return;
                 }
                 commitHandler = commitHandler || getDefaultCommitHandler();
-                storage.openBranch(state.project.name, branchName, getUpdateHandler(), commitHandler,
+                storage.openBranch(state.project.projectId, branchName, getUpdateHandler(), commitHandler,
                     function (err, latestCommit) {
                         var commitObject;
                         if (err) {
@@ -16779,7 +15681,7 @@ define('client/js/client',[
             if (state.branchName !== null) {
                 logger.debug('Branch was open, closing it first', state.branchName);
                 prevBranchName = state.branchName;
-                storage.closeBranch(state.project.name, prevBranchName, openBranch);
+                storage.closeBranch(state.project.projectId, prevBranchName, openBranch);
             } else {
                 openBranch(null);
             }
@@ -16809,6 +15711,7 @@ define('client/js/client',[
                 state.project.loadObject(commitHash, function (err, commitObj) {
                     if (!err && commitObj) {
                         logState('info', 'selectCommit loaded commit');
+                        self.dispatchEvent(CONSTANTS.BRANCH_CHANGED, null);
                         loading(commitObj.root, function (err, aborted) {
                             if (err) {
                                 logger.error('loading returned error', commitObj.root, err);
@@ -16838,7 +15741,7 @@ define('client/js/client',[
                 prevBranchName = state.branchName;
                 state.branchName = null;
                 //state.branchStatus = null;
-                storage.closeBranch(state.project.name, prevBranchName, openCommit);
+                storage.closeBranch(state.project.projectId, prevBranchName, openCommit);
             } else {
                 openCommit(null);
             }
@@ -16876,7 +15779,7 @@ define('client/js/client',[
         function getUpdateHandler() {
             return function (updateQueue, eventData, callback) {
                 var commitHash = eventData.commitObject[CONSTANTS.STORAGE.MONGO_ID];
-                logger.debug('updateHandler invoked. project, branch', eventData.projectName, eventData.branchName);
+                logger.debug('updateHandler invoked. project, branch', eventData.projectId, eventData.branchName);
                 if (state.inTransaction) {
                     logger.warn('Is in transaction, will not load in changes');
                     callback(true); // aborted: true
@@ -16925,7 +15828,7 @@ define('client/js/client',[
         this.forkCurrentBranch = function (newName, commitHash, callback) {
             var self = this,
                 activeBranchName = self.getActiveBranchName(),
-                activeProjectName = self.getActiveProjectName(),
+                activeProjectId = self.getActiveProjectId(),
                 forkName;
 
             logger.debug('forkCurrentBranch', newName, commitHash);
@@ -16938,7 +15841,7 @@ define('client/js/client',[
                 return;
             }
             forkName = newName || activeBranchName + '_' + (new Date()).getTime();
-            storage.forkBranch(activeProjectName, activeBranchName, forkName, commitHash,
+            storage.forkBranch(activeProjectId, activeBranchName, forkName, commitHash,
                 function (err, forkHash) {
                     if (err) {
                         logger.error('Could not fork branch:', newName, err);
@@ -16959,8 +15862,8 @@ define('client/js/client',[
             return state.branchStatus;
         };
 
-        this.getActiveProjectName = function () {
-            return state.project && state.project.name;
+        this.getActiveProjectId = function () {
+            return state.project && state.project.projectId;
         };
 
         this.getActiveBranchName = function () {
@@ -17046,7 +15949,7 @@ define('client/js/client',[
             self.dispatchEvent(CONSTANTS.UNDO_AVAILABLE, canUndo());
             self.dispatchEvent(CONSTANTS.REDO_AVAILABLE, canRedo());
             logState('info', 'undo [before setBranchHash]');
-            storage.setBranchHash(state.project.name,
+            storage.setBranchHash(state.project.projectId,
                 state.branchName, state.undoRedoChain.commit, state.commit.current, function (err) {
                     if (err) {
                         //TODO do we need to handle this? How?
@@ -17079,7 +15982,7 @@ define('client/js/client',[
             self.dispatchEvent(CONSTANTS.UNDO_AVAILABLE, canUndo());
             self.dispatchEvent(CONSTANTS.REDO_AVAILABLE, canRedo());
             logState('info', 'redo [before setBranchHash]');
-            storage.setBranchHash(state.project.name,
+            storage.setBranchHash(state.project.projectId,
                 state.branchName, state.undoRedoChain.commit, state.commit.current, function (err) {
                     if (err) {
                         //TODO do we need to handle this? How?
@@ -17096,65 +15999,58 @@ define('client/js/client',[
         // REST-like functions and forwarded to storage TODO: add these to separate base class
 
         //  Getters
-        this.getProjects = function (callback) {
+        this.getProjects = function (options, callback) {
+            var asObject;
             if (isConnected()) {
-                storage.getProjects(callback);
-            } else {
-                callback(new Error('There is no open database connection!'));
-            }
-        };
-
-        this.getBranches = function (projectName, callback) {
-            if (isConnected()) {
-                storage.getBranches(projectName, callback);
-            } else {
-                callback(new Error('There is no open database connection!'));
-            }
-        };
-
-        this.getCommits = function (projectName, before, number, callback) {
-            if (isConnected()) {
-                storage.getCommits(projectName, before, number, callback);
-            } else {
-                callback(new Error('There is no open database connection!'));
-            }
-        };
-
-        this.getLatestCommitData = function (projectName, branchName, callback) {
-            if (isConnected()) {
-                storage.getLatestCommitData(projectName, branchName, callback);
+                if (options.asObject) {
+                    asObject = true;
+                    delete options.asObject;
+                }
+                storage.getProjects(options, function (err, result) {
+                    var i,
+                        resultObj = {};
+                    if (err) {
+                        callback(err);
+                        return;
+                    }
+                    if (asObject === true) {
+                        for (i = 0; i < result.length; i += 1) {
+                            resultObj[result[i]._id] = result[i];
+                        }
+                        callback(null, resultObj);
+                    } else {
+                        callback(null, result);
+                    }
+                });
             } else {
                 callback(new Error('There is no open database connection!'));
             }
         };
 
         this.getProjectsAndBranches = function (asObject, callback) {
-            if (isConnected()) {
-                storage.getProjectsAndBranches(function (err, projectsWithBranches) {
-                    var i,
-                        result = {};
-                    if (err) {
-                        callback(err);
-                        return;
-                    }
-                    if (asObject === true) {
-                        //Move the result in the same format as before.
-                        for (i = 0; i < projectsWithBranches.length; i += 1) {
-                            result[projectsWithBranches[i].name] = {
-                                branches: projectsWithBranches[i].branches,
-                                rights: {
-                                    read: projectsWithBranches[i].read,
-                                    write: projectsWithBranches[i].write,
-                                    delete: projectsWithBranches[i].delete,
-                                }
-                            };
-                        }
-                        callback(null, result);
-                    } else {
-                        callback(null, projectsWithBranches);
-                    }
+            //This is kept for the tests.
+            self.getProjects({rights: true, branches: true, asObject: asObject}, callback);
+        };
 
-                });
+        this.getBranches = function (projectId, callback) {
+            if (isConnected()) {
+                storage.getBranches(projectId, callback);
+            } else {
+                callback(new Error('There is no open database connection!'));
+            }
+        };
+
+        this.getCommits = function (projectId, before, number, callback) {
+            if (isConnected()) {
+                storage.getCommits(projectId, before, number, callback);
+            } else {
+                callback(new Error('There is no open database connection!'));
+            }
+        };
+
+        this.getLatestCommitData = function (projectId, branchName, callback) {
+            if (isConnected()) {
+                storage.getLatestCommitData(projectId, branchName, callback);
             } else {
                 callback(new Error('There is no open database connection!'));
             }
@@ -17169,9 +16065,9 @@ define('client/js/client',[
             }
         };
 
-        this.deleteProject = function (projectName, callback) {
+        this.deleteProject = function (projectId, callback) {
             if (isConnected()) {
-                storage.deleteProject(projectName, function (err, didExist) {
+                storage.deleteProject(projectId, function (err, didExist) {
                     if (err) {
                         callback(new Error(err));
                         return;
@@ -17183,17 +16079,17 @@ define('client/js/client',[
             }
         };
 
-        this.createBranch = function (projectName, branchName, newHash, callback) {
+        this.createBranch = function (projectId, branchName, newHash, callback) {
             if (isConnected()) {
-                storage.createBranch(projectName, branchName, newHash, callback);
+                storage.createBranch(projectId, branchName, newHash, callback);
             } else {
                 callback(new Error('There is no open database connection!'));
             }
         };
 
-        this.deleteBranch = function (projectName, branchName, oldHash, callback) {
+        this.deleteBranch = function (projectId, branchName, oldHash, callback) {
             if (isConnected()) {
-                storage.deleteBranch(projectName, branchName, oldHash, callback);
+                storage.deleteBranch(projectId, branchName, oldHash, callback);
             } else {
                 callback(new Error('There is no open database connection!'));
             }
@@ -17205,7 +16101,7 @@ define('client/js/client',[
          *
          * eventData = {
          *    etype: PROJECT_CREATED||DELETED,
-         *    projectName: %name of project%
+         *    projectId: %id of project%
          * }
          *
          * @param {function} eventHandler
@@ -17231,37 +16127,37 @@ define('client/js/client',[
 
         /**
          * Triggers eventHandler(storage, eventData) on BRANCH_CREATED, BRANCH_DELETED and BRANCH_HASH_UPDATED
-         * for the given projectName.
+         * for the given projectId.
          *
          *
          * eventData = {
          *    etype: BRANCH_CREATED||DELETED||HASH_UPDATED,
-         *    projectName: %name of project%,
+         *    projectId: %id of project%,
          *    branchName: %name of branch%,
          *    newHash: %new commitHash (='' when DELETED)%
          *    oldHash: %previous commitHash (='' when CREATED)%
          * }
          *
-         * @param {string} projectName
+         * @param {string} projectId
          * @param {function} eventHandler
          * @param {function} [callback]
          */
-        this.watchProject = function (projectName, eventHandler, callback) {
+        this.watchProject = function (projectId, eventHandler, callback) {
             callback = callback || function (err) {
                     if (err) {
-                        logger.error('Problems watching project room', projectName);
+                        logger.error('Problems watching project room', projectId);
                     }
                 };
-            storage.watchProject(projectName, eventHandler, callback);
+            storage.watchProject(projectId, eventHandler, callback);
         };
 
-        this.unwatchProject = function (projectName, eventHandler, callback) {
+        this.unwatchProject = function (projectId, eventHandler, callback) {
             callback = callback || function (err) {
                     if (err) {
-                        logger.error('Problems unwatching project room', projectName);
+                        logger.error('Problems unwatching project room', projectId);
                     }
                 };
-            storage.unwatchProject(projectName, eventHandler, callback);
+            storage.unwatchProject(projectId, eventHandler, callback);
         };
 
         // Internal functions
@@ -17777,68 +16673,78 @@ define('client/js/client',[
 
         //create from file
         this.createProjectFromFile = function (projectName, jProject, callback) {
-            //TODO somehow the export / import should contain the INFO field
-            // so the tags and description could come from it
-            storage.createProject(projectName, function (err, project) {
+            storage.createProject(projectName, function (err, projectId) {
                 if (err) {
                     callback(err);
                     return;
                 }
+                storage.openProject(projectId, function (err, project) {
+                    var core,
+                        rootNode,
+                        persisted;
+                    if (err) {
+                        callback(err);
+                        return;
+                    }
 
-                var core = new Core(project, {
+                    core = new Core(project, {
                         globConf: gmeConfig,
                         logger: logger.fork('core')
-                    }),
-                    root = core.createNode({parent: null, base: null}),
-                    persisted = core.persist(root);
+                    });
+                    rootNode = core.createNode({parent: null, base: null});
+                    persisted = core.persist(rootNode);
 
-                storage.makeCommit(projectName,
-                    null,
-                    [],
-                    persisted.rootHash,
-                    persisted.objects,
-                    'creating project from a file',
-                    function (err, commitResult) {
-                        if (err) {
-                            logger.error('cannot make initial commit for project creation from file');
-                            callback(err);
-                            return;
-                        }
-
-                        project.createBranch('master', commitResult.hash, function (err) {
+                    storage.makeCommit(projectId,
+                        null,
+                        [],
+                        persisted.rootHash,
+                        persisted.objects,
+                        'creating project from a file',
+                        function (err, commitResult) {
                             if (err) {
-                                logger.error('cannot set branch \'master\' for project creation from file');
+                                logger.error('cannot make initial commit for project creation from file');
                                 callback(err);
                                 return;
                             }
 
-                            storage.closeProject(projectName, function (err) {
+                            project.createBranch('master', commitResult.hash, function (err) {
                                 if (err) {
+                                    logger.error('cannot set branch \'master\' for project creation from file');
                                     callback(err);
                                     return;
                                 }
-                                self.selectProject(projectName, function (err) {
+                                storage.closeProject(projectId, function (err) {
                                     if (err) {
+                                        logger.error('Closing temporary project failed in project creation from file',
+                                            err);
                                         callback(err);
                                         return;
                                     }
 
-                                    Serialization.import(state.core, state.root.object, jProject, function (err) {
+                                    self.selectProject(projectId, null, function (err) {
                                         if (err) {
-                                            return callback(err);
+                                            callback(err);
+                                            return;
                                         }
-                                        saveRoot('project created from file', callback);
+
+                                        Serialization.import(state.core, state.root.object, jProject, function (err) {
+                                            if (err) {
+                                                return callback(err);
+                                            }
+                                            saveRoot('project created from file', callback);
+                                        });
                                     });
                                 });
                             });
-                        });
-                    }
-                );
+                        }
+                    );
+                });
             });
         };
 
         //seed
         this.seedProject = function (parameters, callback) {
+            logger.debug('seeding project', parameters);
             parameters.command = 'seedProject';
             storage.simpleRequest(parameters, function (err, id) {
                 if (err) {
@@ -17851,20 +16757,22 @@ define('client/js/client',[
         };
 
         //export branch
-        this.getExportProjectBranchUrl = function (projectName, branchName, fileName, callback) {
+        this.getExportProjectBranchUrl = function (projectId, branchName, fileName, callback) {
             var command = {};
             command.command = 'exportLibrary';
-            command.name = projectName;
-            command.branch = branchName;
+            command.projectId = projectId;
+            command.branchName = branchName;
             command.path = ROOT_PATH;
-            if (command.name && command.branch) {
+            logger.debug('getExportProjectBranchUrl, command', command);
+            if (command.projectId && command.branchName) {
                 storage.simpleRequest(command, function (err, resId) {
+                    var resultUrl = window.location.origin + '/worker/simpleResult/' + resId + '/' + fileName;
+                    logger.debug('getExportProjectBranchUrl', resultUrl);
                     if (err) {
+                        logger.error('getExportProjectBranchUrl failed with error', err);
                         callback(err);
                     } else {
-                        callback(null,
-                            window.location.protocol + '//' + window.location.host + '/worker/simpleResult/' +
-                            resId + '/' + fileName);
+                        callback(null, resultUrl);
                     }
                 });
             } else {
@@ -17876,7 +16784,7 @@ define('client/js/client',[
         this.getExportItemsUrl = function (paths, filename, callback) {
             storage.simpleRequest({
                     command: 'dumpMoreNodes',
-                    name: state.project.name,
+                    projectId: state.project.projectId,
                     hash: state.root.current,
                     nodes: paths
                 },
@@ -17895,12 +16803,13 @@ define('client/js/client',[
         this.getExportLibraryUrl = function (libraryRootPath, filename, callback) {
             var command = {};
             command.command = 'exportLibrary';
-            command.name = state.project.name;
+            command.projectId = state.project.projectId;
             command.hash = state.root.current;
             command.path = libraryRootPath;
-            if (command.name && command.hash) {
+            if (command.projectId && command.hash) {
                 storage.simpleRequest(command, function (err, resId) {
                     if (err) {
+                        logger.error('getExportLibraryUrl failed with error', err);
                         callback(err);
                     } else {
                         callback(null,
@@ -17945,7 +16854,7 @@ define('client/js/client',[
          * @param {string} name - name of plugin.
          * @param {object} context
          * @param {object} context.managerConfig - where the plugin should execute.
-         * @param {string} context.managerConfig.project - name of project.
+         * @param {string} context.managerConfig.project - id of project.
          * @param {string} context.managerConfig.activeNode - path to activeNode.
          * @param {string} [context.managerConfig.activeSelection=[]] - paths to selected nodes.
          * @param {string} context.managerConfig.commit - commit hash to start the plugin from.
@@ -18025,10 +16934,10 @@ define('client/js/client',[
         };
 
         //automerge
-        this.autoMerge = function (projectName, mine, theirs, callback) {
+        this.autoMerge = function (projectId, mine, theirs, callback) {
             var command = {
                 command: 'autoMerge',
-                project: projectName,
+                projectId: projectId,
                 mine: mine,
                 theirs: theirs
             };
@@ -18057,7 +16966,7 @@ define('client/js/client',[
     }
 
 
-// Inherit from the EventDispatcher
+    // Inherit from the EventDispatcher
     Client.prototype = Object.create(EventDispatcher.prototype);
     Client.prototype.constructor = Client;
 
@@ -21750,7 +20659,7 @@ define('js/Utils/InterpreterManager',[
                             // TODO: If global config says try to merge branch then we
                             // TODO: should pass the name of the branch.
                             var config = {
-                                project: self._client.getActiveProjectName(),
+                                project: self._client.getActiveProjectId(),
                                 token: '',
                                 activeNode: activeNode, // active object in the editor
                                 activeSelection: activeSelection || [],

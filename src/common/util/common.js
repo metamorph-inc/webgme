@@ -110,7 +110,7 @@ define(["common/util/assert", "common/storage/mongo", "common/storage/cache", "c
         p.loadObject = TASYNC.wrap(p.loadObject);
         p.insertObject = TASYNC.wrap(p.insertObject);
         p.findHash = TASYNC.wrap(p.findHash);
-        p.getBranchNames = TASYNC.wrap(p.getBranchNames);
+        p.getBranches = TASYNC.wrap(p.getBranches);
         p.setBranchHash = TASYNC.wrap(p.setBranchHash);
         p.getBranchHash = TASYNC.wrap(p.getBranchHash);
         p.makeCommit = TASYNC.wrap(p.makeCommit);

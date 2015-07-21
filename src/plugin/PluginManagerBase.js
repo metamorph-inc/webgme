@@ -240,8 +240,8 @@ define(['plugin/PluginBase', 'plugin/PluginContext'], function (PluginBase, Plug
 
             // load commit hash and run based on branch name or commit hash
             if (managerConfiguration.branchName) {
-                pluginContext.project.getBranchNames(function (err, branchNames) {
-                    self.logger.debug(branchNames);
+                pluginContext.project.getBranches(function (err, branchNames) {
+                    //self.logger.debug(branchNames);
 
                         pluginContext.commitHash = branchNames[managerConfiguration.branchName] || pluginContext.commitHash;
                         pluginContext.branchName = managerConfiguration.branchName;

@@ -303,7 +303,7 @@ define([
 
         this._txtNewProjectName.on('keyup', function () {
             var val = self._txtNewProjectName.val(),
-                projectId = StorageUtil.getProjectIdFromUserIdAndProjectName(self._dialog.find('.username').text(), val);
+                projectId = StorageUtil.getProjectIdFromOwnerIdAndProjectName(self._dialog.find('.username').text(), val);
 
             if (val.length === 1) {
                 self._filter = [projectId.toUpperCase()[0], projectId.toUpperCase()[0]];
@@ -337,7 +337,7 @@ define([
 
             var enterPressed = event.which === 13,
                 newProjectName = self._txtNewProjectName.val(),
-                projectId =  StorageUtil.getProjectIdFromUserIdAndProjectName(self._dialog.find('.username').text(), newProjectName);
+                projectId =  StorageUtil.getProjectIdFromOwnerIdAndProjectName(self._dialog.find('.username').text(), newProjectName);
 
 
             if (enterPressed && isValidProjectName(newProjectName, projectId)) {
@@ -518,13 +518,19 @@ define([
 
         loader.start();
 
-        self._client.createProjectFromFile(projectName, jsonContent, function (err) {
+        self._client.createProjectFromFile(projectName, null, jsonContent, function (err, projectId, branchName) {
             if (err) {
-                self._logger.error('CANNOT CREATE NEW PROJECT FROM FILE: ' + err.message);
+                self._logger.error('CANNOT CREATE NEW PROJECT FROM FILE: ' + err);
+                loader.stop();
             } else {
                 self._logger.debug('CREATE NEW PROJECT FROM FILE FINISHED SUCCESSFULLY');
+                self._client.selectProject(projectId, branchName, function (err) {
+                    if (err) {
+                        self._logger.error('CANNOT SELECT NEWLY CREATED PROJECT FROM FILE: ' + err.message);
+                    }
+                    loader.stop();
+                });
             }
-            loader.stop();
         });
     };
 

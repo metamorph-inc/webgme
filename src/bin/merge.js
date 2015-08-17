@@ -1,5 +1,6 @@
 /*jshint node: true*/
 /**
+ * @module Bin:Merge
  * @author kecso / https://github.com/kecso
  */
 
@@ -9,7 +10,6 @@ var Q = require('q'),
     path = require('path'),
     MongoURI = require('mongo-uri'),
     gmeConfig = require(path.join(process.cwd(), 'config')),
-    Project = require('../../src/server/storage/userproject'),
     merger = webgme.requirejs('common/core/users/merge'),
     cliStorage,
     gmeAuth,
@@ -93,8 +93,7 @@ var main = function (argv) {
 
             return cliStorage.openProject(params);
         })
-        .then(function (dbProject) {
-            var project = new Project(dbProject, cliStorage, logger.fork('project'), gmeConfig);
+        .then(function (project) {
             if (program.user) {
                 project.setUser(program.user);
             }

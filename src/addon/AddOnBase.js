@@ -19,6 +19,8 @@ define(['common/storage/constants'], function (CONSTANTS) {
         this.branch = null;
         this.commit = null;
         this.root = null;
+        this.initializing = false;
+        this.running = false;
         this.rootHash = '';
         this.userId = userId;
 
@@ -30,28 +32,49 @@ define(['common/storage/constants'], function (CONSTANTS) {
     
     AddOnBase.prototype.init = function (parameters, callback) {
         var self = this,
-            updateHandler = function (updateQueue, updateData, aborting) {
-
-                if (self.running) {
-                    self.rootHash = updateData.commitObject.root;
-                    self.commit = updateData.commitObject[CONSTANTS.MONGO_ID];
+            hashUpdateHandler = function (data, commitQueue, updateQueue, callback) {
+                function loadNewRoot(rootLoaded) {
+                    self.rootHash = data.commitData.commitObject.root;
+                    self.commit = data.commitData.commitObject[CONSTANTS.MONGO_ID];
                     self.core.loadRoot(self.rootHash, function (err, root) {
                         if (err) {
                             self.logger.error('failed to load new root', err);
-                            aborting(true);
+                            rootLoaded(err);
                             return;
                         }
 
                         self.root = root;
-                        self.update(root, function (err) {
-                            aborting(err !== null);
+                        rootLoaded(null);
+                    });
+                }
+
+                if (self.running) {
+                    loadNewRoot(function (err) {
+                        if (err) {
+                            callback(err, false); // proceed: false
+                            return;
+                        }
+                        self.update(self.root, function (err) {
+                            var proceed = !err;
+
+                            callback(err, proceed);
                         });
+                    });
+                } else if (self.initializing === true) {
+                    loadNewRoot(function (err) {
+                        if (err) {
+                            callback(err, false); // proceed: false
+                            return;
+                        }
+                        self.intializing = false;
+                        self.running = true;
+                        callback(null, true);
                     });
                 }
             },
-            commitHandler = function (commitQueue, result, pushing) {
+            branchStatusHandler = function (branchStatus /*, commitQueue, updateQueue*/) {
                 //TODO check how it should work
-                pushing(true);
+                self.logger.debug('New branchStatus', branchStatus);
             };
 
         // This is the part of the start process which should always be done,
@@ -71,7 +94,7 @@ define(['common/storage/constants'], function (CONSTANTS) {
                 return;
             }
 
-            if (!branches[self.branchName]) {
+            if (branches.hasOwnProperty(self.branchName) === false) {
                 callback(new Error('no such branch [' + self.branchName + ']'));
                 return;
             }
@@ -85,31 +108,13 @@ define(['common/storage/constants'], function (CONSTANTS) {
             // time to wait in ms for this amount after stop is called and before we kill the addon
             self.waitTimeForPendingEvents = parameters.waitTimeForPendingEvents || 1500;
 
-            self._storage.openBranch(self.projectId, self.branchName, updateHandler, commitHandler,
-                function (err, branch) {
+            self._storage.openBranch(self.projectId, self.branchName, hashUpdateHandler, branchStatusHandler,
+                function (err /*, latestCommit*/) {
                     if (err) {
                         callback(err);
                         return;
                     }
-
-                    self.branch = branch;
-                    self.project.loadObject(self.commit, function (err, commitObject) {
-                        if (err) {
-                            callback(err);
-                            return;
-                        }
-
-                        self.rootHash = commitObject.root;
-                        self.core.loadRoot(self.rootHash, function (err, root) {
-                            if (err) {
-                                callback(err);
-                                return;
-                            }
-                            self.root = root;
-                            self.running = true;
-                            callback(null);
-                        });
-                    });
+                    callback(null);
                 }
             );
         });
@@ -120,6 +125,12 @@ define(['common/storage/constants'], function (CONSTANTS) {
         var self = this;
         //this is the initialization function it could be overwritten or use as it is
         //this.logger = parameters.logger;
+        if (self.running || self.initializing) {
+            callback(new Error('AddOn is already running or starting up.'));
+            return;
+        }
+
+        self.initializing = true;
 
         self.init(parameters, function (err) {
             if (err) {
@@ -195,7 +206,7 @@ define(['common/storage/constants'], function (CONSTANTS) {
     };
 
     AddOnBase.prototype.update = function (root, callback) {
-        callback(new Error('The update function is a main point of an addOn\'s functionality so it must be' +
+        callback(new Error('The update function is a main point of an addOn\'s functionality so it must be ' +
             'overwritten.'));
     };
 

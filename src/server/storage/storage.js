@@ -2,6 +2,7 @@
 /*jshint node:true, newcap:false*/
 
 /**
+ * @module Server:Storage
  * @author pmeijer / https://github.com/pmeijer
  */
 'use strict';
@@ -28,12 +29,9 @@ Storage.prototype.openDatabase = function (callback) {
 };
 
 Storage.prototype.closeDatabase = function (callback) {
+    this.clearAllEvents();
     return this.mongo.closeDatabase()
         .nodeify(callback);
-};
-
-Storage.prototype.getProjectIds = function (data, callback) {
-    return this.mongo.getProjectIds().nodeify(callback);
 };
 
 Storage.prototype.deleteProject = function (data, callback) {
@@ -100,7 +98,7 @@ Storage.prototype.getLatestCommitData = function (data, callback) {
         .then(function (branchHash) {
             if (branchHash === '') {
                 throw new Error('Branch "' + data.branchName + '" does not exist in project "' +
-                data.projectId + '"');
+                    data.projectId + '"');
             }
             return project.loadObject(branchHash);
         })
@@ -120,10 +118,28 @@ Storage.prototype.makeCommit = function (data, callback) {
         deferred = Q.defer();
     this.mongo.openProject(data.projectId)
         .then(function (project) {
-            var objectHashes = Object.keys(data.coreObjects);
+            var objectHashes = Object.keys(data.coreObjects),
+                rootProvided;
 
             function insertObj(hash) {
                 return project.insertObject(data.coreObjects[hash]);
+            }
+
+            function loadRootObject() {
+                var rootDeferred = Q.defer(),
+                    rootObject = data.coreObjects[data.commitObject.root];
+
+                if (rootObject) {
+                    rootProvided = true;
+                    rootDeferred.resolve(rootObject);
+                } else {
+                    rootProvided = false;
+                    project.loadObject(data.commitObject.root)
+                        .then(rootDeferred.resolve)
+                        .catch(rootDeferred.reject);
+                }
+
+                return rootDeferred.promise;
             }
 
             Q.allSettled(objectHashes.map(insertObj))
@@ -138,62 +154,84 @@ Storage.prototype.makeCommit = function (data, callback) {
                         // TODO: How to add meta data to error and decide on error codes.
                         deferred.reject(new Error('Failed inserting coreObjects'));
                     } else {
-                        project.insertObject(data.commitObject)
-                            .then(function () {
-                                if (data.branchName) {
-                                    var newHash = data.commitObject[CONSTANTS.MONGO_ID],
-                                        oldHash = data.commitObject.parents[0],
-                                        result = {
-                                            status: null, // SYNCH, FORKED, (MERGED)
-                                            hash: newHash
-                                        };
-                                    project.setBranchHash(data.branchName, oldHash, newHash)
-                                        .then(function () {
-                                            var fullEventData = {
-                                                    projectId: data.projectId,
-                                                    branchName: data.branchName,
-                                                    commitObject: data.commitObject,
-                                                    coreObjects: [data.coreObjects[data.commitObject.root]]
-                                                },
-                                                eventData = {
-                                                    projectId: data.projectId,
-                                                    branchName: data.branchName,
-                                                    newHash: newHash,
-                                                    oldHash: oldHash
+                        loadRootObject()
+                            .then(function (rootObject) {
+                                project.insertObject(data.commitObject)
+                                    .then(function () {
+                                        if (data.branchName) {
+                                            var newHash = data.commitObject[CONSTANTS.MONGO_ID],
+                                                oldHash = data.oldHash || data.commitObject.parents[0],
+                                                result = {
+                                                    status: null, // SYNCED, FORKED, (MERGED)
+                                                    hash: newHash
                                                 };
-                                            if (data.hasOwnProperty('socket')) {
-                                                fullEventData.socket = data.socket;
-                                                if (self.gmeConfig.storage.broadcastProjectEvents) {
-                                                    eventData.socket = data.socket;
-                                                }
-                                            }
-                                            result.status = CONSTANTS.SYNCH;
-                                            self.dispatchEvent(CONSTANTS.BRANCH_HASH_UPDATED, eventData);
-                                            self.dispatchEvent(CONSTANTS.BRANCH_UPDATED, fullEventData);
-                                            self.logger.debug('Branch update succeeded.');
-                                            deferred.resolve(result);
-                                        })
-                                        .catch(function (err) {
-                                            if (err === 'branch hash mismatch') {
-                                                // TODO: Need to check error better here..
-                                                self.logger.debug('user got forked');
-                                                result.status = CONSTANTS.FORKED;
-                                                deferred.resolve(result);
-                                            } else {
-                                                self.logger.error('Failed updating hash', err);
-                                                // TODO: How to add meta data to error and decide on error codes.
-                                                deferred.reject(new Error(err));
-                                            }
-                                        });
-                                } else {
-                                    deferred.resolve({hash: data.commitObject[CONSTANTS.MONGO_ID]});
-                                }
+                                            project.setBranchHash(data.branchName, oldHash, newHash)
+                                                .then(function () {
+                                                    var fullEventData = {
+                                                            projectId: data.projectId,
+                                                            branchName: data.branchName,
+                                                            commitObject: data.commitObject,
+                                                            coreObjects: []
+                                                        },
+                                                        eventData = {
+                                                            projectId: data.projectId,
+                                                            branchName: data.branchName,
+                                                            newHash: newHash,
+                                                            oldHash: oldHash
+                                                        };
+
+                                                    if (data.hasOwnProperty('socket')) {
+                                                        fullEventData.socket = data.socket;
+                                                        if (self.gmeConfig.storage.broadcastProjectEvents) {
+                                                            eventData.socket = data.socket;
+                                                        }
+                                                    }
+
+                                                    if (self.gmeConfig.storage.emitCommittedCoreObjects &&
+                                                        rootProvided) {
+                                                        //https://github.com/webgme/webgme/issues/474
+                                                        Object.keys(data.coreObjects).map(function (obj) {
+                                                            fullEventData.coreObjects.push(data.coreObjects[obj]);
+                                                        });
+                                                        self.logger.debug('Will emit committed core objects');
+                                                    } else {
+                                                        fullEventData.coreObjects.push(rootObject);
+                                                    }
+
+                                                    result.status = CONSTANTS.SYNCED;
+                                                    self.dispatchEvent(CONSTANTS.BRANCH_HASH_UPDATED, eventData);
+                                                    self.dispatchEvent(CONSTANTS.BRANCH_UPDATED, fullEventData);
+                                                    self.logger.debug('Branch update succeeded.');
+                                                    deferred.resolve(result);
+                                                })
+                                                .catch(function (err) {
+                                                    if (err === 'branch hash mismatch') {
+                                                        // TODO: Need to check error better here..
+                                                        self.logger.debug('user got forked');
+                                                        result.status = CONSTANTS.FORKED;
+                                                        deferred.resolve(result);
+                                                    } else {
+                                                        self.logger.error('Failed updating hash', err);
+                                                        // TODO: How to add meta data to error and decide on error codes
+                                                        deferred.reject(new Error(err));
+                                                    }
+                                                });
+                                        } else {
+                                            deferred.resolve({hash: data.commitObject[CONSTANTS.MONGO_ID]});
+                                        }
+                                    })
+                                    .catch(function (err) {
+                                        // TODO: How to add meta data to error and decide on error codes.
+                                        self.logger.error(err);
+                                        deferred.reject(new Error('Failed inserting commitObject'));
+                                    });
                             })
                             .catch(function (err) {
                                 // TODO: How to add meta data to error and decide on error codes.
                                 self.logger.error(err);
-                                deferred.reject(new Error('Failed inserting commitObject'));
+                                deferred.reject(new Error('Failed loading referred rootObject'));
                             });
+
                     }
                 });
         })
@@ -287,69 +325,85 @@ Storage.prototype.getBranchHash = function (data, callback) {
 
 Storage.prototype.setBranchHash = function (data, callback) {
     var self = this,
-        deferred = Q.defer();
-    this.mongo.openProject(data.projectId)
-        .then(function (project) {
-            return project.setBranchHash(data.branchName, data.oldHash, data.newHash)
-                .then(function () {
-                    var eventData = {
-                            projectId: data.projectId,
-                            branchName: data.branchName,
-                            newHash: data.newHash,
-                            oldHash: data.oldHash
-                        },
-                        fullEventData = {
-                            projectId: data.projectId,
-                            branchName: data.branchName,
-                            commitObject: null,
-                            coreObjects: []
-                        };
+        deferred = Q.defer(),
+        eventData = {
+            projectId: data.projectId,
+            branchName: data.branchName,
+            newHash: data.newHash,
+            oldHash: data.oldHash
+        },
+        fullEventData = {
+            projectId: data.projectId,
+            branchName: data.branchName,
+            commitObject: null,
+            coreObjects: []
+        };
 
-                    if (data.hasOwnProperty('socket')) {
-                        fullEventData.socket = data.socket;
-                        if (self.gmeConfig.storage.broadcastProjectEvents) {
-                            eventData.socket = data.socket;
-                        }
-                    }
-
-                    if (data.oldHash === '' && data.newHash !== '') {
-                        self.dispatchEvent(CONSTANTS.BRANCH_CREATED, eventData);
-                        deferred.resolve({status: CONSTANTS.SYNCH});
-                    } else if (data.newHash === '' && data.oldHash !== '') {
-                        self.dispatchEvent(CONSTANTS.BRANCH_DELETED, eventData);
-                        deferred.resolve({status: CONSTANTS.SYNCH});
-                    } else if (data.newHash !== '' && data.oldHash !== '') {
-                        // Load the necessary objects for BRANCH_UPDATED event.
-                        project.loadObject(data.newHash)
-                            .then(function (commitObject) {
-                                fullEventData.commitObject = commitObject;
-                                return project.loadObject(commitObject.root);
-                            })
-                            .then(function (rootObject) {
-                                fullEventData.coreObjects.push(rootObject);
-                                self.dispatchEvent(CONSTANTS.BRANCH_HASH_UPDATED, eventData);
-                                self.dispatchEvent(CONSTANTS.BRANCH_UPDATED, fullEventData);
-                                deferred.resolve({status: CONSTANTS.SYNCH});
-                            })
-                            .catch(function (err) {
-                                deferred.reject(new Error('Failed loading objects for events' + err));
-                            });
-                    } else {
-                        //setting empty branch to empty
-                        deferred.resolve({status: CONSTANTS.SYNCH});
-                    }
+    // This will also ensure that the new commit does indeed point to a commitObject with an existing root.
+    function loadRootAndCommitObject (project) {
+        var deferred = Q.defer();
+        if (data.newHash !== '') {
+            project.loadObject(data.newHash)
+                .then(function (commitObject) {
+                    fullEventData.commitObject = commitObject;
+                    return project.loadObject(commitObject.root);
+                })
+                .then(function (rootObject) {
+                    fullEventData.coreObjects.push(rootObject);
+                    deferred.resolve(project);
                 })
                 .catch(function (err) {
-                    if (err === 'branch hash mismatch' || err.message === 'branch has mismatch') {
-                        // TODO: Need to check error better here..
-                        self.logger.debug('user got forked');
-                        deferred.resolve({status: CONSTANTS.FORKED});
-                    } else {
-                        self.logger.error('Failed updating hash', err);
-                        // TODO: How to add meta data to error and decide on error codes.
-                        deferred.reject(new Error(err));
-                    }
+                    err = err instanceof Error ? err : new Error(err);
+                    err.message = 'Tried to setBranchHash to invalid or non-existing commit, err: ' + err.message;
+                    deferred.reject(err);
                 });
+        } else {
+            // When deleting a branch there no need to ensure this.
+            deferred.resolve(project);
+        }
+
+        return deferred.promise;
+    }
+
+    this.mongo.openProject(data.projectId)
+        .then(function (project) {
+            return loadRootAndCommitObject(project);
+        })
+        .then(function (project) {
+            return project.setBranchHash(data.branchName, data.oldHash, data.newHash);
+        })
+        .then(function () {
+            if (data.hasOwnProperty('socket')) {
+                fullEventData.socket = data.socket;
+                if (self.gmeConfig.storage.broadcastProjectEvents) {
+                    eventData.socket = data.socket;
+                }
+            }
+
+            if (data.oldHash === '' && data.newHash !== '') {
+                self.dispatchEvent(CONSTANTS.BRANCH_CREATED, eventData);
+                deferred.resolve({status: CONSTANTS.SYNCED, hash: data.newHash});
+            } else if (data.newHash === '' && data.oldHash !== '') {
+                self.dispatchEvent(CONSTANTS.BRANCH_DELETED, eventData);
+                deferred.resolve({status: CONSTANTS.SYNCED, hash: data.newHash});
+            } else if (data.newHash !== '' && data.oldHash !== '') {
+                self.dispatchEvent(CONSTANTS.BRANCH_HASH_UPDATED, eventData);
+                self.dispatchEvent(CONSTANTS.BRANCH_UPDATED, fullEventData);
+                deferred.resolve({status: CONSTANTS.SYNCED, hash: data.newHash});
+            } else {
+                //setting empty branch to empty
+                deferred.resolve({status: CONSTANTS.SYNCED, hash: ''});
+            }
+        })
+        .catch(function (err) {
+            err = err instanceof Error ? err : new Error(err);
+            if (err.message === 'branch hash mismatch') {
+                self.logger.debug('user got forked');
+                deferred.resolve({status: CONSTANTS.FORKED, hash: data.newHash});
+            } else {
+                self.logger.error('setBranchHash failed', err.stack);
+                deferred.reject(err);
+            }
         });
 
     return deferred.promise.nodeify(callback);

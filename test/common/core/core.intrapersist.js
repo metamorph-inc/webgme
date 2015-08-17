@@ -73,7 +73,7 @@ describe('core.intrapersist', function () {
     });
 
     after(function (done) {
-        Q.all([
+        Q.allDone([
             storage.closeDatabase(),
             gmeAuth.unload()
         ])

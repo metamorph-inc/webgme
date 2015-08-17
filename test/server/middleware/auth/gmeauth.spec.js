@@ -27,7 +27,7 @@ describe('GME authentication', function () {
         dbConn = Q.ninvoke(mongodb.MongoClient, 'connect', gmeConfig.mongo.uri, gmeConfig.mongo.options)
             .then(function (db_) {
                 db = db_;
-                return Q.all([
+                return Q.allDone([
                     Q.ninvoke(db, 'collection', '_users')
                         .then(function (collection_) {
                             var collection = collection_;
@@ -207,7 +207,6 @@ describe('GME authentication', function () {
     });
 
 
-
     it('checks invalid and returns false', function (done) {
         auth.checkToken('token')
             .then(function (valid) {
@@ -374,11 +373,15 @@ describe('GME authentication', function () {
     it('should auth with a new token', function (done) {
         auth.generateTokenForUserId('user')
             .then(function (tokenId) {
-                return Q.all([auth.tokenAuthorization(tokenId, 'project'),
+                return Q.allSettled([auth.tokenAuthorization(tokenId, 'project'),
                     auth.tokenAuthorization(tokenId, 'unauthorized_project'),
                     auth.tokenAuthorization(tokenId, 'doesnt_exist_project')]);
             }).then(function (authorized) {
-                authorized.should.deep.equal([true, false, false]);
+                authorized.should.deep.equal([
+                    {state: 'fulfilled', value: true},
+                    {state: 'fulfilled', value: false},
+                    {state: 'fulfilled', value: false}
+                ]);
             }).nodeify(done);
     });
 
@@ -423,14 +426,41 @@ describe('GME authentication', function () {
             }).nodeify(done);
     });
 
+    it('should be able to list organization', function (done) {
+        var orgName = 'org2',
+            otherOrgName = 'otherOrgName';
+        Q.allDone([
+            auth.addOrganization(orgName),
+            auth.addOrganization(otherOrgName)
+        ])
+            .then(function () {
+                return auth.listOrganizations({});
+            }).then(function (organizations) {
+                expect(organizations).to.include({
+                        _id: orgName,
+                        projects: {}
+                    },
+                    {
+                        _id: otherOrgName,
+                        projects: {}
+                    });
+            }).nodeify(done);
+    });
+
     it('should fail to add dup organization', function (done) {
-        var orgName = 'org1';
+        var orgName = 'org3';
         auth.addOrganization(orgName)
             .then(function () {
+                return auth.addOrganization(orgName);
+            })
+            .then(function () {
                 done(new Error('should have been rejected'));
-            }, function (/*err*/) {
+            })
+            .catch(function (err) {
+                expect(err.message).to.include('duplicate key error');
                 done();
-            });
+            })
+            .done();
     });
 
     it('should fail to add nonexistant organization', function (done) {

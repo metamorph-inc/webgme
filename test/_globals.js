@@ -72,6 +72,38 @@ var WebGME = require('../webgme'),
     rimraf = require('rimraf'),
     childProcess = require('child_process');
 
+/**
+ * A combination of Q.allSettled and Q.all. It works like Q.allSettled in the sense that
+ * the promise is not rejected until all promises have finished and like Q.all in that it
+ * is rejected with the first encountered rejection and resolves with an array of "values".
+ *
+ * The rejection is always an Error.
+ * @param promises
+ * @returns {*|promise}
+ */
+Q.allDone = function (promises) {
+    var deferred = Q.defer();
+    Q.allSettled(promises)
+        .then(function (results) {
+            var i,
+                values = [];
+            for (i = 0; i < results.length; i += 1) {
+                if (results[i].state === 'rejected') {
+                    deferred.reject(new Error(results[i].reason));
+                    break;
+                } else if (results[i].state === 'fulfilled') {
+                    values.push(results[i].value);
+                } else {
+                    deferred.reject(new Error('Unexpected promise state' + results[i].state));
+                    break;
+                }
+            }
+            deferred.resolve(values);
+        });
+
+    return deferred.promise;
+};
+
 function clearDatabase(gmeConfigParameter, callback) {
     var deferred = Q.defer(),
         db;
@@ -79,20 +111,21 @@ function clearDatabase(gmeConfigParameter, callback) {
     Q.ninvoke(mongodb.MongoClient, 'connect', gmeConfigParameter.mongo.uri, gmeConfigParameter.mongo.options)
         .then(function (db_) {
             db = db_;
-            return Q.all([
-                Q.ninvoke(db, 'collection', '_users')
-                    .then(function (collection_) {
-                        return Q.ninvoke(collection_, 'remove');
-                    }),
-                Q.ninvoke(db, 'collection', '_organizations')
-                    .then(function (orgs_) {
-                        return Q.ninvoke(orgs_, 'remove');
-                    }),
-                Q.ninvoke(db, 'collection', '_projects')
-                    .then(function (projects_) {
-                        return Q.ninvoke(projects_, 'remove');
-                    })
-            ]);
+            return Q.ninvoke(db, 'dropDatabase');
+            //return Q.allSettled([
+            //    Q.ninvoke(db, 'collection', '_users')
+            //        .then(function (collection_) {
+            //            return Q.ninvoke(collection_, 'remove');
+            //        }),
+            //    Q.ninvoke(db, 'collection', '_organizations')
+            //        .then(function (orgs_) {
+            //            return Q.ninvoke(orgs_, 'remove');
+            //        }),
+            //    Q.ninvoke(db, 'collection', '_projects')
+            //        .then(function (projects_) {
+            //            return Q.ninvoke(projects_, 'remove');
+            //        })
+            //]);
         })
         .then(function () {
             return Q.ninvoke(db, 'close');
@@ -136,7 +169,7 @@ function clearDBAndGetGMEAuth(gmeConfigParameter, projectNameOrNames, callback) 
         })
         .then(function (gmeAuth_) {
             gmeAuth = gmeAuth_;
-            return Q.all([
+            return Q.allSettled([
                 gmeAuth.addUser(guestAccount, guestAccount + '@example.com', guestAccount, true, {overwrite: true}),
                 gmeAuth.addUser('admin', 'admin@example.com', 'admin', true, {overwrite: true, siteAdmin: true})
             ]);
@@ -172,7 +205,7 @@ function clearDBAndGetGMEAuth(gmeConfigParameter, projectNameOrNames, callback) 
                 logger.warn('No projects to authorize...', projectNameOrNames);
             }
 
-            return Q.all(projectsToAuthorize);
+            return Q.allSettled(projectsToAuthorize);
         })
         .then(function () {
             deferred.resolve(gmeAuth);
@@ -219,9 +252,8 @@ function importProject(storage, parameters, callback) {
     data.projectName = parameters.projectName;
 
     storage.createProject(data)
-        .then(function (dbProject) {
-            var project = new Project(dbProject, storage, parameters.logger, parameters.gmeConfig),
-                core = new Core(project, {
+        .then(function (project) {
+            var core = new Core(project, {
                     globConf: parameters.gmeConfig,
                     logger: parameters.logger
                 }),
@@ -235,19 +267,12 @@ function importProject(storage, parameters, callback) {
                 }
                 persisted = core.persist(rootNode);
 
-                var commitObject = project.createCommitObject([''], persisted.rootHash, 'test', 'project imported'),
-                    commitData = {
-                        projectId: project.projectId,
-                        branchName: branchName,
-                        commitObject: commitObject,
-                        coreObjects: persisted.objects
-                    };
-                storage.makeCommit(commitData)
+                project.makeCommit(branchName, [''], persisted.rootHash, persisted.objects, 'project imported')
                     .then(function (result) {
                         deferred.resolve({
                             status: result.status,
                             branchName: branchName,
-                            commitHash: commitObject._id,
+                            commitHash: result.hash,
                             project: project,
                             projectId: project.projectId,
                             core: core,
@@ -412,6 +437,7 @@ module.exports = {
     getMemoryStorage: getMemoryStorage,
     Project: Project,
     Logger: Logger,
+    Core: Core,
     // test logger instance, used by all tests and only tests
     logger: logger,
     generateKey: generateKey,

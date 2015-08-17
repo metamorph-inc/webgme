@@ -30,7 +30,7 @@ describe('Mongo storage', function () {
             .then(function (gmeAuth_) {
                 gmeAuth = gmeAuth_;
                 storage = testFixture.getMongoStorage(logger, gmeConfig, gmeAuth);
-                return Q.all([
+                return Q.allDone([
                     storage.openDatabase(),
                     gmeAuth.authorizeByUserId(guestAccount, projectDoesNotHaveAccessId, 'create',
                         {
@@ -44,7 +44,7 @@ describe('Mongo storage', function () {
     });
 
     after(function (done) {
-        Q.all([
+        Q.allDone([
             gmeAuth.unload(),
             storage.closeDatabase()
         ])
@@ -169,7 +169,7 @@ describe('Mongo storage', function () {
         var mongoStorage;
 
         afterEach(function (done) {
-            Q.all([
+            Q.allDone([
                 testFixture.forceDeleteProject(storage, gmeAuth, projectName),
                 testFixture.forceDeleteProject(storage, gmeAuth, projectDoesNotHaveAccessName)
             ])
@@ -431,7 +431,7 @@ describe('Mongo storage', function () {
                 })
                 .then(function (projects) {
                     expect(projects[0]._id).deep.equal(projectId);
-                    return mongoStorage.openProject({projectId: projectId});
+                    return mongoStorage._getProject({projectId: projectId});
                 })
                 .then(function (project) {
 
@@ -495,7 +495,7 @@ describe('Mongo storage', function () {
                 })
                 .then(function (/*result*/) {
                     //console.log(result);
-                    return mongoStorage.openProject({projectId: projectId});
+                    return mongoStorage._getProject({projectId: projectId});
                 })
                 .then(function (project) {
                     return project.closeProject();
@@ -523,7 +523,7 @@ describe('Mongo storage', function () {
             })
                 .then(function (result) {
                     expect(result.projectId).to.equal(projectId);
-                    return mongoStorage.openProject({projectId: projectId});
+                    return mongoStorage._getProject({projectId: projectId});
                 })
                 .then(function (p) {
                     project = p;
@@ -682,10 +682,10 @@ describe('Mongo storage', function () {
         });
 
         it('should insert object multiple times if the content is the same', function (done) {
-            Q.all([
-                project.insertObject({_id: '#blabla22', num: 42, str: '35', arr: ['', 'ss']}),
-                project.insertObject({_id: '#blabla22', num: 42, str: '35', arr: ['', 'ss']})
-            ])
+            project.insertObject({_id: '#blabla22', num: 42, str: '35', arr: ['', 'ss']})
+                .then(function () {
+                    return project.insertObject({_id: '#blabla22', num: 42, str: '35', arr: ['', 'ss']})
+                })
                 .then(function () {
                     done();
                 })
@@ -693,10 +693,10 @@ describe('Mongo storage', function () {
         });
 
         it('should fail to insert object multiple times if the content is different', function (done) {
-            Q.all([
-                project.insertObject({_id: '#blabla223', num: 42, str: '35', arr: ['', 'ss']}),
-                project.insertObject({_id: '#blabla223', num: 4200, str: 'different', arr: ['', 'ss']})
-            ])
+            project.insertObject({_id: '#blabla223', num: 42, str: '35', arr: ['', 'ss']})
+                .then(function () {
+                    return project.insertObject({_id: '#blabla223', num: 4200, str: 'different', arr: ['', 'ss']});
+                })
                 .then(function () {
                     done(new Error('should have failed to insertObject'));
                 })
@@ -805,7 +805,6 @@ describe('Mongo storage', function () {
                 })
                 .catch(function (err) {
                     if (err === 'branch hash mismatch') {
-                        // TODO: check error message
                         done();
                     } else {
                         done(new Error('should have failed to openProject'));
@@ -904,7 +903,7 @@ describe('Mongo storage', function () {
                         return mongoStorage.makeCommit(commitData);
                     }
 
-                    return Q.all(commitDatas.map(makeCommit));
+                    return Q.allDone(commitDatas.map(makeCommit));
                 })
                 .then(function (/*commitResults*/) {
                     done();

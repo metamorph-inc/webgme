@@ -28,9 +28,6 @@ describe('Run plugin CLI', function () {
                 return storage.openDatabase();
             })
             .then(function () {
-                return testFixture.forceDeleteProject(storage, gmeAuth, projectName);
-            })
-            .then(function () {
                 return testFixture.importProject(storage, {
                     projectSeed: './test/bin/run_plugin/project.json',
                     projectName: projectName,
@@ -43,19 +40,16 @@ describe('Run plugin CLI', function () {
     });
 
     after(function (done) {
-        testFixture.forceDeleteProject(storage, gmeAuth, projectName)
-            .then(function () {
-                return Q.all([
-                    storage.closeDatabase(),
-                    gmeAuth.unload()
-                ]);
-            })
-            .nodeify(done);
+        Q.allDone([
+            storage.closeDatabase(),
+            gmeAuth.unload()
+        ])
+        .nodeify(done);
     });
 
     describe('as a child process', function () {
         it('should run the Minimal Working Example plugin', function (done) {
-            var runpluginProcess = spawn('node', [filename, '-p', projectName, '-n', 'MinimalWorkingExample']),
+            var runpluginProcess = spawn('node', [filename, 'MinimalWorkingExample', projectName]),
                 stdout,
                 stderr;
 
@@ -91,9 +85,10 @@ describe('Run plugin CLI', function () {
         it('should run the Minimal Working Example plugin', function (done) {
             process.exit = function (code) {
                 expect(code).to.equal(0);
+                done();
             };
 
-            runPlugin.main(['node', filename, '-p', projectName, '-n', 'MinimalWorkingExample'],
+            runPlugin.main(['node', filename, 'MinimalWorkingExample', projectName],
                 function (err, result) {
                     if (err) {
                         done(new Error(err));
@@ -101,7 +96,93 @@ describe('Run plugin CLI', function () {
                     }
                     expect(result.success).to.equal(true);
                     expect(result.error).to.equal(null);
-                    done();
+                }
+            );
+        });
+
+        it('should run the Minimal Working Example plugin and fail with configuration file', function (done) {
+            process.exit = function (code) {
+                expect(code).to.equal(1);
+                done();
+            };
+
+            runPlugin.main(['node', filename, 'MinimalWorkingExample', projectName,
+                    '-j', './test/bin/run_plugin/MinimalWorkingExample.config.json'],
+                function (err) {
+                    if (err) {
+                        expect(err).to.match(/Failed on purpose./);
+                        return;
+                    }
+                    done(new Error('should have failed to run plugin'));
+                }
+            );
+        });
+
+
+        it('should run the Minimal Working Example plugin if owner is specified', function (done) {
+            process.exit = function (code) {
+                expect(code).to.equal(0);
+                done();
+            };
+
+            runPlugin.main(['node', filename, 'MinimalWorkingExample', projectName,
+                    '-o', gmeConfig.authentication.guestAccount],
+                function (err, result) {
+                    if (err) {
+                        done(new Error(err));
+                        return;
+                    }
+                    expect(result.success).to.equal(true);
+                    expect(result.error).to.equal(null);
+                }
+            );
+        });
+
+        it('should fail to run the Minimal Working Example plugin if does not have access to project', function (done) {
+            process.exit = function (code) {
+                expect(code).to.equal(1);
+                done();
+            };
+
+            runPlugin.main(['node', filename, 'MinimalWorkingExample', 'not_authorized_project'],
+                function (err) {
+                    if (err) {
+                        expect(err).to.match(/Not authorized to read or write project/);
+                        return;
+                    }
+                    done(new Error('should have failed to run plugin'));
+                }
+            );
+        });
+
+        it('should fail to run plugin if no plugin name and no project name is not given', function (done) {
+            process.exit = function () {
+                done();
+            };
+
+            runPlugin.main(['node', filename],
+                function (err/*, result*/) {
+                    if (err) {
+                        expect(err).to.match(/must be specified/);
+                        return;
+                    }
+                    done(new Error('should have failed to run plugin'));
+                }
+            );
+        });
+
+        it('should fail to run plugin if no project name is given', function (done) {
+            process.exit = function () {
+                done();
+            };
+
+            runPlugin.main(['node', filename, projectName],
+                function (err) {
+                    if (err) {
+                        expect(err).to.match(/must be specified/);
+                        return;
+                    }
+                    done(new Error('should have failed to run plugin'));
                 }
             );
         });

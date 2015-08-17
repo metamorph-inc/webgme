@@ -70,7 +70,7 @@ describe('WebSocket', function () {
                         query = 'webGMESessionId=' + sessionId;
                     } else {
                         query = 'webGMESessionId=' + /webgmeSid=s:([^;]+)\./.exec(
-                            decodeURIComponent(socketReq.cookies))[1];
+                                decodeURIComponent(socketReq.cookies))[1];
                     }
 
                     socket = io.connect(serverBaseUrl,
@@ -112,7 +112,7 @@ describe('WebSocket', function () {
                         gmeAuth = gmeAuth_;
                         safeStorage = testFixture.getMongoStorage(logger, gmeConfigWithAuth, gmeAuth);
 
-                        return Q.all([
+                        return Q.allDone([
                             safeStorage.openDatabase(),
                             gmeAuth.authorizeByUserId(guestAccount, 'project_does_not_exist', 'create',
                                 {
@@ -149,7 +149,7 @@ describe('WebSocket', function () {
                     //    ]);
                     //})
                     .then(function () {
-                        return Q.all([
+                        return Q.allDone([
                             gmeAuth.authorizeByUserId(guestAccount, projectNameUnauthorized, 'create',
                                 {
                                     read: false,
@@ -169,7 +169,7 @@ describe('WebSocket', function () {
                     return;
                 }
 
-                Q.all([
+                Q.allDone([
                     gmeAuth.unload(),
                     safeStorage.closeDatabase()
                 ])
@@ -225,7 +225,7 @@ describe('WebSocket', function () {
                         gmeAuth = gmeAuth_;
                         safeStorage = testFixture.getMongoStorage(logger, gmeConfig, gmeAuth);
 
-                        return Q.all([
+                        return Q.allDone([
                             safeStorage.openDatabase(),
                             gmeAuth.authorizeByUserId(guestAccount, 'project_does_not_exist', 'create',
                                 {
@@ -246,7 +246,7 @@ describe('WebSocket', function () {
                     //    return Q.all(promises);
                     //})
                     .then(function () {
-                        return Q.all([
+                        return Q.allDone([
                             testFixture.importProject(safeStorage, {
                                 projectSeed: 'seeds/EmptyProject.json',
                                 projectName: projectName,
@@ -286,7 +286,7 @@ describe('WebSocket', function () {
                         ]);
                     })
                     .then(function () {
-                        return Q.all([
+                        return Q.allDone([
                             gmeAuth.authorizeByUserId(guestAccount, projectName2Id(projectNameUnauthorized), 'create',
                                 {
                                     read: false,
@@ -307,23 +307,23 @@ describe('WebSocket', function () {
                     write: true,
                     delete: true
                 })
-            .then(function () {
+                .then(function () {
                     var promises = [],
                         i;
                     for (i = 0; i < projects.length; i += 1) {
                         promises.push(safeStorage.deleteProject({projectId: projectName2Id(projects[i])}));
                     }
 
-                    return Q.all(promises);
+                    return Q.allSettled(promises);
                 })
-            .finally(function () {
+                .finally(function () {
                     server.stop(function (err) {
                         if (err) {
                             done(new Error(err));
                             return;
                         }
 
-                        Q.all([
+                        Q.allDone([
                             gmeAuth.unload(),
                             safeStorage.closeDatabase()
                         ])
@@ -928,6 +928,116 @@ describe('WebSocket', function () {
                     return deferred.promise;
                 })
                 .nodeify(done);
+        });
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // AddOn related tests
+
+        it('should fail to query addOn without proper workerId', function (done) {
+            openSocketIo()
+                .then(function (socket) {
+                    var data = {
+                        anything: 'anyValuie'
+                    };
+
+                    return Q.ninvoke(socket, 'emit', 'simpleQuery', 'noWorkerId', data);
+                })
+                .then(function () {
+                    done(new Error('missing error handling'));
+                })
+                .catch(function (err) {
+                    expect(err).to.include('wrong request');
+                    done();
+                })
+                .done();
+        });
+    });
+
+    describe('with invalid session and user', function () {
+        var addFailSimpleCallTestCase = function (functionName) {
+                it('should fail to execute \'' + functionName + '\' with invalid session id', function (done) {
+                    openSocketIo('invalidSession')
+                        .then(function (socket) {
+
+                            return Q.ninvoke(socket, 'emit', functionName, {});
+                        })
+                        .then(function () {
+                            done(new Error('missing error handling'));
+                        })
+                        .catch(function (err) {
+                            expect(err).to.include('invalidSession');
+                            done();
+                        })
+                        .done();
+                });
+            },
+            simpleFunctions = [
+                'watchProject',
+                'watchBranch',
+                'makeCommit',
+                'setBranchHash',
+                'getBranchHash',
+                'getProjects',
+                'deleteProject',
+                'getBranches',
+                'getCommits',
+                'getLatestCommitData',
+                'getCommonAncestorCommit',
+                'simpleRequest',
+                'simpleResult',
+
+            ],
+            i;
+
+        before(function (done) {
+
+            server = WebGME.standaloneServer(gmeConfig);
+            serverBaseUrl = server.getUrl();
+            Q.ninvoke(server, 'start')
+                .then(function () {
+                    return testFixture.clearDBAndGetGMEAuth(gmeConfig, projectName);
+
+                })
+                .then(function (gmeAuth_) {
+                    gmeAuth = gmeAuth_;
+                    done();
+                })
+                .catch(function (err) {
+                    done(err);
+                })
+                .done();
+        });
+
+        beforeEach(function () {
+            agent = superagent.agent();
+        });
+
+        after(function (done) {
+            Q.allDone([
+                Q.ninvoke(server, 'stop'),
+                gmeAuth.unload()
+            ])
+                .nodeify(done);
+        });
+
+        for (i = 0; i < simpleFunctions.length; i++) {
+            addFailSimpleCallTestCase(simpleFunctions[i]);
+        }
+
+        it('should fail to call simpleQuery', function (done) {
+            openSocketIo('invalidSession')
+                .then(function (socket) {
+
+                    return Q.ninvoke(socket, 'emit', 'simpleQuery', 'someWorkerId', {});
+                })
+                .then(function () {
+                    done(new Error('missing error handling'));
+                })
+                .catch(function (err) {
+                    expect(err).to.include('invalidSession');
+                    done();
+                })
+                .done();
         });
     });
 });

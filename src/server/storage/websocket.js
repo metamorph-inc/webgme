@@ -1,6 +1,7 @@
 /*globals requireJS*/
 /*jshint node:true, newcap: false*/
 /**
+ * @module Server:WebSockets
  * @author pmeijer / https://github.com/pmeijer
  */
 'use strict';
@@ -328,6 +329,24 @@ function WebSocket(storage, mainLogger, gmeConfig, gmeAuth, workerManager) {
                         }
                         data.username = userId;
                         return storage.setBranchHash(data);
+                    })
+                    .then(function (result) {
+                        callback(null, result);
+                    })
+                    .catch(function (err) {
+                        if (gmeConfig.debug) {
+                            callback(err.stack);
+                        } else {
+                            callback(err.message);
+                        }
+                    });
+            });
+
+            socket.on('getBranchHash', function (data, callback) {
+                getUserIdFromSocket(socket)
+                    .then(function (userId) {
+                        data.username = userId;
+                        return storage.getBranchHash(data);
                     })
                     .then(function (result) {
                         callback(null, result);

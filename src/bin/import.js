@@ -1,5 +1,6 @@
 /* jshint node:true */
 /**
+ * @module Bin:Import
  * @author kecso / https://github.com/kecso
  */
 
@@ -10,13 +11,12 @@ var webgme = require('../../webgme'),
     path = require('path'),
     Q = require('q'),
     MongoURI = require('mongo-uri'),
-    Project = require('../../src/server/storage/userproject'),
     STORAGE_CONSTANTS = webgme.requirejs('common/storage/constants'),
     jsonProject,
     gmeConfig = require(path.join(process.cwd(), 'config')),
     gmeAuth,
     logger = webgme.Logger.create('gme:bin:import', gmeConfig.bin.log),
-    REGEXP = webgme.REGEXP,
+    //REGEXP = webgme.REGEXP,
     Serialization = webgme.serializer,
     main;
 
@@ -155,8 +155,8 @@ main = function (argv) {
             return cliStorage.openProject(params);
 
         })
-        .then(function (dbProject) {
-            project = new Project(dbProject, cliStorage, logger.fork('project'), gmeConfig);
+        .then(function (project_) {
+            project = project_;
             core = new webgme.core(project, {
                 globConf: gmeConfig,
                 logger: logger.fork('core')
@@ -187,7 +187,7 @@ main = function (argv) {
             params.hash = commitHash;
             return cliStorage.createBranch(params);
         })
-        .then(function(){
+        .then(function () {
             finishUp(null);
         })
         .catch(finishUp);

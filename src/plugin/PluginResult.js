@@ -2,9 +2,11 @@
 /*jshint browser: true, node:true*/
 
 /**
+ * A module representing a PluginResult.
+ *
+ * @module PluginResult
  * @author lattmann / https://github.com/lattmann
  */
-
 
 define(['plugin/PluginMessage'], function (PluginMessage) {
     'use strict';
@@ -15,6 +17,7 @@ define(['plugin/PluginMessage'], function (PluginMessage) {
      *
      * @param config - deserializes an existing configuration to this object.
      * @constructor
+     * @alias PluginResult
      */
     var PluginResult = function (config) {
         var pluginMessage,
@@ -97,7 +100,7 @@ define(['plugin/PluginMessage'], function (PluginMessage) {
      *
      * @param {object} commitData
      * @param {string} commitData.commitHash - hash of the commit.
-     * @param {string} commitData.status - storage.constants./SYNCH/FORKED.
+     * @param {string} commitData.status - storage.constants./SYNCED/FORKED/MERGED
      * @param {string} commitData.branchName - name of branch that got updated with the commitHash.
      */
     PluginResult.prototype.addCommit = function (commitData) {

@@ -186,7 +186,7 @@ define([
                 if (self.projects) {
                     for (projectId in self.projects) {
                         if (self.projects.hasOwnProperty(projectId)) {
-                            self.gmeClient.unwatchProject(self.projects[projectId]._watcher);
+                            self.gmeClient.unwatchProject(projectId, self.projects[projectId]._watcher);
                         }
                     }
                 }
@@ -473,9 +473,14 @@ define([
 
                     currentProject = self.$scope.navigator.items[self.navIdProject];
                     currentBranch = self.$scope.navigator.items[self.navIdBranch];
-                    if (currentBranch === data.branchName && currentProject === projectId) {
-                        //FIXME: This seems wrong, shouldn't it be gmeClient.selectProject??
-                        self.selectProject(projectId);
+                    if (currentBranch.id === data.branchName && currentProject.id === projectId) {
+                        self.gmeClient.selectCommit(self.gmeClient.getActiveCommitHash(), function (err) {
+                            if (err) {
+                                self.logger.error('cannot select latest commit', {metadata: {error: err}});
+                            }
+                            self.logger.debug('active branch deleted, switched to last viewed commit',
+                                {metadata: {commitHash: self.gmeClient.getActiveCommitHash()}});
+                        });
                     }
                 } else if (data.etype === CONSTANTS.CLIENT.STORAGE.BRANCH_HASH_UPDATED) {
                     self.updateBranch(projectId, data.branchName, data.newHash);
@@ -863,6 +868,12 @@ define([
         callback = callback || function () {
             };
 
+        //check if there is need for a change at all
+        if (currentProject && currentProject.id === projectId && currentBranch &&
+            (currentBranch.id === branchId || branchId === undefined || branchId === '')) {
+            callback(null);
+            return;
+        }
         // clear current selection
         if (currentProject) {
             currentProject.isSelected = false;

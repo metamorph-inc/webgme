@@ -1,6 +1,7 @@
 /*jshint node:true*/
 
 /**
+ * @module Server:API
  * @author lattmann / https://github.com/lattmann
  */
 
@@ -34,6 +35,7 @@ function createAPI(app, mountPath, middlewareOpts) {
         webgme = require('../../../webgme'),
         ServerUserProject = require('../storage/userproject'),
         merge = webgme.requirejs('common/core/users/merge'),
+        StorageUtil = webgme.requirejs('common/storage/util'),
 
         versionedAPIPath = mountPath + '/v1',
         latestAPIPath = mountPath;
@@ -70,7 +72,7 @@ function createAPI(app, mountPath, middlewareOpts) {
     }
 
     function getUserId(req) {
-        return req.session.hasOwnProperty('udmId') ? req.session.udmId : null;
+        return req.session.udmId;
     }
 
     // ensure authenticated can be used only after this rule
@@ -98,31 +100,23 @@ function createAPI(app, mountPath, middlewareOpts) {
         });
     });
 
-
     // AUTHENTICATED
     router.get('/user', ensureAuthenticated, function (req, res) {
         var userId = getUserId(req);
 
-        if (userId) {
-            gmeAuth.getUser(userId, function (err, data) {
-                if (err) {
-                    res.status(404);
-                    res.json({
-                        message: 'Requested resource was not found',
-                        error: err
-                    });
-                    return;
-                }
+        gmeAuth.getUser(userId, function (err, data) {
+            if (err) {
+                res.status(404);
+                res.json({
+                    message: 'Requested resource was not found',
+                    error: err
+                });
+                return;
+            }
 
-                res.json(data);
-            });
-        } else {
-            res.status(401);
-            res.json({
-                message: 'Authentication required',
-                error: ''
-            });
-        }
+            res.json(data);
+        });
+
     });
 
     // Example: curl -i -H "Content-Type: application/json" -X PATCH
@@ -130,9 +124,25 @@ function createAPI(app, mountPath, middlewareOpts) {
     router.patch('/user', function (req, res, next) {
         var userId = getUserId(req);
 
-        if (userId) {
-            gmeAuth.getUser(userId, function (err, data) {
-                var receivedData;
+        gmeAuth.getUser(userId, function (err, data) {
+            var receivedData;
+            if (err) {
+                res.status(404);
+                res.json({
+                    message: 'Requested resource was not found',
+                    error: err
+                });
+                return;
+            }
+
+            receivedData = req.body;
+
+            if (receivedData.hasOwnProperty('siteAdmin') && !data.siteAdmin) {
+                res.status(403);
+                return next(new Error('setting siteAdmin property requires site admin role'));
+            }
+
+            gmeAuth.updateUser(userId, receivedData, function (err, userData) {
                 if (err) {
                     res.status(404);
                     res.json({
@@ -142,33 +152,9 @@ function createAPI(app, mountPath, middlewareOpts) {
                     return;
                 }
 
-                receivedData = req.body;
-
-                if (receivedData.hasOwnProperty('siteAdmin') && !data.siteAdmin) {
-                    res.status(403);
-                    return next(new Error('setting siteAdmin property requires site admin role'));
-                }
-
-                gmeAuth.updateUser(userId, receivedData, function (err, userData) {
-                    if (err) {
-                        res.status(404);
-                        res.json({
-                            message: 'Requested resource was not found',
-                            error: err
-                        });
-                        return;
-                    }
-
-                    res.json(userData);
-                });
+                res.json(userData);
             });
-        } else {
-            res.status(401);
-            res.json({
-                message: 'Authentication required',
-                error: ''
-            });
-        }
+        });
     });
 
     router.delete('/user', function (req, res/*, next*/) {
@@ -208,67 +194,60 @@ function createAPI(app, mountPath, middlewareOpts) {
 
         var userId = getUserId(req);
 
-        if (userId) {
-            gmeAuth.getUser(userId, function (err, data) {
-                var receivedData;
-                if (err) {
-                    res.status(404);
-                    res.json({
-                        message: 'Requested resource was not found',
-                        error: err
-                    });
-                    return;
-                }
+        gmeAuth.getUser(userId, function (err, data) {
+            var receivedData;
+            if (err) {
+                res.status(404);
+                res.json({
+                    message: 'Requested resource was not found',
+                    error: err
+                });
+                return;
+            }
 
-                if (!data.siteAdmin) {
-                    res.status(403);
-                    return next(new Error('site admin role is required for  this operation'));
-                }
+            if (!data.siteAdmin) {
+                res.status(403);
+                return next(new Error('site admin role is required for  this operation'));
+            }
 
-                //try {
-                receivedData = req.body;
-                // TODO: verify request
-                // "userId"
-                //"email": "user@example.com",
-                //"password": "pass",
-                //"canCreate": null,
-                //"siteAdmin": false,
+            //try {
+            receivedData = req.body;
+            // TODO: verify request
+            // "userId"
+            //"email": "user@example.com",
+            //"password": "pass",
+            //"canCreate": null,
+            //"siteAdmin": false,
 
-                // we may need to check if this user can create other ones.
+            // we may need to check if this user can create other ones.
 
-                gmeAuth.addUser(receivedData.userId,
-                    receivedData.email,
-                    receivedData.password,
-                    receivedData.canCreate === 'true' || receivedData.canCreate === true,
-                    {overwrite: false},
-                    function (err/*, updateData*/) {
+            gmeAuth.addUser(receivedData.userId,
+                receivedData.email,
+                receivedData.password,
+                receivedData.canCreate === 'true' || receivedData.canCreate === true,
+                {overwrite: false},
+                function (err/*, updateData*/) {
+                    if (err) {
+                        res.status(400);
+                        return next(new Error(err));
+                    }
+
+                    gmeAuth.getUser(receivedData.userId, function (err, data) {
                         if (err) {
-                            res.status(400);
-                            return next(new Error(err));
+                            res.status(404);
+                            res.json({
+                                message: 'Requested resource was not found',
+                                error: err
+                            });
+                            return;
                         }
 
-                        gmeAuth.getUser(receivedData.userId, function (err, data) {
-                            if (err) {
-                                res.status(404);
-                                res.json({
-                                    message: 'Requested resource was not found',
-                                    error: err
-                                });
-                                return;
-                            }
-
-                            res.json(data);
-                        });
+                        res.json(data);
                     });
+                });
 
-            });
-        } else {
-            res.status(401);
-            res.json({
-                message: 'Authentication required',
-                error: ''
-            });
-        }
+        });
+
     });
 
     router.get('/users/:username', function (req, res) {
@@ -291,88 +270,44 @@ function createAPI(app, mountPath, middlewareOpts) {
 
         var userId = getUserId(req);
 
-        if (userId) {
-            gmeAuth.getUser(userId, function (err, data) {
-                var receivedData;
-                if (err) {
-                    res.status(404);
-                    res.json({
-                        message: 'Requested resource was not found',
-                        error: err
-                    });
-                    return;
+
+        gmeAuth.getUser(userId, function (err, data) {
+            var receivedData;
+            if (err) {
+                res.status(404);
+                res.json({
+                    message: 'Requested resource was not found',
+                    error: err
+                });
+                return;
+            }
+
+            //try {
+            receivedData = req.body;
+            // TODO: verify request
+            // "userId"
+            //"email": "user@example.com",
+            //"password": "pass",
+            //"canCreate": null,
+            //"siteAdmin": false,
+
+            // we may need to check if this user can create other ones.
+
+            if (data.siteAdmin || data._id === req.params.username) {
+
+                if (receivedData.hasOwnProperty('siteAdmin') && !data.siteAdmin) {
+                    res.status(403);
+                    return next(new Error('setting siteAdmin property requires site admin role'));
                 }
 
-                //try {
-                receivedData = req.body;
-                // TODO: verify request
-                // "userId"
-                //"email": "user@example.com",
-                //"password": "pass",
-                //"canCreate": null,
-                //"siteAdmin": false,
-
-                // we may need to check if this user can create other ones.
-
-                if (data.siteAdmin || data._id === req.params.username) {
-
-                    if (receivedData.hasOwnProperty('siteAdmin') && !data.siteAdmin) {
-                        res.status(403);
-                        return next(new Error('setting siteAdmin property requires site admin role'));
+                gmeAuth.updateUser(req.params.username, receivedData, function (err/*, updated*/) {
+                    if (err) {
+                        res.status(400);
+                        return next(new Error(err));
                     }
 
-                    gmeAuth.updateUser(req.params.username, receivedData, function (err/*, updated*/) {
+                    gmeAuth.getUser(req.params.username, function (err, data) {
                         if (err) {
-                            res.status(400);
-                            return next(new Error(err));
-                        }
-
-                        gmeAuth.getUser(req.params.username, function (err, data) {
-                            if (err) {
-                                res.status(404);
-                                res.json({
-                                    message: 'Requested resource was not found',
-                                    error: err
-                                });
-                                return;
-                            }
-
-                            res.status(200);
-                            res.json(data);
-                        });
-                    });
-
-                } else {
-                    res.status(403);
-                    return next(new Error('site admin role is required for this operation'));
-                }
-            });
-        } else {
-            res.status(401);
-            res.json({
-                message: 'Authentication required',
-                error: ''
-            });
-        }
-    });
-
-    router.delete('/users/:username', function (req, res, next) {
-        var userId = getUserId(req);
-
-        if (userId) {
-            gmeAuth.getUser(userId, function (err, data) {
-                if (err) {
-                    res.status(404);
-                    res.json({
-                        message: 'Requested resource was not found',
-                        error: err
-                    });
-                    return;
-                }
-
-                if (data.siteAdmin || data._id === req.params.username) {
-                    gmeAuth.deleteUser(req.params.username, function (err, mongoResult) {
-                        if (err || mongoResult !== 1) {
                             res.status(404);
                             res.json({
                                 message: 'Requested resource was not found',
@@ -381,20 +316,51 @@ function createAPI(app, mountPath, middlewareOpts) {
                             return;
                         }
 
-                        res.sendStatus(204);
+                        res.status(200);
+                        res.json(data);
                     });
-                } else {
-                    res.status(403);
-                    return next(new Error('site admin role is required for this operation'));
-                }
-            });
-        } else {
-            res.status(401);
-            res.json({
-                message: 'Authentication required',
-                error: ''
-            });
-        }
+                });
+
+            } else {
+                res.status(403);
+                return next(new Error('site admin role is required for this operation'));
+            }
+        });
+
+    });
+
+    router.delete('/users/:username', function (req, res, next) {
+        var userId = getUserId(req);
+
+        gmeAuth.getUser(userId, function (err, data) {
+            if (err) {
+                res.status(404);
+                res.json({
+                    message: 'Requested resource was not found',
+                    error: err
+                });
+                return;
+            }
+
+            if (data.siteAdmin || data._id === req.params.username) {
+                gmeAuth.deleteUser(req.params.username, function (err, mongoResult) {
+                    if (err || mongoResult !== 1) {
+                        res.status(404);
+                        res.json({
+                            message: 'Requested resource was not found',
+                            error: err
+                        });
+                        return;
+                    }
+
+                    res.sendStatus(204);
+                });
+            } else {
+                res.status(403);
+                return next(new Error('site admin role is required for this operation'));
+            }
+        });
+
     });
 
     // AUTHENTICATED
@@ -435,39 +401,7 @@ function createAPI(app, mountPath, middlewareOpts) {
     //});
 
 
-// ORGANIZATIONS
-//    router.get('/organizations', function (req, res) {
-//
-//        gmeAuth.listOrganizations(null, function (err, data) {
-//            if (err) {
-//                res.status(404);
-//                res.json({
-//                    message: 'Requested resource was not found',
-//                    error: err
-//                });
-//                return;
-//            }
-//
-//            res.json(data);
-//        });
-//    });
-//
-//    router.get('/orgs/:org', function (req, res) {
-//
-//        res.json({
-//            message: 'Not implemented yet'
-//        });
-//    });
-//
-//    router.patch('/orgs/:org', function (req, res) {
-//
-//        res.json({
-//            message: 'Not implemented yet'
-//        });
-//    });
-
-
-// PROJECTS
+    // PROJECTS
 
     router.get('/projects', ensureAuthenticated, function (req, res, next) {
         var userId = getUserId(req);
@@ -480,26 +414,12 @@ function createAPI(app, mountPath, middlewareOpts) {
             });
     });
 
-    //
-    //router.get('/projects/:owner/:project', function (req, res) {
-    //
-    //    res.json({
-    //        message: 'Not implemented yet ' + req.params.owner
-    //    });
-    //});
-    //
-    //router.patch('/projects/:owner/:project', function (req, res) {
-    //
-    //    res.json({
-    //        message: 'Not implemented yet ' + req.params.owner
-    //    });
-    //});
 
-    router.delete('/projects/:projectId', function (req, res, next) {
+    router.delete('/projects/:ownerId/:projectName', function (req, res, next) {
         var userId = getUserId(req),
             data = {
                 username: userId,
-                projectId: req.params.projectId
+                projectId: StorageUtil.getProjectIdFromOwnerIdAndProjectName(req.params.ownerId, req.params.projectName)
             };
 
         safeStorage.deleteProject(data)
@@ -511,11 +431,12 @@ function createAPI(app, mountPath, middlewareOpts) {
             });
     });
 
-    router.get('/projects/:projectId/commits', ensureAuthenticated, function (req, res, next) {
+    router.get('/projects/:ownerId/:projectName/commits', ensureAuthenticated, function (req, res, next) {
         var userId = getUserId(req),
             data = {
                 username: userId,
-                projectId: req.params.projectId,
+                projectId: StorageUtil.getProjectIdFromOwnerIdAndProjectName(req.params.ownerId,
+                    req.params.projectName),
                 before: (new Date()).getTime(), // current time
                 number: 100 // asks for the last 100 commits from the time specified above
             };
@@ -530,42 +451,44 @@ function createAPI(app, mountPath, middlewareOpts) {
     });
 
 
-    router.get('/projects/:projectId/compare/:branchOrCommitA...:branchOrCommitB', ensureAuthenticated, function (req, res, next) {
-        var userId = getUserId(req),
-            loggerCompare = logger.fork('compare'),
-            data = {
-                username: userId,
-                projectId: req.params.projectId
-            };
+    router.get('/projects/:ownerId/:projectName/compare/:branchOrCommitA...:branchOrCommitB',
+        ensureAuthenticated,
+        function (req, res, next) {
+            var userId = getUserId(req),
+                loggerCompare = logger.fork('compare'),
+                data = {
+                    username: userId,
+                    projectId: StorageUtil.getProjectIdFromOwnerIdAndProjectName(req.params.ownerId,
+                        req.params.projectName)
+                };
 
 
-        safeStorage.openProject(data)
-            .then(function (dbProject) {
-                var serverUserProject = new ServerUserProject(dbProject, safeStorage, loggerCompare, middlewareOpts.gmeConfig);
+            safeStorage.openProject(data)
+                .then(function (project) {
 
-                return merge.diff({
-                    project: serverUserProject,
-                    branchOrCommitA: req.params.branchOrCommitA,
-                    branchOrCommitB: req.params.branchOrCommitB,
-                    logger: loggerCompare,
-                    gmeConfig: middlewareOpts.gmeConfig
+                    return merge.diff({
+                        project: project,
+                        branchOrCommitA: req.params.branchOrCommitA,
+                        branchOrCommitB: req.params.branchOrCommitB,
+                        logger: loggerCompare,
+                        gmeConfig: middlewareOpts.gmeConfig
 
+                    });
+
+                })
+                .then(function (diff) {
+                    res.json(diff);
+                })
+                .catch(function (err) {
+                    next(err);
                 });
+        });
 
-            })
-            .then(function (diff) {
-                res.json(diff);
-            })
-            .catch(function (err) {
-                next(err);
-            });
-    });
-
-    router.get('/projects/:projectId/branches', ensureAuthenticated, function (req, res, next) {
+    router.get('/projects/:ownerId/:projectName/branches', ensureAuthenticated, function (req, res, next) {
         var userId = getUserId(req),
             data = {
                 username: userId,
-                projectId: req.params.projectId
+                projectId: StorageUtil.getProjectIdFromOwnerIdAndProjectName(req.params.ownerId, req.params.projectName)
             };
 
         safeStorage.getBranches(data)
@@ -578,11 +501,12 @@ function createAPI(app, mountPath, middlewareOpts) {
     });
 
 
-    router.get('/projects/:projectId/branches/:branchId', ensureAuthenticated, function (req, res, next) {
+    router.get('/projects/:ownerId/:projectName/branches/:branchId', ensureAuthenticated, function (req, res, next) {
         var userId = getUserId(req),
             data = {
                 username: userId,
-                projectId: req.params.projectId,
+                projectId: StorageUtil.getProjectIdFromOwnerIdAndProjectName(req.params.ownerId,
+                    req.params.projectName),
                 branchName: req.params.branchId
             };
 
@@ -598,16 +522,18 @@ function createAPI(app, mountPath, middlewareOpts) {
             });
     });
 
-    router.patch('/projects/:projectId/branches/:branchId', function (req, res, next) {
+    router.patch('/projects/:ownerId/:projectName/branches/:branchId', function (req, res, next) {
         var userId = getUserId(req),
             data = {
                 username: userId,
-                projectId: req.params.projectId,
+                projectId: StorageUtil.getProjectIdFromOwnerIdAndProjectName(req.params.ownerId,
+                    req.params.projectName),
                 branchName: req.params.branchId,
-                hash: req.body.hash
+                oldHash: req.body.oldHash,
+                newHash: req.body.newHash
             };
 
-        safeStorage.createBranch(data)
+        safeStorage.setBranchHash(data)
             .then(function () {
                 res.sendStatus(200);
             })
@@ -616,11 +542,12 @@ function createAPI(app, mountPath, middlewareOpts) {
             });
     });
 
-    router.put('/projects/:projectId/branches/:branchId', function (req, res, next) {
+    router.put('/projects/:ownerId/:projectName/branches/:branchId', function (req, res, next) {
         var userId = getUserId(req),
             data = {
                 username: userId,
-                projectId: req.params.projectId,
+                projectId: StorageUtil.getProjectIdFromOwnerIdAndProjectName(req.params.ownerId,
+                    req.params.projectName),
                 branchName: req.params.branchId,
                 hash: req.body.hash
             };
@@ -634,11 +561,12 @@ function createAPI(app, mountPath, middlewareOpts) {
             });
     });
 
-    router.delete('/projects/:projectId/branches/:branchId', function (req, res, next) {
+    router.delete('/projects/:ownerId/:projectName/branches/:branchId', function (req, res, next) {
         var userId = getUserId(req),
             data = {
                 username: userId,
-                projectId: req.params.projectId,
+                projectId: StorageUtil.getProjectIdFromOwnerIdAndProjectName(req.params.ownerId,
+                    req.params.projectName),
                 branchName: req.params.branchId
             };
 
@@ -651,47 +579,47 @@ function createAPI(app, mountPath, middlewareOpts) {
             });
     });
 
-//// FIXME: requires auth
-//    router.get('/projects/:owner/:project/collaborators', function (req, res) {
-//        // array of users with permissions
-//
-//        res.json({
-//            message: 'Not implemented yet'
-//        });
-//    });
-//
-//
-//    router.patch('/projects/:owner/:project/collaborators', function (req, res) {
-//
-//
-//        res.json({
-//            message: 'Not implemented yet'
-//        });
-//    });
-//
-//// FIXME: requires auth
-//    router.get('/projects/:owner/:project/collaborators/:username', function (req, res) {
-//
-//        res.json({
-//            message: 'Not implemented yet'
-//        });
-//    });
-//
-//
-//    router.put('/projects/:owner/:project/collaborators/:username', function (req, res) {
-//
-//        res.json({
-//            message: 'Not implemented yet'
-//        });
-//    });
-//
-//
-//    router.delete('/projects/:owner/:project/collaborators/:username', function (req, res) {
-//
-//        res.json({
-//            message: 'Not implemented yet'
-//        });
-//    });
+    //// FIXME: requires auth
+    //    router.get('/projects/:owner/:project/collaborators', function (req, res) {
+    //        // array of users with permissions
+    //
+    //        res.json({
+    //            message: 'Not implemented yet'
+    //        });
+    //    });
+    //
+    //
+    //    router.patch('/projects/:owner/:project/collaborators', function (req, res) {
+    //
+    //
+    //        res.json({
+    //            message: 'Not implemented yet'
+    //        });
+    //    });
+    //
+    //// FIXME: requires auth
+    //    router.get('/projects/:owner/:project/collaborators/:username', function (req, res) {
+    //
+    //        res.json({
+    //            message: 'Not implemented yet'
+    //        });
+    //    });
+    //
+    //
+    //    router.put('/projects/:owner/:project/collaborators/:username', function (req, res) {
+    //
+    //        res.json({
+    //            message: 'Not implemented yet'
+    //        });
+    //    });
+    //
+    //
+    //    router.delete('/projects/:owner/:project/collaborators/:username', function (req, res) {
+    //
+    //        res.json({
+    //            message: 'Not implemented yet'
+    //        });
+    //    });
 
     router.use('*', function (req, res, next) {
         res.status(404);

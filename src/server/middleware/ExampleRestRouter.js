@@ -9,12 +9,12 @@ var express = require('express'),
     router = express.Router();
 
 function getUserId(req) {
-    return req.session.hasOwnProperty('udmId') ? req.session.udmId : null;
+    return req.session.udmId;
 }
 
 function initialize(middlewareOpts) {
-    var gmeConfig = middlewareOpts.gmeConfig,
-        logger = middlewareOpts.logger.fork('ExampleRestRouter'),
+    var logger = middlewareOpts.logger.fork('ExampleRestRouter'),
+        //gmeConfig = middlewareOpts.gmeConfig,
         ensureAuthenticated = middlewareOpts.ensureAuthenticated;
 
     logger.debug('initializing ...');

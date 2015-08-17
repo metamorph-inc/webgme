@@ -68,7 +68,7 @@ main = function (argv, callback) {
                 logger.info(detail.collectionName + ' will be owned by ' + detail.owner);
             });
             if (dryRun) {
-                return Q();
+                return Q.resolve();
             } else {
                 return doUpgrade(upgradeInfo);
             }
@@ -146,7 +146,7 @@ main = function (argv, callback) {
                     }
                 });
 
-                return Q(upgradeInfo);
+                return Q.resolve(upgradeInfo);
             })
             .nodeify(cb);
     }
@@ -156,7 +156,7 @@ main = function (argv, callback) {
             promise;
 
         upgradeInfo.map(function (info) {
-            var newProjectId = StorageUtil.getProjectIdFromUserIdAndProjectName(info.owner, info.collectionName);
+            var newProjectId = StorageUtil.getProjectIdFromOwnerIdAndProjectName(info.owner, info.collectionName);
 
             promise = Q.ninvoke(db, 'collection', info.collectionName)
                 .then(function (collection) {

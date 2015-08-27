@@ -949,8 +949,11 @@ define([
             return getNode(nodePath, logger, state, self.meta, storeNode);
         };
 
-        function getStringHash(/* node */) {
+        function getStringHash(node) {
             //TODO there is a memory issue with the huge strings so we have to replace it with something
+            if (node.parent && node.parent.data && node.parent.data[node.relid]) {
+                return node.parent.data[node.relid]; // FIXME this is buggy when creating connections
+            }
             state.gHash += 1;
             return state.gHash;
         }

@@ -1,6 +1,6 @@
 {
   "version": 3,
-  "file": "C:/Users/kevin/Documents/mms-webcyphy/node_modules/webgme/dist/webgme.classes.build.js",
+  "file": "C:/Users/kevin/Documents/webgme/dist/webgme.classes.build.js",
   "sources": [
     "../node_modules/requirejs/require.js",
     "client/lib/debug/debug.js",

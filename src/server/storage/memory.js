@@ -94,7 +94,7 @@ function Memory(mainLogger, gmeConfig) {
                 object = JSON.parse(object);
                 deferred.resolve(object);
             } else {
-                deferred.reject('object does not exist ' + hash);
+                deferred.reject(new Error('object does not exist ' + hash));
             }
 
             return deferred.promise.nodeify(callback);
@@ -197,7 +197,7 @@ function Memory(mainLogger, gmeConfig) {
                 if (oldhash === hash) {
                     deferred.resolve();
                 } else {
-                    deferred.reject('branch hash mismatch');
+                    deferred.reject(new Error('branch hash mismatch'));
                 }
             } else {
                 if (oldhash === hash) {
@@ -211,7 +211,7 @@ function Memory(mainLogger, gmeConfig) {
                     }
                     deferred.resolve();
                 } else {
-                    deferred.reject('branch hash mismatch');
+                    deferred.reject(new Error('branch hash mismatch'));
                 }
             }
 
@@ -317,7 +317,15 @@ function Memory(mainLogger, gmeConfig) {
             newAncestorsA = [commitA];
             ancestorsB[commitB] = true;
             newAncestorsB = [commitB];
-            loadStep();
+
+            if (!storage.getItem(database + SEPARATOR + projectId + SEPARATOR + commitA)) {
+                deferred.reject(new Error('Commit object does not exist [' + commitA + ']'));
+            } else if (!storage.getItem(database + SEPARATOR + projectId + SEPARATOR + commitB)) {
+                deferred.reject(new Error('Commit object does not exist [' + commitB + ']'));
+            } else {
+                loadStep();
+            }
+
 
             return deferred.promise.nodeify(callback);
         };
@@ -441,6 +449,54 @@ function Memory(mainLogger, gmeConfig) {
         return deferred.promise.nodeify(callback);
     }
 
+    function renameProject(projectId, newProjectId, callback) {
+        var deferred = Q.defer(),
+            key,
+            keyArray,
+            i,
+            namesToRemove = [],
+            oldProjectKey,
+            newProject,
+            namesToAdd = [];
+
+        if (storage.connected) {
+            newProject = storage.getItem(database + SEPARATOR + newProjectId + SEPARATOR);
+            if (newProject) {
+                deferred.reject(new Error('Project already exists ' + newProjectId));
+            } else {
+                newProject = new Project(newProjectId);
+
+                for (i = 0; i < storage.length; i += 1) {
+                    key = storage.key(i);
+                    keyArray = key.split(SEPARATOR);
+                    ASSERT(keyArray.length === 3);
+                    if (keyArray[0] === database) {
+                        if (keyArray[1] === projectId) {
+                            if (keyArray[2]) {
+                                namesToRemove.push(key);
+                                namesToAdd.push(keyArray[0] + SEPARATOR + newProjectId + SEPARATOR + keyArray[2]);
+                            } else {
+                                oldProjectKey = keyArray[0] + SEPARATOR + projectId + SEPARATOR;
+                            }
+                        }
+                    }
+                }
+
+                for (i = 0; i < namesToRemove.length; i += 1) {
+                    storage.setItem(namesToAdd[i], storage.getItem(namesToRemove[i]));
+                    storage.removeItem(namesToRemove[i]);
+                }
+
+                storage.removeItem(oldProjectKey);
+
+                deferred.resolve();
+            }
+        } else {
+            deferred.reject(new Error('In-memory database has to be initialized. Call openDatabase first.'));
+        }
+
+        return deferred.promise.nodeify(callback);
+    }
 
     this.openDatabase = openDatabase;
     this.closeDatabase = closeDatabase;
@@ -448,6 +504,7 @@ function Memory(mainLogger, gmeConfig) {
     this.createProject = createProject;
     this.deleteProject = deleteProject;
     this.openProject = openProject;
+    this.renameProject = renameProject;
 }
 
 module.exports = Memory;

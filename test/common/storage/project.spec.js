@@ -21,12 +21,12 @@ describe('storage project', function () {
         expect = testFixture.expect,
 
         agent,
+        socket,
         logger = testFixture.logger.fork('nodestorage'),
 
         guestAccount = gmeConfig.authentication.guestAccount,
         server,
         gmeAuth,
-        safeStorage,
         storage,
 
         projectName = 'StorageProject',
@@ -36,73 +36,46 @@ describe('storage project', function () {
         commitHash2;
 
     before(function (done) {
-        var commitObject,
-            commitData;
-
+        var safeStorage;
         server = WebGME.standaloneServer(gmeConfig);
-        server.start(function (err) {
-            if (err) {
-                done(new Error(err));
-                return;
-            }
+        testFixture.clearDBAndGetGMEAuth(gmeConfig, [projectName])
+            .then(function (gmeAuth_) {
+                gmeAuth = gmeAuth_;
+                safeStorage = testFixture.getMongoStorage(logger, gmeConfig, gmeAuth);
+                return safeStorage.openDatabase();
+            })
+            .then(function () {
+                return Q.allDone([
+                    testFixture.importProject(safeStorage, {
+                        projectSeed: 'seeds/EmptyProject.json',
+                        projectName: projectName,
+                        gmeConfig: gmeConfig,
+                        logger: logger
+                    })
+                ]);
+            })
+            .then(function (results) {
+                importResult = results[0];
+                originalHash = importResult.commitHash;
 
-            testFixture.clearDBAndGetGMEAuth(gmeConfig, [projectName])
-                .then(function (gmeAuth_) {
-                    gmeAuth = gmeAuth_;
-                    safeStorage = testFixture.getMongoStorage(logger, gmeConfig, gmeAuth);
-                    return safeStorage.openDatabase();
-                })
-                .then(function () {
-                    return Q.allDone([
-                        safeStorage.deleteProject({projectId: projectName2Id(projectName)})
-                    ]);
-                })
-                .then(function () {
-                    return Q.allDone([
-                        testFixture.importProject(safeStorage, {
-                            projectSeed: 'seeds/EmptyProject.json',
-                            projectName: projectName,
-                            gmeConfig: gmeConfig,
-                            logger: logger
-                        })
-                    ]);
-                })
-                .then(function (results) {
-                    importResult = results[0];
-                    originalHash = importResult.commitHash;
+                return importResult.project.makeCommit(null, [originalHash], importResult.rootHash, {},
+                    'commit msg 1');
+            })
+            .then(function (result) {
+                commitHash1 = result.hash;
 
-                    commitObject = importResult.project.createCommitObject([originalHash],
-                        importResult.rootHash,
-                        'tester1',
-                        'commit msg 1');
-                    commitData = {
-                        projectId: projectName2Id(projectName),
-                        commitObject: commitObject,
-                        coreObjects: []
-                    };
+                return importResult.project.makeCommit(null, [originalHash], importResult.rootHash, {},
+                    'commit msg 2');
+            })
+            .then(function (result) {
+                commitHash2 = result.hash;
 
-                    return safeStorage.makeCommit(commitData);
-                })
-                .then(function (result) {
-                    commitHash1 = result.hash;
-
-                    commitObject = importResult.project.createCommitObject([originalHash],
-                        importResult.rootHash,
-                        'tester2',
-                        'commit msg 2');
-                    commitData = {
-                        projectId: projectName2Id(projectName),
-                        commitObject: commitObject,
-                        coreObjects: []
-                    };
-
-                    return safeStorage.makeCommit(commitData);
-                })
-                .then(function (result) {
-                    commitHash2 = result.hash;
-                })
-                .nodeify(done);
-        });
+                return safeStorage.closeDatabase();
+            })
+            .then(function () {
+                return Q.ninvoke(server, 'start');
+            })
+            .nodeify(done);
     });
 
     after(function (done) {
@@ -113,8 +86,7 @@ describe('storage project', function () {
             }
 
             Q.allDone([
-                gmeAuth.unload(),
-                safeStorage.closeDatabase()
+                gmeAuth.unload()
             ])
                 .nodeify(done);
         });
@@ -124,6 +96,7 @@ describe('storage project', function () {
         agent = superagent.agent();
         openSocketIo(server, agent, guestAccount, guestAccount)
             .then(function (result) {
+                socket = result.socket;
                 storage = NodeStorage.createStorage('127.0.0.1', /*server.getUrl()*/
                     result.webGMESessionId,
                     logger,
@@ -140,7 +113,10 @@ describe('storage project', function () {
     });
 
     afterEach(function (done) {
-        storage.close(done);
+        storage.close(function (err) {
+                socket.disconnect();
+                done(err);
+            });
     });
 
     it('should openProject', function (done) {
@@ -249,6 +225,29 @@ describe('storage project', function () {
                 expect(commit).to.equal(originalHash);
             })
             .nodeify(done);
+    });
+
+    it('should fail getCommonAncestorCommit when hash does not exist', function (done) {
+        var project,
+            branches,
+            access;
+
+        Q.nfcall(storage.openProject, projectName2Id(projectName))
+            .then(function (result) {
+                project = result[0];
+                branches = result[1];
+                access = result[2];
+
+                return project.getCommonAncestorCommit(commitHash1, '#doesNotExist');
+            })
+            .then(function () {
+                throw new Error('Should have failed!');
+            })
+            .catch(function (err) {
+                expect(err.message).to.include('Commit object does not exist');
+                done();
+            })
+            .done();
     });
 
     it('should setBranchHash without branch open', function (done) {
@@ -496,7 +495,7 @@ describe('storage project', function () {
                 })
                 .then(function (result) {
                     branch = project.branches['queueCommit_name'];
-                    branch.queueCommit(commitData);
+                    branch.queueCommit(commitData, function () {});
                     expect(branch.getCommitQueue().length).to.equal(1);
                     expect(branch.getFirstCommit()).to.equal(commitData);
                     expect(branch.getCommitQueue().length).to.equal(1);
@@ -549,8 +548,8 @@ describe('storage project', function () {
                     branch.updateHashes('hash', 'hash');
                     expect(branch.getCommitsForNewFork('hash_different')).to.equal(false);
                     expect(branch.getCommitsForNewFork()).to.deep.equal({commitHash: 'hash', queue: []});
-                    branch.queueCommit(commitData);
-                    branch.queueCommit(commitData2);
+                    branch.queueCommit(commitData, function () {});
+                    branch.queueCommit(commitData2, function () {});
                     expect(branch.getCommitQueue().length).to.equal(2);
                     expect(branch.getCommitQueue()[0]).to.equal(commitData);
                     expect(branch.getCommitsForNewFork('asd2').queue.length).to.equal(1);

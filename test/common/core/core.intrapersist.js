@@ -86,24 +86,23 @@ describe('core.intrapersist', function () {
             s1NodePath = '/1736622193/274170516',
             s1NodePrimePath = '/1710723537/274170516',
             nodes = null;
-        it('sets the root and commit back to base', function (done) {
+
+        before(function(done){
             core.loadRoot(rootHash, function (err, r) {
                 if (err) {
                     return done(err);
                 }
                 root = r;
-                done();
+                loadNodes([e1NodePath, e1NodePrimePath, s1NodePath, s1NodePrimePath], function (err, n) {
+                    if (err) {
+                        return done(err);
+                    }
+                    nodes = n;
+                    done();
+                });
             });
         });
-        it('loads all the nodes for the test', function (done) {
-            loadNodes([e1NodePath, e1NodePrimePath, s1NodePath, s1NodePrimePath], function (err, n) {
-                if (err) {
-                    return done(err);
-                }
-                nodes = n;
-                done();
-            });
-        });
+
         it('modified attributes should be visible in already loaded nodes', function () {
             if (core.getAttribute(nodes[e1NodePath], 'name') !== 'e1' ||
                 core.getAttribute(nodes[e1NodePrimePath], 'name') !== 'e1') {

@@ -1,5 +1,7 @@
 /*globals define, WebGMEGlobal, _, alert*/
-/*jshint browser: true */
+/*jshint browser: true*/
+/*jscs:disable maximumLineLength*/
+
 /**
  * @author rkereskenyi / https://github.com/rkereskenyi
  */
@@ -285,9 +287,9 @@ define(['js/logger',
                 connTypeObj = this._client.getNode(validConnectionTypes[i]);
                 menuItems[validConnectionTypes[i]] = {
                     name: 'Create type \'' +
-                          (connTypeObj ?
-                              connTypeObj.getAttribute(nodePropertyNames.Attributes.name) : validConnectionTypes[i]) +
-                          '\'',
+                    (connTypeObj ?
+                        connTypeObj.getAttribute(nodePropertyNames.Attributes.name) : validConnectionTypes[i]) +
+                    '\'',
                     icon: false
                 };
             }
@@ -371,7 +373,7 @@ define(['js/logger',
                                                                                                        metaInfo) {
         //store that a subcomponent with a given ID has been added to object with objID
         this._GMEID2Subcomponent[metaInfo[CONSTANTS.GME_ID]] = this._GMEID2Subcomponent[metaInfo[CONSTANTS.GME_ID]] ||
-                                                               {};
+            {};
         this._GMEID2Subcomponent[metaInfo[CONSTANTS.GME_ID]][objID] = sCompID;
 
         this._Subcomponent2GMEID[objID] = this._Subcomponent2GMEID[objID] || {};
@@ -398,6 +400,7 @@ define(['js/logger',
             parentID = this.currentNodeInfo.id,
             i,
             j,
+            FCOamongItems = false,
             validPointerTypes = [],
             baseTypeID,
             baseTypeNode,
@@ -423,6 +426,14 @@ define(['js/logger',
                 }
             };
 
+        //check if FCO is among the items as it may change the outcome
+        for (i = 0; i < items.length; i += 1) {
+            if (GMEConcepts.isProjectFCO(items[i])) {
+                FCOamongItems = true;
+                break;
+            }
+        }
+
         //check to see what DROP actions are possible
         if (items.length > 0) {
             i = dragEffects.length;
@@ -431,15 +442,15 @@ define(['js/logger',
                     case DragHelper.DRAG_EFFECTS.DRAG_MOVE:
                         //check to see if dragParams.parentID and this.parentID are the same
                         //if so, it's not a real move, it is a reposition
-                        if (((dragParams && dragParams.parentID === parentID) ||
-                             GMEConcepts.canCreateChildrenInAspect(parentID, items, aspect)) &&
-                            GMEConcepts.canMoveNodeHere(parentID, items)) {
+                        if ((dragParams && dragParams.parentID === parentID) ||
+                            (GMEConcepts.canCreateChildrenInAspect(parentID, items, aspect) &&
+                            GMEConcepts.canMoveNodeHere(parentID, items) && !FCOamongItems)) {
                             dragAction = {dragEffect: dragEffects[i]};
                             possibleDropActions.push(dragAction);
                         }
                         break;
                     case DragHelper.DRAG_EFFECTS.DRAG_COPY:
-                        if (GMEConcepts.canCreateChildrenInAspect(parentID, items, aspect)) {
+                        if (GMEConcepts.canCreateChildrenInAspect(parentID, items, aspect) && !FCOamongItems) {
                             dragAction = {dragEffect: dragEffects[i]};
                             possibleDropActions.push(dragAction);
                         }
@@ -536,7 +547,7 @@ define(['js/logger',
                     case DragHelper.DRAG_EFFECTS.DRAG_CREATE_POINTER:
                         menuItems[i] = {
                             name: 'Create pointer "' + possibleDropActions[i].pointer + '" of type "' +
-                                    possibleDropActions[i].name + '"',
+                            possibleDropActions[i].name + '"',
                             icon: 'glyphicon glyphicon-share'
                         };
                         break;
@@ -662,7 +673,7 @@ define(['js/logger',
                     origNode = this._client.getNode(items[0]);
                     if (origNode) {
                         ptrName = origNode.getAttribute(nodePropertyNames.Attributes.name) + '-' +
-                                      dropAction.pointer;
+                            dropAction.pointer;
                         this._client.setAttributes(gmeID, nodePropertyNames.Attributes.name, ptrName);
                     }
                 }
@@ -780,12 +791,6 @@ define(['js/logger',
         this.designerCanvas.toolbarItems.ddbtnConnectionLineWidth.enabled(onlyConnectionSelected);
 
         this.$btnConnectionRemoveSegmentPoints.enabled(onlyConnectionSelected);
-
-        //nobody is selected on the canvas
-        //set the active selection to the opened guy
-        if (gmeIDs.length === 0 && (this.currentNodeInfo.id || this.currentNodeInfo.id === CONSTANTS.PROJECT_ROOT_ID)) {
-            gmeIDs.push(this.currentNodeInfo.id);
-        }
 
         this._settingActiveSelection = true;
         WebGMEGlobal.State.registerActiveSelection(gmeIDs);
@@ -1088,7 +1093,7 @@ define(['js/logger',
             if (data && data.project && data.items) {
                 if (projectName !== data.project) {
                     alert('Trying to copy from project \'' + data.project + '\' to project \'' + projectName +
-                          '\' which is not supported... Copy&Paste is supported in the same project only.');
+                        '\' which is not supported... Copy&Paste is supported in the same project only.');
                 } else {
                     if (_.isArray(data.items)) {
                         data = data.items;
@@ -1108,10 +1113,10 @@ define(['js/logger',
                             this._client.copyMoreNodes(params);
                             this._client.completeTransaction();
                             this.logger.warn('Pasted ' + childrenIDs.length + ' items successfully into node (' +
-                                             parentID + ')');
+                                parentID + ')');
                         } else {
                             this.logger.warn('Can not paste items because not all the items on the clipboard can be ' +
-                            'created as a child of the currently opened node (' + parentID + ')');
+                                'created as a child of the currently opened node (' + parentID + ')');
                         }
                     }
                 }
@@ -1154,7 +1159,10 @@ define(['js/logger',
             MENU_EXINTCONF = 'exintconf',
             MENU_EXPLIB = 'exportlib',
             MENU_UPDLIB = 'updatelib',
-            MENU_CON_NODE = 'connode',
+            MENU_CONSTRAINTS_NODE = 'connode',
+            MENU_CONSTRAINTS_MODEL = 'conmodel',
+            MENU_META_RULES_NODE = 'metaRulesNode',
+            MENU_META_RULES_MODEL = 'metaRulesModel',
             self = this;
 
         /*menuItems[MENU_EXINTCONF] = {
@@ -1170,13 +1178,43 @@ define(['js/logger',
                 name: 'Update library...',
                 icon: 'glyphicon glyphicon-refresh'
             };
-            if (self._client.getRunningAddOnNames().indexOf('ConstraintAddOn') !== -1) {
-                menuItems[MENU_CON_NODE] = {
-                    name: 'Check Node Constraints...',
+            menuItems[MENU_META_RULES_NODE] = {
+                name: 'Check Meta rules for node...',
+                icon: 'glyphicon glyphicon-ok-sign'
+            };
+            menuItems[MENU_META_RULES_MODEL] = {
+                name: 'Check Meta rules for node and its children...',
+                icon: 'glyphicon glyphicon-ok-sign'
+            };
+            if (self._client.gmeConfig.core.enableCustomConstraints === true) {
+                menuItems[MENU_CONSTRAINTS_NODE] = {
+                    name: 'Check Custom Constraints for node...',
+                    icon: 'glyphicon glyphicon-fire'
+                };
+                menuItems[MENU_CONSTRAINTS_MODEL] = {
+                    name: 'Check Custom Constraints for node and its children...',
                     icon: 'glyphicon glyphicon-fire'
                 };
             }
-
+        } else if (selectedIds.length > 1) {
+            menuItems[MENU_META_RULES_NODE] = {
+                name: 'Check Meta rules for nodes...',
+                icon: 'glyphicon glyphicon-ok-sign'
+            };
+            menuItems[MENU_META_RULES_MODEL] = {
+                name: 'Check Meta rules for nodes and their children...',
+                icon: 'glyphicon glyphicon-ok-sign'
+            };
+            if (self._client.gmeConfig.core.enableCustomConstraints === true) {
+                menuItems[MENU_CONSTRAINTS_NODE] = {
+                    name: 'Check Custom Constraints for nodes...',
+                    icon: 'glyphicon glyphicon-fire'
+                };
+                menuItems[MENU_CONSTRAINTS_MODEL] = {
+                    name: 'Check Custom Constraints for nodes and their children...',
+                    icon: 'glyphicon glyphicon-fire'
+                };
+            }
         }
 
         this.designerCanvas.createMenu(menuItems, function (key) {
@@ -1186,8 +1224,14 @@ define(['js/logger',
                     self._expLib(selectedIds);
                 } else if (key === MENU_UPDLIB) {
                     self._updLib(selectedIds);
-                } else if (key === MENU_CON_NODE) {
-                    self._nodeConCheck(selectedIds);
+                } else if (key === MENU_CONSTRAINTS_NODE) {
+                    self._nodeConCheck(selectedIds, false);
+                } else if (key === MENU_CONSTRAINTS_MODEL) {
+                    self._nodeConCheck(selectedIds, true);
+                } else if (key === MENU_META_RULES_NODE) {
+                    self._metaRulesCheck(selectedIds, false);
+                } else if (key === MENU_META_RULES_MODEL) {
+                    self._metaRulesCheck(selectedIds, true);
                 }
             },
             this.designerCanvas.posToPageXY(mousePos.mX,
@@ -1205,6 +1249,7 @@ define(['js/logger',
 
         ExportManager.exIntConf(gmeIDs);
     };
+
     ModelEditorControlDiagramDesignerWidgetEventHandlers.prototype._expLib = function (selectedIds) {
         var i = selectedIds.length,
             gmeIDs = [],
@@ -1218,6 +1263,7 @@ define(['js/logger',
 
         ExportManager.expLib(id);
     };
+
     ModelEditorControlDiagramDesignerWidgetEventHandlers.prototype._updLib = function (selectedIds) {
         var i = selectedIds.length,
             gmeIDs = [],
@@ -1232,19 +1278,31 @@ define(['js/logger',
         ImportManager.importLibrary(id);
     };
 
-    ModelEditorControlDiagramDesignerWidgetEventHandlers.prototype._nodeConCheck = function (selectedIds) {
+    ModelEditorControlDiagramDesignerWidgetEventHandlers.prototype._metaRulesCheck = function (selectedIds,
+                                                                                               includeChildren) {
         var i = selectedIds.length,
-            gmeIDs = [],
-            id;
+            gmeIDs = [];
 
         while (i--) {
             gmeIDs.push(this._ComponentID2GmeID[selectedIds[i]]);
         }
 
-        id = gmeIDs[0] || null;
+        if (gmeIDs.length > 0) {
+            this._client.checkMetaRules(gmeIDs, includeChildren);
+        }
+    };
 
-        if (id) {
-            this._client.validateNodeAsync(id);
+    ModelEditorControlDiagramDesignerWidgetEventHandlers.prototype._nodeConCheck = function (selectedIds,
+                                                                                             includeChildren) {
+        var i = selectedIds.length,
+            gmeIDs = [];
+
+        while (i--) {
+            gmeIDs.push(this._ComponentID2GmeID[selectedIds[i]]);
+        }
+
+        if (gmeIDs.length > 0) {
+            this._client.checkCustomConstraints(gmeIDs, includeChildren);
         }
     };
 

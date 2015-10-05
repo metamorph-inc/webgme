@@ -11,7 +11,6 @@ var DEBUG = false,
     _jqueryUIVersion = '1.10.4',
     _bootstrapVersion = '3.1.1',
     _angularVersion = '1.3.15',
-    _superagentVersion = '1.2.0',
     WebGMEGlobal = WebGMEGlobal || {};
 
 
@@ -19,10 +18,12 @@ var DEBUG = false,
 require.config({
     baseUrl: './',
 
+    //TODO paths should be fixed as the rules collide with each other
     map: {
         '*': {
             css: 'lib/require/require-css/css',
-            text: 'lib/require/require-text/text'
+            text: 'lib/require/require-text/text',
+            'globcss':'anything/../css'
         }
     },
 
@@ -64,7 +65,7 @@ require.config({
 
         //node_modules
         jszip: 'lib/jszip/jszip',
-        superagent: 'lib/superagent/superagent-' + _superagentVersion,
+        superagent: 'lib/superagent/superagent',
         debug: 'lib/debug/debug',
         q: 'lib/q/q',
 
@@ -101,6 +102,10 @@ require.config({
         ],
 
         backbone: ['underscore'],
+        codemirror: [
+            'css!globcss/codemirror/codemirror.css',
+            'css!globcss/codemirror/codemirror.bootstrap.css'
+        ],
         'js/util': ['jquery'],
         'js/jquery.WebGME': ['bootstrap'],
         'jquery-dataTables': ['jquery'],
@@ -108,8 +113,8 @@ require.config({
         'js/WebGME': [
             'js/jquery.WebGME',
 
-            'css!' + document.location.pathname + 'css/main.css',
-            'css!' + document.location.pathname + 'css/themes/dawn.css',
+            'css!globcss/main.css',
+            'css!globcss/themes/dawn.css',
             'css!fonts/font-awesome/css/font-awesome.min.css',
             'css!fonts/webgme-icons/style.css'
         ],

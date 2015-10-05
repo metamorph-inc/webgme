@@ -1,6 +1,10 @@
 /*globals define*/
 /*jshint browser: true, node:true*/
 /**
+
+ *
+ * Storage.openProject resolves with an instance of this classes.
+ *
  * @author pmeijer / https://github.com/pmeijer
  */
 
@@ -11,6 +15,19 @@ define([
 ], function (ProjectInterface, Branch, Q) {
     'use strict';
 
+    /**
+     * This project uses a common storage to connect to the database on the server via web-sockets.
+     * It can run under both nodeJS and in the browser.
+     *
+     *
+     * @param {string} projectId - Id of project to be opened.
+     * @param {object} storage - Storage connected to the server and database.
+     * @param {object} mainLogger - Logger instance.
+     * @param {GmeConfig} gmeConfig
+     * @alias Project
+     * @constructor
+     * @augments ProjectInterface
+     */
     function Project(projectId, storage, mainLogger, gmeConfig) {
         var self = this;
         this.branches = {};

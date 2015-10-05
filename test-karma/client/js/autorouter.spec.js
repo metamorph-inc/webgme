@@ -42,6 +42,10 @@ describe('AutoRouter', function () {
 
     var replayTests = function () {
 
+        beforeEach(function() {
+            bugPlayer.expectedErrors = [];
+        });
+
         it('basic model with ports', function (done) {
             requirejs(['text!aRtestCases/basic.json'], function (actions) {
                 bugPlayer.test(JSON.parse(actions));
@@ -213,6 +217,7 @@ describe('AutoRouter', function () {
         });
 
         it('should not move box that doesn\'t exist', function (done) {
+            this.timeout(30000);  // Too slow with web worker on my dev box
             requirejs(['text!aRtestCases/finding_correct_buffer_box.json'], function (actions) {
                 bugPlayer.expectedErrors.push(/Box does not exist/);
                 bugPlayer.test(JSON.parse(actions), {}, done);
@@ -222,11 +227,20 @@ describe('AutoRouter', function () {
         it('should not contain skew edge w/ async routing', function (done) {
             requirejs(['text!aRtestCases/simplifyPathsbug.json'], function (actions) {
                 bugPlayer.test(JSON.parse(actions), {}, function() {
-                    bugPlayer.getPathPoints('C_000032', function(points) {
+                    bugPlayer.getPathPoints('C_000032', function(/*points*/) {
                         // TODO: Add API for executing stuff after routeAsync is done...
                         // utils.validatePoints(points);
                         done();
                     });
+                });
+            });
+        });
+
+        it('issue/447_autorouter_cant_retrieve_end_port', function (done) {
+            requirejs(['text!aRtestCases/issue447.json'], function (actions) {
+                bugPlayer.test(JSON.parse(actions), {}, function() {
+                    // Check that paths are routed
+                    setTimeout(done,200);
                 });
             });
         });
@@ -529,6 +543,12 @@ describe('AutoRouter', function () {
                 router.addPath({src: box1.ports[srcId], dst: box2.ports[dstId]});
 
                 router.routeAsync({
+                    first: function() {
+                        // Check that there is a temp path
+                        path = router.graph.paths[0];
+                        assert(path, 'Missing path');
+                        assert(path.points.length >= 2, 'Path missing temporary points');
+                    },
                     callback: function (paths) {
                         var path = paths[0];
                         assert(path.points.length > 2,
@@ -537,10 +557,6 @@ describe('AutoRouter', function () {
                     }
                 });
 
-                // Check that there is a temp path
-                path = router.graph.paths[0];
-                assert(path, 'Missing path');
-                assert(path.points.length >= 2, 'Path missing temporary points');
             });
 
             it('should reconnect paths disconnected during routeAsync', function (done) {
@@ -972,19 +988,22 @@ describe('AutoRouter', function () {
 
     describe('Replay tests', function() {
         describe('Standard', function () {
-            // Set up the Autorouter as a web worker
+            // Set up the Autorouter on the same thread
             before(function() {
                 bugPlayer.useWebWorker(false);
             });
             describe('Tests', replayTests);
         });
 
-        describe.skip('Web Worker', function () {
+        describe('Web Worker', function () {
             // Set up the Autorouter as a web worker
             before(function() {
                 bugPlayer.useWebWorker(true);
             });
             describe('Tests', replayTests);
+            after(function() {
+                bugPlayer.teardown();
+            });
         });
     });
 
@@ -1028,18 +1047,6 @@ describe('AutoRouter', function () {
 
                 assert(array instanceof Array);
                 assert(array.length === 0);
-            });
-        });
-
-        describe('deepCopy tests', function () {
-            it('should copy nested arrays', function() {
-                var inner = [0,1],
-                    array = [0, inner],
-                    result = arUtils.deepCopy(array);
-
-                inner.pop();
-                assert(result[1].length === 2, 
-                    'Nested array should have length 2 but has length: '+result[1].length);
             });
         });
 

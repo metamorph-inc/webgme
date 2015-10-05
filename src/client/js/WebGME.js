@@ -29,10 +29,10 @@ define([
         'js/KeyboardManager/KeyboardManager',
         'js/PanelManager/PanelManager',
         './WebGME.History',
-        'js/Utils/METAAspectHelper',
         'js/Utils/PreferencesHelper',
         'js/Dialogs/Projects/ProjectsDialog',
         'js/Utils/InterpreterManager',
+        'common/storage/util',
         'superagent',
         'q'
     ], function (Logger,
@@ -53,10 +53,10 @@ define([
                  KeyboardManager,
                  PanelManager,
                  WebGMEHistory,
-                 METAAspectHelper,
                  PreferencesHelper,
                  ProjectsDialog,
                  InterpreterManager,
+                 StorageUtil,
                  superagent,
                  Q) {
 
@@ -64,7 +64,8 @@ define([
 
         var npmJSON = JSON.parse(packagejson),
             gmeConfig = JSON.parse(gmeConfigJson),
-            npmJSONFromSplit;
+            npmJSONFromSplit,
+            defaultPageTitle = 'WebGME';
 
         WebGMEGlobal.version = npmJSON.version;
         WebGMEGlobal.NpmVersion = npmJSON.dist ? npmJSON.version : '';
@@ -85,9 +86,11 @@ define([
 
             // URL query has higher priority than the config.
             if ((initialThingsToDo.projectToLoad || initialThingsToDo.createNewProject) === false) {
-                initialThingsToDo.projectToLoad = gmeConfig.client.defaultProject.name;
-                initialThingsToDo.branchToLoad = initialThingsToDo.branchToLoad || gmeConfig.client.defaultProject.branch;
-                initialThingsToDo.objectToLoad = initialThingsToDo.objectToLoad || gmeConfig.client.defaultProject.node;
+                initialThingsToDo.projectToLoad = gmeConfig.client.defaultContext.project;
+                initialThingsToDo.branchToLoad = initialThingsToDo.branchToLoad ||
+                    gmeConfig.client.defaultContext.branch;
+                initialThingsToDo.objectToLoad = initialThingsToDo.objectToLoad ||
+                    gmeConfig.client.defaultContext.node || initialThingsToDo.objectToLoad; // i.e. the root-node.
                 // TODO: add commit to load
             }
 
@@ -113,13 +116,13 @@ define([
                 );
 
                 WebGMEGlobal.State.setIsInitPhase(true);
+                document.title = defaultPageTitle;
                 logger.info('init-phase true');
                 WebGMEHistory.initialize();
 
                 GMEConcepts.initialize(client);
                 GMEVisualConcepts.initialize(client);
 
-                METAAspectHelper.initialize(client);
                 PreferencesHelper.initialize(client);
 
                 ExportManager.initialize(client);
@@ -134,40 +137,46 @@ define([
                     WebGMEGlobal.State.registerActiveBranchName(branchName);
                 });
                 client.addEventListener(CLIENT_CONSTANTS.PROJECT_OPENED, function (__project, projectName) {
+                    document.title = StorageUtil.getProjectFullNameFromProjectId(projectName);
                     layoutManager.setPanelReadOnly(client.isProjectReadOnly());
                     WebGMEGlobal.State.registerActiveProjectName(projectName);
                 });
 
                 //on project close clear the current state
                 client.addEventListener(CLIENT_CONSTANTS.PROJECT_CLOSED, function (/* __project, projectName */) {
+                    document.title = defaultPageTitle;
                     WebGMEGlobal.State.clear();
                 });
 
 
                 client.decoratorManager = new DecoratorManager();
-                getAvaliablePluginsAndDecoratorsAndSeeds();
-
-                client.decoratorManager.downloadAll(gmeConfig.client.usedDecorators, function (err) {
+                populateAvailableExtensionPoints(function (err) {
                     if (err) {
-                        logger.error(err);
-                    }
-                    for (i = 0; i < len; i += 1) {
-                        panels.push({
-                            panel: layoutPanels[i].panel,
-                            container: layoutPanels[i].container,
-                            control: layoutPanels[i].control,
-                            params: {client: client}
-                        });
+                        logger.error('Failed loading extension points', err);
                     }
 
-                    //load the panels
-                    loadPanels(panels);
+                    client.decoratorManager.downloadAll(gmeConfig.client.usedDecorators, function (err) {
+                        if (err) {
+                            logger.error(err);
+                        }
+                        for (i = 0; i < len; i += 1) {
+                            panels.push({
+                                panel: layoutPanels[i].panel,
+                                container: layoutPanels[i].container,
+                                control: layoutPanels[i].control,
+                                params: {client: client}
+                            });
+                        }
 
-                    //as of now it's a global variable just to make access to it easier
-                    //TODO: might need to be changed
-                    WebGMEGlobal.KeyboardManager = KeyboardManager;
-                    WebGMEGlobal.KeyboardManager.setEnabled(true);
-                    WebGMEGlobal.PanelManager = new PanelManager(client);
+                        //load the panels
+                        loadPanels(panels);
+
+                        //as of now it's a global variable just to make access to it easier
+                        //TODO: might need to be changed
+                        WebGMEGlobal.KeyboardManager = KeyboardManager;
+                        WebGMEGlobal.KeyboardManager.setEnabled(true);
+                        WebGMEGlobal.PanelManager = new PanelManager(client);
+                    });
                 });
             });
 
@@ -386,40 +395,41 @@ define([
                     });
             }
 
-            //This is still asychronous but has a better chance to finish here rather than from the client.
-            function getAvaliablePluginsAndDecoratorsAndSeeds() {
-                superagent.get('/listAllPlugins')
-                    .end(function (err, res) {
-                        if (res.status === 200) {
-                            WebGMEGlobal.allPlugins = res.body.allPlugins;
-                            logger.debug('/listAllPlugins', WebGMEGlobal.allPlugins);
-                        } else {
-                            logger.error('/listAllPlugins failed');
-                            WebGMEGlobal.allPlugins = [];
-                        }
-                    });
-                superagent.get('/listAllDecorators')
-                    .end(function (err, res) {
-                        if (res.status === 200) {
-                            WebGMEGlobal.allDecorators = res.body.allDecorators;
-                            logger.debug('/listAllDecorators', WebGMEGlobal.allDecorators);
-                        } else {
-                            logger.error('/listAllDecorators failed', err);
-                            WebGMEGlobal.allDecorators = [];
-                        }
-                    });
-                superagent.get('/listAllSeeds')
-                    .end(function (err, res) {
-                        if (res.status === 200) {
-                            WebGMEGlobal.allSeeds = res.body.allSeeds;
-                            logger.debug('/listAllSeeds', WebGMEGlobal.allSeeds);
-                        } else {
-                            logger.error('/listAllSeeds failed', err);
-                            WebGMEGlobal.allSeeds = [];
-                        }
-                    });
-            }
+            function populateAvailableExtensionPoints(callback) {
 
+                function capitalizeFirstLetter(string) {
+                    return string.charAt(0).toUpperCase() + string.slice(1);
+                }
+
+                function requestExtensionPoint(name) {
+                    var deferred = Q.defer();
+                    logger.debug('requestExtensionPoint', name);
+                    superagent.get('/api/' + name)
+                        .end(function (err, res) {
+                            var keyName = 'all' + capitalizeFirstLetter(name);
+
+                            if (res.status === 200) {
+                                WebGMEGlobal[keyName] = res.body;
+                                logger.debug('/api/' + name, WebGMEGlobal[keyName]);
+                                deferred.resolve();
+                            } else {
+                                logger.error('/api/' + name + 'failed');
+                                WebGMEGlobal[keyName] = [];
+                                deferred.reject(err);
+                            }
+                        });
+
+                    return deferred.promise;
+                }
+
+                return Q.all([
+                    requestExtensionPoint('visualizers'),
+                    requestExtensionPoint('plugins'),
+                    requestExtensionPoint('decorators'),
+                    requestExtensionPoint('seeds'),
+                    requestExtensionPoint('addOns')
+                ]).nodeify(callback);
+            }
         }
 
         return {

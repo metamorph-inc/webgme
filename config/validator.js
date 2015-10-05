@@ -121,12 +121,16 @@ function validateConfig(configOrFileName) {
     assertString('config.client.appDir', config.client.appDir);
     assertObject('config.client.log', config.client.log);
     assertString('config.client.log.level', config.client.log.level);
-    assertObject('config.client.defaultProject', config.client.defaultProject);
-    assertString('config.client.defaultProject.name', config.client.defaultProject.name, true);
-    assertString('config.client.defaultProject.branch', config.client.defaultProject.name, true);
-    assertString('config.client.defaultProject.node', config.client.defaultProject.name, true);
+    assertObject('config.client.defaultContext', config.client.defaultContext);
+    assertString('config.client.defaultContext.project', config.client.defaultContext.project, true);
+    assertString('config.client.defaultContext.branch', config.client.defaultContext.branch, true);
+    assertString('config.client.defaultContext.node', config.client.defaultContext.node, true);
     assertEnum('config.client.defaultConnectionRouter', config.client.defaultConnectionRouter,
         'basic', 'basic2', 'basic3');
+
+    // core
+    expectedKeys.push('core');
+    assertBoolean('config.core.enableCustomConstraints', config.core.enableCustomConstraints);
 
     // debug
     expectedKeys.push('debug');
@@ -161,7 +165,6 @@ function validateConfig(configOrFileName) {
     // rest
     expectedKeys.push('rest');
     assertObject('config.rest', config.rest);
-    assertBoolean('config.rest.secure', config.rest.secure);
     assertObject('config.rest.components', config.rest.components);
 
     //seedProjects
@@ -179,9 +182,8 @@ function validateConfig(configOrFileName) {
     assertObject('config.server.sessionStore', config.server.sessionStore);
     assertString('config.server.sessionStore.type', config.server.sessionStore.type);
     assertObject('config.server.sessionStore.options', config.server.sessionStore.options);
-
-    assertString('config.server.sessionCookieId', config.server.sessionCookieId);
-    assertString('config.server.sessionCookieSecret', config.server.sessionCookieSecret);
+    assertString('config.server.sessionStore.cookieSecret', config.server.sessionStore.cookieSecret);
+    assertString('config.server.sessionStore.cookieKey', config.server.sessionStore.cookieKey);
     // server log
     assertObject('config.server.log', config.server.log);
     assertArray('config.server.log.transports', config.server.log.transports);
@@ -190,16 +192,18 @@ function validateConfig(configOrFileName) {
     assertBoolean('config.server.https.enable', config.server.https.enable);
     assertString('config.server.https.certificateFile', config.server.https.certificateFile);
     assertString('config.server.https.keyFile', config.server.https.keyFile);
+    // server extlib
+    assertArray('config.server.extlibExcludes', config.server.extlibExcludes);
 
     // socketIO
     expectedKeys.push('socketIO');
     assertObject('config.socketIO', config.socketIO);
-    assertArray('config.socketIO.transports', config.socketIO.transports);
+    assertObject('config.socketIO.clientOptions', config.socketIO.clientOptions);
+    assertObject('config.socketIO.serverOptions', config.socketIO.serverOptions);
 
     // storage
     expectedKeys.push('storage');
     assertObject('config.storage', config.storage);
-    assertBoolean('config.storage.autoPersist', config.storage.autoPersist);
     assertBoolean('config.storage.broadcastProjectEvents', config.storage.broadcastProjectEvents);
     assertBoolean('config.storage.emitCommittedCoreObjects', config.storage.emitCommittedCoreObjects);
     assertNumber('config.storage.cache', config.storage.cache);

@@ -144,10 +144,10 @@ describe('standalone server', function () {
             //{code: 200, url: '/rest/unknown'},
             //{code: 200, url: '/rest/does_not_exist'},
             //{code: 200, url: '/rest/help'},
-            {code: 200, url: '/listAllDecorators'},
-            {code: 200, url: '/listAllPlugins'},
-            {code: 200, url: '/listAllVisualizerDescriptors'},
-            {code: 200, url: '/listAllSeeds'},
+            {code: 200, url: '/api/decorators'},
+            {code: 200, url: '/api/plugins'},
+            {code: 200, url: '/api/visualizers'},
+            {code: 200, url: '/api/seeds'},
 
             //{code: 401, url: '/login/client/fail'},
 
@@ -172,10 +172,15 @@ describe('standalone server', function () {
             {code: 404, url: '/does_not_exist.js'},
             {code: 404, url: '/asdf'},
 
+            //excluded extlib paths.
+            {code: 200, url: '/extlib/config/index.js'},
+            {code: 403, url: '/extlib/config/config.default.js'},
+            {code: 403, url: '/extlib/someCertificate.pem'},
+
             //{code: 410, url: '/getToken'},
             //{code: 410, url: '/checktoken/does_not_exist'},
 
-            {code: 500, url: '/worker/simpleResult/bad_parameter'}
+            {code: 404, url: '/worker/simpleResult/bad_parameter'}
         ]
     }, {
         type: 'http',
@@ -193,16 +198,17 @@ describe('standalone server', function () {
             {code: 200, url: '/file.svg', redirectUrl: '/login'},
             {code: 200, url: '/file.json', redirectUrl: '/login'},
             {code: 200, url: '/file.map', redirectUrl: '/login'},
-            {code: 200, url: '/listAllPlugins', redirectUrl: '/login'},
-            {code: 200, url: '/listAllDecorators', redirectUrl: '/login'},
-            {code: 200, url: '/listAllVisualizerDescriptors', redirectUrl: '/login'},
 
             // should allow access without auth
             {code: 200, url: '/lib/require/require.min.js'},
             {code: 200, url: '/plugin/PluginResult.js'},
             {code: 200, url: '/common/storage/browserstorage.js'},
             {code: 200, url: '/common/storage/constants.js'},
-            {code: 200, url: '/common/blob/BlobClient.js'}
+            {code: 200, url: '/common/blob/BlobClient.js'},
+
+            {code: 401, url: '/api/plugins'},
+            {code: 401, url: '/api/decorators'},
+            {code: 401, url: '/api/visualizers'}
         ]
     }, {
         type: 'https',
@@ -289,10 +295,10 @@ describe('standalone server', function () {
                                 .then(function (collection_) {
                                     return Q.ninvoke(collection_, 'remove');
                                 }),
-                            Q.ninvoke(db, 'collection', '_organizations')
-                                .then(function (orgs_) {
-                                    return Q.ninvoke(orgs_, 'remove');
-                                }),
+                            //Q.ninvoke(db, 'collection', '_organizations')
+                            //    .then(function (orgs_) {
+                            //        return Q.ninvoke(orgs_, 'remove');
+                            //    }),
                             Q.ninvoke(db, 'collection', 'ClientCreateProject')
                                 .then(function (createdProject) {
                                     return Q.ninvoke(createdProject, 'remove');
@@ -407,11 +413,9 @@ describe('standalone server', function () {
 
     describe('http server with authentication turned on', function () {
 
-        var db,
-            collection,
-            safeStorage,
+        var safeStorage,
 
-            gmeauth = require('../../src/server/middleware/auth/gmeauth'),
+            gmeAuth,
             gmeConfig = testFixture.getGmeConfig(),
             logIn = function (callback) {
                 agent.post(serverBaseUrl + '/login?redirect=%2F')
@@ -440,7 +444,6 @@ describe('standalone server', function () {
                             {
                                 query: 'webGMESessionId=' + /webgmeSid=s:([^;]+)\./.exec(
                                     decodeURIComponent(socketReq.cookies))[1],
-                                transports: gmeConfig.socketIO.transports,
                                 multiplex: false
                             });
 
@@ -472,18 +475,12 @@ describe('standalone server', function () {
             gmeConfig.authentication.enable = true;
             gmeConfig.authentication.allowGuests = false;
 
-            dbConn = testFixture.clearDBAndGetGMEAuth(gmeConfig, [project, unauthorizedProject])
+            dbConn = testFixture.clearDBAndGetGMEAuth(gmeConfig)
                 .then(function (gmeAuth_) {
-                    gmeauth = gmeAuth_;
-                    safeStorage = testFixture.getMongoStorage(logger, gmeConfig, gmeauth);
+                    gmeAuth = gmeAuth_;
+                    safeStorage = testFixture.getMongoStorage(logger, gmeConfig, gmeAuth);
                     return safeStorage.openDatabase();
 
-                })
-                .then(function () {
-                    return Q.allDone([
-                        safeStorage.deleteProject({projectId: testFixture.projectName2Id(project)}),
-                        safeStorage.deleteProject({projectId: testFixture.projectName2Id(unauthorizedProject)})
-                    ]);
                 })
                 .then(function () {
                     return Q.allDone([
@@ -500,18 +497,6 @@ describe('standalone server', function () {
                             logger: logger
                         })
                     ]);
-                })
-                .then(function () {
-                    return Q.ninvoke(mongodb.MongoClient, 'connect', gmeConfig.mongo.uri, gmeConfig.mongo.options);
-                })
-                .then(function (db_) {
-                    db = db_;
-                    return Q.allDone([
-                        Q.ninvoke(db, 'collection', testFixture.projectName2Id('ClientCreateProject', 'user'))
-                            .then(function (createdProject) {
-                                return Q.ninvoke(createdProject, 'remove');
-                            })
-                    ]);
                 });
 
             server = WebGME.standaloneServer(gmeConfig);
@@ -520,10 +505,10 @@ describe('standalone server', function () {
 
             Q.allDone([serverReady, dbConn])
                 .then(function () {
-                    return gmeauth.addUser('user', 'user@example.com', 'plaintext', true, {overwrite: true});
+                    return gmeAuth.addUser('user', 'user@example.com', 'plaintext', true, {overwrite: true});
                 })
                 .then(function () {
-                    return gmeauth.authorizeByUserId('user', testFixture.projectName2Id('project'),
+                    return gmeAuth.authorizeByUserId('user', testFixture.projectName2Id('project'),
                         'create', {
                             read: true,
                             write: true,
@@ -532,7 +517,7 @@ describe('standalone server', function () {
                     );
                 })
                 .then(function () {
-                    return gmeauth.authorizeByUserId('user', testFixture.projectName2Id('unauthorized_project'),
+                    return gmeAuth.authorizeByUserId('user', testFixture.projectName2Id('unauthorized_project'),
                         'create', {
                             read: false,
                             write: false,
@@ -544,15 +529,12 @@ describe('standalone server', function () {
         });
 
         after(function (done) {
-            db.close(true, function (err) {
+            server.stop(function (err) {
                 if (err) {
-                    done(err);
-                    return;
+                    logger.error(err);
                 }
-
-                server.stop(function (err) {
-                    done(err);
-                });
+                gmeAuth.unload()
+                    .nodeify(done);
             });
         });
 
@@ -617,7 +599,7 @@ describe('standalone server', function () {
                             socket.disconnect();
                         });
                 }).then(function () {
-                    return gmeauth.getProjectAuthorizationByUserId('user', projectId);
+                    return gmeAuth.getProjectAuthorizationByUserId('user', projectId);
                 }).then(function (authorized) {
                     authorized.should.deep.equal({read: true, write: true, delete: false});
                 }).nodeify(done);
@@ -632,7 +614,7 @@ describe('standalone server', function () {
                             socket.disconnect();
                         });
                 }).then(function () {
-                    return gmeauth.getProjectAuthorizationByUserId('user', projectId);
+                    return gmeAuth.getProjectAuthorizationByUserId('user', projectId);
                 }).then(function (authorized) {
                     authorized.should.deep.equal({read: true, write: true, delete: true});
                 }).nodeify(function (err) {
@@ -644,6 +626,7 @@ describe('standalone server', function () {
                     done();
                 });
         });
+
 
         it('should be able to export an authorized project /worker/simpleResult/:id/exported_branch', function (done) {
             var projectName = 'project',
@@ -661,10 +644,15 @@ describe('standalone server', function () {
                             socket.disconnect();
                         });
                 })
-                .then(function (resId) {
+                .then(function (result) {
                     var deferred = Q.defer();
 
-                    agent.get(server.getUrl() + '/worker/simpleResult/' + resId + '/exported_branch')
+                    expect(typeof result).to.equal('object');
+                    expect(result).to.have.property('file');
+                    expect(typeof result.file.hash).to.equal('string');
+                    expect(result.file.url).to.include(server.getUrl());
+
+                    agent.get(result.file.url)
                         .end(function (err, res) {
                             expect(err).to.equal(null);
                             expect(res.status).to.equal(200);
@@ -695,10 +683,15 @@ describe('standalone server', function () {
                             socket.disconnect();
                         });
                 })
-                .then(function (resId) {
+                .then(function (result) {
                     var deferred = Q.defer();
 
-                    agent.get(server.getUrl() + '/worker/simpleResult/' + resId)
+                    expect(typeof result).to.equal('object');
+                    expect(result).to.have.property('file');
+                    expect(typeof result.file.hash).to.equal('string');
+                    expect(result.file.url).to.include(server.getUrl());
+
+                    agent.get(result.file.url)
                         .end(function (err, res) {
                             expect(err).to.equal(null);
                             expect(res.status).to.equal(200);
@@ -723,7 +716,7 @@ describe('standalone server', function () {
                             socket.disconnect();
                         });
                 }).then(function () {
-                    return gmeauth.getProjectAuthorizationByUserId('user', projectId);
+                    return gmeAuth.getProjectAuthorizationByUserId('user', projectId);
                 }).then(function (authorized) {
                     authorized.should.deep.equal({read: true, write: true, delete: true});
                 }).nodeify(done);
@@ -748,5 +741,4 @@ describe('standalone server', function () {
                 });
         });
     });
-})
-;
+});

@@ -220,7 +220,7 @@ describe('Memory storage', function () {
 
         it('should fail to get projects and branches if not connected to database', function (done) {
             var memoryStorage = testFixture.getMemoryStorage(logger, gmeConfig, gmeAuth),
-                projectName = 'something';
+                projectName = 'something1';
 
             importProjectAndClose(memoryStorage, projectName)
                 .then(function (/*projectId*/) {
@@ -253,8 +253,8 @@ describe('Memory storage', function () {
 
         it('should create a project', function (done) {
             var memoryStorage = testFixture.getMemoryStorage(logger, gmeConfig, gmeAuth),
-                projectId,
-                projectName = 'something';
+                projectName = 'something2',
+                projectId = testFixture.projectName2Id(projectName);
 
             memoryStorage.openDatabase()
                 .then(function () {
@@ -332,8 +332,8 @@ describe('Memory storage', function () {
 
         it('should create and delete a project', function (done) {
             var memoryStorage = testFixture.getMemoryStorage(logger, gmeConfig, gmeAuth),
-                projectId,
-                projectName = 'something';
+                projectName = 'something3',
+                projectId = testFixture.projectName2Id(projectName);
 
             memoryStorage.openDatabase()
                 .then(function () {
@@ -700,15 +700,15 @@ describe('Memory storage', function () {
                     done(new Error('should have failed'));
                 })
                 .catch(function (err) {
-                    if (err === 'branch hash mismatch') {
+                    if (err.message === 'branch hash mismatch') {
                         done();
                     } else {
-                        done(new Error('should have failed to openProject'));
+                        done(new Error('should have failed to set branch hash'));
                     }
                 });
         });
 
-        it('should fail to set new branch hash if oldhash does not match', function (done) {
+        it('should fail to to set branch hash if oldhash does not match', function (done) {
             project.getBranchHash('master', '')
                 .then(function (hash) {
                     return project.setBranchHash('dummy', '', hash);
@@ -725,10 +725,10 @@ describe('Memory storage', function () {
                     done(new Error('should have failed'));
                 })
                 .catch(function (err) {
-                    if (err === 'branch hash mismatch') {
+                    if (err.message === 'branch hash mismatch') {
                         done();
                     } else {
-                        done(new Error('should have failed to openProject'));
+                        done(new Error('should have failed to to set branch hash'));
                     }
                 });
         });
@@ -864,6 +864,34 @@ describe('Memory storage', function () {
                     return;
                 }
                 c.should.be.equal(commitChain[2]);
+                done();
+            });
+        });
+        it('5 vs 5 -> 5', function (done) {
+            project.getCommonAncestorCommit(commitChain[5], commitChain[5], function (err, c) {
+                if (err) {
+                    done(err);
+                    return;
+                }
+                c.should.be.equal(commitChain[5]);
+                done();
+            });
+        });
+        it('first commit does not exist', function (done) {
+            project.getCommonAncestorCommit('#doesNotExist', commitChain[5], function (err) {
+                expect(err.message).to.include('Commit object does not exist [#doesNotExist]');
+                done();
+            });
+        });
+        it('second commit does not exist', function (done) {
+            project.getCommonAncestorCommit(commitChain[5], '#doesNotExist', function (err) {
+                expect(err.message).to.include('Commit object does not exist [#doesNotExist]');
+                done();
+            });
+        });
+        it('both commits does not exist', function (done) {
+            project.getCommonAncestorCommit('#doesNotExist1', '#doesNotExist2', function (err) {
+                expect(err.message).to.include('Commit object does not exist [#doesNotExist1]');
                 done();
             });
         });

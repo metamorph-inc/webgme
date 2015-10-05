@@ -23,6 +23,13 @@ define(['common/storage/constants'], function (STORAGE_CONSTANTS) {
         PROJECT_OPENED: 'PROJECT_OPENED',
 
         UNDO_AVAILABLE: 'UNDO_AVAILABLE',
-        REDO_AVAILABLE: 'REDO_AVAILABLE'
+        REDO_AVAILABLE: 'REDO_AVAILABLE',
+
+        // general notification event
+        NOTIFICATION: 'NOTIFICATION',
+
+        // Constraint Checking
+        META_RULES_RESULT: 'META_RULES_RESULT',
+        CONSTRAINT_RESULT: 'CONSTRAINT_RESULT'
     };
 });

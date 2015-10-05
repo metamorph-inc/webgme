@@ -24,10 +24,12 @@ var WebGME = require('../webgme'),
     },
     Core = requireJS('common/core/core'),
     NodeStorage = requireJS('../src/common/storage/nodestorage'),
+    storageUtil = requireJS('common/storage/util'),
     Mongo = require('../src/server/storage/mongo'),
     Memory = require('../src/server/storage/memory'),
     SafeStorage = require('../src/server/storage/safestorage'),
     Logger = require('../src/server/logger'),
+
     logger = Logger.create('gme:test', {
         //patterns: ['gme:test:*cache'],
         transports: [{
@@ -39,7 +41,7 @@ var WebGME = require('../webgme'),
                 prettyPrint: true,
                 //handleExceptions: true, // ignored by default when you create the logger, see the logger.create
                 //exitOnError: false,
-                depth: 2,
+                depth: 4,
                 debugStdout: true
             }
         }]
@@ -69,6 +71,7 @@ var WebGME = require('../webgme'),
     mongodb = require('mongodb'),
     Q = require('q'),
     fs = require('fs'),
+    path = require('path'),
     rimraf = require('rimraf'),
     childProcess = require('child_process');
 
@@ -111,21 +114,18 @@ function clearDatabase(gmeConfigParameter, callback) {
     Q.ninvoke(mongodb.MongoClient, 'connect', gmeConfigParameter.mongo.uri, gmeConfigParameter.mongo.options)
         .then(function (db_) {
             db = db_;
-            return Q.ninvoke(db, 'dropDatabase');
-            //return Q.allSettled([
-            //    Q.ninvoke(db, 'collection', '_users')
-            //        .then(function (collection_) {
-            //            return Q.ninvoke(collection_, 'remove');
-            //        }),
-            //    Q.ninvoke(db, 'collection', '_organizations')
-            //        .then(function (orgs_) {
-            //            return Q.ninvoke(orgs_, 'remove');
-            //        }),
-            //    Q.ninvoke(db, 'collection', '_projects')
-            //        .then(function (projects_) {
-            //            return Q.ninvoke(projects_, 'remove');
-            //        })
-            //]);
+            return Q.ninvoke(db, 'collectionNames');
+        })
+        .then(function (collectionNames) {
+            var collectionPromises = [];
+            collectionNames.map(function (collData) {
+                if (collData.name.indexOf('system.') === -1) {
+                    collectionPromises.push(Q.ninvoke(db, 'dropCollection', collData.name));
+                } else {
+
+                }
+            });
+            return Q.allDone(collectionPromises);
         })
         .then(function () {
             return Q.ninvoke(db, 'close');
@@ -169,7 +169,7 @@ function clearDBAndGetGMEAuth(gmeConfigParameter, projectNameOrNames, callback) 
         })
         .then(function (gmeAuth_) {
             gmeAuth = gmeAuth_;
-            return Q.allSettled([
+            return Q.allDone([
                 gmeAuth.addUser(guestAccount, guestAccount + '@example.com', guestAccount, true, {overwrite: true}),
                 gmeAuth.addUser('admin', 'admin@example.com', 'admin', true, {overwrite: true, siteAdmin: true})
             ]);
@@ -205,7 +205,7 @@ function clearDBAndGetGMEAuth(gmeConfigParameter, projectNameOrNames, callback) 
                 logger.warn('No projects to authorize...', projectNameOrNames);
             }
 
-            return Q.allSettled(projectsToAuthorize);
+            return Q.allDone(projectsToAuthorize);
         })
         .then(function () {
             deferred.resolve(gmeAuth);
@@ -320,6 +320,58 @@ function saveChanges(parameters, done) {
 }
 
 /**
+ *
+ * @param core
+ * @param rootNode
+ * @param nodePath
+ * @param [callback]
+ * @returns {Q.Promise}
+ */
+function loadNode(core, rootNode, nodePath, callback) {
+    var deferred = new Q.defer();
+
+    core.loadByPath(rootNode, nodePath, function (err, node) {
+        if (err) {
+            deferred.reject(new Error(err));
+        } else if (core.isEmpty(node)) {
+            deferred.reject(new Error('Given nodePath does not exist "' + nodePath + '"!'));
+        } else {
+            deferred.resolve(node);
+        }
+    });
+
+    return deferred.promise.nodeify(callback);
+}
+
+/**
+ *
+ * @param project
+ * @param core
+ * @param commitHash
+ * @param [callback]
+ * @returns {Q.Promise}
+ */
+function loadRootNodeFromCommit(project, core, commitHash, callback) {
+    var deferred = new Q.defer();
+
+    project.loadObject(commitHash, function (err, commitObj) {
+        if (err) {
+            deferred.reject(new Error(err));
+        } else {
+            core.loadRoot(commitObj.root, function (err, rootNode) {
+                if (err) {
+                    deferred.reject(new Error(err));
+                } else {
+                    deferred.resolve(rootNode);
+                }
+            });
+        }
+    });
+
+    return deferred.promise.nodeify(callback);
+}
+
+/**
  * This uses the guest account by default
  * @param {string} projectName
  * @param {string} [userId=gmeConfig.authentication.guestAccount]
@@ -327,34 +379,7 @@ function saveChanges(parameters, done) {
  */
 function projectName2Id(projectName, userId) {
     userId = userId || gmeConfig.authentication.guestAccount;
-    return userId + STORAGE_CONSTANTS.PROJECT_ID_SEP + projectName;
-}
-
-/**
- * Forces the deletion of the given projectName (N.B. not projectId).
- * @param storage
- * @param gmeAuth
- * @param projectName
- * @param [userId=gmeConfig.authentication.guestAccount]
- * @param [callback]
- * @returns {*}
- */
-function forceDeleteProject(storage, gmeAuth, projectName, userId, callback) {
-    var projectId = projectName2Id(projectName, userId);
-
-    userId = userId || gmeConfig.authentication.guestAccount;
-
-    return gmeAuth.addProject(userId, projectName, null)
-        .then(function () {
-            return gmeAuth.authorizeByUserId(userId, projectId, 'create', {
-                read: true,
-                write: true,
-                delete: true
-            });
-        })
-        .then(function () {
-            return storage.deleteProject({projectId: projectId});
-        }).nodeify(callback);
+    return storageUtil.getProjectIdFromOwnerIdAndProjectName(userId, projectName);
 }
 
 function logIn(server, agent, userName, password) {
@@ -394,7 +419,6 @@ function openSocketIo(server, agent, userName, password) {
             socket = io.connect(serverBaseUrl,
                 {
                     query: 'webGMESessionId=' + webGMESessionId,
-                    transports: gmeConfig.socketIO.transports,
                     multiplex: false
                 });
 
@@ -451,6 +475,7 @@ module.exports = {
     requirejs: requireJS,
     Q: Q,
     fs: fs,
+    path: path,
     superagent: superagent,
     mongodb: mongodb,
     rimraf: rimraf,
@@ -467,9 +492,12 @@ module.exports = {
     importProject: importProject,
     saveChanges: saveChanges,
     projectName2Id: projectName2Id,
-    forceDeleteProject: forceDeleteProject,
     logIn: logIn,
     openSocketIo: openSocketIo,
+    loadRootNodeFromCommit: loadRootNodeFromCommit,
+    loadNode: loadNode,
 
+    storageUtil: storageUtil,
+    SEED_DIR: path.join(__dirname, '../seeds/'),
     STORAGE_CONSTANTS: STORAGE_CONSTANTS
 };

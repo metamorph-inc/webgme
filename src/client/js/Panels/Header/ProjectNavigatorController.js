@@ -13,9 +13,12 @@ define([
     'js/Dialogs/Commit/CommitDialog',
     'js/Dialogs/Merge/MergeDialog',
     'js/Dialogs/ProjectRepository/ProjectRepositoryDialog',
+    'js/Dialogs/Branches/BranchesDialog',
     'common/storage/util',
     'isis-ui-components/simpleDialog/simpleDialog',
-    'text!js/Dialogs/Projects/templates/DeleteDialogTemplate.html'
+    'text!js/Dialogs/Projects/templates/DeleteDialogTemplate.html',
+    'text!js/Dialogs/Projects/templates/TransferDialogTemplate.html',
+    'js/Utils/SaveToDisk'
 ], function (Logger,
              CONSTANTS,
              ng,
@@ -23,20 +26,24 @@ define([
              CommitDialog,
              MergeDialog,
              ProjectRepositoryDialog,
+             BranchesDialog,
              StorageUtil,
              ConfirmDialog,
-             DeleteDialogTemplate) {
+             DeleteDialogTemplate,
+             TransferDialogTemplate,
+             saveToDisk) {
     'use strict';
 
 
     angular.module('gme.ui.ProjectNavigator', []).run(function ($templateCache) {
         $templateCache.put('DeleteDialogTemplate.html', DeleteDialogTemplate);
+        $templateCache.put('TransferDialogTemplate.html', TransferDialogTemplate);
     });
 
 
     var ProjectNavigatorController;
 
-    ProjectNavigatorController = function ($scope, gmeClient, $simpleDialog, $timeout, $window) {
+    ProjectNavigatorController = function ($scope, gmeClient, $simpleDialog, $timeout, $window, $http) {
         var self = this;
         self.logger = Logger.create('gme:Panels:Header:ProjectNavigatorController', WebGMEGlobal.gmeConfig.client.log);
         self.$scope = $scope;
@@ -44,6 +51,7 @@ define([
         self.gmeClient = gmeClient;
         self.$simpleDialog = $simpleDialog;
         self.$timeout = $timeout;
+        self.$http = $http;
 
         // internal data representation for fast access to objects
         self.projects = {};
@@ -62,6 +70,7 @@ define([
 
         self.requestedSelection = null;
 
+        self.userId = null;
         self.initialize();
     };
 
@@ -89,7 +98,7 @@ define([
                 var pd = new ProjectsDialog(self.gmeClient);
                 pd.show();
             };
-
+            self.userId = self.gmeClient.getUserId();
         } else {
             newProject = function (/*data*/) {
                 self.dummyProjectsGenerator('New Project ' + Math.floor(Math.random() * 10000), 4);
@@ -98,6 +107,7 @@ define([
             manageProjects = function (/*data*/) {
                 self.dummyProjectsGenerator('Manage projects ' + Math.floor(Math.random() * 10000), 4);
             };
+            self.userId = 'dummyUser';
         }
 
         // initialize root menu
@@ -140,8 +150,10 @@ define([
 
         if (self.gmeClient) {
             self.initWithClient();
+            self.$scope.ownerList = [self.userId];
         } else {
             self.initTestData();
+            self.$scope.ownerList = [self.userId];
         }
 
         // only root is selected by default
@@ -162,6 +174,15 @@ define([
     ProjectNavigatorController.prototype.initWithClient = function () {
         var self = this;
 
+        self.$http.get('/api/users/' + self.userId)
+            .then(function (userData) {
+                self.$scope.ownerList = userData.data.orgs;
+                self.$scope.ownerList.push(self.userId);
+            }, function (err) {
+                self.logger.error(err);
+                self.$scope.ownerList = [self.userId];
+            });
+
         // register all event listeners on gmeClient
 
         self.gmeClient.addEventListener(CONSTANTS.CLIENT.NETWORK_STATUS_CHANGED, function (client, networkStatus) {
@@ -173,7 +194,38 @@ define([
                 self.gmeClient.watchDatabase(function (emitter, data) {
                     self.logger.debug('watchDatabase event', data);
                     if (data.etype === CONSTANTS.CLIENT.STORAGE.PROJECT_CREATED) {
-                        self.addProject(data.projectId);
+                        //TODO: This call should get the rights..
+                        self.gmeClient.getBranches(data.projectId, function (err, branches) {
+                            if (err) {
+                                if (err.message.indexOf('Not authorized to read project') > -1) {
+                                    // This is anticipated when someone else created the project.
+                                    self.logger.debug(err.message);
+                                } else {
+                                    self.logger.error('Could not get branches for newly created project ' +
+                                        data.projectId);
+                                    self.logger.error(err);
+                                }
+                                return;
+                            }
+                            self.logger.debug('Got branches before joining room:', Object.keys(branches));
+                            //TODO: Should include rights, for now complete rights are assumed.
+                            self.addProject(data.projectId, null, true, function (err) {
+                                if (err) {
+                                    self.logger.error(err);
+                                    return;
+                                }
+                                self.gmeClient.getBranches(data.projectId, function (err, branches) {
+                                    if (err) {
+                                        self.logger.error(err);
+                                        return;
+                                    }
+                                    self.logger.debug('Got branches after joining room:', Object.keys(branches));
+                                    Object.keys(branches).map(function (branchId) {
+                                        self.addBranch(data.projectId, branchId);
+                                    });
+                                });
+                            });
+                        });
                     } else if (data.etype === CONSTANTS.CLIENT.STORAGE.PROJECT_DELETED) {
                         self.removeProject(data.projectId);
                     } else {
@@ -314,16 +366,17 @@ define([
         });
     };
 
-    ProjectNavigatorController.prototype.addProject = function (projectId, rights, noUpdate) {
+    ProjectNavigatorController.prototype.addProject = function (projectId, rights, noUpdate, callback) {
         var self = this,
             i,
             showHistory,
             showAllBranches,
             deleteProject,
+            transferProject,
             selectProject,
             refreshPage,
             updateProjectList,
-            projectDiplayedName;
+            projectDisplayedName;
 
         rights = rights || {
                 delete: true,
@@ -388,8 +441,66 @@ define([
 
             };
 
+            transferProject = function (data) {
+                var transferProjectModal;
+
+                self.$scope.thingName = data.projectId;
+                self.$scope.newOwnerId = self.userId;
+
+                transferProjectModal = self.$simpleDialog.open({
+                    dialogTitle: 'Transfer',
+                    dialogContentTemplate: 'TransferDialogTemplate.html',
+                    controller: function ($scope, $modalInstance, dialogTitle, dialogContentTemplate) {
+
+                        $scope.dialogTitle = dialogTitle;
+                        $scope.dialogContentTemplate = dialogContentTemplate;
+
+                        $scope.ok = function () {
+                            var activeProjectId = self.gmeClient.getActiveProjectId();
+                            $modalInstance.close();
+                            self.gmeClient.transferProject(data.projectId, $scope.newOwnerId, function (err) {
+                                if (err) {
+                                    self.logger.error('Failed transferProject', err);
+                                } else {
+                                    if (data.projectId === activeProjectId) {
+                                        refreshPage();
+                                    } else {
+                                        self.removeProject(data.projectId);
+                                    }
+                                }
+                            });
+                        };
+
+                        $scope.cancel = function () {
+                            $modalInstance.dismiss('cancel');
+                        };
+
+                        $scope.setNewOwnerId = function (ownerId) {
+                            self.$scope.newOwnerId = ownerId;
+                        };
+                    },
+                    scope: self.$scope
+                });
+
+            };
+
             showAllBranches = function (data) {
-                self.logger.error('showAllBranches: gmeClient version is not implemented yet.', data);
+                var prd;
+                if (self.gmeClient.getActiveProjectId() === data.projectId) {
+                    prd = new BranchesDialog(self.gmeClient);
+                    prd.show();
+                } else {
+                    self.selectProject({projectId: projectId}, function (err) {
+                        var dialog = new BranchesDialog(self.gmeClient);
+
+                        if (err) {
+                            // TODO: handle errors
+                            return;
+                        }
+
+                        dialog.show();
+                    });
+                }
             };
         } else {
             // test version
@@ -410,12 +521,12 @@ define([
             self.selectProject(data);
         };
 
-        projectDiplayedName = StorageUtil.getProjectDisplayedNameFromProjectId(projectId);
+        projectDisplayedName = StorageUtil.getProjectDisplayedNameFromProjectId(projectId);
 
         // create a new project object
         self.projects[projectId] = {
             id: projectId,
-            label: projectDiplayedName,
+            label: projectDisplayedName,
             iconClass: rights.write ? '' : 'glyphicon glyphicon-lock',
             iconPullRight: !rights.write,
             disabled: !rights.read,
@@ -440,6 +551,16 @@ define([
                             }
                         },
                         {
+                            id: 'transferProject',
+                            label: 'Transfer project',
+                            iconClass: 'glyphicon glyphicon-transfer',
+                            disabled: !rights.delete,
+                            action: transferProject,
+                            actionData: {
+                                projectId: projectId
+                            }
+                        },
+                        {
                             id: 'showHistory',
                             label: 'Show history',
                             iconClass: 'glyphicon glyphicon-time',
@@ -458,7 +579,7 @@ define([
                     totalItems: 20,
                     items: [],
                     showAllItems: function () {
-                        showHistory({projectId: projectId});
+                        showAllBranches({projectId: projectId});
                     }
                 }
             ],
@@ -473,7 +594,7 @@ define([
 
                     currentProject = self.$scope.navigator.items[self.navIdProject];
                     currentBranch = self.$scope.navigator.items[self.navIdBranch];
-                    if (currentBranch.id === data.branchName && currentProject.id === projectId) {
+                    if (currentBranch && currentBranch.id === data.branchName && currentProject.id === projectId) {
                         self.gmeClient.selectCommit(self.gmeClient.getActiveCommitHash(), function (err) {
                             if (err) {
                                 self.logger.error('cannot select latest commit', {metadata: {error: err}});
@@ -491,9 +612,10 @@ define([
         };
 
         if (self.gmeClient) {
-            self.gmeClient.watchProject(projectId, self.projects[projectId]._watcher);
+            self.gmeClient.watchProject(projectId, self.projects[projectId]._watcher, callback);
         } else {
             self.dummyBranchGenerator('Branch', 10, projectId);
+            callback(null);
         }
 
         for (i = 0; i < self.root.menu.length; i += 1) {
@@ -555,7 +677,7 @@ define([
                 self.gmeClient.getExportProjectBranchUrl(data.projectId,
                     data.branchId, data.projectId + '_' + data.branchId, function (err, url) {
                         if (!err && url) {
-                            window.open(url);
+                            saveToDisk.saveUrlToDisk(url);
                         } else {
                             self.logger.error('Failed to get project export url for', data);
                         }

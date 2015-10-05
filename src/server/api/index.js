@@ -1,3 +1,4 @@
+/*globals requireJS*/
 /*jshint node:true*/
 
 /**
@@ -20,44 +21,45 @@ function createAPI(app, mountPath, middlewareOpts) {
         router = express.Router(),
 
         Q = require('q'),
-        aglio = require('aglio'),// used to generate API docs from blue print Readme.md
         htmlDoc,
         htmlDocDeferred = Q.defer(),
+        path = require('path'),
         fs = require('fs'),
-        blueprint = fs.readFileSync(__dirname + '/Readme.md', {encoding: 'utf8'}),
-        template = 'default',
         apiDocumentationMountPoint = '/developer/api',
 
         logger = middlewareOpts.logger.fork('api'),
         gmeAuth = middlewareOpts.gmeAuth,
         safeStorage = middlewareOpts.safeStorage,
         ensureAuthenticated = middlewareOpts.ensureAuthenticated,
+        gmeConfig = middlewareOpts.gmeConfig,
         webgme = require('../../../webgme'),
-        ServerUserProject = require('../storage/userproject'),
         merge = webgme.requirejs('common/core/users/merge'),
         StorageUtil = webgme.requirejs('common/storage/util'),
+        webgmeUtils = require('../../utils'),
 
         versionedAPIPath = mountPath + '/v1',
-        latestAPIPath = mountPath;
+        latestAPIPath = mountPath,
+
+        raml2html,
+        configWithDefaultTemplates;
 
     if (true || global.TESTING) {
         htmlDocDeferred.resolve();
     } else {
         // FIXME: this does not work with tests well.
-        // generate api documentation based on blueprint when server starts
-        aglio.render(blueprint, template, function (err, html, warnings) {
-            if (err) {
-                logger.error(err);
-                htmlDocDeferred.reject(err);
-                return;
-            }
-            if (warnings && warnings.length) {
-                logger.warn('aglio', {metadata: warnings});
-            }
+        // generate api documentation based on raml file when server starts
+        raml2html = require('raml2html');
+        configWithDefaultTemplates = raml2html.getDefaultConfig();
+        //var configWithCustomTemplates = raml2html.getDefaultConfig('my-custom-template.nunjucks', __dirname);
 
-            htmlDoc = html;
-            logger.debug('html doc is ready: ' + apiDocumentationMountPoint);
+        // source can either be a filename, url, file contents (string) or parsed RAML object
+        raml2html.render(path.join(__dirname, 'webgme-api.raml'), configWithDefaultTemplates).then(function (result) {
+            // Save the result to a file or do something else with the result
+            htmlDoc = result;
             htmlDocDeferred.resolve();
+        }, function (error) {
+            // Output error
+            htmlDocDeferred.reject(error);
         });
     }
 
@@ -363,42 +365,166 @@ function createAPI(app, mountPath, middlewareOpts) {
 
     });
 
-    // AUTHENTICATED
-    //router.get('/user/orgs', ensureAuthenticated, function (req, res) {
-    //
-    //    res.json({
-    //        message: 'Not implemented yet'
-    //    });
-    //});
-    //
-    //router.post('/user/projects', function (req, res) {
-    //
-    //    res.json({
-    //        message: 'Not implemented yet'
-    //    });
-    //});
-    //
-    //router.post('/orgs/:org/projects', function (req, res) {
-    //
-    //    res.json({
-    //        message: 'Not implemented yet'
-    //    });
-    //});
+    //ORGANIZATIONS
+    function ensureOrgOrSiteAdmin(req, res) {
+        //TODO: Could this be handled like ensureAuthenticated?
+        var userId = getUserId(req),
+            userData;
 
-    // USERS
-    //router.put('/users/:username/site_admin', function (req, res) {
-    //
-    //    res.json({
-    //        message: 'Not implemented yet'
-    //    });
-    //});
-    //
-    //router.delete('/users/:username/site_admin', function (req, res) {
-    //
-    //    res.json({
-    //        message: 'Not implemented yet'
-    //    });
-    //});
+        return gmeAuth.getUser(userId)
+            .then(function (data) {
+                userData = data;
+                return gmeAuth.getAdminsInOrganization(req.params.orgId);
+            })
+            .then(function (admins) {
+                if (!userData.siteAdmin && admins.indexOf(userId) === -1) {
+                    res.status(403);
+                    throw new Error('site admin role or organization admin is required for this operation');
+                }
+            });
+    }
+
+    router.get('/orgs', function (req, res, next) {
+        gmeAuth.listOrganizations(null)
+            .then(function (data) {
+                res.json(data);
+            })
+            .catch(function (err) {
+                next(err);
+            });
+    });
+
+    router.put('/orgs/:orgId', function (req, res, next) {
+
+        var userId = getUserId(req);
+
+        gmeAuth.getUser(userId)
+            .then(function (data) {
+                if (!(data.siteAdmin || data.canCreate)) {
+                    res.status(403);
+                    throw new Error('site admin role or can create is required for this operation');
+                }
+
+                return gmeAuth.addOrganization(req.params.orgId, req.body.info);
+            })
+            .then(function () {
+                return gmeAuth.setAdminForUserInOrganization(userId, req.params.orgId, true);
+            })
+            .then(function () {
+                return gmeAuth.addUserToOrganization(userId, req.params.orgId);
+            })
+            .then(function () {
+                return gmeAuth.getOrganization(req.params.orgId);
+            })
+            .then(function (orgData) {
+                res.json(orgData);
+            })
+            .catch(function (err) {
+                next(err);
+            });
+    });
+
+    router.get('/orgs/:orgId', function (req, res, next) {
+        gmeAuth.getOrganization(req.params.orgId)
+            .then(function (data) {
+                res.json(data);
+            })
+            .catch(function (err) {
+                err = new Error(err);
+                if (err.message.indexOf('No such organization [') > -1) {
+                    res.status(404);
+                }
+                next(err);
+            });
+    });
+
+    router.delete('/orgs/:orgId', function (req, res, next) {
+        ensureOrgOrSiteAdmin(req, res)
+            .then(function () {
+                return gmeAuth.removeOrganizationByOrgId(req.params.orgId);
+            })
+            .then(function () {
+                res.sendStatus(204);
+            })
+            .catch(function (err) {
+                err = new Error(err);
+                if (err.message.indexOf('No such organization [') > -1) {
+                    res.status(404);
+                }
+                next(err);
+            });
+    });
+
+    router.put('/orgs/:orgId/users/:username', function (req, res, next) {
+        ensureOrgOrSiteAdmin(req, res)
+            .then(function () {
+                return gmeAuth.addUserToOrganization(req.params.username, req.params.orgId);
+            })
+            .then(function () {
+                res.sendStatus(204);
+            })
+            .catch(function (err) {
+                err = new Error(err);
+                if (err.message.indexOf('No such organization [') > -1 ||
+                    err.message.indexOf('No such user [') > -1) {
+                    res.status(404);
+                }
+                next(err);
+            });
+    });
+
+    router.delete('/orgs/:orgId/users/:username', function (req, res, next) {
+        ensureOrgOrSiteAdmin(req, res)
+            .then(function () {
+                return gmeAuth.removeUserFromOrganization(req.params.username, req.params.orgId);
+            })
+            .then(function () {
+                res.sendStatus(204);
+            })
+            .catch(function (err) {
+                err = new Error(err);
+                if (err.message.indexOf('No such organization [') > -1) {
+                    res.status(404);
+                }
+                next(err);
+            });
+    });
+
+    router.put('/orgs/:orgId/admins/:username', function (req, res, next) {
+        ensureOrgOrSiteAdmin(req, res)
+            .then(function () {
+                return gmeAuth.setAdminForUserInOrganization(req.params.username, req.params.orgId, true);
+            })
+            .then(function () {
+                res.sendStatus(204);
+            })
+            .catch(function (err) {
+                err = new Error(err);
+                if (err.message.indexOf('No such organization [') > -1 ||
+                    err.message.indexOf('No such user [') > -1) {
+                    res.status(404);
+                }
+                next(err);
+            });
+    });
+
+    router.delete('/orgs/:orgId/admins/:username', function (req, res, next) {
+        ensureOrgOrSiteAdmin(req, res)
+            .then(function () {
+                return gmeAuth.setAdminForUserInOrganization(req.params.username, req.params.orgId, false);
+            })
+            .then(function () {
+                res.sendStatus(204);
+            })
+            .catch(function (err) {
+                err = new Error(err);
+                if (err.message.indexOf('No such organization [') > -1 ||
+                    err.message.indexOf('No such user [') > -1) {
+                    res.status(404);
+                }
+                next(err);
+            });
+    });
 
 
     // PROJECTS
@@ -414,6 +540,36 @@ function createAPI(app, mountPath, middlewareOpts) {
             });
     });
 
+
+    /**
+     * Creating project by seed
+     * Available body parameters:
+     * type {string} - sets if the seed is coming from file (==='file') source or from some existing project(==='db') [mandatory]
+     * seedName {string} - the name of the seed (in case of db, it has to be the complete id of the project) [mandatory]
+     * seedBranch {string} - in case of db seed, it is possible to give the name of the source branch [default=master]
+     *
+     * @example {type:'file',seedName:'EmptyProject'}
+     * @example {type:'db',seedName:'me+myOldProject',seedBranch:'release'}
+     */
+    router.put('/projects/:ownerId/:projectName', function (req, res, next) {
+        var userId = getUserId(req),
+            command = req.body;
+        command.command = 'seedProject';
+        command.userId = userId;
+        command.webGMESessionId = req.session.id;
+        command.ownerId = req.params.ownerId;
+        command.projectName = req.params.projectName;
+
+        req.session.save(); //TODO why do we have to save manually
+
+        Q.nfcall(middlewareOpts.workerManager.request, command)
+            .then(function () {
+                res.sendStatus(204);
+            })
+            .catch(function (err) {
+                next(new Error(err));
+            }); //TODO do we need special error handling???
+    });
 
     router.delete('/projects/:ownerId/:projectName', function (req, res, next) {
         var userId = getUserId(req),
@@ -471,7 +627,7 @@ function createAPI(app, mountPath, middlewareOpts) {
                         branchOrCommitA: req.params.branchOrCommitA,
                         branchOrCommitB: req.params.branchOrCommitB,
                         logger: loggerCompare,
-                        gmeConfig: middlewareOpts.gmeConfig
+                        gmeConfig: gmeConfig
 
                     });
 
@@ -579,47 +735,231 @@ function createAPI(app, mountPath, middlewareOpts) {
             });
     });
 
-    //// FIXME: requires auth
-    //    router.get('/projects/:owner/:project/collaborators', function (req, res) {
-    //        // array of users with permissions
-    //
-    //        res.json({
-    //            message: 'Not implemented yet'
-    //        });
-    //    });
-    //
-    //
-    //    router.patch('/projects/:owner/:project/collaborators', function (req, res) {
-    //
-    //
-    //        res.json({
-    //            message: 'Not implemented yet'
-    //        });
-    //    });
-    //
-    //// FIXME: requires auth
-    //    router.get('/projects/:owner/:project/collaborators/:username', function (req, res) {
-    //
-    //        res.json({
-    //            message: 'Not implemented yet'
-    //        });
-    //    });
-    //
-    //
-    //    router.put('/projects/:owner/:project/collaborators/:username', function (req, res) {
-    //
-    //        res.json({
-    //            message: 'Not implemented yet'
-    //        });
-    //    });
-    //
-    //
-    //    router.delete('/projects/:owner/:project/collaborators/:username', function (req, res) {
-    //
-    //        res.json({
-    //            message: 'Not implemented yet'
-    //        });
-    //    });
+    logger.debug('creating list asset rules');
+    router.get('/decorators', ensureAuthenticated, function (req, res) {
+        var result = webgmeUtils.getComponentNames(gmeConfig.visualization.decoratorPaths);
+        logger.debug('/decorators', {metadata: result});
+        res.send(result);
+    });
+
+    // Plugins
+    // TODO: These variables should not be defined here.
+    // TODO: runningPlugins should be stored in a database.
+    var runningPlugins = {};
+    var GUID = requireJS('common/util/guid');
+    var PLUGIN_CONSTANTS = {
+        RUNNING: 'RUNNING',
+        FINISHED: 'FINISHED', // Could still be that result.success=false.
+        ERROR: 'ERROR'
+    };
+
+    function getPlugin(name) {
+        var pluginPath = 'plugin/' + name + '/' + name + '/' + name,
+            Plugin,
+            error,
+            plugin;
+
+        logger.debug('Configuration requested for plugin at', pluginPath);
+        try {
+            Plugin = requireJS(pluginPath);
+        } catch (err) {
+            error = err;
+        }
+
+        // This is weird, the second time requirejs simply returns with undefined.
+        if (Plugin) {
+            plugin = new Plugin();
+            return plugin;
+        } else {
+            return error || new Error('Plugin is not available from: ' + pluginPath);
+        }
+
+    }
+
+    router.get('/plugins', ensureAuthenticated, function (req, res) {
+        var result = webgmeUtils.getComponentNames(gmeConfig.plugin.basePaths);
+        logger.debug('/plugins', {metadata: result});
+        res.send(result);
+    });
+
+    router.get('/plugins/:pluginId/config', ensureAuthenticated, function (req, res) {
+        var plugin = getPlugin(req.params.pluginId);
+
+        if (plugin instanceof Error) {
+            logger.error(plugin);
+            res.sendStatus(404);
+        } else {
+            res.send(plugin.getDefaultConfig());
+        }
+    });
+
+    router.get('/plugins/:pluginId/configStructure', ensureAuthenticated, function (req, res) {
+        var plugin = getPlugin(req.params.pluginId);
+
+        if (plugin instanceof Error) {
+            logger.error(plugin);
+            res.sendStatus(404);
+        } else {
+            res.send(plugin.getConfigStructure());
+        }
+    });
+
+    router.post('/plugins/:pluginId/execute', ensureAuthenticated, function (req, res) {
+        var resultId = GUID(),
+            pluginContext = {
+                managerConfig: {
+                    project: req.body.projectId,
+                    branchName: req.body.branchName,
+                    commit: req.body.commitHash,
+                    activeNode: req.body.activeNode,
+                    activeSelection: req.body.activeSelection,
+                },
+                pluginConfig: req.body.pluginConfig
+            },
+            workerParameters = {
+                command: middlewareOpts.workerManager.CONSTANTS.workerCommands.executePlugin,
+                webGMESessionId: req.session.id,
+                name: req.params.pluginId,
+                context: pluginContext
+            };
+
+        req.session.save();
+
+        middlewareOpts.workerManager.request(workerParameters, function (err, result) {
+            if (err) {
+                runningPlugins[resultId].status = PLUGIN_CONSTANTS.ERROR;
+                runningPlugins[resultId].err = err;
+            } else {
+                runningPlugins[resultId].status = PLUGIN_CONSTANTS.FINISHED;
+            }
+
+            runningPlugins[resultId].result = result;
+            runningPlugins[resultId].timeoutId = setTimeout(function () {
+                logger.warn('Plugin result timed out: ' + gmeConfig.plugin.serverResultTimeout + '[ms]',
+                    resultId);
+                delete runningPlugins[resultId];
+            }, gmeConfig.plugin.serverResultTimeout);
+        });
+
+        runningPlugins[resultId] = {
+            status: PLUGIN_CONSTANTS.RUNNING,
+            //timeoutId: will be added after plugin finished
+            //result: null,
+            //error: null
+        };
+
+        res.send({resultId: resultId});
+    });
+
+    router.get('/plugins/:pluginId/results/:resultId', ensureAuthenticated, function (req, res) {
+        var pluginExecution = runningPlugins[req.params.resultId];
+        logger.debug('Plugin-result request for ', req.params.pluginId, req.params.resultId);
+        if (pluginExecution) {
+            if (pluginExecution.status ===  PLUGIN_CONSTANTS.RUNNING) {
+                res.send(pluginExecution);
+            } else {
+                // Remove the pluginExecution when it has finished or an error occurred.
+                clearTimeout(pluginExecution.timeoutId);
+                pluginExecution.timeoutId = undefined;
+                delete runningPlugins[req.params.resultId];
+
+                res.send(pluginExecution);
+            }
+        } else {
+            res.sendStatus(404);
+        }
+    });
+
+    // AddOns
+    router.get('/addOns', ensureAuthenticated, function (req, res) {
+        var result = webgmeUtils.getComponentNames(gmeConfig.addOn.basePaths);
+        logger.debug('/addOns', {metadata: result});
+        res.send(result);
+    });
+
+    // TODO: router.get('/addOns/:addOnId/queryParams', ensureAuthenticated, function (req, res) {});
+    // TODO:router.get('/addOns/:addOnId/queryParamsStructure', ensureAuthenticated, function (req, res) {});
+    // TODO:router.post('/addOns/:addOnId/query', ensureAuthenticated, function (req, res) {});
+
+    router.get('/seeds', ensureAuthenticated, function (req, res) {
+        var names = [],
+            result = [],
+            seedName,
+            i,
+            j;
+        if (gmeConfig.seedProjects.enable === true) {
+            for (i = 0; i < gmeConfig.seedProjects.basePaths.length; i++) {
+                names = fs.readdirSync(gmeConfig.seedProjects.basePaths[i]);
+                for (j = 0; j < names.length; j++) {
+                    seedName = path.basename(names[j], '.json');
+                    if (result.indexOf(seedName) === -1) {
+                        result.push(seedName);
+                    }
+                }
+            }
+        }
+        logger.debug('/seeds', {metadata: result});
+        res.send(result);
+    });
+
+    function getVisualizersDescriptor() {
+        //we merge the contents of the CONFIG.visualizerDescriptors by id
+        var indexById = function (objectArray, id) {
+                var i,
+                    index = -1;
+                for (i = 0; i < objectArray.length; i++) {
+                    if (objectArray[i].id === id) {
+                        index = i;
+                        break;
+                    }
+                }
+
+                return index;
+            },
+            getVisualizerDescriptor = function (path) {
+                try {
+                    var descriptor = fs.readFileSync(path, 'utf-8');
+                    descriptor = JSON.parse(descriptor);
+                    return descriptor;
+                } catch (e) {
+                    //we do not care much of the error just give back an empty array
+                    logger.error(e);
+                    return [];
+                }
+            },
+            allVisualizersDescriptor = [],
+            i, j;
+
+        for (i = 0; i < gmeConfig.visualization.visualizerDescriptors.length; i++) {
+            var descriptor = getVisualizerDescriptor(gmeConfig.visualization.visualizerDescriptors[i]);
+            if (descriptor.length) {
+                for (j = 0; j < descriptor.length; j++) {
+                    var index = indexById(allVisualizersDescriptor, descriptor[j].id);
+                    if (index !== -1) {
+                        allVisualizersDescriptor[index] = descriptor[j];
+                    } else {
+                        allVisualizersDescriptor.push(descriptor[j]);
+                    }
+                }
+            }
+        }
+        return allVisualizersDescriptor.sort(function (a, b) {
+            if (a.id < b.id) {
+                return -1;
+            }
+            if (a.id > b.id) {
+                return 1;
+            }
+            return 0;
+        });
+    }
+
+    // FIXME: this should be JSON
+    router.get('/visualizers', ensureAuthenticated, function (req, res, next) {
+        var result = getVisualizersDescriptor();
+        logger.debug('/visualizers', {metadata: result});
+        res.send(result);
+    });
 
     router.use('*', function (req, res, next) {
         res.status(404);

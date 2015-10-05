@@ -22,6 +22,7 @@ describe('storage socketio websocket', function () {
 
         guestAccount = gmeConfig.authentication.guestAccount,
         server,
+        socket,
         gmeAuth,
         storage,
         agent,
@@ -52,13 +53,6 @@ describe('storage socketio websocket', function () {
                     gmeAuth = gmeAuth_;
                     safeStorage = testFixture.getMongoStorage(logger, gmeConfig, gmeAuth);
                     return safeStorage.openDatabase();
-                })
-                .then(function () {
-                    return Q.allDone([
-                        safeStorage.deleteProject({projectId: projectName2Id(projectName)}),
-                        safeStorage.deleteProject({projectId: projectName2Id(projectNameCreate)}),
-                        safeStorage.deleteProject({projectId: projectName2Id(projectNameDelete)})
-                    ]);
                 })
                 .then(function () {
                     return Q.allDone([
@@ -129,6 +123,7 @@ describe('storage socketio websocket', function () {
         agent = superagent.agent();
         openSocketIo(server, agent, guestAccount, guestAccount)
             .then(function (result) {
+                socket = result.socket;
                 storage = NodeStorage.createStorage('127.0.0.1', /*server.getUrl()*/
                     result.webGMESessionId,
                     logger,
@@ -150,7 +145,10 @@ describe('storage socketio websocket', function () {
     });
 
     afterEach(function (done) {
-        storage.close(done);
+        storage.close(function (err) {
+            socket.disconnect();
+            done(err);
+        });
     });
 
     it('should getProjects', function (done) {
@@ -593,7 +591,7 @@ describe('storage socketio websocket', function () {
                 done(new Error('missing error handling'));
             })
             .catch(function (err) {
-                expect(err).to.include('wrong request');
+                expect(err.message).to.include('wrong request');
                 done();
             })
             .done();
@@ -608,14 +606,11 @@ describe('storage socketio websocket', function () {
         };
 
         Q.nfcall(webSocket.simpleRequest, command)
-            .then(function (resultId) {
-                expect(typeof resultId).to.equal('string');
-                expect(resultId).to.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
-                    'should be an id');
-                return Q.nfcall(webSocket.simpleResult, resultId);
-            })
             .then(function (result) {
-                expect(result).to.have.property('root');
+                expect(typeof result).to.equal('object');
+                expect(result).to.have.property('file');
+                expect(typeof result.file.hash).to.equal('string');
+                expect(result.file.url).to.include('http');
                 done();
             })
             .catch(function (err) {

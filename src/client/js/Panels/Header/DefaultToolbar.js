@@ -9,22 +9,22 @@
 define([
     'js/util',
     'js/Constants',
-    'js/Utils/METAAspectHelper',
     'js/Utils/ExportManager',
     'js/Dialogs/Projects/ProjectsDialog',
     'js/Dialogs/Commit/CommitDialog',
     'js/Dialogs/ProjectRepository/ProjectRepositoryDialog',
     './PluginToolbar',
-    './ConstraintToolbar'
+    './ConstraintToolbar',
+    './MetaRulesToolbar',
 ], function (util,
              CONSTANTS,
-             METAAspectHelper,
              ExportManager,
              ProjectsDialog,
              CommitDialog,
              ProjectRepositoryDialog,
              PluginToolbar,
-             ConstraintToolBar) {
+             ConstraintToolBar,
+             MetaRulesToolbar) {
 
     'use strict';
 
@@ -33,6 +33,7 @@ define([
     DefaultToolbar = function (client) {
         this._client = client;
         this._pluginToolBar = null;
+        this._metaRulesToolBar = null;
         this._constraintToolBar = null;
 
         this._initialize();
@@ -40,9 +41,9 @@ define([
 
     DefaultToolbar.prototype._initialize = function () {
         this._pluginToolBar = new PluginToolbar(this._client);
-
+        this._metaRulesToolBar = new MetaRulesToolbar(this._client);
         //TODO the toolbar also has to be optional, but how???
-        if (this._client.addOnsAllowed === true) {
+        if (this._client.gmeConfig.core.enableCustomConstraints === true) {
             this._constraintToolBar = new ConstraintToolBar(this._client);
         }
     };

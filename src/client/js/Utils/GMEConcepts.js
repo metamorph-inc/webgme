@@ -11,7 +11,6 @@ define(['jquery',
     'js/NodePropertyNames',
     'js/RegistryKeys',
     './GMEConcepts.FCO',
-    './METAAspectHelper',
     'js/Panels/MetaEditor/MetaEditorConstants',
     'js/util'
 ], function (_jquery,
@@ -20,7 +19,6 @@ define(['jquery',
              nodePropertyNames,
              REGISTRY_KEYS,
              GMEConceptsFCO,
-             METAAspectHelper,
              MetaEditorConstants,
              clientUtil) {
 
@@ -179,6 +177,18 @@ define(['jquery',
         return isProjectRegistryValue(CONSTANTS.PROJECT_FCO_ID, objID);
     }
 
+    // returns with all the contaners of the node plus the node itself up untill the ROOT
+    function getAllContainerIds(nodeId) {
+        var containers = [],
+            node = client.getNode(nodeId);
+
+        while (node !== null) {
+            containers.push(node.getId());
+            node = client.getNode(node.getParentId());
+        }
+        return containers;
+    }
+
     /*
      * Returns true if a new child with the given baseId (instance of base) can be created in parent
      */
@@ -195,18 +205,23 @@ define(['jquery',
             j,
             node,
             validChildrenTypes,
-            validChildrenTypeMap;
+            validChildrenTypeMap,
+            parentIds = getAllContainerIds(parentId);
 
         //TODO: implement real logic based on META and CONSTRAINTS...
         if (typeof parentId === 'string' && baseIdList && baseIdList.length > 0) {
             result = true;
 
-            //make sure that no basIDList is not derived from parentId
+            //make sure that no baseId is derived from any of the containers
             len = baseIdList.length;
             while (len-- && result === true) {
-                if (client.isTypeOf(baseIdList[len], parentId)) {
-                    result = false;
+                i = parentIds.length;
+                while (i-- && result === true) {
+                    if (client.isTypeOf(baseIdList[len], parentIds[i])) {
+                        result = false;
+                    }
                 }
+
             }
 
 
@@ -314,13 +329,13 @@ define(['jquery',
     }
 
     function getMETAAspectMergedValidChildrenTypes(objID) {
-        var metaAspectMembers = METAAspectHelper.getMetaAspectMembers(),
+        var metaNodes = client.getAllMetaNodes() || [],
             validChildrenTypes = client.getValidChildrenTypes(objID),
-            len = metaAspectMembers.length,
+            len = metaNodes.length,
             id;
 
         while (len--) {
-            id = metaAspectMembers[len];
+            id = metaNodes[len].getId();
             if (validChildrenTypes.indexOf(id) === -1) {
                 if (client.isValidChild(objID, id)) {
                     validChildrenTypes.push(id);
@@ -737,13 +752,18 @@ define(['jquery',
 
     function canMoveNodeHere(parentId, nodes) {
         var parent = client.getNode(parentId),
-            parentBase = parent.getBaseId();
+            parentBase;
 
-        if (parentBase) {
-            if (nodes.indexOf(parentBase) !== -1) {
-                return false;
+        while (parent) {
+            parentBase = parent.getBaseId();
+            if (parentBase) {
+                if (nodes.indexOf(parentBase) !== -1) {
+                    return false;
+                }
             }
+            parent = client.getNode(parent.getParentId());
         }
+
 
         return true;
     }

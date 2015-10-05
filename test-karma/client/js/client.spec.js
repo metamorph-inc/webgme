@@ -50,6 +50,8 @@ describe('GME client', function () {
         it('should have public functions', function () {
             var client = new Client(gmeConfig);
 
+            expect(client.hasOwnProperty('gmeConfig')).to.equal(true, 'gmeConfig');
+
             //event related API
             expect(typeof client.addEventListener).to.equal('function');
             expect(typeof client.removeEventListener).to.equal('function');
@@ -184,17 +186,6 @@ describe('GME client', function () {
                 'getAspectTerritoryPattern'
             );
 
-            //addOn related API
-            expect(client).to.include.keys(
-                'validateProjectAsync',
-                'validateModelAsync',
-                'validateNodeAsync',
-                'setValidationCallback',
-                'getDetailedHistoryAsync',
-                'getRunningAddOnNames',
-                'addOnsAllowed'
-            );
-
             //territory related API
             expect(client).to.include.keys(
                 'addUI',
@@ -203,27 +194,32 @@ describe('GME client', function () {
                 'getNode'
             );
 
-            //export - import API
+            //simple request commands
             expect(client.hasOwnProperty('runServerPlugin')).to.equal(true, 'runServerPlugin');
-            //expect(client.hasOwnProperty('exportItems')).to.equal(true, 'exportItems'); //TODO: Add this back
             expect(client.hasOwnProperty('getExportItemsUrl')).to.equal(true, 'getExportItemsUrl');
             expect(client.hasOwnProperty('createProjectFromFile')).to.equal(true, 'createProjectFromFile');
+            expect(client.hasOwnProperty('seedProject')).to.equal(true, 'seedProject');
             expect(client.hasOwnProperty('getExportProjectBranchUrl')).to.equal(true, 'getExportProjectBranchUrl');
             expect(client.hasOwnProperty('getExportLibraryUrl')).to.equal(true, 'getExportLibraryUrl');
             expect(client.hasOwnProperty('updateLibrary')).to.equal(true, 'updateLibrary');
             expect(client.hasOwnProperty('addLibrary')).to.equal(true, 'addLibrary');
+            expect(client.hasOwnProperty('autoMerge')).to.equal(true, 'autoMerge');
+            expect(client.hasOwnProperty('resolve')).to.equal(true, 'resolve');
+            expect(client.hasOwnProperty('checkMetaRules')).to.equal(true, 'checkMetaRules');
+            expect(client.hasOwnProperty('checkCustomConstraints')).to.equal(true, 'checkCustomConstraints');
+
         });
 
-        it('should not contain merge related functions', function () {
-            var client = new Client(gmeConfig);
-            expect(client).not.to.include.keys('getBaseOfCommits',
-                'getDiffTree',
-                'getConflictOfDiffs',
-                'applyDiff',
-                'merge',
-                'getResolve',
-                'resolve');
-        });
+        //it('should not contain merge related functions', function () {
+        //    var client = new Client(gmeConfig);
+        //    expect(client).not.to.include.keys('getBaseOfCommits',
+        //        'getDiffTree',
+        //        'getConflictOfDiffs',
+        //        'applyDiff',
+        //        'merge',
+        //        'getResolve',
+        //        'resolve');
+        //});
 
     });
 
@@ -590,7 +586,7 @@ describe('GME client', function () {
         it('should fail to create an already existing project', function (done) {
             var projectName = 'alreadyExists';
             client.createProject(projectName, function (err) {
-                expect(err).to.contain('Project already exist');
+                expect(err.message).to.contain('Project already exist');
                 done();
             });
         });
@@ -686,7 +682,7 @@ describe('GME client', function () {
                 expect(err).to.equal(null);
 
                 client.selectCommit('#unknown', function (err) {
-                    expect(err).to.equal('object does not exist #unknown');
+                    expect(err.message).to.include('object does not exist #unknown');
 
                     done();
                 });
@@ -1066,7 +1062,7 @@ describe('GME client', function () {
                 activeBranchName = client.getActiveBranchName();
 
                 client.forkCurrentBranch(forkName, commitHash, function (err /*, name, hash*/) {
-                    expect(err).to.include('Could not find specified commitHash');
+                    expect(err.message).to.include('Could not find specified commitHash');
 
                     client.getBranches(projectId, function (err, branches) {
                         expect(err).to.equal(null);
@@ -1553,6 +1549,28 @@ describe('GME client', function () {
             expect(clientNode.toString()).to.contain('/323573539');
         });
 
+        it('should return detailed information about the valid children types', function () {
+            expect(clientNode.getValidChildrenTypesDetailed()).to.deep.equal({'/701504349': true});
+        });
+
+        it('should return detailed information about the valid set types', function () {
+            expect(clientNode.getValidSetMemberTypesDetailed('set')).to.deep.equal({'/701504349': true});
+        });
+
+        it('should return all meta gme nodes synchronously',function(){
+            var metaNodes = client.getAllMetaNodes();
+            expect(metaNodes).to.have.length(2);
+            expect(!!metaNodes[0].getId).to.equal(true);
+            expect(!!metaNodes[1].getId).to.equal(true);
+        });
+
+        it('should check if the node is [connection]-like',function(){
+            expect(clientNode.isConnection()).to.equal(false);
+        });
+
+        it('should check if the node is abstract',function(){
+            expect(clientNode.isAbstract()).to.equal(false);
+        });
         //it('should log the textual representation of the node', function () {
         //
         //})
@@ -1792,6 +1810,140 @@ describe('GME client', function () {
                 expect(guid).not.to.equal(null);
 
                 client.updateTerritory(guid, {'/323573539': {children: 0}});
+            });
+        });
+
+        it('should handle updateTerritory+modification requests in order', function (done) {
+            var testId = 'updateTerritoryPlusModify',
+                tOneState = 'init',
+                tOneId = null,
+                basicNodePaths = ['', '/1', '/701504349', '/5185791', '/1400778473', '/1697300825'];
+
+            function tOneEvents(events) {
+                var node,
+                    parent,
+                    i,
+                    eventPaths = [],
+                    newNodePath = null,
+                    getEventPaths = function (events) {
+                        var i,
+                            paths = [];
+                        expect(events).to.have.length.above(1);
+                        for (i = 1; i < events.length; i += 1) {
+                            paths.push(events[i].eid);
+                        }
+                        return paths;
+                    };
+
+                if (tOneState === 'init') {
+                    tOneState = 'tUpdate';
+                    expect(events).to.have.length(2);
+                    node = client.getNode(events[1].eid);
+                    parent = client.getNode(node.getParentId());
+                    client.updateTerritory(tOneId, {'': {children: 1}});
+                    client.copyMoreNodes({parentId: parent.getId(), '/323573539': {}}, 'duplicating node');
+
+                } else if (tOneState === 'tUpdate') {
+                    //first our territoryUpdate should be resolved
+                    expect(events).to.have.length(8);
+                    eventPaths = getEventPaths(events);
+
+                    expect(eventPaths).to.include.members(basicNodePaths);
+                    for (i = 1; i < events.length; i += 1) {
+                        expect(events[i].etype).to.equal('load');
+                        if (basicNodePaths.indexOf(events[i].eid) === -1) {
+                            newNodePath = events[i].eid;
+                        }
+                    }
+
+                    tOneState = 'modified';
+                    return;
+
+                } else if (tOneState === 'modified') {
+                    //finally our modification should generate events
+                    //the number of events should remain the same as the newObject will not generate one!
+                    expect(events).to.have.length(8);
+                    eventPaths = getEventPaths(events);
+                    expect(eventPaths).not.to.include.members([newNodePath]);
+                    for (i = 1; i < events.length; i += 1) {
+                        expect(events[i].etype).to.equal('update');
+                    }
+                    client.removeUI(tOneId);
+                    done();
+                }
+            }
+
+            buildUpForTest(testId, function () {
+                tOneId = client.addUI({}, tOneEvents);
+                expect(tOneId).not.to.equal(null);
+
+                client.updateTerritory(tOneId, {'/323573539': {children: 0}});
+            });
+        });
+
+        it('should handle modification+updateTerritory requests order', function (done) {
+            var testId = 'modifyPlusUpdateTerritory',
+                tOneState = 'init',
+                tOneId = null,
+                basicNodePaths = ['', '/1', '/701504349', '/5185791', '/1400778473', '/1697300825'];
+
+            function tOneEvents(events) {
+                var node,
+                    parent,
+                    i,
+                    eventPaths = [],
+                    newnodePath = null,
+                    getEventPaths = function (events) {
+                        var i,
+                            paths = [];
+                        expect(events).to.have.length.above(1);
+                        for (i = 1; i < events.length; i += 1) {
+                            paths.push(events[i].eid);
+                        }
+                        return paths;
+                    };
+
+                if (tOneState === 'init') {
+                    tOneState = 'tUpdate';
+                    expect(events).to.have.length(2);
+                    node = client.getNode(events[1].eid);
+                    parent = client.getNode(node.getParentId());
+                    client.copyMoreNodes({parentId: parent.getId(), '/323573539': {}}, 'duplicating node');
+                    client.updateTerritory(tOneId, {'': {children: 1}});
+                } else if (tOneState === 'tUpdate') {
+                    //first our territoryUpdate should be resolved
+                    expect(events).to.have.length(8);
+                    eventPaths = getEventPaths(events);
+
+                    expect(eventPaths).to.include.members(basicNodePaths);
+                    for (i = 1; i < events.length; i += 1) {
+                        expect(events[i].etype).to.equal('load');
+                        if (basicNodePaths.indexOf(events[i].eid) === -1) {
+                            newnodePath = events[i].eid;
+                        }
+                    }
+
+                    tOneState = 'modified';
+                    return;
+                } else if (tOneState === 'modified') {
+                    //finally our modification should generate events
+                    //the number of events should remain the same as the newObject will not generate one!
+                    expect(events).to.have.length(8);
+                    eventPaths = getEventPaths(events);
+                    expect(eventPaths).not.to.include.members([newnodePath]);
+                    for (i = 1; i < events.length; i += 1) {
+                        expect(events[i].etype).to.equal('update');
+                    }
+                    client.removeUI(tOneId);
+                    done();
+                }
+            }
+
+            buildUpForTest(testId, function () {
+                tOneId = client.addUI({}, tOneEvents);
+                expect(tOneId).not.to.equal(null);
+
+                client.updateTerritory(tOneId, {'/323573539': {children: 0}});
             });
         });
 
@@ -3652,62 +3804,14 @@ describe('GME client', function () {
             });
         });
 
-        it('should return a url which would download the given list of nodes', function (done) {
-            this.timeout(10000);
-            client.getExportItemsUrl(['', '/1'], 'output', function (err, url) {
-                expect(err).to.equal(null);
-                expect(url).to.contain('output');
-                expect(url).to.contain('/worker/simpleResult/');
-
-                //FIXME why server crashes at the end if we get the result??
-                superagent.get(url).end(function (err, res) {
-
-                    expect(err).to.equal(null);
-
-                    expect(res.status).to.equal(200);
-
-                    expect(res.body).not.to.equal(null);
-
-                    expect(res.body).to.have.length(2);
-
-                    done();
-                });
-            });
-        });
-
         it('should return a url where the given library (sub-tree) is available', function (done) {
             this.timeout(5000);
             client.getExportLibraryUrl('', 'output', function (err, url) {
                 expect(err).to.equal(null);
-                expect(url).to.contain('output');
-                expect(url).to.contain('/worker/simpleResult/');
+                expect(url).to.contain('/rest/blob/download');
 
                 done();
             });
-        });
-
-        it.skip('should return a json format of the node (or a sub-tree)', function (done) {
-            client.dumpNodeAsync('', function (err, dump) {
-                expect(err).to.equal(null);
-
-                expect(dump).not.to.equal(null);
-
-                done();
-            });
-        });
-
-        it.skip('should fail to dump not loaded node', function (done) {
-            // dumpNodeAsync
-            client.dumpNodeAsync('/42/42', function (err) {
-                expect(err).not.to.equal(null);
-
-                done();
-            });
-        });
-
-        //TODO modify this test to use the getExportProjectBranchUrlAsync function
-        it.skip('should return a url for dumping the whole project', function () {
-            expect(client.getDumpURL({})).to.contain('dump_url.out');
         });
     });
 
@@ -3882,10 +3986,10 @@ describe('GME client', function () {
 
         it('modify an empty ruleset to empty', function (done) {
             var branchStatusHandler = function (status/*, commitQueue, updateQueue*/) {
-                    if (status === client.CONSTANTS.BRANCH_STATUS.SYNC) {
-                        done();
-                    }
-                };
+                if (status === client.CONSTANTS.BRANCH_STATUS.SYNC) {
+                    done();
+                }
+            };
             prepareBranchForTest('noChangeSet', branchStatusHandler, function (err) {
                 expect(err).to.equal(null);
 
@@ -4044,7 +4148,11 @@ describe('GME client', function () {
 
                 client.getExportProjectBranchUrl(projectId, 'master', 'seedTestOutPut',
                     function (err, url) {
+                        //var karmaUrl;
                         expect(err).to.equal(null);
+                        expect(url).to.contain('/rest/blob/download/');
+
+                        //karmaUrl = url.replace('http://127.0.0.1:9001', window.location.origin);
 
                         superagent.get(url, function (err, result) {
                             expect(err).to.equal(null);
@@ -4077,7 +4185,11 @@ describe('GME client', function () {
 
                 client.getExportProjectBranchUrl(projectId, 'master', 'seedTestOutPut',
                     function (err, url) {
+                        //var karmaUrl;
                         expect(err).to.equal(null);
+                        expect(url).to.contain('rest/blob/download/');
+
+                        //karmaUrl = url.replace('http://127.0.0.1:9001', window.location.origin);
 
                         superagent.get(url, function (err, result) {
                             expect(err).to.equal(null);
@@ -4192,7 +4304,7 @@ describe('GME client', function () {
             client.seedProject(seedConfig, function (err) {
                 expect(err).to.equal(null);
 
-                client.getExportProjectBranchUrl(projectId, 'other', 'seedTestOutPut',
+                client.getExportProjectBranchUrl(projectId, 'master', 'seedTestOutPut',
                     function (err, url) {
                         expect(err).to.equal(null);
 
@@ -4224,8 +4336,8 @@ describe('GME client', function () {
 
             client.seedProject(seedConfig, function (err) {
                 expect(err).not.to.equal(null);
-
-                expect(err).to.contain('Project already exists');
+                console.error('seedProject', err);
+                expect(err.message).to.contain('Project already exists');
 
                 done();
             });
@@ -4242,7 +4354,7 @@ describe('GME client', function () {
             client.seedProject(seedConfig, function (err) {
                 expect(err).not.to.equal(null);
 
-                expect(err).to.contain('unknownBranch');
+                expect(err.message).to.contain('unknownBranch');
 
                 done();
             });
@@ -4259,7 +4371,7 @@ describe('GME client', function () {
             client.seedProject(seedConfig, function (err) {
                 expect(err).not.to.equal(null);
 
-                expect(err).to.contain('unknown file seed');
+                expect(err.message).to.contain('unknown file seed');
 
                 done();
             });

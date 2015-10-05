@@ -18,6 +18,9 @@ var mongodb = require('mongodb'),
 
 function Mongo(mainLogger, gmeConfig) {
     var mongo = null,
+        connectionCnt = 0,
+        connectDeferred,
+        disconnectDeferred,
         logger = mainLogger.fork('mongo');
 
     /**
@@ -26,6 +29,7 @@ function Mongo(mainLogger, gmeConfig) {
      * @param {string} projectId - identifier of the project (ownerId + '.' + projectName).
      * @param {object} collection - Mongo collection connected to database.
      * @constructor
+     * @private
      */
     function Project(projectId, collection) {
         this.projectId = projectId;
@@ -41,9 +45,9 @@ function Mongo(mainLogger, gmeConfig) {
         this.loadObject = function (hash, callback) {
             var deferred = Q.defer();
             if (typeof hash !== 'string') {
-                deferred.reject('loadObject - given hash is not a string : ' + typeof hash);
+                deferred.reject(new Error('loadObject - given hash is not a string : ' + typeof hash));
             } else if (!REGEXP.HASH.test(hash)) {
-                deferred.reject('loadObject - invalid hash :' + hash);
+                deferred.reject(new Error('loadObject - invalid hash :' + hash));
             } else {
                 logger.debug('loadObject ' + hash);
                 collection.findOne({_id: hash}, function (err, obj) {
@@ -54,7 +58,7 @@ function Mongo(mainLogger, gmeConfig) {
                         deferred.resolve(obj);
                     } else {
                         logger.error('object does not exist ' + hash);
-                        deferred.reject('object does not exist ' + hash);
+                        deferred.reject(new Error('object does not exist ' + hash));
                     }
                 });
             }
@@ -66,10 +70,10 @@ function Mongo(mainLogger, gmeConfig) {
             var deferred = Q.defer(),
                 rejected = false;
             if (object === null || typeof object !== 'object') {
-                deferred.reject('object is not an object');
+                deferred.reject(new Error('object is not an object'));
                 rejected = true;
             } else if (typeof object._id !== 'string' || !REGEXP.HASH.test(object._id)) {
-                deferred.reject('object._id is not a valid hash.');
+                deferred.reject(new Error('object._id is not a valid hash.'));
                 rejected = true;
             }
             if (rejected === false) {
@@ -103,37 +107,6 @@ function Mongo(mainLogger, gmeConfig) {
 
             return deferred.promise.nodeify(callback);
         };
-
-        //this.getInfo = function (callback) {
-        //    return Q.ninvoke(collection, 'findOne', {_id: CONSTANTS.PROJECT_INFO_ID})
-        //        .then(function (info) {
-        //            if (info) {
-        //                delete info._id;
-        //            }
-        //            return Q(info);
-        //        })
-        //        .nodeify(callback);
-        //};
-        //
-        //this.setInfo = function (info, callback) {
-        //    ASSERT(typeof info === 'object' && typeof callback === 'function');
-        //    info._id = CONSTANTS.PROJECT_INFO_ID;
-        //
-        //    return Q.ninvoke(collection, 'update', {_id: CONSTANTS.PROJECT_INFO_ID}, info, {upsert: true})
-        //        .nodeify(callback);
-        //};
-        //
-        //this.dumpObjects = function (callback) {
-        //    ASSERT(typeof callback === 'function');
-        //
-        //    collection.find().each(function (err, item) {
-        //        if (err || item === null) {
-        //            callback(err);
-        //        } else {
-        //            logger.debug(item);
-        //        }
-        //    });
-        //};
 
         this.getBranches = function (callback) {
             var mongoFind = collection.find({
@@ -175,7 +148,7 @@ function Mongo(mainLogger, gmeConfig) {
                     _id: branch
                 }, function (err, obj) {
                     if (!err && oldhash !== ((obj && obj.hash) || '')) {
-                        err = 'branch hash mismatch';
+                        err = new Error('branch hash mismatch');
                     }
                     if (err) {
                         deferred.reject(err);
@@ -189,7 +162,7 @@ function Mongo(mainLogger, gmeConfig) {
                     hash: oldhash
                 }, function (err, num) {
                     if (!err && num !== 1) {
-                        err = 'branch hash mismatch';
+                        err = new Error('branch hash mismatch');
                     }
                     if (err) {
                         deferred.reject(err);
@@ -204,7 +177,7 @@ function Mongo(mainLogger, gmeConfig) {
                 }, function (err) {
                     if (err) {
                         if (err.code === 11000) { // insertDocument :: caused by :: 11000 E11000 duplicate key error...
-                            deferred.reject('branch hash mismatch');
+                            deferred.reject(new Error('branch hash mismatch'));
                         } else {
                             deferred.reject(err);
                         }
@@ -222,7 +195,7 @@ function Mongo(mainLogger, gmeConfig) {
                     }
                 }, function (err, num) {
                     if (!err && num !== 1) {
-                        err = 'branch hash mismatch';
+                        err = new Error('branch hash mismatch');
                     }
                     if (err) {
                         deferred.reject(err);
@@ -242,7 +215,7 @@ function Mongo(mainLogger, gmeConfig) {
                     $lt: before
                 }
             }).limit(number).sort({
-                $natural: -1
+                time: -1
             });
 
             return Q.ninvoke(mongoFind, 'toArray')
@@ -335,54 +308,91 @@ function Mongo(mainLogger, gmeConfig) {
             newAncestorsA = [commitA];
             ancestorsB[commitB] = true;
             newAncestorsB = [commitB];
-            loadStep();
+            collection.findOne({
+                _id: commitA,
+                type: 'commit'
+            }, function (err, commit) {
+                if (err || !commit) {
+                    deferred.reject(new Error('Commit object does not exist [' + commitA + ']'));
+                    return;
+                }
+                collection.findOne({
+                    _id: commitB,
+                    type: 'commit'
+                }, function (err, commit) {
+                    if (err || !commit) {
+                        deferred.reject(new Error('Commit object does not exist [' + commitB + ']'));
+                        return;
+                    }
+                    loadStep();
+                });
+            });
 
             return deferred.promise.nodeify(callback);
         };
     }
 
     function openDatabase(callback) {
-        var deferred = Q.defer();
-        logger.debug('openDatabase');
+        connectionCnt += 1;
+        logger.debug('openDatabase, connection counter:', connectionCnt);
 
-        if (mongo === null) {
-            logger.debug('Connecting to mongo...');
-            // connect to mongo
-            mongodb.MongoClient.connect(gmeConfig.mongo.uri, gmeConfig.mongo.options, function (err, db) {
-                if (!err && db) {
-                    mongo = db;
-                    logger.debug('Connected.');
-                    deferred.resolve();
-                } else {
-                    mongo = null;
-                    deferred.reject(err);
-                }
-            });
+        if (connectionCnt === 1) {
+            if (mongo === null) {
+                logger.debug('Connecting to mongo...');
+                connectDeferred = Q.defer();
+                // connect to mongo
+                mongodb.MongoClient.connect(gmeConfig.mongo.uri, gmeConfig.mongo.options, function (err, db) {
+                    if (!err && db) {
+                        mongo = db;
+                        logger.debug('Connected.');
+                        connectDeferred.resolve();
+                    } else {
+                        mongo = null;
+                        connectionCnt -= 1;
+                        logger.error('Failed to connect.', {metadata: err});
+                        connectDeferred.reject(err);
+                    }
+                });
+            } else {
+                logger.debug('Count is 1 but mongo is not null');
+            }
         } else {
             logger.debug('Reusing mongo connection.');
             // we are already connected
-            deferred.resolve();
         }
 
-        return deferred.promise.nodeify(callback);
+        return connectDeferred.promise.nodeify(callback);
     }
 
     function closeDatabase(callback) {
-        var deferred = Q.defer();
-        logger.debug('closeDatabase');
-        if (mongo !== null) {
-            logger.debug('Closing connection to mongo...');
-            mongo.close(function () {
-                mongo = null;
-                logger.debug('Closed.');
-                deferred.resolve();
-            });
-        } else {
-            logger.debug('No mongo connection was established.');
-            deferred.resolve();
+        connectionCnt -= 1;
+        logger.debug('closeDatabase, connection counter:', connectionCnt);
+
+        if (connectionCnt < 0) {
+            logger.error('connection counter became negative, too many closeDatabase. Setting it to 0.', connectionCnt);
+            connectionCnt = 0;
         }
 
-        return deferred.promise.nodeify(callback);
+        if (!disconnectDeferred) {
+            disconnectDeferred = Q.defer();
+        }
+
+        if (connectionCnt === 0) {
+            if (mongo) {
+                logger.debug('Closing connection to mongo...');
+                mongo.close(function () {
+                    mongo = null;
+                    logger.debug('Closed.');
+                    disconnectDeferred.resolve();
+                });
+            } else {
+                disconnectDeferred.resolve();
+            }
+        } else {
+            logger.debug('Connections still alive.');
+        }
+
+        return disconnectDeferred.promise.nodeify(callback);
     }
 
     function deleteProject(projectId, callback) {
@@ -467,12 +477,29 @@ function Mongo(mainLogger, gmeConfig) {
         return deferred.promise.nodeify(callback);
     }
 
+    function renameProject(projectId, newProjectId, callback) {
+        var deferred = Q.defer();
+
+        if (mongo) {
+            Q.ninvoke(mongo, 'renameCollection', projectId, newProjectId)
+                .then(function () {
+                    deferred.resolve();
+                })
+                .catch(deferred.reject);
+        } else {
+            deferred.reject(new Error('Database is not open.'));
+        }
+
+        return deferred.promise.nodeify(callback);
+    }
+
     this.openDatabase = openDatabase;
     this.closeDatabase = closeDatabase;
 
     this.openProject = openProject;
     this.deleteProject = deleteProject;
     this.createProject = createProject;
+    this.renameProject = renameProject;
 }
 
 module.exports = Mongo;

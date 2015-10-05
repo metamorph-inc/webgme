@@ -8,6 +8,7 @@ var path = require('path'),
     config = {
         addOn: {
             enable: false,
+            monitorTimeout: 10000,
             basePaths: [path.join(__dirname, '../src/addon/core')]
         },
 
@@ -45,8 +46,7 @@ var path = require('path'),
         client: {
             appDir: path.join(__dirname, '../src/client'),
             log: {
-                level: 'debug' // To see log messages in the browser inspector set:
-                               // localStorage.debug = '*' (or 'gme*', 'gme:core*')
+                level: 'debug'
             },
             usedDecorators: ['ModelDecorator',
                              'CircleDecorator',
@@ -54,13 +54,17 @@ var path = require('path'),
                              'SVGDecorator',
                              'UMLStateMachineDecorator',
                              'DefaultDecorator'],
-            // Used in client/WebGME.js to load initial project.
-            defaultProject: {
-                name: null,
-                branch: null,
-                node: null
+            // Used in client/WebGME.js to load initial project (if url is specified that has higher priority)
+            defaultContext: {
+                project: null,   // This is the projectId, e.g. 'guest+TestProject'
+                branch: null, // Defaults to master
+                node: null    // Defaults to the root-node.
             },
             defaultConnectionRouter: 'basic3' //'basic', 'basic2', 'basic3'
+        },
+
+        core: {
+            enableCustomConstraints: false,
         },
 
         debug: false,
@@ -91,13 +95,13 @@ var path = require('path'),
         plugin: {
             allowServerExecution: false,
             basePaths: [path.join(__dirname, '../src/plugin/coreplugins')],
-            displayAll: false
+            displayAll: false,
+            serverResultTimeout: 60000
         },
 
         requirejsPaths: {},
 
         rest: {
-            secure: false,
             components: {}
         },
 
@@ -115,10 +119,10 @@ var path = require('path'),
                 // see specific session store documentations for options connect-mongo and connect-redis
                 options: {
                     //url: 'mongodb://127.0.0.1:27017/multi'
-                }
+                },
+                cookieSecret: 'meWebGMEez',
+                cookieKey: 'webgmeSid',
             },
-            sessionCookieId: 'webgmeSid',
-            sessionCookieSecret: 'meWebGMEez',
             log: {
                 //patterns: ['gme:server:*', '-gme:server:standalone*'],
                 transports: [{
@@ -155,24 +159,28 @@ var path = require('path'),
                 enable: false,
                 certificateFile: path.join(__dirname, '../certificates/sample-cert.pem'),
                 keyFile: path.join(__dirname, '../certificates/sample-key.pem')
-            }
+            },
+            extlibExcludes: ['.\.pem$', 'config\/config\..*\.js$']
         },
 
         socketIO: {
-            reconnection: true,
-            'connect timeout': 10,
-            'reconnection delay': 1,
-            'force new connection': true,
-            transports: ['websocket', 'polling']
+            clientOptions: {
+                reconnection: true,
+                'connect timeout': 10,
+                'reconnection delay': 1,
+                'force new connection': true
+            },
+            serverOptions: {
+                //transports: ['websocket', 'polling']
+            }
         },
 
         storage: {
-            autoPersist: true, // core setting
             cache: 2000,
             // If true events such as PROJECT_CREATED and BRANCH_CREATED will only be broadcasted
             // and not emitted back to the web-socket that triggered the event.
             broadcastProjectEvents: false,
-            emitCommittedCoreObjects: false,
+            emitCommittedCoreObjects: true,
             loadBucketSize: 100,
             loadBucketTimer: 10,
             clientCacheSize: 2000, // overwrites cache on client

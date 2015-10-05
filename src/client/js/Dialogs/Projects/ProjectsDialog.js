@@ -9,6 +9,7 @@
 define([
     'angular',
     'js/logger',
+    'js/Constants',
     'js/Loader/LoaderCircles',
     'js/Utils/GMEConcepts',
     'js/Dialogs/Import/ImportDialog',
@@ -21,7 +22,7 @@ define([
 
     'css!./styles/ProjectsDialog.css'
 
-], function (ng, Logger, LoaderCircles, GMEConcepts, ImportDialog, CreateFromSeedDialog, StorageUtil,
+], function (ng, Logger, CONSTANTS, LoaderCircles, GMEConcepts, ImportDialog, CreateFromSeedDialog, StorageUtil,
              projectsDialogTemplate, ConfirmDialog, DeleteDialogTemplate) {
 
     'use strict';
@@ -53,6 +54,7 @@ define([
         this._projectNames = [];
         this._projectList = {};
         this._filter = undefined;
+        this._ownerId = null; // TODO get this from dropdown list
 
         this._logger.debug('Created');
     };
@@ -65,13 +67,31 @@ define([
         this._dialog.modal('show');
 
         this._dialog.on('hidden.bs.model', function () {
-            self._loader.destroy();
             self._dialog.remove();
             self._dialog.empty();
             self._dialog = undefined;
+            self._client.unwatchDatabase(self._projectEventHandling, function (err) {
+                if (err) {
+                    self._logger.error('error during unsubscribe', err);
+                }
+            });
         });
 
         this._refreshProjectList();
+
+        this._projectEventHandling = function (emitter, data) {
+            if (data.etype === CONSTANTS.CLIENT.STORAGE.PROJECT_CREATED ||
+                data.etype === CONSTANTS.CLIENT.STORAGE.PROJECT_DELETED) {
+                self._logger.debug('projectList changed event', data);
+                self._refreshProjectList.call(self);
+            }
+        };
+
+        self._client.watchDatabase(self._projectEventHandling, function (err) {
+            if (err) {
+                self._logger.error('unable to follow project events', err);
+            }
+        });
     };
 
     ProjectsDialog.prototype._initDialog = function () {
@@ -191,7 +211,7 @@ define([
 
         this._txtNewProjectName = this._dialog.find('.txt-project-name');
         this._dialog.find('.username').text(this._client.getUserId());
-
+        this._ownerId = this._client.getUserId(); //TODO: Get this from drop-down
 
         this._loader = new LoaderCircles({containerElement: this._btnRefresh});
         this._loader.setSize(14);
@@ -296,8 +316,8 @@ define([
             var re = /^[0-9a-z_]+$/gi;
 
             return (
-            re.test(aProjectName) &&
-            self._projectNames.indexOf(projectId) === -1
+                re.test(aProjectName) &&
+                self._projectNames.indexOf(projectId) === -1
             );
         }
 
@@ -337,7 +357,7 @@ define([
 
             var enterPressed = event.which === 13,
                 newProjectName = self._txtNewProjectName.val(),
-                projectId =  StorageUtil.getProjectIdFromOwnerIdAndProjectName(self._dialog.find('.username').text(), newProjectName);
+                projectId = StorageUtil.getProjectIdFromOwnerIdAndProjectName(self._dialog.find('.username').text(), newProjectName);
 
 
             if (enterPressed && isValidProjectName(newProjectName, projectId)) {
@@ -349,9 +369,7 @@ define([
                 event.stopPropagation();
                 event.preventDefault();
             }
-
         });
-
 
         this._btnRefresh.on('click', function (event) {
             self._refreshProjectList.call(self);
@@ -366,6 +384,7 @@ define([
             params = {
                 rights: true
             };
+
 
         this._loader.start();
         this._btnRefresh.disable(true);
@@ -475,7 +494,7 @@ define([
                     displayProject = true;
                 } else {
                     displayProject = (this._projectNames[i].toUpperCase()[0] >= this._filter[0] &&
-                                      this._projectNames[i].toUpperCase()[0] <= this._filter[1]);
+                    this._projectNames[i].toUpperCase()[0] <= this._filter[1]);
                 }
 
                 if (displayProject) {
@@ -518,20 +537,22 @@ define([
 
         loader.start();
 
-        self._client.createProjectFromFile(projectName, null, jsonContent, function (err, projectId, branchName) {
-            if (err) {
-                self._logger.error('CANNOT CREATE NEW PROJECT FROM FILE: ' + err);
-                loader.stop();
-            } else {
-                self._logger.debug('CREATE NEW PROJECT FROM FILE FINISHED SUCCESSFULLY');
-                self._client.selectProject(projectId, branchName, function (err) {
-                    if (err) {
-                        self._logger.error('CANNOT SELECT NEWLY CREATED PROJECT FROM FILE: ' + err.message);
-                    }
+        self._client.createProjectFromFile(projectName, null, jsonContent, self._ownerId,
+            function (err, projectId, branchName) {
+                if (err) {
+                    self._logger.error('CANNOT CREATE NEW PROJECT FROM FILE: ', err);
                     loader.stop();
-                });
+                } else {
+                    self._logger.debug('CREATE NEW PROJECT FROM FILE FINISHED SUCCESSFULLY');
+                    self._client.selectProject(projectId, branchName, function (err) {
+                        if (err) {
+                            self._logger.error('CANNOT SELECT NEWLY CREATED PROJECT FROM FILE: ', err.message);
+                        }
+                        loader.stop();
+                    });
+                }
             }
-        });
+        );
     };
 
     ProjectsDialog.prototype._createProjectFromSeed = function (projectName, type, seedName, branchName, commitHash) {
@@ -541,7 +562,8 @@ define([
                 projectName: projectName,
                 seedName: seedName,
                 seedBranch: branchName,
-                seedCommit: commitHash
+                seedCommit: commitHash,
+                ownerId: self._ownerId
             },
             loader = new LoaderCircles({containerElement: $('body')});
 

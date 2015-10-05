@@ -24,6 +24,7 @@ var Path = require('path'),
     Http = require('http'),
     Https = require('https'),
     URL = require('url'),
+    contentDisposition = require('content-disposition'),
 
     Mongo = require('./storage/mongo'),
     Storage = require('./storage/safestorage'),
@@ -41,6 +42,8 @@ var Path = require('path'),
     Logger = require('./logger'),
 
     ServerWorkerManager = require('./worker/serverworkermanager'),
+
+    webgmeUtils = require('../utils'),
 
     servers = [],
 
@@ -95,7 +98,7 @@ process.on('SIGINT', function () {
 function StandAloneServer(gmeConfig) {
     var self = this,
         clientConfig = getClientConfig(gmeConfig),
-
+        excludeRegExs = [],
         sockets = [];
 
     self.id = Math.random().toString(36).slice(2, 11);
@@ -237,6 +240,9 @@ function StandAloneServer(gmeConfig) {
         self.isRunning = false;
 
         try {
+            if (gmeConfig.executor.enable) {
+                ExecutorServer.stop();
+            }
             // FIXME: is this call synchronous?
             __webSocket.stop();
             //kill all remaining workers
@@ -380,25 +386,12 @@ function StandAloneServer(gmeConfig) {
         }
     }
 
-    function isGoodExtraAsset(name, path) {
-        try {
-            var file = FS.readFileSync(path + '/' + name + '.js', 'utf-8');
-            if (file === undefined || file === null) {
-                return false;
-            } else {
-                return true;
-            }
-        } catch (e) {
-            return false;
-        }
-    }
-
     function getPluginBasePathByName(pluginName) {
         for (var i = 0; i < gmeConfig.plugin.basePaths.length; i++) {
             var additional = FS.readdirSync(gmeConfig.plugin.basePaths[i]);
             for (var j = 0; j < additional.length; j++) {
                 if (additional[j] === pluginName) {
-                    if (isGoodExtraAsset(additional[j], Path.join(gmeConfig.plugin.basePaths[i], additional[j]))) {
+                    if (webgmeUtils.isGoodExtraAsset(additional[j], Path.join(gmeConfig.plugin.basePaths[i], additional[j]))) {
                         return gmeConfig.plugin.basePaths[i];
                     }
                 }
@@ -406,48 +399,7 @@ function StandAloneServer(gmeConfig) {
         }
     }
 
-    function getVisualizersDescriptor() {
-        //we merge the contents of the CONFIG.visualizerDescriptors by id
-        var indexById = function (objectArray, id) {
-                var i,
-                    index = -1;
-                for (i = 0; i < objectArray.length; i++) {
-                    if (objectArray[i].id === id) {
-                        index = i;
-                        break;
-                    }
-                }
 
-                return index;
-            },
-            getVisualizerDescriptor = function (path) {
-                try {
-                    var descriptor = FS.readFileSync(path, 'utf-8');
-                    descriptor = JSON.parse(descriptor);
-                    return descriptor;
-                } catch (e) {
-                    //we do not care much of the error just give back an empty array
-                    return [];
-                }
-            },
-            allVisualizersDescriptor = [],
-            i, j;
-
-        for (i = 0; i < gmeConfig.visualization.visualizerDescriptors.length; i++) {
-            var descriptor = getVisualizerDescriptor(gmeConfig.visualization.visualizerDescriptors[i]);
-            if (descriptor.length) {
-                for (j = 0; j < descriptor.length; j++) {
-                    var index = indexById(allVisualizersDescriptor, descriptor[j].id);
-                    if (index !== -1) {
-                        allVisualizersDescriptor[index] = descriptor[j];
-                    } else {
-                        allVisualizersDescriptor.push(descriptor[j]);
-                    }
-                }
-            }
-        }
-        return allVisualizersDescriptor;
-    }
 
     function setupExternalRestModules() {
         var restComponent,
@@ -501,8 +453,8 @@ function StandAloneServer(gmeConfig) {
         __sessionStore,
         __workerManager,
         __users = {},
-        //__googleAuthenticationSet = false,
-        //__canCheckToken = true,
+    //__googleAuthenticationSet = false,
+    //__canCheckToken = true,
         __httpServer = null,
         __logoutUrl = gmeConfig.authentication.logOutUrl || '/',
         __baseDir = requireJS.s.contexts._.config.baseUrl,// TODO: this is ugly
@@ -591,8 +543,8 @@ function StandAloneServer(gmeConfig) {
     __app.use(multipart({defer: true})); // required to upload files. (body parser should not be used!)
     __app.use(session({
         store: __sessionStore,
-        secret: gmeConfig.server.sessionCookieSecret,
-        key: gmeConfig.server.sessionCookieId,
+        secret: gmeConfig.server.sessionStore.cookieSecret,
+        key: gmeConfig.server.sessionStore.cookieKey,
         saveUninitialized: true,
         resave: true
     }));
@@ -641,9 +593,7 @@ function StandAloneServer(gmeConfig) {
     // Basic authentication
 
     logger.debug('creating login routing rules for the static server');
-    __app.get('/', ensureAuthenticated, function (req, res) {
-        expressFileSending(res, __clientBaseDir + '/index.html');
-    });
+    __app.get('/', ensureAuthenticated, Express.static(__clientBaseDir));
     __app.get('/logout', function (req, res) {
         res.clearCookie('webgme');
         req.logout();
@@ -651,10 +601,9 @@ function StandAloneServer(gmeConfig) {
         delete req.session.udmId;
         res.redirect(__logoutUrl);
     });
-    __app.get('/login', function (req, res) {
-        res.location('/login');
-        expressFileSending(res, __clientBaseDir + '/login.html');
-    });
+
+    __app.get('/login', Express.static(__clientBaseDir, {extensions: ['html'], index: false}));
+
     __app.post('/login', function (req, res, next) {
         var queryParams = [],
             url = URL.parse(req.url, true);
@@ -751,10 +700,25 @@ function StandAloneServer(gmeConfig) {
         });
     });
 
-    logger.debug('creating external library specific routing rules');
-    __app.get(/^\/extlib\/.*/, ensureAuthenticated, function (req, res) {
-        //first we try to give back the common extlib/modules
 
+    logger.debug('creating external library specific routing rules');
+    gmeConfig.server.extlibExcludes.forEach(function (regExStr) {
+        logger.debug('Adding exclude rule to "/extlib" path: ', regExStr);
+        excludeRegExs.push(new RegExp(regExStr));
+    });
+
+    __app.get(/^\/extlib\/.*/, ensureAuthenticated, function (req, res) {
+        var i;
+        for (i = 0; i < excludeRegExs.length; i += 1) {
+            if (excludeRegExs[i].test(req.url)) {
+                logger.warn('Request attempted to access excluded path "' + req.url + '", caught by "' +
+                    gmeConfig.server.extlibExcludes[i] + '" from gmeConfig.');
+                res.sendStatus(403);
+                return;
+            }
+        }
+
+        //first we try to give back the common extlib/modules
         var urlArray = req.path.split('/');
         urlArray[1] = '.';
         urlArray.shift();
@@ -773,173 +737,29 @@ function StandAloneServer(gmeConfig) {
     logger.debug('creating basic static content related routing rules');
     //static contents
     //javascripts - core and transportation related files //TODO: remove config, middleware and bin
-    __app.get(/^\/(common|config|bin|middleware)\/.*\.js$/, function (req, res) {
-        expressFileSending(res, Path.join(__baseDir, req.path));
-    });
+    __app.get(/^\/(common|config|bin|middleware)\/.*\.js$/, Express.static(__baseDir, {index: false}));
 
     //TODO remove this part as this is only temporary!!!
-    __app.get('/docs/*', function (req, res) {
-        expressFileSending(res, Path.join(__baseDir, '..', req.path));
-    });
-
+    __app.get('/docs/*', Express.static(Path.join(__baseDir, '..'), {index: false}));
 
     __app.use('/rest/blob', BlobServer.createExpressBlob(middlewareOpts));
 
     //client contents - js/html/css
-    //stuff that considered not protected
-    __app.get(/^\/.*\.(css|ico|ttf|woff|js|cur)$/, function (req, res) {
-        expressFileSending(res, Path.join(__clientBaseDir, req.path));
-    });
+    __app.get(/^\/.*\.(css|ico|ttf|woff|js|cur)$/, Express.static(__clientBaseDir));
 
 
-    __app.get(/^\/.*\.(_js|html|gif|png|bmp|svg|json|map)$/, ensureAuthenticated, function (req, res) {
-        //package.json
-        if (req.path === '/package.json') {
-            expressFileSending(res, Path.join(__baseDir, '..', req.path));
-        } else {
-            expressFileSending(res, Path.join(__clientBaseDir, req.path));
-        }
-    });
-
-    //logger.debug('creating token related routing rules');
-    //__app.get('/gettoken', ensureAuthenticated, function (req, res) {
-    //    if (gmeConfig.rest.secure) {
-    //        __gmeAuth.getToken(req.session.id, function (err, token) {
-    //            if (err) {
-    //                res.send(err);
-    //            } else {
-    //                res.send(token);
-    //            }
-    //        });
-    //    } else {
-    //        res.sendStatus(410); //special error for the interpreters to know there is no need for token
-    //    }
-    //});
-    //__app.get('/checktoken/:token', function (req, res) {
-    //    if (gmeConfig.authentication.enable === true) {
-    //        if (__canCheckToken === true) {
-    //            setTimeout(function () {
-    //                __canCheckToken = true;
-    //            }, 10000);
-    //            __canCheckToken = false;
-    //            __gmeAuth.checkToken(req.params.token, function (isValid) {
-    //                if (isValid === true) {
-    //                    res.sendStatus(200);
-    //                } else {
-    //                    res.sendStatus(403);
-    //                }
-    //            });
-    //        } else {
-    //            res.sendStatus(403);
-    //        }
-    //    } else {
-    //        res.sendStatus(410); //special error for the interpreters to know there is no need for token
-    //    }
-    //});
+    __app.get('/package.json', ensureAuthenticated, Express.static(Path.join(__baseDir, '..')));
+    __app.get(/^\/.*\.(_js|html|gif|png|bmp|svg|json|map)$/, ensureAuthenticated, Express.static(__clientBaseDir));
 
     logger.debug('creating API related routing rules');
 
     apiReady = api.createAPI(__app, '/api', middlewareOpts);
 
-
-    logger.debug('creating server-worker related routing rules');
-
-    function sendSimpleResult(res, resultId, filename) {
-        logger.debug('worker/simpleResult requested, urlArray', {metadata: {id: resultId, filename: filename}});
-
-        __workerManager.result(resultId, function (err, result) {
-            if (err) {
-                logger.error('worker/simpleResult err', err);
-                res.sendStatus(500);
-            } else {
-                res.header('Content-Disposition', 'attachment;filename=\'' + filename + '\'');
-                res.json(result);
-            }
-        });
-    }
-
-    __app.get('/worker/simpleResult/:resultId', function (req, res) {
-        var filename = 'simpleResult-' + req.params.resultId + '.json';
-        sendSimpleResult(res, req.params.resultId, filename);
+    // everything else is 404
+    logger.debug('creating all other request rule - error 404 -');
+    __app.use('*', function (req, res) {
+        res.sendStatus(404);
     });
-
-    // FIXME: filename should be in query string
-    __app.get('/worker/simpleResult/:resultId/:filename', function (req, res) {
-        var filename = req.params.filename;
-        if (filename.indexOf('.json') === -1) {
-            filename += '.json';
-        }
-        sendSimpleResult(res, req.params.resultId, filename);
-    });
-
-
-    logger.debug('creating list asset rules');
-    __app.get('/listAllDecorators', ensureAuthenticated, function (req, res) {
-        var names = []; //TODO we add everything in the directories!!!
-        for (var i = 0; i < gmeConfig.visualization.decoratorPaths.length; i++) {
-            var additional = FS.readdirSync(gmeConfig.visualization.decoratorPaths[i]);
-            for (var j = 0; j < additional.length; j++) {
-                if (names.indexOf(additional[j]) === -1) {
-                    if (isGoodExtraAsset(additional[j],
-                            Path.join(gmeConfig.visualization.decoratorPaths[i],
-                                additional[j]))) {
-                        names.push(additional[j]);
-                    }
-                }
-            }
-        }
-        res.status(200);
-        res.setHeader('Content-type', 'application/json');
-        res.end(JSON.stringify({allDecorators: names}));
-    });
-
-    __app.get('/listAllPlugins', ensureAuthenticated, function (req, res) {
-        var names = []; //we add only the '*.js' files from the directories
-        for (var i = 0; i < gmeConfig.plugin.basePaths.length; i++) {
-            var additional = FS.readdirSync(gmeConfig.plugin.basePaths[i]);
-            for (var j = 0; j < additional.length; j++) {
-                if (names.indexOf(additional[j]) === -1) {
-                    if (isGoodExtraAsset(additional[j], Path.join(gmeConfig.plugin.basePaths[i], additional[j]))) {
-                        names.push(additional[j]);
-                    }
-                }
-            }
-        }
-        res.status(200);
-        res.setHeader('Content-type', 'application/json');
-        res.end(JSON.stringify({allPlugins: names}));
-    });
-
-    __app.get('/listAllSeeds', ensureAuthenticated, function (req, res) {
-        var names = [],
-            result = [],
-            seedName,
-            i,
-            j;
-        if (gmeConfig.seedProjects.enable === true) {
-            for (i = 0; i < gmeConfig.seedProjects.basePaths.length; i++) {
-                names = FS.readdirSync(gmeConfig.seedProjects.basePaths[i]);
-                for (j = 0; j < names.length; j++) {
-                    seedName = Path.basename(names[j], '.json');
-                    if (result.indexOf(seedName) === -1) {
-                        result.push(seedName);
-                    }
-                }
-            }
-        }
-        logger.debug('/listAllSeeds', {metadata: result});
-        res.status(200);
-        res.setHeader('Content-type', 'application/json');
-        res.end(JSON.stringify({allSeeds: result.sort()}));
-    });
-
-    __app.get('/listAllVisualizerDescriptors', ensureAuthenticated, function (req, res) {
-        var allVisualizerDescriptors = getVisualizersDescriptor();
-        res.status(200);
-        res.setHeader('Content-type', 'application/javascript');
-        res.end('define([],function(){ return ' + JSON.stringify(allVisualizerDescriptors) + ';});');
-    });
-
 
     // catches all next(new Error()) from previous rules, you can set res.status() before you call next(new Error())
     __app.use(function (err, req, res, next) {
@@ -949,13 +769,6 @@ function StandAloneServer(gmeConfig) {
         res.sendStatus(res.statusCode);
         //res.send(err.stack ? err.stack : err); // FIXME: in dev mode
     });
-
-    // everything else is 404
-    logger.debug('creating all other request rule - error 404 -');
-    __app.use('*', function (req, res) {
-        res.sendStatus(404);
-    });
-
 
     logger.debug('gmeConfig of webgme server', {metadata: gmeConfig});
     var networkIfs = OS.networkInterfaces(),

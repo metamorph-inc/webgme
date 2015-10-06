@@ -7,2097 +7,7 @@ GME.classes = GME.classes || {};
 // property to access build in dependencies
 GME.utils = GME.utils || {};
 
-(function(){/** vim: et:ts=4:sw=4:sts=4
- * @license RequireJS 2.1.18 Copyright (c) 2010-2015, The Dojo Foundation All Rights Reserved.
- * Available via the MIT or new BSD license.
- * see: http://github.com/jrburke/requirejs for details
- */
-//Not using strict: uneven strict support in browsers, #392, and causes
-//problems with requirejs.exec()/transpiler plugins that may not be strict.
-/*jslint regexp: true, nomen: true, sloppy: true */
-/*global window, navigator, document, importScripts, setTimeout, opera */
-
-var requirejs, require, define;
-(function (global) {
-    var req, s, head, baseElement, dataMain, src,
-        interactiveScript, currentlyAddingScript, mainScript, subPath,
-        version = '2.1.18',
-        commentRegExp = /(\/\*([\s\S]*?)\*\/|([^:]|^)\/\/(.*)$)/mg,
-        cjsRequireRegExp = /[^.]\s*require\s*\(\s*["']([^'"\s]+)["']\s*\)/g,
-        jsSuffixRegExp = /\.js$/,
-        currDirRegExp = /^\.\//,
-        op = Object.prototype,
-        ostring = op.toString,
-        hasOwn = op.hasOwnProperty,
-        ap = Array.prototype,
-        apsp = ap.splice,
-        isBrowser = !!(typeof window !== 'undefined' && typeof navigator !== 'undefined' && window.document),
-        isWebWorker = !isBrowser && typeof importScripts !== 'undefined',
-        //PS3 indicates loaded and complete, but need to wait for complete
-        //specifically. Sequence is 'loading', 'loaded', execution,
-        // then 'complete'. The UA check is unfortunate, but not sure how
-        //to feature test w/o causing perf issues.
-        readyRegExp = isBrowser && navigator.platform === 'PLAYSTATION 3' ?
-                      /^complete$/ : /^(complete|loaded)$/,
-        defContextName = '_',
-        //Oh the tragedy, detecting opera. See the usage of isOpera for reason.
-        isOpera = typeof opera !== 'undefined' && opera.toString() === '[object Opera]',
-        contexts = {},
-        cfg = {},
-        globalDefQueue = [],
-        useInteractive = false;
-
-    function isFunction(it) {
-        return ostring.call(it) === '[object Function]';
-    }
-
-    function isArray(it) {
-        return ostring.call(it) === '[object Array]';
-    }
-
-    /**
-     * Helper function for iterating over an array. If the func returns
-     * a true value, it will break out of the loop.
-     */
-    function each(ary, func) {
-        if (ary) {
-            var i;
-            for (i = 0; i < ary.length; i += 1) {
-                if (ary[i] && func(ary[i], i, ary)) {
-                    break;
-                }
-            }
-        }
-    }
-
-    /**
-     * Helper function for iterating over an array backwards. If the func
-     * returns a true value, it will break out of the loop.
-     */
-    function eachReverse(ary, func) {
-        if (ary) {
-            var i;
-            for (i = ary.length - 1; i > -1; i -= 1) {
-                if (ary[i] && func(ary[i], i, ary)) {
-                    break;
-                }
-            }
-        }
-    }
-
-    function hasProp(obj, prop) {
-        return hasOwn.call(obj, prop);
-    }
-
-    function getOwn(obj, prop) {
-        return hasProp(obj, prop) && obj[prop];
-    }
-
-    /**
-     * Cycles over properties in an object and calls a function for each
-     * property value. If the function returns a truthy value, then the
-     * iteration is stopped.
-     */
-    function eachProp(obj, func) {
-        var prop;
-        for (prop in obj) {
-            if (hasProp(obj, prop)) {
-                if (func(obj[prop], prop)) {
-                    break;
-                }
-            }
-        }
-    }
-
-    /**
-     * Simple function to mix in properties from source into target,
-     * but only if target does not already have a property of the same name.
-     */
-    function mixin(target, source, force, deepStringMixin) {
-        if (source) {
-            eachProp(source, function (value, prop) {
-                if (force || !hasProp(target, prop)) {
-                    if (deepStringMixin && typeof value === 'object' && value &&
-                        !isArray(value) && !isFunction(value) &&
-                        !(value instanceof RegExp)) {
-
-                        if (!target[prop]) {
-                            target[prop] = {};
-                        }
-                        mixin(target[prop], value, force, deepStringMixin);
-                    } else {
-                        target[prop] = value;
-                    }
-                }
-            });
-        }
-        return target;
-    }
-
-    //Similar to Function.prototype.bind, but the 'this' object is specified
-    //first, since it is easier to read/figure out what 'this' will be.
-    function bind(obj, fn) {
-        return function () {
-            return fn.apply(obj, arguments);
-        };
-    }
-
-    function scripts() {
-        return document.getElementsByTagName('script');
-    }
-
-    function defaultOnError(err) {
-        throw err;
-    }
-
-    //Allow getting a global that is expressed in
-    //dot notation, like 'a.b.c'.
-    function getGlobal(value) {
-        if (!value) {
-            return value;
-        }
-        var g = global;
-        each(value.split('.'), function (part) {
-            g = g[part];
-        });
-        return g;
-    }
-
-    /**
-     * Constructs an error with a pointer to an URL with more information.
-     * @param {String} id the error ID that maps to an ID on a web page.
-     * @param {String} message human readable error.
-     * @param {Error} [err] the original error, if there is one.
-     *
-     * @returns {Error}
-     */
-    function makeError(id, msg, err, requireModules) {
-        var e = new Error(msg + '\nhttp://requirejs.org/docs/errors.html#' + id);
-        e.requireType = id;
-        e.requireModules = requireModules;
-        if (err) {
-            e.originalError = err;
-        }
-        return e;
-    }
-
-    if (typeof define !== 'undefined') {
-        //If a define is already in play via another AMD loader,
-        //do not overwrite.
-        return;
-    }
-
-    if (typeof requirejs !== 'undefined') {
-        if (isFunction(requirejs)) {
-            //Do not overwrite an existing requirejs instance.
-            return;
-        }
-        cfg = requirejs;
-        requirejs = undefined;
-    }
-
-    //Allow for a require config object
-    if (typeof require !== 'undefined' && !isFunction(require)) {
-        //assume it is a config object.
-        cfg = require;
-        require = undefined;
-    }
-
-    function newContext(contextName) {
-        var inCheckLoaded, Module, context, handlers,
-            checkLoadedTimeoutId,
-            config = {
-                //Defaults. Do not set a default for map
-                //config to speed up normalize(), which
-                //will run faster if there is no default.
-                waitSeconds: 7,
-                baseUrl: './',
-                paths: {},
-                bundles: {},
-                pkgs: {},
-                shim: {},
-                config: {}
-            },
-            registry = {},
-            //registry of just enabled modules, to speed
-            //cycle breaking code when lots of modules
-            //are registered, but not activated.
-            enabledRegistry = {},
-            undefEvents = {},
-            defQueue = [],
-            defined = {},
-            urlFetched = {},
-            bundlesMap = {},
-            requireCounter = 1,
-            unnormalizedCounter = 1;
-
-        /**
-         * Trims the . and .. from an array of path segments.
-         * It will keep a leading path segment if a .. will become
-         * the first path segment, to help with module name lookups,
-         * which act like paths, but can be remapped. But the end result,
-         * all paths that use this function should look normalized.
-         * NOTE: this method MODIFIES the input array.
-         * @param {Array} ary the array of path segments.
-         */
-        function trimDots(ary) {
-            var i, part;
-            for (i = 0; i < ary.length; i++) {
-                part = ary[i];
-                if (part === '.') {
-                    ary.splice(i, 1);
-                    i -= 1;
-                } else if (part === '..') {
-                    // If at the start, or previous value is still ..,
-                    // keep them so that when converted to a path it may
-                    // still work when converted to a path, even though
-                    // as an ID it is less than ideal. In larger point
-                    // releases, may be better to just kick out an error.
-                    if (i === 0 || (i === 1 && ary[2] === '..') || ary[i - 1] === '..') {
-                        continue;
-                    } else if (i > 0) {
-                        ary.splice(i - 1, 2);
-                        i -= 2;
-                    }
-                }
-            }
-        }
-
-        /**
-         * Given a relative module name, like ./something, normalize it to
-         * a real name that can be mapped to a path.
-         * @param {String} name the relative name
-         * @param {String} baseName a real name that the name arg is relative
-         * to.
-         * @param {Boolean} applyMap apply the map config to the value. Should
-         * only be done if this normalization is for a dependency ID.
-         * @returns {String} normalized name
-         */
-        function normalize(name, baseName, applyMap) {
-            var pkgMain, mapValue, nameParts, i, j, nameSegment, lastIndex,
-                foundMap, foundI, foundStarMap, starI, normalizedBaseParts,
-                baseParts = (baseName && baseName.split('/')),
-                map = config.map,
-                starMap = map && map['*'];
-
-            //Adjust any relative paths.
-            if (name) {
-                name = name.split('/');
-                lastIndex = name.length - 1;
-
-                // If wanting node ID compatibility, strip .js from end
-                // of IDs. Have to do this here, and not in nameToUrl
-                // because node allows either .js or non .js to map
-                // to same file.
-                if (config.nodeIdCompat && jsSuffixRegExp.test(name[lastIndex])) {
-                    name[lastIndex] = name[lastIndex].replace(jsSuffixRegExp, '');
-                }
-
-                // Starts with a '.' so need the baseName
-                if (name[0].charAt(0) === '.' && baseParts) {
-                    //Convert baseName to array, and lop off the last part,
-                    //so that . matches that 'directory' and not name of the baseName's
-                    //module. For instance, baseName of 'one/two/three', maps to
-                    //'one/two/three.js', but we want the directory, 'one/two' for
-                    //this normalization.
-                    normalizedBaseParts = baseParts.slice(0, baseParts.length - 1);
-                    name = normalizedBaseParts.concat(name);
-                }
-
-                trimDots(name);
-                name = name.join('/');
-            }
-
-            //Apply map config if available.
-            if (applyMap && map && (baseParts || starMap)) {
-                nameParts = name.split('/');
-
-                outerLoop: for (i = nameParts.length; i > 0; i -= 1) {
-                    nameSegment = nameParts.slice(0, i).join('/');
-
-                    if (baseParts) {
-                        //Find the longest baseName segment match in the config.
-                        //So, do joins on the biggest to smallest lengths of baseParts.
-                        for (j = baseParts.length; j > 0; j -= 1) {
-                            mapValue = getOwn(map, baseParts.slice(0, j).join('/'));
-
-                            //baseName segment has config, find if it has one for
-                            //this name.
-                            if (mapValue) {
-                                mapValue = getOwn(mapValue, nameSegment);
-                                if (mapValue) {
-                                    //Match, update name to the new value.
-                                    foundMap = mapValue;
-                                    foundI = i;
-                                    break outerLoop;
-                                }
-                            }
-                        }
-                    }
-
-                    //Check for a star map match, but just hold on to it,
-                    //if there is a shorter segment match later in a matching
-                    //config, then favor over this star map.
-                    if (!foundStarMap && starMap && getOwn(starMap, nameSegment)) {
-                        foundStarMap = getOwn(starMap, nameSegment);
-                        starI = i;
-                    }
-                }
-
-                if (!foundMap && foundStarMap) {
-                    foundMap = foundStarMap;
-                    foundI = starI;
-                }
-
-                if (foundMap) {
-                    nameParts.splice(0, foundI, foundMap);
-                    name = nameParts.join('/');
-                }
-            }
-
-            // If the name points to a package's name, use
-            // the package main instead.
-            pkgMain = getOwn(config.pkgs, name);
-
-            return pkgMain ? pkgMain : name;
-        }
-
-        function removeScript(name) {
-            if (isBrowser) {
-                each(scripts(), function (scriptNode) {
-                    if (scriptNode.getAttribute('data-requiremodule') === name &&
-                            scriptNode.getAttribute('data-requirecontext') === context.contextName) {
-                        scriptNode.parentNode.removeChild(scriptNode);
-                        return true;
-                    }
-                });
-            }
-        }
-
-        function hasPathFallback(id) {
-            var pathConfig = getOwn(config.paths, id);
-            if (pathConfig && isArray(pathConfig) && pathConfig.length > 1) {
-                //Pop off the first array value, since it failed, and
-                //retry
-                pathConfig.shift();
-                context.require.undef(id);
-
-                //Custom require that does not do map translation, since
-                //ID is "absolute", already mapped/resolved.
-                context.makeRequire(null, {
-                    skipMap: true
-                })([id]);
-
-                return true;
-            }
-        }
-
-        //Turns a plugin!resource to [plugin, resource]
-        //with the plugin being undefined if the name
-        //did not have a plugin prefix.
-        function splitPrefix(name) {
-            var prefix,
-                index = name ? name.indexOf('!') : -1;
-            if (index > -1) {
-                prefix = name.substring(0, index);
-                name = name.substring(index + 1, name.length);
-            }
-            return [prefix, name];
-        }
-
-        /**
-         * Creates a module mapping that includes plugin prefix, module
-         * name, and path. If parentModuleMap is provided it will
-         * also normalize the name via require.normalize()
-         *
-         * @param {String} name the module name
-         * @param {String} [parentModuleMap] parent module map
-         * for the module name, used to resolve relative names.
-         * @param {Boolean} isNormalized: is the ID already normalized.
-         * This is true if this call is done for a define() module ID.
-         * @param {Boolean} applyMap: apply the map config to the ID.
-         * Should only be true if this map is for a dependency.
-         *
-         * @returns {Object}
-         */
-        function makeModuleMap(name, parentModuleMap, isNormalized, applyMap) {
-            var url, pluginModule, suffix, nameParts,
-                prefix = null,
-                parentName = parentModuleMap ? parentModuleMap.name : null,
-                originalName = name,
-                isDefine = true,
-                normalizedName = '';
-
-            //If no name, then it means it is a require call, generate an
-            //internal name.
-            if (!name) {
-                isDefine = false;
-                name = '_@r' + (requireCounter += 1);
-            }
-
-            nameParts = splitPrefix(name);
-            prefix = nameParts[0];
-            name = nameParts[1];
-
-            if (prefix) {
-                prefix = normalize(prefix, parentName, applyMap);
-                pluginModule = getOwn(defined, prefix);
-            }
-
-            //Account for relative paths if there is a base name.
-            if (name) {
-                if (prefix) {
-                    if (pluginModule && pluginModule.normalize) {
-                        //Plugin is loaded, use its normalize method.
-                        normalizedName = pluginModule.normalize(name, function (name) {
-                            return normalize(name, parentName, applyMap);
-                        });
-                    } else {
-                        // If nested plugin references, then do not try to
-                        // normalize, as it will not normalize correctly. This
-                        // places a restriction on resourceIds, and the longer
-                        // term solution is not to normalize until plugins are
-                        // loaded and all normalizations to allow for async
-                        // loading of a loader plugin. But for now, fixes the
-                        // common uses. Details in #1131
-                        normalizedName = name.indexOf('!') === -1 ?
-                                         normalize(name, parentName, applyMap) :
-                                         name;
-                    }
-                } else {
-                    //A regular module.
-                    normalizedName = normalize(name, parentName, applyMap);
-
-                    //Normalized name may be a plugin ID due to map config
-                    //application in normalize. The map config values must
-                    //already be normalized, so do not need to redo that part.
-                    nameParts = splitPrefix(normalizedName);
-                    prefix = nameParts[0];
-                    normalizedName = nameParts[1];
-                    isNormalized = true;
-
-                    url = context.nameToUrl(normalizedName);
-                }
-            }
-
-            //If the id is a plugin id that cannot be determined if it needs
-            //normalization, stamp it with a unique ID so two matching relative
-            //ids that may conflict can be separate.
-            suffix = prefix && !pluginModule && !isNormalized ?
-                     '_unnormalized' + (unnormalizedCounter += 1) :
-                     '';
-
-            return {
-                prefix: prefix,
-                name: normalizedName,
-                parentMap: parentModuleMap,
-                unnormalized: !!suffix,
-                url: url,
-                originalName: originalName,
-                isDefine: isDefine,
-                id: (prefix ?
-                        prefix + '!' + normalizedName :
-                        normalizedName) + suffix
-            };
-        }
-
-        function getModule(depMap) {
-            var id = depMap.id,
-                mod = getOwn(registry, id);
-
-            if (!mod) {
-                mod = registry[id] = new context.Module(depMap);
-            }
-
-            return mod;
-        }
-
-        function on(depMap, name, fn) {
-            var id = depMap.id,
-                mod = getOwn(registry, id);
-
-            if (hasProp(defined, id) &&
-                    (!mod || mod.defineEmitComplete)) {
-                if (name === 'defined') {
-                    fn(defined[id]);
-                }
-            } else {
-                mod = getModule(depMap);
-                if (mod.error && name === 'error') {
-                    fn(mod.error);
-                } else {
-                    mod.on(name, fn);
-                }
-            }
-        }
-
-        function onError(err, errback) {
-            var ids = err.requireModules,
-                notified = false;
-
-            if (errback) {
-                errback(err);
-            } else {
-                each(ids, function (id) {
-                    var mod = getOwn(registry, id);
-                    if (mod) {
-                        //Set error on module, so it skips timeout checks.
-                        mod.error = err;
-                        if (mod.events.error) {
-                            notified = true;
-                            mod.emit('error', err);
-                        }
-                    }
-                });
-
-                if (!notified) {
-                    req.onError(err);
-                }
-            }
-        }
-
-        /**
-         * Internal method to transfer globalQueue items to this context's
-         * defQueue.
-         */
-        function takeGlobalQueue() {
-            //Push all the globalDefQueue items into the context's defQueue
-            if (globalDefQueue.length) {
-                //Array splice in the values since the context code has a
-                //local var ref to defQueue, so cannot just reassign the one
-                //on context.
-                apsp.apply(defQueue,
-                           [defQueue.length, 0].concat(globalDefQueue));
-                globalDefQueue = [];
-            }
-        }
-
-        handlers = {
-            'require': function (mod) {
-                if (mod.require) {
-                    return mod.require;
-                } else {
-                    return (mod.require = context.makeRequire(mod.map));
-                }
-            },
-            'exports': function (mod) {
-                mod.usingExports = true;
-                if (mod.map.isDefine) {
-                    if (mod.exports) {
-                        return (defined[mod.map.id] = mod.exports);
-                    } else {
-                        return (mod.exports = defined[mod.map.id] = {});
-                    }
-                }
-            },
-            'module': function (mod) {
-                if (mod.module) {
-                    return mod.module;
-                } else {
-                    return (mod.module = {
-                        id: mod.map.id,
-                        uri: mod.map.url,
-                        config: function () {
-                            return getOwn(config.config, mod.map.id) || {};
-                        },
-                        exports: mod.exports || (mod.exports = {})
-                    });
-                }
-            }
-        };
-
-        function cleanRegistry(id) {
-            //Clean up machinery used for waiting modules.
-            delete registry[id];
-            delete enabledRegistry[id];
-        }
-
-        function breakCycle(mod, traced, processed) {
-            var id = mod.map.id;
-
-            if (mod.error) {
-                mod.emit('error', mod.error);
-            } else {
-                traced[id] = true;
-                each(mod.depMaps, function (depMap, i) {
-                    var depId = depMap.id,
-                        dep = getOwn(registry, depId);
-
-                    //Only force things that have not completed
-                    //being defined, so still in the registry,
-                    //and only if it has not been matched up
-                    //in the module already.
-                    if (dep && !mod.depMatched[i] && !processed[depId]) {
-                        if (getOwn(traced, depId)) {
-                            mod.defineDep(i, defined[depId]);
-                            mod.check(); //pass false?
-                        } else {
-                            breakCycle(dep, traced, processed);
-                        }
-                    }
-                });
-                processed[id] = true;
-            }
-        }
-
-        function checkLoaded() {
-            var err, usingPathFallback,
-                waitInterval = config.waitSeconds * 1000,
-                //It is possible to disable the wait interval by using waitSeconds of 0.
-                expired = waitInterval && (context.startTime + waitInterval) < new Date().getTime(),
-                noLoads = [],
-                reqCalls = [],
-                stillLoading = false,
-                needCycleCheck = true;
-
-            //Do not bother if this call was a result of a cycle break.
-            if (inCheckLoaded) {
-                return;
-            }
-
-            inCheckLoaded = true;
-
-            //Figure out the state of all the modules.
-            eachProp(enabledRegistry, function (mod) {
-                var map = mod.map,
-                    modId = map.id;
-
-                //Skip things that are not enabled or in error state.
-                if (!mod.enabled) {
-                    return;
-                }
-
-                if (!map.isDefine) {
-                    reqCalls.push(mod);
-                }
-
-                if (!mod.error) {
-                    //If the module should be executed, and it has not
-                    //been inited and time is up, remember it.
-                    if (!mod.inited && expired) {
-                        if (hasPathFallback(modId)) {
-                            usingPathFallback = true;
-                            stillLoading = true;
-                        } else {
-                            noLoads.push(modId);
-                            removeScript(modId);
-                        }
-                    } else if (!mod.inited && mod.fetched && map.isDefine) {
-                        stillLoading = true;
-                        if (!map.prefix) {
-                            //No reason to keep looking for unfinished
-                            //loading. If the only stillLoading is a
-                            //plugin resource though, keep going,
-                            //because it may be that a plugin resource
-                            //is waiting on a non-plugin cycle.
-                            return (needCycleCheck = false);
-                        }
-                    }
-                }
-            });
-
-            if (expired && noLoads.length) {
-                //If wait time expired, throw error of unloaded modules.
-                err = makeError('timeout', 'Load timeout for modules: ' + noLoads, null, noLoads);
-                err.contextName = context.contextName;
-                return onError(err);
-            }
-
-            //Not expired, check for a cycle.
-            if (needCycleCheck) {
-                each(reqCalls, function (mod) {
-                    breakCycle(mod, {}, {});
-                });
-            }
-
-            //If still waiting on loads, and the waiting load is something
-            //other than a plugin resource, or there are still outstanding
-            //scripts, then just try back later.
-            if ((!expired || usingPathFallback) && stillLoading) {
-                //Something is still waiting to load. Wait for it, but only
-                //if a timeout is not already in effect.
-                if ((isBrowser || isWebWorker) && !checkLoadedTimeoutId) {
-                    checkLoadedTimeoutId = setTimeout(function () {
-                        checkLoadedTimeoutId = 0;
-                        checkLoaded();
-                    }, 50);
-                }
-            }
-
-            inCheckLoaded = false;
-        }
-
-        Module = function (map) {
-            this.events = getOwn(undefEvents, map.id) || {};
-            this.map = map;
-            this.shim = getOwn(config.shim, map.id);
-            this.depExports = [];
-            this.depMaps = [];
-            this.depMatched = [];
-            this.pluginMaps = {};
-            this.depCount = 0;
-
-            /* this.exports this.factory
-               this.depMaps = [],
-               this.enabled, this.fetched
-            */
-        };
-
-        Module.prototype = {
-            init: function (depMaps, factory, errback, options) {
-                options = options || {};
-
-                //Do not do more inits if already done. Can happen if there
-                //are multiple define calls for the same module. That is not
-                //a normal, common case, but it is also not unexpected.
-                if (this.inited) {
-                    return;
-                }
-
-                this.factory = factory;
-
-                if (errback) {
-                    //Register for errors on this module.
-                    this.on('error', errback);
-                } else if (this.events.error) {
-                    //If no errback already, but there are error listeners
-                    //on this module, set up an errback to pass to the deps.
-                    errback = bind(this, function (err) {
-                        this.emit('error', err);
-                    });
-                }
-
-                //Do a copy of the dependency array, so that
-                //source inputs are not modified. For example
-                //"shim" deps are passed in here directly, and
-                //doing a direct modification of the depMaps array
-                //would affect that config.
-                this.depMaps = depMaps && depMaps.slice(0);
-
-                this.errback = errback;
-
-                //Indicate this module has be initialized
-                this.inited = true;
-
-                this.ignore = options.ignore;
-
-                //Could have option to init this module in enabled mode,
-                //or could have been previously marked as enabled. However,
-                //the dependencies are not known until init is called. So
-                //if enabled previously, now trigger dependencies as enabled.
-                if (options.enabled || this.enabled) {
-                    //Enable this module and dependencies.
-                    //Will call this.check()
-                    this.enable();
-                } else {
-                    this.check();
-                }
-            },
-
-            defineDep: function (i, depExports) {
-                //Because of cycles, defined callback for a given
-                //export can be called more than once.
-                if (!this.depMatched[i]) {
-                    this.depMatched[i] = true;
-                    this.depCount -= 1;
-                    this.depExports[i] = depExports;
-                }
-            },
-
-            fetch: function () {
-                if (this.fetched) {
-                    return;
-                }
-                this.fetched = true;
-
-                context.startTime = (new Date()).getTime();
-
-                var map = this.map;
-
-                //If the manager is for a plugin managed resource,
-                //ask the plugin to load it now.
-                if (this.shim) {
-                    context.makeRequire(this.map, {
-                        enableBuildCallback: true
-                    })(this.shim.deps || [], bind(this, function () {
-                        return map.prefix ? this.callPlugin() : this.load();
-                    }));
-                } else {
-                    //Regular dependency.
-                    return map.prefix ? this.callPlugin() : this.load();
-                }
-            },
-
-            load: function () {
-                var url = this.map.url;
-
-                //Regular dependency.
-                if (!urlFetched[url]) {
-                    urlFetched[url] = true;
-                    context.load(this.map.id, url);
-                }
-            },
-
-            /**
-             * Checks if the module is ready to define itself, and if so,
-             * define it.
-             */
-            check: function () {
-                if (!this.enabled || this.enabling) {
-                    return;
-                }
-
-                var err, cjsModule,
-                    id = this.map.id,
-                    depExports = this.depExports,
-                    exports = this.exports,
-                    factory = this.factory;
-
-                if (!this.inited) {
-                    this.fetch();
-                } else if (this.error) {
-                    this.emit('error', this.error);
-                } else if (!this.defining) {
-                    //The factory could trigger another require call
-                    //that would result in checking this module to
-                    //define itself again. If already in the process
-                    //of doing that, skip this work.
-                    this.defining = true;
-
-                    if (this.depCount < 1 && !this.defined) {
-                        if (isFunction(factory)) {
-                            //If there is an error listener, favor passing
-                            //to that instead of throwing an error. However,
-                            //only do it for define()'d  modules. require
-                            //errbacks should not be called for failures in
-                            //their callbacks (#699). However if a global
-                            //onError is set, use that.
-                            if ((this.events.error && this.map.isDefine) ||
-                                req.onError !== defaultOnError) {
-                                try {
-                                    exports = context.execCb(id, factory, depExports, exports);
-                                } catch (e) {
-                                    err = e;
-                                }
-                            } else {
-                                exports = context.execCb(id, factory, depExports, exports);
-                            }
-
-                            // Favor return value over exports. If node/cjs in play,
-                            // then will not have a return value anyway. Favor
-                            // module.exports assignment over exports object.
-                            if (this.map.isDefine && exports === undefined) {
-                                cjsModule = this.module;
-                                if (cjsModule) {
-                                    exports = cjsModule.exports;
-                                } else if (this.usingExports) {
-                                    //exports already set the defined value.
-                                    exports = this.exports;
-                                }
-                            }
-
-                            if (err) {
-                                err.requireMap = this.map;
-                                err.requireModules = this.map.isDefine ? [this.map.id] : null;
-                                err.requireType = this.map.isDefine ? 'define' : 'require';
-                                return onError((this.error = err));
-                            }
-
-                        } else {
-                            //Just a literal value
-                            exports = factory;
-                        }
-
-                        this.exports = exports;
-
-                        if (this.map.isDefine && !this.ignore) {
-                            defined[id] = exports;
-
-                            if (req.onResourceLoad) {
-                                req.onResourceLoad(context, this.map, this.depMaps);
-                            }
-                        }
-
-                        //Clean up
-                        cleanRegistry(id);
-
-                        this.defined = true;
-                    }
-
-                    //Finished the define stage. Allow calling check again
-                    //to allow define notifications below in the case of a
-                    //cycle.
-                    this.defining = false;
-
-                    if (this.defined && !this.defineEmitted) {
-                        this.defineEmitted = true;
-                        this.emit('defined', this.exports);
-                        this.defineEmitComplete = true;
-                    }
-
-                }
-            },
-
-            callPlugin: function () {
-                var map = this.map,
-                    id = map.id,
-                    //Map already normalized the prefix.
-                    pluginMap = makeModuleMap(map.prefix);
-
-                //Mark this as a dependency for this plugin, so it
-                //can be traced for cycles.
-                this.depMaps.push(pluginMap);
-
-                on(pluginMap, 'defined', bind(this, function (plugin) {
-                    var load, normalizedMap, normalizedMod,
-                        bundleId = getOwn(bundlesMap, this.map.id),
-                        name = this.map.name,
-                        parentName = this.map.parentMap ? this.map.parentMap.name : null,
-                        localRequire = context.makeRequire(map.parentMap, {
-                            enableBuildCallback: true
-                        });
-
-                    //If current map is not normalized, wait for that
-                    //normalized name to load instead of continuing.
-                    if (this.map.unnormalized) {
-                        //Normalize the ID if the plugin allows it.
-                        if (plugin.normalize) {
-                            name = plugin.normalize(name, function (name) {
-                                return normalize(name, parentName, true);
-                            }) || '';
-                        }
-
-                        //prefix and name should already be normalized, no need
-                        //for applying map config again either.
-                        normalizedMap = makeModuleMap(map.prefix + '!' + name,
-                                                      this.map.parentMap);
-                        on(normalizedMap,
-                            'defined', bind(this, function (value) {
-                                this.init([], function () { return value; }, null, {
-                                    enabled: true,
-                                    ignore: true
-                                });
-                            }));
-
-                        normalizedMod = getOwn(registry, normalizedMap.id);
-                        if (normalizedMod) {
-                            //Mark this as a dependency for this plugin, so it
-                            //can be traced for cycles.
-                            this.depMaps.push(normalizedMap);
-
-                            if (this.events.error) {
-                                normalizedMod.on('error', bind(this, function (err) {
-                                    this.emit('error', err);
-                                }));
-                            }
-                            normalizedMod.enable();
-                        }
-
-                        return;
-                    }
-
-                    //If a paths config, then just load that file instead to
-                    //resolve the plugin, as it is built into that paths layer.
-                    if (bundleId) {
-                        this.map.url = context.nameToUrl(bundleId);
-                        this.load();
-                        return;
-                    }
-
-                    load = bind(this, function (value) {
-                        this.init([], function () { return value; }, null, {
-                            enabled: true
-                        });
-                    });
-
-                    load.error = bind(this, function (err) {
-                        this.inited = true;
-                        this.error = err;
-                        err.requireModules = [id];
-
-                        //Remove temp unnormalized modules for this module,
-                        //since they will never be resolved otherwise now.
-                        eachProp(registry, function (mod) {
-                            if (mod.map.id.indexOf(id + '_unnormalized') === 0) {
-                                cleanRegistry(mod.map.id);
-                            }
-                        });
-
-                        onError(err);
-                    });
-
-                    //Allow plugins to load other code without having to know the
-                    //context or how to 'complete' the load.
-                    load.fromText = bind(this, function (text, textAlt) {
-                        /*jslint evil: true */
-                        var moduleName = map.name,
-                            moduleMap = makeModuleMap(moduleName),
-                            hasInteractive = useInteractive;
-
-                        //As of 2.1.0, support just passing the text, to reinforce
-                        //fromText only being called once per resource. Still
-                        //support old style of passing moduleName but discard
-                        //that moduleName in favor of the internal ref.
-                        if (textAlt) {
-                            text = textAlt;
-                        }
-
-                        //Turn off interactive script matching for IE for any define
-                        //calls in the text, then turn it back on at the end.
-                        if (hasInteractive) {
-                            useInteractive = false;
-                        }
-
-                        //Prime the system by creating a module instance for
-                        //it.
-                        getModule(moduleMap);
-
-                        //Transfer any config to this other module.
-                        if (hasProp(config.config, id)) {
-                            config.config[moduleName] = config.config[id];
-                        }
-
-                        try {
-                            req.exec(text);
-                        } catch (e) {
-                            return onError(makeError('fromtexteval',
-                                             'fromText eval for ' + id +
-                                            ' failed: ' + e,
-                                             e,
-                                             [id]));
-                        }
-
-                        if (hasInteractive) {
-                            useInteractive = true;
-                        }
-
-                        //Mark this as a dependency for the plugin
-                        //resource
-                        this.depMaps.push(moduleMap);
-
-                        //Support anonymous modules.
-                        context.completeLoad(moduleName);
-
-                        //Bind the value of that module to the value for this
-                        //resource ID.
-                        localRequire([moduleName], load);
-                    });
-
-                    //Use parentName here since the plugin's name is not reliable,
-                    //could be some weird string with no path that actually wants to
-                    //reference the parentName's path.
-                    plugin.load(map.name, localRequire, load, config);
-                }));
-
-                context.enable(pluginMap, this);
-                this.pluginMaps[pluginMap.id] = pluginMap;
-            },
-
-            enable: function () {
-                enabledRegistry[this.map.id] = this;
-                this.enabled = true;
-
-                //Set flag mentioning that the module is enabling,
-                //so that immediate calls to the defined callbacks
-                //for dependencies do not trigger inadvertent load
-                //with the depCount still being zero.
-                this.enabling = true;
-
-                //Enable each dependency
-                each(this.depMaps, bind(this, function (depMap, i) {
-                    var id, mod, handler;
-
-                    if (typeof depMap === 'string') {
-                        //Dependency needs to be converted to a depMap
-                        //and wired up to this module.
-                        depMap = makeModuleMap(depMap,
-                                               (this.map.isDefine ? this.map : this.map.parentMap),
-                                               false,
-                                               !this.skipMap);
-                        this.depMaps[i] = depMap;
-
-                        handler = getOwn(handlers, depMap.id);
-
-                        if (handler) {
-                            this.depExports[i] = handler(this);
-                            return;
-                        }
-
-                        this.depCount += 1;
-
-                        on(depMap, 'defined', bind(this, function (depExports) {
-                            if (this.undefed) {
-                                return;
-                            }
-                            this.defineDep(i, depExports);
-                            this.check();
-                        }));
-
-                        if (this.errback) {
-                            on(depMap, 'error', bind(this, this.errback));
-                        } else if (this.events.error) {
-                            // No direct errback on this module, but something
-                            // else is listening for errors, so be sure to
-                            // propagate the error correctly.
-                            on(depMap, 'error', bind(this, function(err) {
-                                this.emit('error', err);
-                            }));
-                        }
-                    }
-
-                    id = depMap.id;
-                    mod = registry[id];
-
-                    //Skip special modules like 'require', 'exports', 'module'
-                    //Also, don't call enable if it is already enabled,
-                    //important in circular dependency cases.
-                    if (!hasProp(handlers, id) && mod && !mod.enabled) {
-                        context.enable(depMap, this);
-                    }
-                }));
-
-                //Enable each plugin that is used in
-                //a dependency
-                eachProp(this.pluginMaps, bind(this, function (pluginMap) {
-                    var mod = getOwn(registry, pluginMap.id);
-                    if (mod && !mod.enabled) {
-                        context.enable(pluginMap, this);
-                    }
-                }));
-
-                this.enabling = false;
-
-                this.check();
-            },
-
-            on: function (name, cb) {
-                var cbs = this.events[name];
-                if (!cbs) {
-                    cbs = this.events[name] = [];
-                }
-                cbs.push(cb);
-            },
-
-            emit: function (name, evt) {
-                each(this.events[name], function (cb) {
-                    cb(evt);
-                });
-                if (name === 'error') {
-                    //Now that the error handler was triggered, remove
-                    //the listeners, since this broken Module instance
-                    //can stay around for a while in the registry.
-                    delete this.events[name];
-                }
-            }
-        };
-
-        function callGetModule(args) {
-            //Skip modules already defined.
-            if (!hasProp(defined, args[0])) {
-                getModule(makeModuleMap(args[0], null, true)).init(args[1], args[2]);
-            }
-        }
-
-        function removeListener(node, func, name, ieName) {
-            //Favor detachEvent because of IE9
-            //issue, see attachEvent/addEventListener comment elsewhere
-            //in this file.
-            if (node.detachEvent && !isOpera) {
-                //Probably IE. If not it will throw an error, which will be
-                //useful to know.
-                if (ieName) {
-                    node.detachEvent(ieName, func);
-                }
-            } else {
-                node.removeEventListener(name, func, false);
-            }
-        }
-
-        /**
-         * Given an event from a script node, get the requirejs info from it,
-         * and then removes the event listeners on the node.
-         * @param {Event} evt
-         * @returns {Object}
-         */
-        function getScriptData(evt) {
-            //Using currentTarget instead of target for Firefox 2.0's sake. Not
-            //all old browsers will be supported, but this one was easy enough
-            //to support and still makes sense.
-            var node = evt.currentTarget || evt.srcElement;
-
-            //Remove the listeners once here.
-            removeListener(node, context.onScriptLoad, 'load', 'onreadystatechange');
-            removeListener(node, context.onScriptError, 'error');
-
-            return {
-                node: node,
-                id: node && node.getAttribute('data-requiremodule')
-            };
-        }
-
-        function intakeDefines() {
-            var args;
-
-            //Any defined modules in the global queue, intake them now.
-            takeGlobalQueue();
-
-            //Make sure any remaining defQueue items get properly processed.
-            while (defQueue.length) {
-                args = defQueue.shift();
-                if (args[0] === null) {
-                    return onError(makeError('mismatch', 'Mismatched anonymous define() module: ' +
-                        args[args.length - 1]));
-                } else {
-                    //args are id, deps, factory. Should be normalized by the
-                    //define() function.
-                    callGetModule(args);
-                }
-            }
-        }
-
-        context = {
-            config: config,
-            contextName: contextName,
-            registry: registry,
-            defined: defined,
-            urlFetched: urlFetched,
-            defQueue: defQueue,
-            Module: Module,
-            makeModuleMap: makeModuleMap,
-            nextTick: req.nextTick,
-            onError: onError,
-
-            /**
-             * Set a configuration for the context.
-             * @param {Object} cfg config object to integrate.
-             */
-            configure: function (cfg) {
-                //Make sure the baseUrl ends in a slash.
-                if (cfg.baseUrl) {
-                    if (cfg.baseUrl.charAt(cfg.baseUrl.length - 1) !== '/') {
-                        cfg.baseUrl += '/';
-                    }
-                }
-
-                //Save off the paths since they require special processing,
-                //they are additive.
-                var shim = config.shim,
-                    objs = {
-                        paths: true,
-                        bundles: true,
-                        config: true,
-                        map: true
-                    };
-
-                eachProp(cfg, function (value, prop) {
-                    if (objs[prop]) {
-                        if (!config[prop]) {
-                            config[prop] = {};
-                        }
-                        mixin(config[prop], value, true, true);
-                    } else {
-                        config[prop] = value;
-                    }
-                });
-
-                //Reverse map the bundles
-                if (cfg.bundles) {
-                    eachProp(cfg.bundles, function (value, prop) {
-                        each(value, function (v) {
-                            if (v !== prop) {
-                                bundlesMap[v] = prop;
-                            }
-                        });
-                    });
-                }
-
-                //Merge shim
-                if (cfg.shim) {
-                    eachProp(cfg.shim, function (value, id) {
-                        //Normalize the structure
-                        if (isArray(value)) {
-                            value = {
-                                deps: value
-                            };
-                        }
-                        if ((value.exports || value.init) && !value.exportsFn) {
-                            value.exportsFn = context.makeShimExports(value);
-                        }
-                        shim[id] = value;
-                    });
-                    config.shim = shim;
-                }
-
-                //Adjust packages if necessary.
-                if (cfg.packages) {
-                    each(cfg.packages, function (pkgObj) {
-                        var location, name;
-
-                        pkgObj = typeof pkgObj === 'string' ? {name: pkgObj} : pkgObj;
-
-                        name = pkgObj.name;
-                        location = pkgObj.location;
-                        if (location) {
-                            config.paths[name] = pkgObj.location;
-                        }
-
-                        //Save pointer to main module ID for pkg name.
-                        //Remove leading dot in main, so main paths are normalized,
-                        //and remove any trailing .js, since different package
-                        //envs have different conventions: some use a module name,
-                        //some use a file name.
-                        config.pkgs[name] = pkgObj.name + '/' + (pkgObj.main || 'main')
-                                     .replace(currDirRegExp, '')
-                                     .replace(jsSuffixRegExp, '');
-                    });
-                }
-
-                //If there are any "waiting to execute" modules in the registry,
-                //update the maps for them, since their info, like URLs to load,
-                //may have changed.
-                eachProp(registry, function (mod, id) {
-                    //If module already has init called, since it is too
-                    //late to modify them, and ignore unnormalized ones
-                    //since they are transient.
-                    if (!mod.inited && !mod.map.unnormalized) {
-                        mod.map = makeModuleMap(id, null, true);
-                    }
-                });
-
-                //If a deps array or a config callback is specified, then call
-                //require with those args. This is useful when require is defined as a
-                //config object before require.js is loaded.
-                if (cfg.deps || cfg.callback) {
-                    context.require(cfg.deps || [], cfg.callback);
-                }
-            },
-
-            makeShimExports: function (value) {
-                function fn() {
-                    var ret;
-                    if (value.init) {
-                        ret = value.init.apply(global, arguments);
-                    }
-                    return ret || (value.exports && getGlobal(value.exports));
-                }
-                return fn;
-            },
-
-            makeRequire: function (relMap, options) {
-                options = options || {};
-
-                function localRequire(deps, callback, errback) {
-                    var id, map, requireMod;
-
-                    if (options.enableBuildCallback && callback && isFunction(callback)) {
-                        callback.__requireJsBuild = true;
-                    }
-
-                    if (typeof deps === 'string') {
-                        if (isFunction(callback)) {
-                            //Invalid call
-                            return onError(makeError('requireargs', 'Invalid require call'), errback);
-                        }
-
-                        //If require|exports|module are requested, get the
-                        //value for them from the special handlers. Caveat:
-                        //this only works while module is being defined.
-                        if (relMap && hasProp(handlers, deps)) {
-                            return handlers[deps](registry[relMap.id]);
-                        }
-
-                        //Synchronous access to one module. If require.get is
-                        //available (as in the Node adapter), prefer that.
-                        if (req.get) {
-                            return req.get(context, deps, relMap, localRequire);
-                        }
-
-                        //Normalize module name, if it contains . or ..
-                        map = makeModuleMap(deps, relMap, false, true);
-                        id = map.id;
-
-                        if (!hasProp(defined, id)) {
-                            return onError(makeError('notloaded', 'Module name "' +
-                                        id +
-                                        '" has not been loaded yet for context: ' +
-                                        contextName +
-                                        (relMap ? '' : '. Use require([])')));
-                        }
-                        return defined[id];
-                    }
-
-                    //Grab defines waiting in the global queue.
-                    intakeDefines();
-
-                    //Mark all the dependencies as needing to be loaded.
-                    context.nextTick(function () {
-                        //Some defines could have been added since the
-                        //require call, collect them.
-                        intakeDefines();
-
-                        requireMod = getModule(makeModuleMap(null, relMap));
-
-                        //Store if map config should be applied to this require
-                        //call for dependencies.
-                        requireMod.skipMap = options.skipMap;
-
-                        requireMod.init(deps, callback, errback, {
-                            enabled: true
-                        });
-
-                        checkLoaded();
-                    });
-
-                    return localRequire;
-                }
-
-                mixin(localRequire, {
-                    isBrowser: isBrowser,
-
-                    /**
-                     * Converts a module name + .extension into an URL path.
-                     * *Requires* the use of a module name. It does not support using
-                     * plain URLs like nameToUrl.
-                     */
-                    toUrl: function (moduleNamePlusExt) {
-                        var ext,
-                            index = moduleNamePlusExt.lastIndexOf('.'),
-                            segment = moduleNamePlusExt.split('/')[0],
-                            isRelative = segment === '.' || segment === '..';
-
-                        //Have a file extension alias, and it is not the
-                        //dots from a relative path.
-                        if (index !== -1 && (!isRelative || index > 1)) {
-                            ext = moduleNamePlusExt.substring(index, moduleNamePlusExt.length);
-                            moduleNamePlusExt = moduleNamePlusExt.substring(0, index);
-                        }
-
-                        return context.nameToUrl(normalize(moduleNamePlusExt,
-                                                relMap && relMap.id, true), ext,  true);
-                    },
-
-                    defined: function (id) {
-                        return hasProp(defined, makeModuleMap(id, relMap, false, true).id);
-                    },
-
-                    specified: function (id) {
-                        id = makeModuleMap(id, relMap, false, true).id;
-                        return hasProp(defined, id) || hasProp(registry, id);
-                    }
-                });
-
-                //Only allow undef on top level require calls
-                if (!relMap) {
-                    localRequire.undef = function (id) {
-                        //Bind any waiting define() calls to this context,
-                        //fix for #408
-                        takeGlobalQueue();
-
-                        var map = makeModuleMap(id, relMap, true),
-                            mod = getOwn(registry, id);
-
-                        mod.undefed = true;
-                        removeScript(id);
-
-                        delete defined[id];
-                        delete urlFetched[map.url];
-                        delete undefEvents[id];
-
-                        //Clean queued defines too. Go backwards
-                        //in array so that the splices do not
-                        //mess up the iteration.
-                        eachReverse(defQueue, function(args, i) {
-                            if (args[0] === id) {
-                                defQueue.splice(i, 1);
-                            }
-                        });
-
-                        if (mod) {
-                            //Hold on to listeners in case the
-                            //module will be attempted to be reloaded
-                            //using a different config.
-                            if (mod.events.defined) {
-                                undefEvents[id] = mod.events;
-                            }
-
-                            cleanRegistry(id);
-                        }
-                    };
-                }
-
-                return localRequire;
-            },
-
-            /**
-             * Called to enable a module if it is still in the registry
-             * awaiting enablement. A second arg, parent, the parent module,
-             * is passed in for context, when this method is overridden by
-             * the optimizer. Not shown here to keep code compact.
-             */
-            enable: function (depMap) {
-                var mod = getOwn(registry, depMap.id);
-                if (mod) {
-                    getModule(depMap).enable();
-                }
-            },
-
-            /**
-             * Internal method used by environment adapters to complete a load event.
-             * A load event could be a script load or just a load pass from a synchronous
-             * load call.
-             * @param {String} moduleName the name of the module to potentially complete.
-             */
-            completeLoad: function (moduleName) {
-                var found, args, mod,
-                    shim = getOwn(config.shim, moduleName) || {},
-                    shExports = shim.exports;
-
-                takeGlobalQueue();
-
-                while (defQueue.length) {
-                    args = defQueue.shift();
-                    if (args[0] === null) {
-                        args[0] = moduleName;
-                        //If already found an anonymous module and bound it
-                        //to this name, then this is some other anon module
-                        //waiting for its completeLoad to fire.
-                        if (found) {
-                            break;
-                        }
-                        found = true;
-                    } else if (args[0] === moduleName) {
-                        //Found matching define call for this script!
-                        found = true;
-                    }
-
-                    callGetModule(args);
-                }
-
-                //Do this after the cycle of callGetModule in case the result
-                //of those calls/init calls changes the registry.
-                mod = getOwn(registry, moduleName);
-
-                if (!found && !hasProp(defined, moduleName) && mod && !mod.inited) {
-                    if (config.enforceDefine && (!shExports || !getGlobal(shExports))) {
-                        if (hasPathFallback(moduleName)) {
-                            return;
-                        } else {
-                            return onError(makeError('nodefine',
-                                             'No define call for ' + moduleName,
-                                             null,
-                                             [moduleName]));
-                        }
-                    } else {
-                        //A script that does not call define(), so just simulate
-                        //the call for it.
-                        callGetModule([moduleName, (shim.deps || []), shim.exportsFn]);
-                    }
-                }
-
-                checkLoaded();
-            },
-
-            /**
-             * Converts a module name to a file path. Supports cases where
-             * moduleName may actually be just an URL.
-             * Note that it **does not** call normalize on the moduleName,
-             * it is assumed to have already been normalized. This is an
-             * internal API, not a public one. Use toUrl for the public API.
-             */
-            nameToUrl: function (moduleName, ext, skipExt) {
-                var paths, syms, i, parentModule, url,
-                    parentPath, bundleId,
-                    pkgMain = getOwn(config.pkgs, moduleName);
-
-                if (pkgMain) {
-                    moduleName = pkgMain;
-                }
-
-                bundleId = getOwn(bundlesMap, moduleName);
-
-                if (bundleId) {
-                    return context.nameToUrl(bundleId, ext, skipExt);
-                }
-
-                //If a colon is in the URL, it indicates a protocol is used and it is just
-                //an URL to a file, or if it starts with a slash, contains a query arg (i.e. ?)
-                //or ends with .js, then assume the user meant to use an url and not a module id.
-                //The slash is important for protocol-less URLs as well as full paths.
-                if (req.jsExtRegExp.test(moduleName)) {
-                    //Just a plain path, not module name lookup, so just return it.
-                    //Add extension if it is included. This is a bit wonky, only non-.js things pass
-                    //an extension, this method probably needs to be reworked.
-                    url = moduleName + (ext || '');
-                } else {
-                    //A module that needs to be converted to a path.
-                    paths = config.paths;
-
-                    syms = moduleName.split('/');
-                    //For each module name segment, see if there is a path
-                    //registered for it. Start with most specific name
-                    //and work up from it.
-                    for (i = syms.length; i > 0; i -= 1) {
-                        parentModule = syms.slice(0, i).join('/');
-
-                        parentPath = getOwn(paths, parentModule);
-                        if (parentPath) {
-                            //If an array, it means there are a few choices,
-                            //Choose the one that is desired
-                            if (isArray(parentPath)) {
-                                parentPath = parentPath[0];
-                            }
-                            syms.splice(0, i, parentPath);
-                            break;
-                        }
-                    }
-
-                    //Join the path parts together, then figure out if baseUrl is needed.
-                    url = syms.join('/');
-                    url += (ext || (/^data\:|\?/.test(url) || skipExt ? '' : '.js'));
-                    url = (url.charAt(0) === '/' || url.match(/^[\w\+\.\-]+:/) ? '' : config.baseUrl) + url;
-                }
-
-                return config.urlArgs ? url +
-                                        ((url.indexOf('?') === -1 ? '?' : '&') +
-                                         config.urlArgs) : url;
-            },
-
-            //Delegates to req.load. Broken out as a separate function to
-            //allow overriding in the optimizer.
-            load: function (id, url) {
-                req.load(context, id, url);
-            },
-
-            /**
-             * Executes a module callback function. Broken out as a separate function
-             * solely to allow the build system to sequence the files in the built
-             * layer in the right sequence.
-             *
-             * @private
-             */
-            execCb: function (name, callback, args, exports) {
-                return callback.apply(exports, args);
-            },
-
-            /**
-             * callback for script loads, used to check status of loading.
-             *
-             * @param {Event} evt the event from the browser for the script
-             * that was loaded.
-             */
-            onScriptLoad: function (evt) {
-                //Using currentTarget instead of target for Firefox 2.0's sake. Not
-                //all old browsers will be supported, but this one was easy enough
-                //to support and still makes sense.
-                if (evt.type === 'load' ||
-                        (readyRegExp.test((evt.currentTarget || evt.srcElement).readyState))) {
-                    //Reset interactive script so a script node is not held onto for
-                    //to long.
-                    interactiveScript = null;
-
-                    //Pull out the name of the module and the context.
-                    var data = getScriptData(evt);
-                    context.completeLoad(data.id);
-                }
-            },
-
-            /**
-             * Callback for script errors.
-             */
-            onScriptError: function (evt) {
-                var data = getScriptData(evt);
-                if (!hasPathFallback(data.id)) {
-                    return onError(makeError('scripterror', 'Script error for: ' + data.id, evt, [data.id]));
-                }
-            }
-        };
-
-        context.require = context.makeRequire();
-        return context;
-    }
-
-    /**
-     * Main entry point.
-     *
-     * If the only argument to require is a string, then the module that
-     * is represented by that string is fetched for the appropriate context.
-     *
-     * If the first argument is an array, then it will be treated as an array
-     * of dependency string names to fetch. An optional function callback can
-     * be specified to execute when all of those dependencies are available.
-     *
-     * Make a local req variable to help Caja compliance (it assumes things
-     * on a require that are not standardized), and to give a short
-     * name for minification/local scope use.
-     */
-    req = requirejs = function (deps, callback, errback, optional) {
-
-        //Find the right context, use default
-        var context, config,
-            contextName = defContextName;
-
-        // Determine if have config object in the call.
-        if (!isArray(deps) && typeof deps !== 'string') {
-            // deps is a config object
-            config = deps;
-            if (isArray(callback)) {
-                // Adjust args if there are dependencies
-                deps = callback;
-                callback = errback;
-                errback = optional;
-            } else {
-                deps = [];
-            }
-        }
-
-        if (config && config.context) {
-            contextName = config.context;
-        }
-
-        context = getOwn(contexts, contextName);
-        if (!context) {
-            context = contexts[contextName] = req.s.newContext(contextName);
-        }
-
-        if (config) {
-            context.configure(config);
-        }
-
-        return context.require(deps, callback, errback);
-    };
-
-    /**
-     * Support require.config() to make it easier to cooperate with other
-     * AMD loaders on globally agreed names.
-     */
-    req.config = function (config) {
-        return req(config);
-    };
-
-    /**
-     * Execute something after the current tick
-     * of the event loop. Override for other envs
-     * that have a better solution than setTimeout.
-     * @param  {Function} fn function to execute later.
-     */
-    req.nextTick = typeof setTimeout !== 'undefined' ? function (fn) {
-        setTimeout(fn, 4);
-    } : function (fn) { fn(); };
-
-    /**
-     * Export require as a global, but only if it does not already exist.
-     */
-    if (!require) {
-        require = req;
-    }
-
-    req.version = version;
-
-    //Used to filter out dependencies that are already paths.
-    req.jsExtRegExp = /^\/|:|\?|\.js$/;
-    req.isBrowser = isBrowser;
-    s = req.s = {
-        contexts: contexts,
-        newContext: newContext
-    };
-
-    //Create default context.
-    req({});
-
-    //Exports some context-sensitive methods on global require.
-    each([
-        'toUrl',
-        'undef',
-        'defined',
-        'specified'
-    ], function (prop) {
-        //Reference from contexts instead of early binding to default context,
-        //so that during builds, the latest instance of the default context
-        //with its config gets used.
-        req[prop] = function () {
-            var ctx = contexts[defContextName];
-            return ctx.require[prop].apply(ctx, arguments);
-        };
-    });
-
-    if (isBrowser) {
-        head = s.head = document.getElementsByTagName('head')[0];
-        //If BASE tag is in play, using appendChild is a problem for IE6.
-        //When that browser dies, this can be removed. Details in this jQuery bug:
-        //http://dev.jquery.com/ticket/2709
-        baseElement = document.getElementsByTagName('base')[0];
-        if (baseElement) {
-            head = s.head = baseElement.parentNode;
-        }
-    }
-
-    /**
-     * Any errors that require explicitly generates will be passed to this
-     * function. Intercept/override it if you want custom error handling.
-     * @param {Error} err the error object.
-     */
-    req.onError = defaultOnError;
-
-    /**
-     * Creates the node for the load command. Only used in browser envs.
-     */
-    req.createNode = function (config, moduleName, url) {
-        var node = config.xhtml ?
-                document.createElementNS('http://www.w3.org/1999/xhtml', 'html:script') :
-                document.createElement('script');
-        node.type = config.scriptType || 'text/javascript';
-        node.charset = 'utf-8';
-        node.async = true;
-        return node;
-    };
-
-    /**
-     * Does the request to load a module for the browser case.
-     * Make this a separate function to allow other environments
-     * to override it.
-     *
-     * @param {Object} context the require context to find state.
-     * @param {String} moduleName the name of the module.
-     * @param {Object} url the URL to the module.
-     */
-    req.load = function (context, moduleName, url) {
-        var config = (context && context.config) || {},
-            node;
-        if (isBrowser) {
-            //In the browser so use a script tag
-            node = req.createNode(config, moduleName, url);
-
-            node.setAttribute('data-requirecontext', context.contextName);
-            node.setAttribute('data-requiremodule', moduleName);
-
-            //Set up load listener. Test attachEvent first because IE9 has
-            //a subtle issue in its addEventListener and script onload firings
-            //that do not match the behavior of all other browsers with
-            //addEventListener support, which fire the onload event for a
-            //script right after the script execution. See:
-            //https://connect.microsoft.com/IE/feedback/details/648057/script-onload-event-is-not-fired-immediately-after-script-execution
-            //UNFORTUNATELY Opera implements attachEvent but does not follow the script
-            //script execution mode.
-            if (node.attachEvent &&
-                    //Check if node.attachEvent is artificially added by custom script or
-                    //natively supported by browser
-                    //read https://github.com/jrburke/requirejs/issues/187
-                    //if we can NOT find [native code] then it must NOT natively supported.
-                    //in IE8, node.attachEvent does not have toString()
-                    //Note the test for "[native code" with no closing brace, see:
-                    //https://github.com/jrburke/requirejs/issues/273
-                    !(node.attachEvent.toString && node.attachEvent.toString().indexOf('[native code') < 0) &&
-                    !isOpera) {
-                //Probably IE. IE (at least 6-8) do not fire
-                //script onload right after executing the script, so
-                //we cannot tie the anonymous define call to a name.
-                //However, IE reports the script as being in 'interactive'
-                //readyState at the time of the define call.
-                useInteractive = true;
-
-                node.attachEvent('onreadystatechange', context.onScriptLoad);
-                //It would be great to add an error handler here to catch
-                //404s in IE9+. However, onreadystatechange will fire before
-                //the error handler, so that does not help. If addEventListener
-                //is used, then IE will fire error before load, but we cannot
-                //use that pathway given the connect.microsoft.com issue
-                //mentioned above about not doing the 'script execute,
-                //then fire the script load event listener before execute
-                //next script' that other browsers do.
-                //Best hope: IE10 fixes the issues,
-                //and then destroys all installs of IE 6-9.
-                //node.attachEvent('onerror', context.onScriptError);
-            } else {
-                node.addEventListener('load', context.onScriptLoad, false);
-                node.addEventListener('error', context.onScriptError, false);
-            }
-            node.src = url;
-
-            //For some cache cases in IE 6-8, the script executes before the end
-            //of the appendChild execution, so to tie an anonymous define
-            //call to the module name (which is stored on the node), hold on
-            //to a reference to this node, but clear after the DOM insertion.
-            currentlyAddingScript = node;
-            if (baseElement) {
-                head.insertBefore(node, baseElement);
-            } else {
-                head.appendChild(node);
-            }
-            currentlyAddingScript = null;
-
-            return node;
-        } else if (isWebWorker) {
-            try {
-                //In a web worker, use importScripts. This is not a very
-                //efficient use of importScripts, importScripts will block until
-                //its script is downloaded and evaluated. However, if web workers
-                //are in play, the expectation that a build has been done so that
-                //only one script needs to be loaded anyway. This may need to be
-                //reevaluated if other use cases become common.
-                importScripts(url);
-
-                //Account for anonymous modules
-                context.completeLoad(moduleName);
-            } catch (e) {
-                context.onError(makeError('importscripts',
-                                'importScripts failed for ' +
-                                    moduleName + ' at ' + url,
-                                e,
-                                [moduleName]));
-            }
-        }
-    };
-
-    function getInteractiveScript() {
-        if (interactiveScript && interactiveScript.readyState === 'interactive') {
-            return interactiveScript;
-        }
-
-        eachReverse(scripts(), function (script) {
-            if (script.readyState === 'interactive') {
-                return (interactiveScript = script);
-            }
-        });
-        return interactiveScript;
-    }
-
-    //Look for a data-main script attribute, which could also adjust the baseUrl.
-    if (isBrowser && !cfg.skipDataMain) {
-        //Figure out baseUrl. Get it from the script tag with require.js in it.
-        eachReverse(scripts(), function (script) {
-            //Set the 'head' where we can append children by
-            //using the script's parent.
-            if (!head) {
-                head = script.parentNode;
-            }
-
-            //Look for a data-main attribute to set main script for the page
-            //to load. If it is there, the path to data main becomes the
-            //baseUrl, if it is not already set.
-            dataMain = script.getAttribute('data-main');
-            if (dataMain) {
-                //Preserve dataMain in case it is a path (i.e. contains '?')
-                mainScript = dataMain;
-
-                //Set final baseUrl if there is not already an explicit one.
-                if (!cfg.baseUrl) {
-                    //Pull off the directory of data-main for use as the
-                    //baseUrl.
-                    src = mainScript.split('/');
-                    mainScript = src.pop();
-                    subPath = src.length ? src.join('/')  + '/' : './';
-
-                    cfg.baseUrl = subPath;
-                }
-
-                //Strip off any trailing .js since mainScript is now
-                //like a module name.
-                mainScript = mainScript.replace(jsSuffixRegExp, '');
-
-                //If mainScript is still a path, fall back to dataMain
-                if (req.jsExtRegExp.test(mainScript)) {
-                    mainScript = dataMain;
-                }
-
-                //Put the data-main script in the files to load.
-                cfg.deps = cfg.deps ? cfg.deps.concat(mainScript) : [mainScript];
-
-                return true;
-            }
-        });
-    }
-
-    /**
-     * The function that handles definitions of modules. Differs from
-     * require() in that a string for the module should be the first argument,
-     * and the function to execute after dependencies are loaded should
-     * return a value to define the module corresponding to the first argument's
-     * name.
-     */
-    define = function (name, deps, callback) {
-        var node, context;
-
-        //Allow for anonymous modules
-        if (typeof name !== 'string') {
-            //Adjust args appropriately
-            callback = deps;
-            deps = name;
-            name = null;
-        }
-
-        //This module may not have dependencies
-        if (!isArray(deps)) {
-            callback = deps;
-            deps = null;
-        }
-
-        //If no name, and callback is a function, then figure out if it a
-        //CommonJS thing with dependencies.
-        if (!deps && isFunction(callback)) {
-            deps = [];
-            //Remove comments from the callback string,
-            //look for require calls, and pull them into the dependencies,
-            //but only if there are function args.
-            if (callback.length) {
-                callback
-                    .toString()
-                    .replace(commentRegExp, '')
-                    .replace(cjsRequireRegExp, function (match, dep) {
-                        deps.push(dep);
-                    });
-
-                //May be a CommonJS thing even without require calls, but still
-                //could use exports, and module. Avoid doing exports and module
-                //work though if it just needs require.
-                //REQUIRES the function to expect the CommonJS variables in the
-                //order listed below.
-                deps = (callback.length === 1 ? ['require'] : ['require', 'exports', 'module']).concat(deps);
-            }
-        }
-
-        //If in IE 6-8 and hit an anonymous define() call, do the interactive
-        //work.
-        if (useInteractive) {
-            node = currentlyAddingScript || getInteractiveScript();
-            if (node) {
-                if (!name) {
-                    name = node.getAttribute('data-requiremodule');
-                }
-                context = contexts[node.getAttribute('data-requirecontext')];
-            }
-        }
-
-        //Always save off evaluating the def call until the script onload handler.
-        //This allows multiple modules to be in a file without prematurely
-        //tracing dependencies, and allows for anonymous module support,
-        //where the module name is not known until the script onload event
-        //occurs. If no context, use the global queue, and get it processed
-        //in the onscript load callback.
-        (context ? context.defQueue : globalDefQueue).push([name, deps, callback]);
-    };
-
-    define.amd = {
-        jQuery: true
-    };
-
-    /**
-     * Executes the text. Normally just uses eval, but can be modified
-     * to use a better, environment-specific call. Only used for transpiling
-     * loader plugins, not for plain JS modules.
-     * @param {String} text the text to execute/evaluate.
-     */
-    req.exec = function (text) {
-        /*jslint evil: true */
-        return eval(text);
-    };
-
-    //Set up with config info.
-    req(cfg);
-}(this));
-
-define("../node_modules/requirejs/require", function(){});
-
-(function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
+(function(){(function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
 
 /**
  * This is the web browser implementation of `debug()`.
@@ -2696,12 +606,56 @@ define('js/logger',['debug'], function (_debug) {
 /*jshint node:true, browser: true*/
 /**
  * @author pmeijer / https://github.com/pmeijer
+ * @module Storage
  */
 
+/**
+ * @typedef {string} CommitHash - Unique SHA-1 hash for commit object.
+ * @example
+ * '#5496cf226542fcceccf89056f0d27564abc88c99'
+ */
+
+/**
+ * @typedef {object} CommitResult
+ * @prop {module:Storage~CommitHash} hash - The commitHash for the commit.
+ * @prop {string} status - 'SYNCED', 'FORKED', 'CANCELED', undefined
+ *
+ * @example
+ * {
+ *   status: 'SYNCED',
+ *   hash: '#someHash'
+ * }
+ * @example
+ * {
+         *   hash: '<hash from makeCommit with no branch provided>'
+         * }
+ */
+
+/**
+ * @typedef {object} CommitObject
+ * @prop {module:Storage~CommitHash} _id - Hash of the commit object, a.k.a commitHash.
+ * @prop {module:Core~ObjectHash} root - Hash of the associated root object, a.k.a. rootHash.
+ * @prop {module:Storage~CommitHash[]} parents - Commits from where this commit evolved.
+ * @prop {number} time - When the commit object was created (new Date()).getTime().
+ * @prop {string} message - Commit message.
+ * @prop {string[]} updater - Commit message.
+ * @prop {string} type - 'commit'
+ *
+ * @example
+ * {
+ *   _id: '#5496cf226542fcceccf89056f0d27564abc88c99',
+ *   root: '#04009ecd1e68117cd3e9d39c87aadd9ed1ee5cb3',
+ *   parents: ['#87d9fd309ec6a5d84776d7731ce1f1ab2790aac2']
+ *   updater: ['guest'],
+ *   time: 1430169614741,
+ *   message: "createChildren({\"/1008889918/1998840078\":\"/1182870936/737997118/1736829087/1966323860\"})",
+ *   type: 'commit'
+ *}
+ */
 define('common/storage/constants',[], function () {
     'use strict';
-    return {
 
+    return {
         // Database related
         MONGO_ID: '_id',
         PROJECT_INFO_ID: '*info*',
@@ -2737,7 +691,9 @@ define('common/storage/constants',[], function () {
         BRANCH_CREATED: 'BRANCH_CREATED',
         BRANCH_HASH_UPDATED: 'BRANCH_HASH_UPDATED',
 
-        BRANCH_UPDATED: 'BRANCH_UPDATED'
+        BRANCH_UPDATED: 'BRANCH_UPDATED',
+
+        BRANCH_ROOM_SOCKETS: 'BRANCH_ROOM_SOCKETS'
     };
 });
 
@@ -2795,7 +751,7 @@ define('common/storage/storageclasses/watchers',['common/storage/constants'], fu
             }
         } else if (this.watchers.database < 0) {
             this.logger.error('Number of database watchers became negative!');
-            callback('Number of database watchers became negative!');
+            callback(new Error('Number of database watchers became negative!'));
         } else {
             callback(null);
         }
@@ -2838,7 +794,7 @@ define('common/storage/storageclasses/watchers',['common/storage/constants'], fu
             }
         } else if (this.watchers.projects[projectId] < 0) {
             this.logger.error('Number of project watchers became negative!:', projectId);
-            callback('Number of project watchers became negative!');
+            callback(new Error('Number of project watchers became negative!'));
         } else {
             callback(null);
         }
@@ -2991,11 +947,17 @@ define('common/storage/storageclasses/simpleapi',['common/storage/storageclasses
     };
 
     // Setters
-    StorageSimpleAPI.prototype.createProject = function (projectName, callback) {
-        var data = {
-            projectName: projectName
-        },
-            self = this;
+    StorageSimpleAPI.prototype.createProject = function (projectName, ownerId, callback) {
+        var self = this,
+            data = {
+                projectName: projectName,
+                ownerId: ownerId
+            };
+
+        if (callback === undefined && typeof ownerId === 'function') {
+            callback = ownerId;
+            data.ownerId = undefined;
+        }
 
         this.logger.debug('invoking createProject', {metadata: data});
 
@@ -3017,6 +979,15 @@ define('common/storage/storageclasses/simpleapi',['common/storage/storageclasses
         };
         this.logger.debug('invoking deleteProject', {metadata: data});
         this.webSocket.deleteProject(data, callback);
+    };
+
+    StorageSimpleAPI.prototype.transferProject = function (projectId, newOwnerId, callback) {
+        var data = {
+            projectId: projectId,
+            newOwnerId: newOwnerId
+        };
+        this.logger.debug('invoking transferProject', {metadata: data});
+        this.webSocket.transferProject(data, callback);
     };
 
     StorageSimpleAPI.prototype.setBranchHash = function (projectId, branchName, newHash, oldHash, callback) {
@@ -3056,11 +1027,6 @@ define('common/storage/storageclasses/simpleapi',['common/storage/storageclasses
     StorageSimpleAPI.prototype.simpleRequest = function (parameters, callback) {
         this.logger.debug('invoking simpleRequest', {metadata: parameters});
         this.webSocket.simpleRequest(parameters, callback);
-    };
-
-    StorageSimpleAPI.prototype.simpleResult = function (resultId, callback) {
-        this.logger.debug('invoking simpleResult', resultId);
-        this.webSocket.simpleResult(resultId, callback);
     };
 
     StorageSimpleAPI.prototype.simpleQuery = function (workerId, parameters, callback) {
@@ -3159,7 +1125,7 @@ define('common/storage/storageclasses/objectloaders',['common/storage/storagecla
                     hashedObjects[i].cb(err);
                 } else if (typeof result[hashedObjects[i].hash] === 'string') {
                     self.logger.error(result[hashedObjects[i].hash]);
-                    hashedObjects[i].cb(result[hashedObjects[i].hash]);
+                    hashedObjects[i].cb(new Error(result[hashedObjects[i].hash]));
                 } else {
                     hashedObjects[i].cb(err, result[hashedObjects[i].hash]);
                 }
@@ -3210,13 +1176,17 @@ define('common/util/assert',[],function () {
 define('common/storage/project/cache',['common/util/assert', 'common/storage/constants'], function (ASSERT, CONSTANTS) {
     'use strict';
     function ProjectCache(storage, projectId, mainLogger, gmeConfig) {
-        var missing = {},
+        var self = this,
+            missing = {},
             backup = {},
             cache = {},
             logger = mainLogger.fork('ProjectCache'),
             cacheSize = 0;
 
         logger.debug('ctor', projectId);
+
+        this.queuedPersists = {};
+
         function cacheInsert(key, obj) {
             ASSERT(typeof cache[key] === 'undefined' && obj[CONSTANTS.MONGO_ID] === key);
             logger.debug('cacheInsert', key);
@@ -3232,6 +1202,7 @@ define('common/storage/project/cache',['common/util/assert', 'common/storage/con
         }
 
         this.loadObject = function (key, callback) {
+            var commitId;
             ASSERT(typeof key === 'string' && typeof callback === 'function');
             logger.debug('loadObject', {metadata: key});
 
@@ -3239,33 +1210,44 @@ define('common/storage/project/cache',['common/util/assert', 'common/storage/con
             if (typeof obj === 'undefined') {
                 obj = backup[key];
                 if (typeof obj === 'undefined') {
-                    obj = missing[key];
-                    if (typeof obj === 'undefined') {
-                        obj = [callback];
-                        missing[key] = obj;
-                        logger.debug('object set to be loaded from storage');
-                        storage.loadObject(projectId, key, function (err, obj2) {
-                            ASSERT(typeof obj2 === 'object' || typeof obj2 === 'undefined');
-
-                            if (obj.length !== 0) {
-                                ASSERT(missing[key] === obj);
-
-                                delete missing[key];
-                                if (!err && obj2) {
-                                    cacheInsert(key, obj2);
-                                }
-
-                                var cb;
-                                while ((cb = obj.pop())) {
-                                    cb(err, obj2);
-                                }
-                            }
-                        });
-                    } else {
-                        logger.debug('object was already queued to be loaded');
-                        obj.push(callback);
+                    for (commitId in self.queuedPersists) {
+                        if (self.queuedPersists.hasOwnProperty(commitId) && self.queuedPersists[commitId][key]) {
+                            obj = self.queuedPersists[commitId][key];
+                            break;
+                        }
                     }
-                    return;
+                    if (typeof obj === 'undefined') {
+                        obj = missing[key];
+                        if (typeof obj === 'undefined') {
+                            obj = [callback];
+                            missing[key] = obj;
+                            logger.debug('object set to be loaded from storage');
+                            storage.loadObject(projectId, key, function (err, obj2) {
+                                ASSERT(typeof obj2 === 'object' || typeof obj2 === 'undefined');
+
+                                if (obj.length !== 0) {
+                                    ASSERT(missing[key] === obj);
+
+                                    delete missing[key];
+                                    if (!err && obj2) {
+                                        cacheInsert(key, obj2);
+                                    }
+
+                                    var cb;
+                                    while ((cb = obj.pop())) {
+                                        cb(err, obj2);
+                                    }
+                                }
+                            });
+                        } else {
+                            logger.debug('object was already queued to be loaded');
+                            obj.push(callback);
+                        }
+                        return;
+                    } else {
+                        logger.debug('object was erased from cache and backup but present in queuedPersists');
+                        cacheInsert(key, obj);
+                    }
                 } else {
                     logger.debug('object was in backup');
                     cacheInsert(key, obj);
@@ -3316,7 +1298,8 @@ define('common/storage/project/cache',['common/util/assert', 'common/storage/con
 /*globals define*/
 /*jshint node:true, browser: true*/
 /**
- * This class defines the common interface for a storage-project
+ * This class defines the common interface for a storage-project.
+ *
  * @author pmeijer / https://github.com/pmeijer
  */
 
@@ -3326,47 +1309,214 @@ define('common/storage/project/interface',[
 ], function (ProjectCache, CONSTANTS) {
     'use strict';
 
+    /**
+     *
+     * @param {string} projectId - Id of project to be opened.
+     * @param {object} storageObjectsAccessor - Exposes loadObject towards the database.
+     * @param {GmeLogger} mainLogger - Logger instance from instantiator.
+     * @param {GmeConfig} gmeConfig
+     * @alias ProjectInterface
+     * @constructor
+     */
     function ProjectInterface(projectId, storageObjectsAccessor, mainLogger, gmeConfig) {
+
+        /**
+         * Unique ID of project, built up by the ownerId and projectName.
+         *
+         * @example
+         * 'guest+TestProject', 'organization+TestProject2'
+         * @type {string}
+         */
         this.projectId = projectId;
+
         this.CONSTANTS = CONSTANTS;
+
         this.ID_NAME = CONSTANTS.MONGO_ID;
         this.logger = mainLogger.fork('Project:' + this.projectId);
+
         this.logger.debug('ctor', projectId);
         this.projectCache = new ProjectCache(storageObjectsAccessor, this.projectId, this.logger, gmeConfig);
 
         // Functions forwarded to project cache.
+        /**
+         * Inserts the given object to project-cache.
+         *
+         * @param {module:Storage~CommitObject|module:Core~ObjectData} obj - Object to be inserted in database.
+         * @param {Object.<module:Core~ObjectHash, module:Core~ObjectData>} [stackedObjects] - When used by the core, inserts between persists are stored here.
+         * @func
+         * @private
+         */
         this.insertObject = this.projectCache.insertObject;
+
+        /**
+         * Callback for loadObject.
+         *
+         * @callback ProjectInterface~loadObjectCallback
+         * @param {Error} err - If error occurred.
+         * @param {module:Storage~CommitObject|module:Core~ObjectData} object - Object loaded from database, e.g. a commit object.
+         */
+
+        /**
+         * Attempts to load the object with hash key from the database or
+         * directly from the cache if recently loaded.
+         *
+         * @param {string} key - Hash of object to load.
+         * @param {ProjectInterface~loadObjectCallback} callback - Invoked when object is loaded.
+         * @func
+         */
         this.loadObject = this.projectCache.loadObject;
 
-        // Functions forwarded to storage.
+        /**
+         * Makes a commit to data base. Based on the root hash and commit message a new
+         * {@link module:Storage.CommitObject} (with returned hash)
+         * is generated and insert together with the core objects to the database on the server.
+         *
+         * @example
+         * var persisted = core.persist(rootNode);
+         *
+         * project.makeCommit('master', ['#thePreviousCommitHash'], persisted.rootHash, persisted.objects, 'new commit')
+         *   .then(function (result) {
+         *     // result = {
+         *     //   status: 'SYNCED',
+         *     //   hash: '#thisCommitHash'
+         *     // }
+         *   })
+         *   .catch(function (error) {
+         *     // error.message = 'Not authorized to read project: guest+project'
+         *   });
+         * @example
+         * project.makeCommit('master', ['#notPreviousCommitHash'], persisted.rootHash, persisted.objects, 'new commit')
+         *   .then(function (result) {
+         *     // result = {
+         *     //   status: 'FORKED',
+         *     //   hash: '#thisCommitHash'
+         *     // }
+         *   })...
+         * @example
+         * project.makeCommit(null, ['#anExistingCommitHash'], persisted.rootHash, persisted.objects, 'new commit')
+         *   .then(function (result) {
+         *     // result = {
+         *     //   hash: '#thisCommitHash'
+         *     // }
+         *   })...
+         * @example
+         * project.makeCommit('master', ['#aPreviousCommitHash'], previousRootHash, {}, 'just adding a commit to master')
+         *   .then(function (result) {
+         *     // result = {
+         *     //   status: 'SYNCED',
+         *     //   hash: '#thisCommitHash'
+         *     // }
+         *   })...
+         * @param {string} branchName - Name of branch to update (none if null).
+         * @param {module:Storage~CommitHash[]} parents - Parent commit hashes.
+         * @param {module:Core~ObjectHash} rootHash - Hash of root object.
+         * @param {module:Core~DataObject} coreObjects - Core objects associated with the commit.
+         * @param {string} msg='n/a' - Commit message.
+         * @param {function} [callback] - If provided no promise will be returned.
+         * @async
+         * @return {external:Promise}  On success the promise will be resolved with
+         * {@link module:Storage~CommitResult} <b>result</b>.<br>
+         * On error the promise will be rejected with {Error} <b>error</b>.
+         */
         this.makeCommit = function (branchName, parents, rootHash, coreObjects, msg, callback) {
             throw new Error('makeCommit must be overridden in derived class');
         };
 
+        /**
+         * Attempts to update the head of the branch.
+         * @param {string} branchName - Name of branch to update.
+         * @param {module:Storage~CommitHash} newHash - New commit hash for branch head.
+         * @param {module:Storage~CommitHash} oldHash - Current state of the branch head inside the database.
+         * @param {function} [callback] - if provided no promise will be returned.
+         *
+         * @return {external:Promise}  On success the promise will be resolved with
+         * {@link module:Storage~CommitResult} <b>result</b>.<br>
+         * On error the promise will be rejected with {Error} <b>error</b>.
+         */
         this.setBranchHash = function (branchName, newHash, oldHash, callback) {
             throw new Error('setBranchHash must be overridden in derived class');
         };
 
+        /**
+         * Retrieves the commit hash for the head of the branch.
+         * @param {string} branchName - Name of branch.
+         * @param {function} [callback] - if provided no promise will be returned.
+         *
+         * @return {external:Promise}  On success the promise will be resolved with
+         * {module:Storage~CommitHash} <b>branchHash</b>.<br>
+         * On error the promise will be rejected with {Error} <b>error</b>.
+         */
         this.getBranchHash = function (branchName, callback) {
             throw new Error('getBranchHash must be overridden in derived class');
         };
 
+        /**
+         * Attempts to create a new branch with head pointing to the provided commit hash.
+         * @param {string} branchName - Name of branch to create.
+         * @param {module:Storage~CommitHash} newHash - New commit hash for branch head.
+         * @param {function} [callback] - if provided no promise will be returned.
+         *
+         * @return {external:Promise}  On success the promise will be resolved with
+         * {@link module:Storage~CommitResult} <b>result</b>.<br>
+         * On error the promise will be rejected with {Error} <b>error</b>.
+         */
         this.createBranch = function (branchName, newHash, callback) {
             throw new Error('createBranch must be overridden in derived class');
         };
 
+        /**
+         * Attempts to delete the branch.
+         * @param {string} branchName - Name of branch to create.
+         * @param {module:Storage~CommitHash} oldHash - Previous commit hash for branch head.
+         * @param {function} [callback] - if provided no promise will be returned.
+         *
+         * @return {external:Promise}  On success the promise will be resolved with
+         * {@link module:Storage~~CommitResult} <b>result</b>.<br>
+         * On error the promise will be rejected with {Error} <b>error</b>.
+         */
         this.deleteBranch = function (branchName, oldHash, callback) {
             throw new Error('deleteBranch must be overridden in derived class');
         };
 
+        /**
+         * Retrieves all branches and their current heads within the project.
+         * @param {function} [callback] - if provided no promise will be returned.
+         *
+         * @return {external:Promise}  On success the promise will be resolved with
+         * Object.<string, {@link module:Storage~CommitHash}> <b>result</b>.<br>
+         * On error the promise will be rejected with {Error} <b>error</b>.
+         */
         this.getBranches = function (callback) {
             throw new Error('getBranches must be overridden in derived class');
         };
 
+        /**
+         * Retrieves and array of the latest (sorted by timestamp) commits for the project.
+         * If timestamp is given it will get <b>number</b> of commits strictly before <b>before</b>.
+         * If commit hash is specified that commit will be included too.
+         * @param {number|module:Storage~CommitHash} before - Timestamp or commitHash to load history from.
+         * @param {number} number - Number of commits to load.
+         * @param {function} [callback] - if provided no promise will be returned.
+         *
+         * @return {external:Promise}  On success the promise will be resolved with
+         * Array.<{@link module:Storage~CommitObject}> <b>result</b>.<br>
+         * On error the promise will be rejected with {Error} <b>error</b>.
+         */
         this.getCommits = function (before, number, callback) {
             throw new Error('getCommits must be overridden in derived class');
         };
 
+        /**
+         * Attempts to retrieve the common ancestor of two commits. If no ancestor exists it will result in an error.
+         *
+         * @param {string} commitA - Commit hash.
+         * @param {string} commitB - Commit hash.
+         * @param {function} [callback] - if provided no promise will be returned.
+         *
+         * @return {external:Promise}  On success the promise will be resolved with
+         * {@link module:Storage~CommitHash} <b>commonCommitHash</b>.<br>
+         * On error the promise will be rejected with {Error} <b>error</b>.
+         */
         this.getCommonAncestorCommit = function (commitA, commitB, callback) {
             throw new Error('getCommonAncestorCommit must be overridden in derived class');
         };
@@ -3400,6 +1550,7 @@ define('common/storage/project/branch',['common/storage/constants'], function (C
 
         this.branchStatusHandlers = [];
         this.hashUpdateHandlers = [];
+        this.callbackQueue = [];
 
         this._remoteUpdateHandler = null;
 
@@ -3411,16 +1562,15 @@ define('common/storage/project/branch',['common/storage/constants'], function (C
             self.hashUpdateHandlers = [];
 
             self._remoteUpdateHandler = null;
-            for (i = 0; i < commitQueue.length; i += 1) {
+            for (i = 0; i < self.callbackQueue.length; i += 1) {
                 // Make sure there are no pending callbacks, invoke with status CANCELED.
                 commitResult = {
                     status: CONSTANTS.CANCELED,
                     hash: commitQueue[i].commitObject[CONSTANTS.MONGO_ID]
                 };
-                if (commitQueue[i].callback) {
-                    commitQueue[i].callback(null, commitResult);
-                }
+                self.callbackQueue[i](null, commitResult);
             }
+            self.callbackQueue = [];
             commitQueue = [];
             updateQueue = [];
         };
@@ -3447,8 +1597,9 @@ define('common/storage/project/branch',['common/storage/constants'], function (C
         };
 
         // Queue related functions
-        this.queueCommit = function (commitData) {
+        this.queueCommit = function (commitData, commitCallback) {
             commitQueue.push(commitData);
+            self.callbackQueue.push(commitCallback);
             logger.debug('Adding new commit to queue', commitQueue.length);
         };
 
@@ -3456,6 +1607,7 @@ define('common/storage/project/branch',['common/storage/constants'], function (C
             var commitData;
             if (shift) {
                 commitData = commitQueue.shift();
+                self.callbackQueue.shift();
                 logger.debug('Removed commit from queue', commitQueue.length);
             } else {
                 commitData = commitQueue[0];
@@ -5654,6 +3806,10 @@ return Q;
 /*globals define*/
 /*jshint browser: true, node:true*/
 /**
+
+ *
+ * Storage.openProject resolves with an instance of this classes.
+ *
  * @author pmeijer / https://github.com/pmeijer
  */
 
@@ -5664,6 +3820,19 @@ define('common/storage/project/project',[
 ], function (ProjectInterface, Branch, Q) {
     'use strict';
 
+    /**
+     * This project uses a common storage to connect to the database on the server via web-sockets.
+     * It can run under both nodeJS and in the browser.
+     *
+     *
+     * @param {string} projectId - Id of project to be opened.
+     * @param {object} storage - Storage connected to the server and database.
+     * @param {object} mainLogger - Logger instance.
+     * @param {GmeConfig} gmeConfig
+     * @alias Project
+     * @constructor
+     * @augments ProjectInterface
+     */
     function Project(projectId, storage, mainLogger, gmeConfig) {
         var self = this;
         this.branches = {};
@@ -5911,6 +4080,13 @@ define('common/storage/storageclasses/editorstorage',[
 ], function (StorageObjectLoaders, CONSTANTS, Project, Branch, ASSERT, GENKEY) {
     'use strict';
 
+    /**
+     *
+     * @param webSocket
+     * @param mainLogger
+     * @param gmeConfig
+     * @constructor
+     */
     function EditorStorage(webSocket, mainLogger, gmeConfig) {
         var self = this,
             logger = mainLogger.fork('storage'),
@@ -5946,7 +4122,7 @@ define('common/storage/storageclasses/editorstorage',[
         };
 
         this.close = function (callback) {
-            var error = '',
+            var error = null,
                 openProjects = Object.keys(projects),
                 projectCnt = openProjects.length;
 
@@ -5954,8 +4130,8 @@ define('common/storage/storageclasses/editorstorage',[
 
             function afterProjectClosed(err) {
                 if (err) {
-                    logger.error(err);
-                    error += err;
+                    logger.error(err.message);
+                    error = err;
                 }
                 logger.debug('inside afterProjectClosed projectCnt', projectCnt);
                 if (projectCnt === 0) {
@@ -5969,7 +4145,7 @@ define('common/storage/storageclasses/editorstorage',[
                     self.connected = false;
                     // Remove all local event-listeners.
                     webSocket.clearAllEvents();
-                    callback(error || null);
+                    callback(error);
                 }
             }
 
@@ -6007,7 +4183,7 @@ define('common/storage/storageclasses/editorstorage',[
             };
             if (projects[projectId]) {
                 logger.error('project is already open', projectId);
-                callback('project is already open');
+                callback(new Error('project is already open'));
             }
             webSocket.openProject(data, function (err, branches, access) {
                 if (err) {
@@ -6016,21 +4192,21 @@ define('common/storage/storageclasses/editorstorage',[
                 }
                 var project = new Project(projectId, self, logger, gmeConfig);
                 projects[projectId] = project;
-                callback(err, project, branches, access);
+                callback(null, project, branches, access);
             });
         };
 
         this.closeProject = function (projectId, callback) {
             var project = projects[projectId],
-                error = '',
+                error = null,
                 branchCnt,
                 branchNames;
             logger.debug('closeProject', projectId);
 
             function closeAndDelete(err) {
                 if (err) {
-                    logger.error(err);
-                    error += err;
+                    logger.error(err.message);
+                    error = err;
                 }
                 logger.debug('inside closeAndDelete branchCnt', branchCnt);
                 if (branchCnt === 0) {
@@ -6070,12 +4246,12 @@ define('common/storage/storageclasses/editorstorage',[
                 branch;
 
             if (!project) {
-                callback('Cannot open branch, ' + branchName + ', project ' + projectId + ' is not opened.');
+                callback(new Error('Cannot open branch, ' + branchName + ', project ' + projectId + ' is not opened.'));
                 return;
             }
 
             if (project.branches[branchName]) {
-                callback('Branch is already open ' + branchName + ', project: ' + projectId);
+                callback(new Error('Branch is already open ' + branchName + ', project: ' + projectId));
                 return;
             }
 
@@ -6100,7 +4276,7 @@ define('common/storage/storageclasses/editorstorage',[
                 branch.addHashUpdateHandler(hashUpdateHandler);
                 branch.addBranchStatusHandler(branchStatusHandler);
 
-                branch._remoteUpdateHandler = function (_ws, updateData, callback) {
+                branch._remoteUpdateHandler = function (_ws, updateData, initCallback) {
                     var j,
                         originHash = updateData.commitObject[CONSTANTS.MONGO_ID];
                     logger.debug('_remoteUpdateHandler invoked for project, branch', projectId, branchName);
@@ -6113,7 +4289,7 @@ define('common/storage/storageclasses/editorstorage',[
 
                     if (branch.getCommitQueue().length === 0) {
                         if (branch.getUpdateQueue().length === 1) {
-                            self._pullNextQueuedCommit(projectId, branchName, callback); // hashUpdateHandlers
+                            self._pullNextQueuedCommit(projectId, branchName, initCallback); // hashUpdateHandlers
                         }
                     } else {
                         logger.debug('commitQueue is not empty, only updating originHash.');
@@ -6135,7 +4311,8 @@ define('common/storage/storageclasses/editorstorage',[
             logger.debug('closeBranch', projectId, branchName);
 
             if (!project) {
-                callback('Cannot close branch, ' + branchName + ', project ' + projectId + ' is not opened.');
+                callback(new Error('Cannot close branch, ' + branchName + ', project ' + projectId +
+                    ' is not opened.'));
                 return;
             }
 
@@ -6171,38 +4348,32 @@ define('common/storage/storageclasses/editorstorage',[
             this.logger.debug('forkBranch', projectId, branchName, forkName, commitHash);
 
             if (!project) {
-                callback('Cannot fork branch, ' + branchName + ', project ' + projectId + ' is not opened.');
+                callback(new Error('Cannot fork branch, ' + branchName + ', project ' + projectId + ' is not opened.'));
                 return;
             }
 
             branch = project.branches[branchName];
 
             if (!branch) {
-                callback('Cannot fork branch, branch is not open ' + branchName + ', project: ' + projectId);
+                callback(new Error('Cannot fork branch, branch is not open ' + branchName + ', project: ' + projectId));
                 return;
             }
 
             forkData = branch.getCommitsForNewFork(commitHash, forkName); // commitHash = null defaults to latest commit
             self.logger.debug('forkBranch - forkData', forkData);
             if (forkData === false) {
-                callback('Could not find specified commitHash');
+                callback(new Error('Could not find specified commitHash'));
                 return;
             }
 
             function commitNext() {
-                var currentCommitData = forkData.queue.shift(),
-                    commitCallback;
+                var currentCommitData = forkData.queue.shift();
 
                 logger.debug('forkBranch - commitNext, currentCommitData', currentCommitData);
                 if (currentCommitData) {
-                    // Temporarily remove the callback while committing.
                     delete currentCommitData.branchName;
-                    commitCallback = currentCommitData.callback;
-                    delete currentCommitData.callback;
 
                     webSocket.makeCommit(currentCommitData, function (err, result) {
-                        // Add back the callback while committing (needed when closing original branch)
-                        currentCommitData.callback = commitCallback;
                         if (err) {
                             logger.error('forkBranch - failed committing', err);
                             callback(err);
@@ -6229,6 +4400,8 @@ define('common/storage/storageclasses/editorstorage',[
         this.makeCommit = function (projectId, branchName, parents, rootHash, coreObjects, msg, callback) {
             var project = projects[projectId],
                 branch,
+                commitId,
+                commitCallback,
                 commitData = {
                     projectId: projectId,
                     commitObject: null,
@@ -6240,6 +4413,20 @@ define('common/storage/storageclasses/editorstorage',[
 
             if (project) {
                 project.insertObject(commitData.commitObject);
+                commitId = commitData.commitObject[CONSTANTS.MONGO_ID];
+
+                commitCallback = function commitCallback() {
+                    delete project.projectCache.queuedPersists[commitId];
+                    self.logger.debug('Removed now persisted core-objects from cache: ',
+                        Object.keys(project.projectCache.queuedPersists).length);
+                    callback.apply(null, arguments);
+                };
+
+                project.projectCache.queuedPersists[commitId] = coreObjects;
+                logger.debug('Queued non-persisted core-objects in cache: ',
+                    Object.keys(project.projectCache.queuedPersists).length);
+            } else {
+                commitCallback = callback;
             }
 
             if (typeof branchName === 'string') {
@@ -6250,9 +4437,9 @@ define('common/storage/storageclasses/editorstorage',[
             logger.debug('makeCommit', commitData);
             if (branch) {
                 logger.debug('makeCommit, branch is open will commit using commitQueue. branchName:', branchName);
-                self._commitToBranch(projectId, branchName, commitData, parents[0], callback);
+                self._commitToBranch(projectId, branchName, commitData, parents[0], commitCallback);
             } else {
-                webSocket.makeCommit(commitData, callback);
+                webSocket.makeCommit(commitData, commitCallback);
             }
         };
 
@@ -6267,7 +4454,8 @@ define('common/storage/storageclasses/editorstorage',[
                 project.loadObject(newHash, function (err, commitObject) {
                     var commitData;
                     if (err) {
-                        callback('loading commitObject failed with err, ' + err);
+                        logger.error('setBranchHash, faild to load in commitObject');
+                        callback(err);
                         return;
                     }
                     logger.debug('setBranchHash, loaded commitObject');
@@ -6290,6 +4478,7 @@ define('common/storage/storageclasses/editorstorage',[
             var project = projects[projectId],
                 newCommitHash = commitData.commitObject._id,
                 branch = project.branches[branchName],
+                wasFirstInQueue,
                 eventData = {
                     commitData: commitData,
                     local: true
@@ -6298,9 +4487,8 @@ define('common/storage/storageclasses/editorstorage',[
             logger.debug('_commitToBranch, [oldCommitHash, localHash]', oldCommitHash, branch.getLocalHash());
 
             if (oldCommitHash === branch.getLocalHash()) {
-                commitData.callback = callback;
                 branch.updateHashes(newCommitHash, null);
-                branch.queueCommit(commitData);
+                branch.queueCommit(commitData, callback);
 
                 if (branch.inSync === false) {
                     branch.dispatchBranchStatus(CONSTANTS.BRANCH_STATUS.AHEAD_NOT_SYNC);
@@ -6308,20 +4496,24 @@ define('common/storage/storageclasses/editorstorage',[
                     branch.dispatchBranchStatus(CONSTANTS.BRANCH_STATUS.AHEAD_SYNC);
                 }
 
-                if (branch.getCommitQueue().length === 1) { // i.e. this commit is the only one queued.
-                    logger.debug('_commitToBranch, commit was first in queue. Will start pushing commit');
-                    self._pushNextQueuedCommit(projectId, branchName);
-                }
+                // Get the queue length before dispatching because within the asynchrony,
+                // the queue may get longer and we end up never pushing any commit.
+                wasFirstInQueue = branch.getCommitQueue().length === 1;
 
                 branch.dispatchHashUpdate(eventData, function (err, proceed) {
                     logger.debug('_commitToBranch, dispatchHashUpdate done. [err, proceed]', err, proceed);
 
                     if (err) {
-                        callback('Commit failed being loaded in users: ' + err);
+                        callback(new Error('Commit failed being loaded in users: ' + err));
                     } else if (proceed === true) {
-                        logger.debug('_commitToBranch, proceed only applicable when loading external updates');
+                        if (wasFirstInQueue) {
+                            logger.debug('_commitToBranch, commit was first in queue - will start pushing commit');
+                            self._pushNextQueuedCommit(projectId, branchName);
+                        } else {
+                            logger.debug('_commitToBranch, commit was NOT first in queue');
+                        }
                     } else {
-                        callback('Commit halted when loaded in users: ' + err);
+                        callback(new Error('Commit halted when loaded in users: ' + err));
                     }
                 });
             } else {
@@ -6335,14 +4527,11 @@ define('common/storage/storageclasses/editorstorage',[
         this._pushNextQueuedCommit = function (projectId, branchName) {
             var project = projects[projectId],
                 branch = project.branches[branchName],
-                commitData,
-                callback;
+                commitData;
 
-            logger.debug('_pushNextQueuedCommit', branch.getCommitQueue());
+            logger.debug('_pushNextQueuedCommit, length=', branch.getCommitQueue().length);
 
             commitData = branch.getFirstCommit();
-            callback = commitData.callback;
-            delete commitData.callback;
 
             logger.debug('_pushNextQueuedCommit, makeCommit [from# -> to#]',
                 commitData.commitObject.parents[0], commitData.commitObject._id);
@@ -6352,24 +4541,25 @@ define('common/storage/storageclasses/editorstorage',[
                     logger.error('makeCommit failed', err);
                 }
 
-                callback(err, result);
-
-                if (branch.isOpen && !err && result) {
-                    if (result.status === CONSTANTS.SYNCED) {
-                        branch.inSync = true;
-                        branch.updateHashes(null, result.hash);
-                        branch.getFirstCommit(true);
-                        if (branch.getCommitQueue().length === 0) {
-                            branch.dispatchBranchStatus(CONSTANTS.BRANCH_STATUS.SYNC);
+                if (branch.isOpen) {
+                    branch.callbackQueue[0](err, result);
+                    if (!err && result) {
+                        if (result.status === CONSTANTS.SYNCED) {
+                            branch.inSync = true;
+                            branch.updateHashes(null, result.hash);
+                            branch.getFirstCommit(true);
+                            if (branch.getCommitQueue().length === 0) {
+                                branch.dispatchBranchStatus(CONSTANTS.BRANCH_STATUS.SYNC);
+                            } else {
+                                branch.dispatchBranchStatus(CONSTANTS.BRANCH_STATUS.AHEAD_SYNC);
+                                self._pushNextQueuedCommit(projectId, branchName);
+                            }
+                        } else if (result.status === CONSTANTS.FORKED) {
+                            branch.inSync = false;
+                            branch.dispatchBranchStatus(CONSTANTS.BRANCH_STATUS.AHEAD_NOT_SYNC);
                         } else {
-                            branch.dispatchBranchStatus(CONSTANTS.BRANCH_STATUS.AHEAD_SYNC);
-                            self._pushNextQueuedCommit(projectId, branchName);
+                            logger.error('Unsupported commit status ' + result.status);
                         }
-                    } else if (result.status === CONSTANTS.FORKED) {
-                        branch.inSync = false;
-                        branch.dispatchBranchStatus(CONSTANTS.BRANCH_STATUS.AHEAD_NOT_SYNC);
-                    } else {
-                        logger.error('Unsupported commit status ' + result.status);
                     }
                 } else {
                     logger.error('_pushNextQueuedCommit returned from server but the branch was closed, ' +
@@ -6382,13 +4572,15 @@ define('common/storage/storageclasses/editorstorage',[
             ASSERT(projects.hasOwnProperty(projectId), 'Project not opened: ' + projectId);
             var project = projects[projectId],
                 branch = project.branches[branchName],
+                error,
                 updateData;
 
             if (!branch) {
+                error = new Error('Branch, ' + branchName + ', not in project ' + projectId + '.');
                 if (callback) {
-                    callback('Branch, ' + branchName + ', not in project ' + projectId + '.');
+                    callback(error);
                 } else {
-                    throw new Error('Branch, ' + branchName + ', not in project ' + projectId + '.');
+                    throw error;
                 }
             }
 
@@ -6414,13 +4606,15 @@ define('common/storage/storageclasses/editorstorage',[
                         logger.debug('New commit was successfully loaded, updating localHash.');
                         branch.updateHashes(originHash, null);
                         branch.getFirstUpdate(true);
-                        self._pullNextQueuedCommit(projectId, branchName, callback);
+                        if (branch.getCommitQueue().length === 0) {
+                            self._pullNextQueuedCommit(projectId, branchName, callback);
+                        }
                         return;
                     } else {
                         logger.warn('Loading of update commit was aborted', {metadata: updateData});
                     }
                     if (callback) {
-                        callback(err || 'Loading the first commit was aborted');
+                        callback(new Error('Loading the first commit was aborted'));
                     }
                 });
             } else {
@@ -6451,6 +4645,106 @@ define('common/storage/storageclasses/editorstorage',[
                 project,
                 branchName;
             logger.debug('_rejoinBranchRooms');
+            function afterRejoinFn(projectId, branchName) {
+                return function (err) {
+                    var project = projects[projectId];
+                    if (err) {
+                        logger.error('_rejoinBranchRooms, could not rejoin branch room', projectId, branchName);
+                        logger.error(err);
+                        return;
+                    }
+                    logger.debug('_rejoinBranchRooms, rejoined branch room', projectId, branchName);
+
+                    if (!project) {
+                        logger.error('_rejoinBranchRooms, project has been closed after disconnect',
+                            projectId, branchName);
+                        return;
+                    }
+                    project.getBranchHash(branchName)
+                        .then(function (branchHash) {
+                            var branch = project.branches[branchName],
+                                queuedCommitHash;
+                            logger.debug('_rejoinBranchRooms received branchHash', projectId, branchName, branchHash);
+                            if (!branch) {
+                                logger.error('_rejoinBranchRooms, branch had been closed disconnect',
+                                    projectId, branchName);
+                                return;
+                            }
+
+                            if (branch.getCommitQueue().length > 0) {
+                                queuedCommitHash = branch.getFirstCommit().commitObject._id;
+                                logger.debug('_rejoinBranchRooms, commits were queued length=, firstQueuedCommitHash',
+                                    branch.getCommitQueue().length, queuedCommitHash);
+
+                                project.getCommonAncestorCommit(branchHash, queuedCommitHash)
+                                    .then(function (commonCommitHash) {
+                                        var result,
+                                            branch = project.branches[branchName];
+
+                                        logger.debug('_rejoinBranchRooms getCommonAncestorCommit',
+                                            projectId, branchName, commonCommitHash);
+                                        if (!branch) {
+                                            logger.error('_rejoinBranchRooms, branch had been closed after disconnect',
+                                                projectId, branchName);
+                                            return;
+                                        }
+                                        function dispatchSynced() {
+                                            result = {status: CONSTANTS.SYNCED, hash: branchHash};
+
+                                            branch.callbackQueue[0](null, result);
+                                            branch.inSync = true;
+                                            branch.updateHashes(null, branchHash);
+                                            branch.getFirstCommit(true);
+                                            if (branch.getCommitQueue().length === 0) {
+                                                branch.dispatchBranchStatus(CONSTANTS.BRANCH_STATUS.SYNC);
+                                            } else {
+                                                branch.dispatchBranchStatus(CONSTANTS.BRANCH_STATUS.AHEAD_SYNC);
+                                                self._pushNextQueuedCommit(projectId, branchName);
+                                            }
+                                        }
+
+                                        function dispatchForked() {
+                                            result = {status: CONSTANTS.FORKED, hash: branchHash};
+
+                                            branch.callbackQueue[0](null, result);
+                                            branch.inSync = false;
+                                            branch.dispatchBranchStatus(CONSTANTS.BRANCH_STATUS.AHEAD_NOT_SYNC);
+                                        }
+
+                                        // The commit was inserted.
+                                        if (commonCommitHash === queuedCommitHash) {
+                                            // The commit is (or was) in sync with the branch.
+                                            dispatchSynced();
+                                        } else if (commonCommitHash === branchHash) {
+                                            // The branch has moved back since the commit was made.
+                                            // Treat it like the commit was forked.
+                                            dispatchForked();
+                                        } else {
+                                            // The branch has moved forward and the commit was forked.
+                                            dispatchForked();
+                                        }
+                                    })
+                                    .catch(function (err) {
+                                        if (err.message.indexOf('Commit object does not exist [' +
+                                                queuedCommitHash) > -1) {
+                                            // Commit never made it to the server - push it.
+                                            logger.debug('First queued commit never made it to the server. push...');
+                                            self._pushNextQueuedCommit(projectId, branchName);
+                                        } else {
+                                            logger.error(err);
+                                        }
+                                    })
+                                    .done();
+                            } else {
+                                logger.debug('_rejoinBranchRooms, no commits were queued during disconnect.');
+                            }
+                        })
+                        .catch(function (err) {
+                            logger.error(err);
+                        });
+                };
+            }
+
             for (projectId in projects) {
                 if (projects.hasOwnProperty(projectId)) {
                     project = projects[projectId];
@@ -6462,7 +4756,7 @@ define('common/storage/storageclasses/editorstorage',[
                                 projectId: projectId,
                                 branchName: branchName,
                                 join: true
-                            });
+                            }, afterRejoinFn(projectId, branchName));
                         }
                     }
                 }
@@ -6503,8 +4797,8 @@ define('common/storage/socketio/browserclient',[], function () {
                 var io = io_ || window.io,
                     socket;
 
-                logger.debug('Connecting to "' + hostAddress + '" with options', gmeConfig.socketIO);
-                socket = io.connect(hostAddress, gmeConfig.socketIO);
+                logger.debug('Connecting to "' + hostAddress + '" with options', gmeConfig.socketIO.clientOptions);
+                socket = io.connect(hostAddress, gmeConfig.socketIO.clientOptions);
                 callback(null, socket);
             });
         };
@@ -6649,6 +4943,16 @@ define('common/storage/socketio/websocket',[
         logger.debug('ctor');
         EventDispatcher.call(this);
 
+        function wrapError(callback) {
+            return function () {
+                if (typeof arguments[0] === 'string') {
+                    callback(new Error(arguments[0]), arguments[1]); // Add second argument for e.g. pluginResults
+                } else {
+                    callback.apply(null, arguments);
+                }
+            };
+        }
+
         this.connect = function (networkHandler) {
             logger.debug('Connecting via ioClient.');
             ioClient.connect(function (err, socket_) {
@@ -6659,8 +4963,25 @@ define('common/storage/socketio/websocket',[
                 self.socket = socket_;
 
                 self.socket.on('connect', function () {
+                    var i,
+                        sendBufferSave = [];
                     if (beenConnected) {
                         logger.debug('Socket got reconnected.');
+
+                        // #368
+                        for (i = 0; i < self.socket.sendBuffer.length; i += 1) {
+                            // Clear all makeCommits. If pushed - they would be broadcasted back to the socket.
+                            if (self.socket.sendBuffer[i].data[0] === 'makeCommit') {
+                                logger.debug('Removed makeCommit from sendBuffer...');
+                            } else {
+                                sendBufferSave.push(self.socket.sendBuffer[i]);
+                            }
+                        }
+                        if (self.socket.receiveBuffer.length > 0) {
+                            // TODO: In which cases is this applicable??
+                            logger.debug('receiveBuffer not empty after reconnect');
+                        }
+                        self.socket.sendBuffer = sendBufferSave;
                         networkHandler(null, CONSTANTS.RECONNECTED);
                     } else {
                         logger.debug('Socket got connected for the first time.');
@@ -6716,6 +5037,11 @@ define('common/storage/socketio/websocket',[
                     logger.debug('BRANCH_UPDATED event', {metadata: data});
                     self.dispatchEvent(self.getBranchUpdateEventName(data.projectId, data.branchName), data);
                 });
+
+                self.socket.on(CONSTANTS.BRANCH_ROOM_SOCKETS, function (data) {
+                    logger.debug('BRANCH_ROOM_SOCKETS event', {metadata: data});
+                    self.dispatchEvent(CONSTANTS.BRANCH_ROOM_SOCKETS, data);
+                });
             });
         };
 
@@ -6726,90 +5052,90 @@ define('common/storage/socketio/websocket',[
 
         // watcher functions
         this.watchDatabase = function (data, callback) {
-            self.socket.emit('watchDatabase', data, callback);
+            self.socket.emit('watchDatabase', data, wrapError(callback));
         };
 
         this.watchProject = function (data, callback) {
-            self.socket.emit('watchProject', data, callback);
+            self.socket.emit('watchProject', data, wrapError(callback));
         };
 
         this.watchBranch = function (data, callback) {
-            self.socket.emit('watchBranch', data, callback);
+            self.socket.emit('watchBranch', data, wrapError(callback));
         };
 
         // model editing functions
         this.openProject = function (data, callback) {
-            self.socket.emit('openProject', data, callback);
+            self.socket.emit('openProject', data, wrapError(callback));
         };
 
         this.closeProject = function (data, callback) {
-            self.socket.emit('closeProject', data, callback);
+            self.socket.emit('closeProject', data, wrapError(callback));
         };
 
         this.openBranch = function (data, callback) {
-            self.socket.emit('openBranch', data, callback);
+            self.socket.emit('openBranch', data, wrapError(callback));
         };
 
         this.closeBranch = function (data, callback) {
-            self.socket.emit('closeBranch', data, callback);
+            self.socket.emit('closeBranch', data, wrapError(callback));
         };
 
         this.makeCommit = function (data, callback) {
-            self.socket.emit('makeCommit', data, callback);
+            self.socket.emit('makeCommit', data, wrapError(callback));
         };
 
         this.loadObjects = function (data, callback) {
-            self.socket.emit('loadObjects', data, callback);
+            self.socket.emit('loadObjects', data, wrapError(callback));
         };
 
         this.setBranchHash = function (data, callback) {
-            self.socket.emit('setBranchHash', data, callback);
+            self.socket.emit('setBranchHash', data, wrapError(callback));
         };
 
         this.getBranchHash = function (data, callback) {
-            self.socket.emit('getBranchHash', data, callback);
+            self.socket.emit('getBranchHash', data, wrapError(callback));
         };
 
         // REST like functions
         this.getProjects = function (data, callback) {
-            self.socket.emit('getProjects', data, callback);
+            self.socket.emit('getProjects', data, wrapError(callback));
         };
 
         this.deleteProject = function (data, callback) {
-            self.socket.emit('deleteProject', data, callback);
+            self.socket.emit('deleteProject', data, wrapError(callback));
         };
 
         this.createProject = function (data, callback) {
-            self.socket.emit('createProject', data, callback);
+            self.socket.emit('createProject', data, wrapError(callback));
+        };
+
+        this.transferProject = function (data, callback) {
+            self.socket.emit('transferProject', data, wrapError(callback));
         };
 
         this.getBranches = function (data, callback) {
-            self.socket.emit('getBranches', data, callback);
+            self.socket.emit('getBranches', data, wrapError(callback));
         };
 
         this.getCommits = function (data, callback) {
-            self.socket.emit('getCommits', data, callback);
+            self.socket.emit('getCommits', data, wrapError(callback));
         };
 
         this.getLatestCommitData = function (data, callback) {
-            self.socket.emit('getLatestCommitData', data, callback);
+            self.socket.emit('getLatestCommitData', data, wrapError(callback));
         };
 
         this.getCommonAncestorCommit = function (data, callback) {
-            self.socket.emit('getCommonAncestorCommit', data, callback);
+            self.socket.emit('getCommonAncestorCommit', data, wrapError(callback));
         };
 
         //temporary simple request / result functions
         this.simpleRequest = function (data, callback) {
-            self.socket.emit('simpleRequest', data, callback);
-        };
-
-        this.simpleResult = function (data, callback) {
-            self.socket.emit('simpleResult', data, callback);
+            self.socket.emit('simpleRequest', data, wrapError(callback));
         };
 
         this.simpleQuery = function (workerId, data, callback) {
-            self.socket.emit('simpleQuery', workerId, data, callback);
+            self.socket.emit('simpleQuery', workerId, data, wrapError(callback));
         };
 
         // Helper functions
@@ -8097,7 +6423,8 @@ define('common/core/coretree',[
             }
 
             // TODO: infinite cycle if MAX_MUTATE is smaller than depth!
-            if (gmeConfig.storage.autoPersist && ++mutateCount > MAX_MUTATE) {
+            // gmeConfig.storage.autoPersist is removed and always false
+            if (false && ++mutateCount > MAX_MUTATE) {
                 mutateCount = 0;
 
                 for (var i = 0; i < roots.length; ++i) {
@@ -9479,6 +7806,20 @@ define('common/core/corerel',['common/util/assert', 'common/core/coretree', 'com
 
         corerel.overlayInsert = overlayInsert;
 
+        corerel.isContainerPath = function (path, parentPath) {
+            var pathArray = (path || '').split('/'),
+                parentArray = (parentPath || '').split('/'),
+                i;
+
+            for (i = 0; i < parentArray.length; i += 1) {
+                if (parentArray[i] !== pathArray[i]) {
+                    return false;
+                }
+            }
+
+            return true;
+        };
+
         return corerel;
     }
 
@@ -9503,12 +7844,19 @@ define('common/core/setcore',['common/util/assert'], function (ASSERT) {
         ASSERT(typeof options.globConf === 'object');
         ASSERT(typeof options.logger !== 'undefined');
 
-        var logger = options.logger.fork('setcore');
+        var logger = options.logger.fork('setcore'),
+            setCore = {};
+        for (var i in innerCore) {
+            setCore[i] = innerCore[i];
+        }
+        logger.debug('initialized');
+
         //help functions
-        var setModified = function (node) {
+        function setModified(node) {
             innerCore.setRegistry(node, '_sets_', (innerCore.getRegistry(node, '_sets_') || 0) + 1);
-        };
-        var getMemberPath = function (node, setElementNode) {
+        }
+
+        function getMemberPath(node, setElementNode) {
             var ownPath = innerCore.getPath(node),
                 memberPath = innerCore.getPointerPath(setElementNode, REL_ID);
 
@@ -9535,8 +7883,9 @@ define('common/core/setcore',['common/util/assert'], function (ASSERT) {
 
             return memberPath;
 
-        };
-        var getMemberRelId = function (node, setName, memberPath) {
+        }
+
+        function getMemberRelId(node, setName, memberPath) {
             ASSERT(typeof setName === 'string');
             var setNode = innerCore.getChild(innerCore.getChild(node, SETS_ID), setName);
             var elements = innerCore.getChildrenRelids(setNode);
@@ -9547,8 +7896,9 @@ define('common/core/setcore',['common/util/assert'], function (ASSERT) {
                 }
             }
             return null;
-        };
-        var createNewMemberRelid = function (setNode) {
+        }
+
+        function createNewMemberRelid(setNode) {
             var MAX_RELID = Math.pow(2, 31);
             var existingRelIds = innerCore.getChildrenRelids(setNode);
             var relid;
@@ -9556,9 +7906,9 @@ define('common/core/setcore',['common/util/assert'], function (ASSERT) {
                 relid = Math.floor(Math.random() * MAX_RELID);
             } while (existingRelIds.indexOf(relid) !== -1);
             return '' + relid;
-        };
+        }
 
-        var harmonizeMemberData = function (node, setName) {
+        function harmonizeMemberData(node, setName) {
             var setNode = innerCore.getChild(innerCore.getChild(node, SETS_ID), setName),
                 base = innerCore.getBase(setNode),
                 allMembers = innerCore.getChildrenRelids(setNode),
@@ -9576,51 +7926,50 @@ define('common/core/setcore',['common/util/assert'], function (ASSERT) {
                 for (i = 0; i < ownMembers.length; i++) {
                     ownMember = innerCore.getChild(setNode, ownMembers[i]);
                     path = innerCore.getPointerPath(ownMember, 'member');
-                    for (j = 0; j < inheritedMembers.length; j++) {
-                        inheritedMember = innerCore.getChild(setNode, inheritedMembers[j]);
-                        if (getMemberPath(node, inheritedMember) === path) {
-                            //redundancy...
-                            names = innerCore.getAttributeNames(ownMember);
-                            for (k = 0; k < names.length; k++) {
-                                if (innerCore.getAttribute(ownMember, names[k]) !==
-                                    innerCore.getAttribute(inheritedMember, names[k])) {
+                    if (path === undefined) {
+                        innerCore.deleteNode(innerCore.getChild(setNode, ownMembers[i]), true);
+                    } else {
+                        for (j = 0; j < inheritedMembers.length; j++) {
+                            inheritedMember = innerCore.getChild(setNode, inheritedMembers[j]);
+                            if (getMemberPath(node, inheritedMember) === path) {
+                                //redundancy...
+                                names = innerCore.getAttributeNames(ownMember);
+                                for (k = 0; k < names.length; k++) {
+                                    if (innerCore.getAttribute(ownMember, names[k]) !==
+                                        innerCore.getAttribute(inheritedMember, names[k])) {
 
-                                    innerCore.setAttribute(inheritedMember, names[k],
-                                        innerCore.getAttribute(ownMember, names[k]));
+                                        innerCore.setAttribute(inheritedMember, names[k],
+                                            innerCore.getAttribute(ownMember, names[k]));
+                                    }
                                 }
-                            }
-                            names = innerCore.getRegistryNames(ownMember);
-                            for (k = 0; k < names.length; k++) {
-                                if (innerCore.getRegistry(ownMember, names[k]) !==
-                                    innerCore.getRegistry(inheritedMember, names[k])) {
+                                names = innerCore.getRegistryNames(ownMember);
+                                for (k = 0; k < names.length; k++) {
+                                    if (innerCore.getRegistry(ownMember, names[k]) !==
+                                        innerCore.getRegistry(inheritedMember, names[k])) {
 
-                                    innerCore.setRegistry(inheritedMember, names[k],
-                                        innerCore.getRegistry(ownMember, names[k]));
+                                        innerCore.setRegistry(inheritedMember, names[k],
+                                            innerCore.getRegistry(ownMember, names[k]));
+                                    }
                                 }
+                                innerCore.deleteNode(innerCore.getChild(setNode, ownMembers[i]), true);
                             }
-                            innerCore.deleteNode(innerCore.getChild(setNode, ownMembers[i]), true);
                         }
                     }
                 }
             }
-        };
-
-        //copy lower layer
-        var setcore = {};
-        for (var i in innerCore) {
-            setcore[i] = innerCore[i];
         }
-        logger.debug('initialized');
+
+
         //adding new functions
-        setcore.getSetNumbers = function (node) {
+        setCore.getSetNumbers = function (node) {
             return this.getSetNames(node).length;
         };
 
-        setcore.getSetNames = function (node) {
+        setCore.getSetNames = function (node) {
             return innerCore.getPointerNames(innerCore.getChild(node, SETS_ID)) || [];
         };
 
-        setcore.getPointerNames = function (node) {
+        setCore.getPointerNames = function (node) {
             var sorted = [],
                 raw = innerCore.getPointerNames(node);
             for (var i = 0; i < raw.length; i++) {
@@ -9631,7 +7980,7 @@ define('common/core/setcore',['common/util/assert'], function (ASSERT) {
             return sorted;
         };
 
-        setcore.getCollectionNames = function (node) {
+        setCore.getCollectionNames = function (node) {
             var sorted = [],
                 raw = innerCore.getCollectionNames(node);
             for (var i = 0; i < raw.length; i++) {
@@ -9642,9 +7991,9 @@ define('common/core/setcore',['common/util/assert'], function (ASSERT) {
             return sorted;
         };
 
-        setcore.getMemberPaths = function (node, setName) {
-            ASSERT(typeof setName === 'string');
+        setCore.getMemberPaths = function (node, setName) {
             harmonizeMemberData(node, setName);
+            ASSERT(typeof setName === 'string');
             var setNode = innerCore.getChild(innerCore.getChild(node, SETS_ID), setName);
             var members = [];
             var elements = innerCore.getChildrenRelids(setNode);
@@ -9658,9 +8007,8 @@ define('common/core/setcore',['common/util/assert'], function (ASSERT) {
             return members;
         };
 
-        setcore.delMember = function (node, setName, memberPath) {
+        setCore.delMember = function (node, setName, memberPath) {
             ASSERT(typeof setName === 'string');
-            harmonizeMemberData(node, setName);
             //we only need the path of the member so we allow to enter only it
             if (typeof memberPath !== 'string') {
                 memberPath = innerCore.getPath(memberPath);
@@ -9676,17 +8024,13 @@ define('common/core/setcore',['common/util/assert'], function (ASSERT) {
             }
         };
 
-        setcore.addMember = function (node, setName, member) {
+        setCore.addMember = function (node, setName, member) {
             ASSERT(typeof setName === 'string');
-            var setsNode = innerCore.getChild(node, SETS_ID);
-            //TODO decide if the member addition should really create the set or it should fail...
-            if (innerCore.getPointerPath(setsNode, setName) === undefined) {
-                setcore.createSet(node, setName);
-            }
-            harmonizeMemberData(node, setName);
-            var setNode = innerCore.getChild(setsNode, setName);
-            var setMemberRelId = getMemberRelId(node, setName, setcore.getPath(member));
+            var setsNode = innerCore.getChild(node, SETS_ID),
+                setNode = innerCore.getChild(setsNode, setName),
+                setMemberRelId = getMemberRelId(node, setName, setCore.getPath(member));
             if (setMemberRelId === null) {
+                createSetOnDemand(node, setName);
                 var setMember = innerCore.getChild(setNode, createNewMemberRelid(setNode));
                 innerCore.setPointer(setMember, 'member', member);
 
@@ -9700,7 +8044,7 @@ define('common/core/setcore',['common/util/assert'], function (ASSERT) {
         //TODO: var memberNode = innerCore.getChild(
         //TODO: innerCore.getChild(innerCore.getChild(node, SETS_ID), setName), memberRelId);
 
-        setcore.getMemberAttributeNames = function (node, setName, memberPath) {
+        setCore.getMemberAttributeNames = function (node, setName, memberPath) {
             ASSERT(typeof setName === 'string');
             harmonizeMemberData(node, setName);
             var memberRelId = getMemberRelId(node, setName, memberPath);
@@ -9713,7 +8057,7 @@ define('common/core/setcore',['common/util/assert'], function (ASSERT) {
             return [];
         };
 
-        setcore.getMemberOwnAttributeNames = function (node, setName, memberPath) {
+        setCore.getMemberOwnAttributeNames = function (node, setName, memberPath) {
             ASSERT(typeof setName === 'string');
             var memberRelId = getMemberRelId(node, setName, memberPath);
             if (memberRelId) {
@@ -9725,9 +8069,9 @@ define('common/core/setcore',['common/util/assert'], function (ASSERT) {
             return [];
         };
 
-        setcore.getMemberAttribute = function (node, setName, memberPath, attrName) {
-            ASSERT(typeof setName === 'string' && typeof attrName === 'string');
+        setCore.getMemberAttribute = function (node, setName, memberPath, attrName) {
             harmonizeMemberData(node, setName);
+            ASSERT(typeof setName === 'string' && typeof attrName === 'string');
             var memberRelId = getMemberRelId(node, setName, memberPath);
             if (memberRelId) {
                 var memberNode = innerCore.getChild(
@@ -9737,7 +8081,7 @@ define('common/core/setcore',['common/util/assert'], function (ASSERT) {
             }
         };
 
-        setcore.setMemberAttribute = function (node, setName, memberPath, attrName, attrValue) {
+        setCore.setMemberAttribute = function (node, setName, memberPath, attrName, attrValue) {
             ASSERT(typeof setName === 'string' && typeof attrName === 'string' && attrValue !== undefined);
             harmonizeMemberData(node, setName);
             var memberRelId = getMemberRelId(node, setName, memberPath);
@@ -9750,9 +8094,8 @@ define('common/core/setcore',['common/util/assert'], function (ASSERT) {
             }
         };
 
-        setcore.delMemberAttribute = function (node, setName, memberPath, attrName) {
+        setCore.delMemberAttribute = function (node, setName, memberPath, attrName) {
             ASSERT(typeof setName === 'string' && typeof attrName === 'string');
-            harmonizeMemberData(node, setName);
             var memberRelId = getMemberRelId(node, setName, memberPath);
             if (memberRelId) {
                 var memberNode = innerCore.getChild(
@@ -9763,7 +8106,7 @@ define('common/core/setcore',['common/util/assert'], function (ASSERT) {
             }
         };
 
-        setcore.getMemberRegistryNames = function (node, setName, memberPath) {
+        setCore.getMemberRegistryNames = function (node, setName, memberPath) {
             ASSERT(typeof setName === 'string');
             harmonizeMemberData(node, setName);
             var memberRelId = getMemberRelId(node, setName, memberPath);
@@ -9775,7 +8118,7 @@ define('common/core/setcore',['common/util/assert'], function (ASSERT) {
             }
             return [];
         };
-        setcore.getMemberOwnRegistryNames = function (node, setName, memberPath) {
+        setCore.getMemberOwnRegistryNames = function (node, setName, memberPath) {
             ASSERT(typeof setName === 'string');
             var memberRelId = getMemberRelId(node, setName, memberPath);
             if (memberRelId) {
@@ -9786,7 +8129,7 @@ define('common/core/setcore',['common/util/assert'], function (ASSERT) {
             }
             return [];
         };
-        setcore.getMemberRegistry = function (node, setName, memberPath, regName) {
+        setCore.getMemberRegistry = function (node, setName, memberPath, regName) {
             ASSERT(typeof setName === 'string' && typeof regName === 'string');
             harmonizeMemberData(node, setName);
             var memberRelId = getMemberRelId(node, setName, memberPath);
@@ -9797,7 +8140,7 @@ define('common/core/setcore',['common/util/assert'], function (ASSERT) {
                 return innerCore.getRegistry(memberNode, regName);
             }
         };
-        setcore.setMemberRegistry = function (node, setName, memberPath, regName, regValue) {
+        setCore.setMemberRegistry = function (node, setName, memberPath, regName, regValue) {
             ASSERT(typeof setName === 'string' && typeof regName === 'string' && regValue !== undefined);
             harmonizeMemberData(node, setName);
             var memberRelId = getMemberRelId(node, setName, memberPath);
@@ -9809,9 +8152,8 @@ define('common/core/setcore',['common/util/assert'], function (ASSERT) {
                 setModified(node);
             }
         };
-        setcore.delMemberRegistry = function (node, setName, memberPath, regName) {
+        setCore.delMemberRegistry = function (node, setName, memberPath, regName) {
             ASSERT(typeof setName === 'string' && typeof regName === 'string');
-            harmonizeMemberData(node, setName);
             var memberRelId = getMemberRelId(node, setName, memberPath);
             if (memberRelId) {
                 var memberNode = innerCore.getChild(
@@ -9821,7 +8163,17 @@ define('common/core/setcore',['common/util/assert'], function (ASSERT) {
                 setModified(node);
             }
         };
-        setcore.createSet = function (node, setName) {
+
+        function createSetOnDemand(node, setName) {
+            //the function checks if there is no set defined on the node's level and create it
+            var setsNode = innerCore.getChild(node, SETS_ID);
+            if (innerCore.getOwnPointerPath(setsNode, setName) === undefined) {
+                setCore.createSet(node, setName);
+            }
+        }
+
+
+        setCore.createSet = function (node, setName) {
             ASSERT(typeof setName === 'string');
             var setsNode = innerCore.getChild(node, SETS_ID),
                 setNode = innerCore.getChild(setsNode, setName);
@@ -9832,7 +8184,7 @@ define('common/core/setcore',['common/util/assert'], function (ASSERT) {
             innerCore.setPointer(innerCore.getChild(node, SETS_ID), setName, null);
             setModified(node);
         };
-        setcore.deleteSet = function (node, setName) {
+        setCore.deleteSet = function (node, setName) {
             ASSERT(typeof setName === 'string');
             var setsNode = innerCore.getChild(node, SETS_ID),
                 setNode = innerCore.getChild(setsNode, setName);
@@ -9841,9 +8193,9 @@ define('common/core/setcore',['common/util/assert'], function (ASSERT) {
             setModified(node);
         };
 
-        setcore.isMemberOf = function (node) {
+        setCore.isMemberOf = function (node) {
             //TODO we should find a proper way to do this - or at least some support from lower layers would be fine
-            var coll = setcore.getCollectionPaths(node, REL_ID);
+            var coll = setCore.getCollectionPaths(node, REL_ID);
             var sets = {};
             for (var i = 0; i < coll.length; i++) {
                 var pathArray = coll[i].split('/');
@@ -9880,7 +8232,7 @@ define('common/core/setcore',['common/util/assert'], function (ASSERT) {
          return datas;
          };*/
 
-        return setcore;
+        return setCore;
 
     }
 
@@ -10330,6 +8682,25 @@ define('common/core/coretype',['common/util/assert', 'common/core/core', 'common
 
         core.isValidNode = isValidNode;
 
+        //check of inheritance chain and containment hierarchy collision
+        core.isInheritanceContainmentCollision = function (node, parent) {
+            var parentPath = core.getPath(parent),
+                bases = [];
+
+            while (node) {
+                bases.push(core.getPath(node));
+                node = core.getBase(node);
+            }
+
+            while (parent) {
+                if (bases.indexOf(core.getPath(parent)) !== -1) {
+                    return true;
+                }
+                parent = core.getParent(parent);
+            }
+            return false;
+        };
+
         // ----- navigation
 
         core.getBase = function (node) {
@@ -10360,7 +8731,7 @@ define('common/core/coretype',['common/util/assert', 'common/core/core', 'common
             return node;
         }
 
-        core.loadChild = function (node, relid) {
+        function _loadChild(node, relid) {
             var child = null,
                 base = core.getBase(node),
                 basechild = null;
@@ -10390,6 +8761,19 @@ define('common/core/coretype',['common/util/assert', 'common/core/core', 'common
             }
             //normal child
             return TASYNC.call(__loadBase, oldcore.loadChild(node, relid));
+        }
+
+        core.loadChild = function (node, relid) {
+            return TASYNC.call(function (child) {
+                if (child && core.isInheritanceContainmentCollision(child, core.getParent(child))) {
+                    logger.error('node[' + core.getPath(child) + '] was deleted due to inheritance-containment collision');
+                    core.deleteNode(child);
+                    //core.persist(core.getRoot(child));
+                    return null;
+                } else {
+                    return child;
+                }
+            }, _loadChild(node, relid));
         };
 
         core.loadByPath = function (node, path) {
@@ -10398,6 +8782,7 @@ define('common/core/coretype',['common/util/assert', 'common/core/core', 'common
             path = path.split('/');
             return loadDescendantByPath(node, path, 1);
         };
+
         var loadDescendantByPath = function (node, pathArray, index) {
             if (node === null || index === pathArray.length) {
                 return node;
@@ -10420,6 +8805,7 @@ define('common/core/coretype',['common/util/assert', 'common/core/core', 'common
         };
 
         function __loadBase(node) {
+            var path = oldcore.getPath(node);
             ASSERT(node === null || typeof node.base === 'undefined' || typeof node.base === 'object');
 
             if (typeof node.base === 'undefined') {
@@ -10428,18 +8814,25 @@ define('common/core/coretype',['common/util/assert', 'common/core/core', 'common
                     node.base = null;
                     return node;
                 } else if (isFalseNode(node)) {
-                    var root = core.getRoot(node);
                     oldcore.deleteNode(node);
-                    core.persist(root);
+                    //core.persist(core.getRoot(node));
+                    //TODO a notification should be generated towards the user
+                    logger.warn('node [' + path + '] removed due to missing base'); //TODO check if some identification can be passed
                     return null;
                 } else {
-                    var basepath = oldcore.getPointerPath(node, 'base');
-                    ASSERT(basepath !== undefined);
-                    if (basepath === null) {
+                    var basePath = oldcore.getPointerPath(node, 'base');
+                    ASSERT(basePath !== undefined);
+                    if (basePath === null) {
                         node.base = null;
                         return node;
+                    } else if (core.isContainerPath(basePath, path)) {
+                        //contained base error
+                        logger.error('node [' + path + '] contains its own base!');
+                        oldcore.deleteNode(node);
+                        //core.persist(core.getRoot(node));
+                        return null;
                     } else {
-                        return TASYNC.call(__loadBase2, node, core.loadByPath(core.getRoot(node), basepath));
+                        return TASYNC.call(__loadBase2, node, core.loadByPath(core.getRoot(node), basePath));
                     }
                 }
             } else {
@@ -11555,8 +9948,8 @@ define('common/core/metacore',[
                 for (i = 0; i < names.length; i++) {
                     if (smaller.attributes[names[i]]) {
                         //they both have the attribute - if it differs we keep the whole of the bigger
-                        if (CANON.stringify(smaller.attributes[names[i]] !==
-                                CANON.stringify(bigger.attributes[names[i]]))) {
+                        if (CANON.stringify(smaller.attributes[names[i]]) !==
+                            CANON.stringify(bigger.attributes[names[i]])) {
 
                             diff.attributes = diff.attributes || {};
                             diff.attributes[names[i]] = bigger.attributes[names[i]];
@@ -11651,6 +10044,30 @@ define('common/core/metacore',[
         core.getValidChildrenPaths = function (node) {
             return core.getMemberPaths(getMetaChildrenNode(node), 'items');
         };
+
+        core.getChildrenMeta = function (node) {
+            var cMetaNode = getMetaChildrenNode(node),
+                childrenMeta = {
+                    min: core.getAttribute(cMetaNode, 'min'),
+                    max: core.getAttribute(cMetaNode, 'max')
+                },
+                paths = core.getMemberPaths(cMetaNode, 'items'),
+                i;
+
+            for (i = 0; i < paths.length; i += 1) {
+                childrenMeta[paths[i]] = {
+                    min: core.getMemberAttribute(cMetaNode, 'items', paths[i], 'min'),
+                    max: core.getMemberAttribute(cMetaNode, 'items', paths[i], 'max')
+                };
+            }
+
+            if(paths.length > 0){
+                return childrenMeta;
+            }
+
+            return null;
+        };
+
         core.setChildMeta = function (node, child, min, max) {
             core.addMember(getMetaChildrenNode(node), 'items', child);
             min = min || -1;
@@ -12076,7 +10493,7 @@ define('common/core/corediff',['common/util/canon',
                             for (j = 0; j < names.length; j++) {
                                 if (ovr[paths[i]][names[j]] === '/_nullptr') {
                                     data[paths[i]][names[j]] = null;
-                                } else if (names[j].slice(-4) !== '-inv' &&
+                                } else if (names[j].slice(-4) !== '-inv' && names[j].indexOf('_') === -1 &&
                                     ovr[paths[i]][names[j]].indexOf('_') === -1) {
 
                                     data[paths[i]][names[j]] = _core.joinPaths(base, ovr[paths[i]][names[j]]);
@@ -14190,6 +12607,432 @@ define('common/core/corediff',['common/util/canon',
  * @author kecso / https://github.com/kecso
  */
 
+define('common/core/metacachecore',['common/util/assert', 'common/core/core', 'common/core/tasync'], function (ASSERT, Core, TASYNC) {
+        'use strict';
+
+        var MetaCacheCore = function (oldcore, options) {
+            ASSERT(typeof options === 'object');
+            ASSERT(typeof options.globConf === 'object');
+            ASSERT(typeof options.logger !== 'undefined');
+            // copy all operations
+            var core = {},
+                META_SET_NAME = 'MetaAspectSet',
+                logger = options.logger.fork('MetaCacheCore');
+            for (var key in oldcore) {
+                core[key] = oldcore[key];
+            }
+            logger.debug('initialized');
+
+            function loadMetaSet(root) {
+                var paths = oldcore.getMemberPaths(root, META_SET_NAME),
+                    i,
+                    metaNodes = [];
+
+                for (i = 0; i < paths.length; i += 1) {
+                    metaNodes.push(oldcore.loadByPath(root, paths[i]));
+                }
+
+                return TASYNC.lift(metaNodes);
+            }
+
+            core.loadRoot = function (hash) {
+                return TASYNC.call(function (root) {
+                    return TASYNC.call(function (elements) {
+                        var i = 0;
+                        root.metaNodes = {};
+                        for (i = 0; i < elements.length; i += 1) {
+                            root.metaNodes[oldcore.getPath(elements[i])] = elements[i];
+                        }
+                        return root;
+                    }, loadMetaSet(root));
+                }, oldcore.loadRoot(hash));
+            };
+
+            //functions where the cache may needs to be updated
+            core.createNode = function (parameters) {
+                var node = oldcore.createNode(parameters);
+
+                if (!parameters || !parameters.parent) {
+                    //a root just have been created
+                    node.metaNodes = {};
+                }
+
+                return node;
+            };
+
+            core.addMember = function (node, setName, member) {
+                var root = core.getRoot(node);
+                oldcore.addMember(node, setName, member);
+
+                //check if our cache needs to be updated
+                if (setName === META_SET_NAME && core.getPath(node) === core.getPath(root)) {
+                    root.metaNodes[core.getPath(member)] = member;
+                }
+            };
+
+            core.delMember = function (node, setName, memberPath) {
+                var root = core.getRoot(node);
+                oldcore.delMember(node, setName, memberPath);
+
+                //check if our cache needs to be updated
+                if (setName === META_SET_NAME && core.getPath(node) === core.getPath(root)) {
+                    delete root.metaNodes[memberPath];
+                }
+            };
+
+            core.deleteNode = function (node, technical) {
+                var root = core.getRoot(node);
+                if (root.metaNodes[core.getPath(node)]) {
+                    delete root.metaNodes[core.getPath(node)];
+                }
+                oldcore.deleteNode(node, technical);
+            };
+
+            core.moveNode = function (node, parent) {
+                var root = core.getRoot(node),
+                    oldpath = core.getPath(node),
+                    moved = oldcore.moveNode(node, parent);
+
+                if (root.metaNodes[oldpath]) {
+                    delete root.metaNodes[oldpath];
+                    root.metaNodes[core.getPath(moved)] = moved;
+                }
+
+                return moved;
+            };
+
+            //additional inquiry functions
+            core.isMetaNode = function (node) {
+                var root = core.getRoot(node);
+                if (root.metaNodes && root.metaNodes[core.getPath(node)]) {
+                    return true;
+                }
+
+                return false;
+            };
+
+            core.getAllMetaNodes = function (node) {
+                var root = core.getRoot(node);
+
+                if (root.metaNodes) {
+                    return root.metaNodes;
+                }
+
+                return [];
+            };
+
+            core.isAbstract = function (node) {
+                return core.getRegistry(node, 'isAbstract') === true;
+            };
+
+            core.isConnection = function (node) {
+                var validPtrNames = oldcore.getValidPointerNames(node);
+
+                return validPtrNames.indexOf('dst') !== -1 && validPtrNames.indexOf('src') !== -1;
+            };
+
+            function sensitiveFilter(validNodes) {
+                var i;
+
+                i = validNodes.length;
+                while (i--) {
+                    if (core.isConnection(validNodes[i]) || core.isAbstract(validNodes[i])) {
+                        validNodes.splice(i, 1);
+                    }
+                }
+            }
+
+            //parameters
+            // node - the node in question
+            // children - the current children of the node, so that multiplicity can be checked
+            // sensitive - if true the function do not return the connection and abstract types
+            // multiplicity - if true the function filters out possibilities that fail multiplicity check
+            // aspect - if given the function also filters out valid children type meta nodes based on aspect rule
+            core.getValidChildrenMetaNodes = function (parameters) {
+                var validNodes = [],
+                    node = parameters.node,
+                    metaNodes = core.getRoot(node).metaNodes,
+                    keys = Object.keys(metaNodes || {}),
+                    i, j,
+                    typeCounters = {},
+                    children = parameters.children || [],
+                    rules,
+                    inAspect,
+                    temp;
+
+                rules = oldcore.getChildrenMeta(node) || {};
+
+                for (i = 0; i < keys.length; i += 1) {
+                    temp = metaNodes[keys[i]];
+                    while (temp) {
+                        if (rules[oldcore.getPath(temp)]) {
+                            validNodes.push(metaNodes[keys[i]]);
+                            break;
+                        }
+                        temp = oldcore.getBase(temp);
+                    }
+                    //if (core.isValidChildOf(metaNodes[keys[i]], node)) {
+                    //    validNodes.push(metaNodes[keys[i]]);
+                    //}
+                }
+
+                //before every next step we check if we still have potential nodes
+                if (validNodes.length === 0) {
+                    return validNodes;
+                }
+
+                if (parameters.sensitive === true) {
+                    sensitiveFilter(validNodes);
+                }
+
+                //before every next step we check if we still have potential nodes
+                if (validNodes.length === 0) {
+                    return validNodes;
+                }
+
+                if (parameters.multiplicity === true) {
+                    if (rules.max && rules.max > -1 && oldcore.getChildrenRelids(node).length >= rules.max) {
+                        validNodes = [];
+                        return validNodes;
+                    }
+                    if (children.length === 0) {
+                        return validNodes; //we cannot check type-multiplicity without children
+                    }
+
+                    delete rules.max;
+                    delete rules.min;
+
+                    //we need to clear nodes that are not on the meta sheet
+                    // and we have to initialize the counters
+                    keys = Object.keys(rules);
+                    for (i = 0; i < keys.length; i += 1) {
+                        if (!metaNodes[keys[i]]) {
+                            delete rules[keys[i]];
+                        } else {
+                            typeCounters[keys[i]] = 0;
+                        }
+                    }
+
+                    keys = Object.keys(rules);
+                    for (i = 0; i < children.length; i += 1) {
+                        for (j = 0; j < keys.length; j += 1) {
+                            if (oldcore.isTypeOf(children[i], metaNodes[keys[j]])) {
+                                typeCounters[keys[j]] += 1;
+                            }
+                        }
+                    }
+
+                    i = validNodes.length;
+                    keys = Object.keys(typeCounters);
+                    while (i--) {
+                        for (j = 0; j < keys.length; j += 1) {
+                            if (rules[keys[j]].max &&
+                                rules[keys[j]].max > -1 &&
+                                rules[keys[j]].max <= typeCounters[keys[j]] &&
+                                oldcore.isTypeOf(validNodes[i], metaNodes[keys[j]])) {
+                                validNodes.splice(i, 1);
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                //before every next step we check if we still have potential nodes
+                if (validNodes.length === 0) {
+                    return validNodes;
+                }
+
+
+                if (parameters.aspect) {
+                    keys = oldcore.getAspectMeta(node, parameters.aspect);
+                    i = validNodes.length;
+
+                    while (i--) {
+                        inAspect = false;
+                        for (j = 0; j < keys.length; j += 1) {
+                            if (oldcore.isTypeOf(validNodes[i], metaNodes[keys[j]])) {
+                                inAspect = true;
+                                break;
+                            }
+                        }
+                        if (!inAspect) {
+                            validNodes.splice(i, 1);
+                        }
+                    }
+                }
+                return validNodes;
+            };
+
+            //parameters
+            // node - the node in question
+            // name - the name of the set
+            // members - the current members of the set, so that multiplicity can be checked
+            // sensitive - if true the function do not return the connection and abstract types
+            // multiplicity - if true the function filters out possibilities that fail multiplicity check
+            core.getValidSetElementsMetaNodes = function (parameters) {
+                var validNodes = [],
+                    node = parameters.node,
+                    metaNodes = core.getRoot(node).metaNodes,
+                    keys = Object.keys(metaNodes || {}),
+                    i, j,
+                    typeCounters = {},
+                    members = parameters.members || [],
+                    rules = core.getPointerMeta(node, parameters.name) || {},
+                    temp;
+
+                for (i = 0; i < keys.length; i += 1) {
+                    temp = metaNodes[keys[i]];
+                    while (temp) {
+                        if (rules[oldcore.getPath(temp)]) {
+                            validNodes.push(metaNodes[keys[i]]);
+                            break;
+                        }
+                        temp = oldcore.getBase(temp);
+                    }
+                }
+
+                //before every next step we check if we still have potential nodes
+                if (validNodes.length === 0) {
+                    return validNodes;
+                }
+
+                if (parameters.sensitive === true) {
+                    sensitiveFilter(validNodes);
+                }
+
+                //before every next step we check if we still have potential nodes
+                if (validNodes.length === 0) {
+                    return validNodes;
+                }
+
+                if (parameters.multiplicity === true) {
+                    if (rules.max && rules.max > -1 && oldcore.getMemberPaths(node).length >= rules.max) {
+                        validNodes = [];
+                        return validNodes;
+                    }
+
+                    if (members.length === 0) {
+                        return validNodes; //we cannot check type-multiplicity without children
+                    }
+
+                    delete rules.max;
+                    delete rules.min;
+
+                    //we need to clear nodes that are not on the meta sheet
+                    // and we have to initialize the counters
+                    keys = Object.keys(rules);
+                    for (i = 0; i < keys.length; i += 1) {
+                        if (!metaNodes[keys[i]]) {
+                            delete rules[keys[i]];
+                        } else {
+                            typeCounters[keys[i]] = 0;
+                        }
+                    }
+
+                    keys = Object.keys(rules);
+                    for (i = 0; i < members.length; i += 1) {
+                        for (j = 0; j < keys.length; j += 1) {
+                            if (oldcore.isTypeOf(members[i], metaNodes[keys[j]])) {
+                                typeCounters[keys[j]] += 1;
+                            }
+                        }
+                    }
+
+                    i = validNodes.length;
+                    keys = Object.keys(typeCounters);
+                    while (i--) {
+                        for (j = 0; j < keys.length; j += 1) {
+                            if (rules[keys[j]].max &&
+                                rules[keys[j]].max > -1 &&
+                                rules[keys[j]].max <= typeCounters[keys[j]] &&
+                                oldcore.isTypeOf(validNodes[i], metaNodes[keys[j]])) {
+                                validNodes.splice(i, 1);
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                return validNodes;
+            };
+            return core;
+        };
+
+        return MetaCacheCore;
+    }
+)
+;
+/*globals define*/
+/*jshint node: true, browser: true*/
+
+/**
+ * This class defines the public API of the WebGME-Core
+ *
+ * @author kecso / https://github.com/kecso
+ * @module Core
+ */
+
+/**
+ * @typedef {object} Node - the object that represents the atomic element of the containment hierarchy.
+ */
+
+/**
+ * @typedef {object} DataObject - Inner data of {@link module:Core~Node} that can be serialized and saved in the storage.
+ */
+
+/**
+ * @typedef {object} GmePersisted - the result object of a persist which contains information about the newly
+ * created data objects.
+ * @prop {module:Core~ObjectHash} rootHash - Hash of the root node.
+ * @prop {Object.<module:Core~ObjectHash, module:Core~DataObject>} objects - Hash of the root node.
+ */
+
+/**
+ * @typedef {string} ObjectHash - Unique SHA-1 hash for the node object.
+ * @example
+ * '#5496cf226542fcceccf89056f0d27564abc88c99'
+ */
+
+/**
+ * @typedef {string} GUID - Globally unique identifier. A formatted string containing hexadecimal characters. If some
+ * projects share some GUIDs that can only be because the node with the given identification represents the same
+ * concept.
+ * @example
+ * 'cd891e7b-e2ea-e929-f6cd-9faf4f1fc045'
+ */
+
+/**
+ * @typedef {object} Constraint - An object that represents some additional rule regarding some node of the project.
+ * @prop {string} script - The script which checks if the contraint is met.
+ * @prop {string} info - Short description of the constraint.
+ * @prop {string} priority - Gives instructions on how to deal with violations of the constraint.
+ */
+
+/**
+ * @typedef {object} RelationRule - An object that represents a relational type rule-set (pointer/set).
+ * @prop {integer} [min] - The minimum amount of target necessary for the relationship (if not present or '-1'
+ * then there is no minimum rule that applies)
+ * @prop {integer} [max] - The minimum amount of target necessary for the relationship (if not present or '-1'
+ * then there is no minimum rule that applies)
+ * @prop {object} [absolutePathOfTarget] - special rules regarding the given type (if the object is empty, it still
+ * represents that the type is a valid target of the relationship)
+ * @prop {integer} [absolutePathOfTarget.min] - The minimum amount of target necessary for the relationship
+ * from the given type (if not present or '-1' then there is no minimum rule that applies)
+ * @prop {integer} [absolutePathOfTarget.max] - The minimum amount of target necessary for the relationship
+ * from the given type (if not present or '-1' then there is no minimum rule that applies)
+ * @example
+ * '{
+ *  'min': 1,
+ *  'max': -1,
+ *  'any/path/of/node':{
+ *   'min':-1,
+ *   'max':2
+ *   },
+ *   'any/other/valid/path':{
+ *   }
+ * }'
+ */
+
 define('common/core/core',[
     'common/core/corerel',
     'common/core/setcore',
@@ -14201,10 +13044,28 @@ define('common/core/core',[
     'common/core/coretree',
     'common/core/metacore',
     'common/core/coretreeloader',
-    'common/core/corediff'
-], function (CoreRel, Set, Guid, NullPtr, UnWrap, Type, Constraint, CoreTree, MetaCore, TreeLoader, CoreDiff) {
+    'common/core/corediff',
+    'common/core/metacachecore'
+], function (CoreRel,
+             Set,
+             Guid,
+             NullPtr,
+             UnWrap,
+             Type,
+             Constraint,
+             CoreTree,
+             MetaCore,
+             TreeLoader,
+             CoreDiff,
+             MetaCacheCore) {
     'use strict';
 
+    /**
+     * @param {object} storageObject
+     * @param {object} options - contains logging information
+     * @alias Core
+     * @constructor
+     */
     function Core(storage, options) {
         var core,
             coreLayers = [];
@@ -14218,6 +13079,8 @@ define('common/core/core',[
         coreLayers.push(MetaCore);
         coreLayers.push(CoreDiff);
         coreLayers.push(TreeLoader);
+        coreLayers.push(MetaCacheCore);
+
         if (options.usertype !== 'tasync') {
             coreLayers.push(UnWrap);
         }
@@ -14226,7 +13089,1301 @@ define('common/core/core',[
             return new Class(inner, options);
         }, new CoreTree(storage, options));
 
-        return core;
+        /**
+         * Returns the parent of the node.
+         * @param {module:Core~Node} node - the node in question
+         *
+         * @return {module:Core~Node} Returns the parent of the node or NULL if it has no parent.
+         *
+         * @func
+         */
+        this.getParent = core.getParent;
+
+        /**
+         * Returns the parent-relative identifier of the node.
+         * @param {module:Core~Node} node - the node in question.
+         *
+         * @return {string} Returns the id string or return NULL and UNDEFINED if there is no such id for the node.
+         *
+         * @func
+         */
+        this.getRelid = core.getRelid;
+
+        //this.getLevel = core.getLevel;
+
+        /**
+         * Returns the root node of the containment tree.
+         * @param {module:Core~Node} node - the node in question.
+         *
+         * @return {module:Core~Node} Returns the root of the containment hierarchy (it can be the node itself).
+         *
+         * @func
+         */
+        this.getRoot = core.getRoot;
+
+        /**
+         * Retuns the complete path of the node in the containment hierarchy.
+         * @param {module:Core~Node} node - the node in question.
+         *
+         * @return {string} Returns a path string where each portion is a relative id and they are separated by '/'.
+         * The path can be empty as well if the node in question is the  root itself, otherwise it should be a chain
+         * of relative ids from the root of the containment hierarchy.
+         *
+         * @func
+         */
+        this.getPath = core.getPath;
+
+        //this.isValidPath = core.isValidPath;
+        //this.splitPath = core.splitPath;
+        //this.buildPath = core.buildPath;
+        //this.joinPaths = core.joinPaths;
+        //this.getCommonPathPrefixData = core.getCommonPathPrefixData;
+        //this.normalize = core.normalize;
+        //this.getAncestor = core.getAncestor;
+        //this.isAncestor = core.isAncestor;
+        //this.createRoot = core.createRoot;
+        //this.createChild = core.createChild;
+
+        /**
+         * Retrieves the child of the input node at the given relative id. It is not an asynchronous load
+         * and it automatically creates the child under the given relative id if no child was there beforehand.
+         * @param {module:Core~Node} node - the node in question.
+         * @param {string} relativeId - the relative id which our child in question has.
+         *
+         * @return {module:Core~Node} Return an empty node if it was created as a result of the function or
+         * return the already existing and loaded node if it found.
+         *
+         * @func
+         */
+        this.getChild = core.getChild;
+
+        //this.getDescendant = core.getDescendant;
+        //this.getDescendantByPath = core.getDescendantByPath;
+        //this.isMutable = core.isMutable;
+        //this.isObject = core.isObject;
+
+        /**
+         * Checks if the node in question is exists or not.
+         * @param {module:Core~Node} node - the node in question.
+         *
+         * @return {bool} Returns true if the node is 'empty' meaning that it is not reserved by real data.
+         * Returns false if the node is exists and have some meaningful value.
+         *
+         * @func
+         */
+        this.isEmpty = core.isEmpty;
+
+        //this.mutate = core.mutate;
+        //this.getData = core.getData;
+        //this.setData = core.setData;
+        //this.deleteData = core.deleteData;
+        //this.copyData = core.copyData;
+        //this.getProperty = core.getProperty;
+        //this.setProperty = core.setProperty;
+        //this.deleteProperty = core.deleteProperty;
+        //this.getKeys = core.getKeys;
+        //this.getRawKeys = core.getRawKeys;
+        //this.isHashed = core.isHashed;
+        //this.setHashed = core.setHashed;
+
+        /**
+         * Returns the calculated database id of the data of the node.
+         * @param {module:Core~Node} node - the node in question.
+         *
+         * @return {module:Core~ObjectHash} Returns the so called Hash value of the data of the given node. If the string is empty,
+         * then it means that the node was mutated but not yet saved to the database, so it do not have a hash
+         * temporarily.
+         *
+         * @func
+         */
+        this.getHash = core.getHash;
+
+        /**
+         * Persists the changes made in memory and computed the data blobs that needs to be saved into the database
+         * to make the change and allow other users to see the new state of the project.
+         * @param {module:Core~Node} node - some node element of the modified containment hierarchy (usually the root).
+         * @param {function(module:Core~Node)} callback
+         *
+         * @return {module:Core~GmePersisted} The function returns an object which collects all the changes
+         * on data level and necessary to update the databse on server side
+         *
+         * @func
+         */
+        this.persist = core.persist;
+
+        /**
+         * Loads the data object with the given hash and makes it a root of a containment hierarchy.
+         * @param {module:Core~ObjectHash} hash - the hash of the data object we like to load as root.
+         * @param {function(module:Core~Node)} callback
+         *
+         * @func
+         */
+        this.loadRoot = core.loadRoot;
+
+        /**
+         * Loads the child of the given parent pointed by the relative id. Behind the scenes, it means
+         * that it actually loads the data pointed by a hash stored inside the parent under the given id
+         * and wraps it in a node object which will be connected to the parent as a child in the containment
+         * hierarchy.
+         * @param {module:Core~Node} parent - the container node in question.
+         * @param {string} relativeId - the relative id of the child in question.
+         * @param {function(module:Core~Node)} callback
+         *
+         * @func
+         */
+        this.loadChild = core.loadChild;
+
+        /**
+         * From the given starting node, it loads the path given as a series of relative ids (separated by '/')
+         * and returns the node it finds at the ends of the path. If there is no node, it will not stop but create
+         * empty nodes on demand and return a new empty node back.
+         * @param {module:Core~Node} startNode - the starting node of our search.
+         * @param {string} relativePath - the relative path - built by relative ids - of the node in question.
+         * @param {function(module:Core~Node)} callback
+         *
+         * @func
+         */
+        this.loadByPath = core.loadByPath;
+
+        /**
+         * Loads the all children of the given parent. As it first checks the already reserved relative ids of
+         * the parent, it only loads the already existing children (so no on-demand empty node creation).
+         * @param {module:Core~Node} parent - the container node in question.
+         * @param {function(module:Core~Node[])} callback
+         *
+         * @func
+         */
+        this.loadChildren = core.loadChildren;
+
+        /**
+         * Loads the target of the given pointer of the given node. In the callback the node can have three values:
+         * if the node is valid, then it is the defined target of a valid pointer,
+         * if the returned value is null, then it means that the pointer is defined, but has no real target,
+         * finally if the returned value is undefined than there is no such pointer defined for the given node.
+         * @param {module:Core~Node} source - the container node in question.
+         * @param {string} pointerName - the relative id of the child in question.
+         * @param {function(module:Core~Node)} callback
+         *
+         * @func
+         */
+        this.loadPointer = core.loadPointer;
+
+        /**
+         * Loads all the source nodes that has such a pointer and its target is the given node.
+         * @param {module:Core~Node} target - the container node in question.
+         * @param {string} pointerName - the relative id of the child in question.
+         * @param {function(module:Core~Node[])} callback
+         *
+         * @func
+         */
+        this.loadCollection = core.loadCollection;
+
+        /**
+         * Loads a complete sub-tree of the containment hierarchy starting from the given node.
+         * @param {module:Core~Node} node - the container node in question.
+         * @param {function(module:Core~Node[])} callback
+         *
+         * @func
+         */
+        this.loadSubTree = core.loadSubTree;
+
+        /**
+         * Loads a complete complete containment hierarchy using the data object - pointed by the given hash -
+         * as the root.
+         * @param {module:Core~ObjectHash} rootHash - hash of the root node.
+         * @param {function(module:Core~Node[])} callback
+         *
+         * @func
+         */
+        this.loadTree = core.loadTree;
+
+        //this.isValidNode = core.isValidNode;
+        //this.getChildHash = core.getChildHash;
+        //this.isValidRelid = core.isValidRelid;
+
+        /**
+         * Collects the relative ids of all the children of the given node.
+         * @param {module:Core~Node} parent - the container node in question.
+         *
+         *@return {string[]} The function returns an array of the relative ids.
+         *
+         * @func
+         */
+        this.getChildrenRelids = core.getChildrenRelids;
+
+        /**
+         * Collects the paths of all the children of the given node.
+         * @param {module:Core~Node} parent - the container node in question.
+         *
+         *@return {string[]} The function returns an array of the absolute paths of the children.
+         *
+         * @func
+         */
+        this.getChildrenPaths = core.getChildrenPaths;
+
+        /**
+         * Creates a node according to the given parameters.
+         * @param {object} parameters - the details of the creation.
+         * @param {module:Core~Node | null} [parameters.parent] - the parent of the node to be created.
+         * @param {module:Core~Node | null} [parameters.base] - the base of the node to be created.
+         * @param {string} [parameters.relid] - the relative id of the node to be created (if reserved, the function
+         * returns the node behind the relative id)
+         * @param {module:Core~GUID} [parameters.guid] - the GUID of the node to be created
+         *
+         *
+         *@return {module:Core~Node} The function returns the created node or null if no node was created.
+         *
+         * @func
+         */
+        this.createNode = core.createNode;
+
+        /**
+         * Removes a node from the containment hierarchy.
+         * @param {module:Core~Node} node - the node to be removed.
+         *
+         * @func
+         */
+        this.deleteNode = core.deleteNode;
+
+        /**
+         * Copies the given to be a child of the given parent.
+         * @param {module:Core~Node} node - the node to be copied.
+         * @param {module:Core~Node} parent - the parent node of the copy.
+         *
+         * @return {module:Core~Node} The function returns the copy of the original node.
+         *
+         * @func
+         */
+        this.copyNode = core.copyNode;
+
+        /**
+         * Create copy of the given nodes under the given parent. The copy will
+         * @param {module:Core~Node[]} nodes - the nodes to be copied.
+         * @param {module:Core~Node} parent - the parent node of the copy.
+         *
+         * @return {module:Core~Node} The function returns the copy of the original node.
+         *
+         * @func
+         */
+        this.copyNodes = core.copyNodes;
+
+        /**
+         * Moves the given node under the given parent.
+         * @param {module:Core~Node} node - the node to be moved.
+         * @param {module:Core~Node} parent - the parent node of the copy.
+         *
+         * @return {module:Core~Node} The function returns the node after the move.
+         *
+         * @func
+         */
+        this.moveNode = core.moveNode;
+
+        /**
+         * Returns the names of the defined attributes of the node.
+         * @param {module:Core~Node} node - the node in question.
+         *
+         * @return {string[]} The function returns an array of the names of the attributes of the node.
+         *
+         * @func
+         */
+        this.getAttributeNames = core.getAttributeNames;
+
+        /**
+         * Retrieves the value of the given attribute of the given node.
+         * @param {module:Core~Node} node - the node in question.
+         * @param {string} name - the name of the attribute.
+         *
+         * @return {object | primitive | null | undefined} The function returns the value of the attribute of the node.
+         * The value can be an object or any primitive type. If the value is undefined that means the node do not have
+         * such attribute defined. [The retrieved attribute should not be modified as is - it should be copied first!!]
+         *
+         * @func
+         */
+        this.getAttribute = core.getAttribute;
+
+        /**
+         * Sets the value of the given attribute of the given node. It defines the attribute on demand, means that it
+         * will set the given attribute even if was ot defined for the node beforehand.
+         * @param {module:Core~Node} node - the node in question.
+         * @param {string} name - the name of the attribute.
+         * @param {object | primitive | null} value - the new of the attribute. Can be any primitive type or object.
+         * Undefined is not allowed.
+         *
+         * @func
+         */
+        this.setAttribute = core.setAttribute;
+
+        /**
+         * Removes the given attributes from the given node.
+         * @param {module:Core~Node} node - the node in question.
+         * @param {string} name - the name of the attribute.
+         *
+         * @func
+         */
+        this.delAttribute = core.delAttribute;
+
+        /**
+         * Returns the names of the defined registry entries of the node.
+         * @param {module:Core~Node} node - the node in question.
+         *
+         * @return {string[]} The function returns an array of the names of the registry entries of the node.
+         *
+         * @func
+         */
+        this.getRegistryNames = core.getRegistryNames;
+
+        /**
+         * Retrieves the value of the given registry entry of the given node.
+         * @param {module:Core~Node} node - the node in question.
+         * @param {string} name - the name of the registry entry.
+         *
+         * @return {object | primitive | null | undefined} The function returns the value of the registry entry
+         * of the node. The value can be an object or any primitive type. If the value is undefined that means
+         * the node do not have such attribute defined. [The retrieved registry value should
+         * not be modified as is - it should be copied first!!]
+         *
+         * @func
+         */
+        this.getRegistry = core.getRegistry;
+
+        /**
+         * Sets the value of the given registry entry of the given node. It defines the registry entry on demand,
+         * means that it will set the given registry entry even if was ot defined for the node beforehand.
+         * @param {module:Core~Node} node - the node in question.
+         * @param {string} name - the name of the registry entry.
+         * @param {object | primitive | null} value - the new of the registry entry. Can be any primitive
+         * type or object. Undefined is not allowed.
+         *
+         * @func
+         */
+        this.setRegistry = core.setRegistry;
+
+        /**
+         * Removes the given registry entry from the given node.
+         * @param {module:Core~Node} node - the node in question.
+         * @param {string} name - the name of the registry entry.
+         *
+         * @func
+         */
+        this.delRegistry = core.delRegistry;
+
+        /**
+         * Retrieves a list of the defined pointer names of the node.
+         * @param {module:Core~Node} node - the node in question.
+         *
+         * @return {string[]} The function returns an array of the names of the pointers of the node.
+         *
+         * @func
+         */
+        this.getPointerNames = core.getPointerNames;
+
+        /**
+         * Retrieves the path of the target of the given pointer of the given node.
+         * @param {module:Core~Node} node - the node in question.
+         * @param {string} name - the name of the pointer in question.
+         *
+         * @return {string | null | undefined} The function returns the absolute path of the target node
+         * if there is a valid target. It returns null if though the pointer is defined it does not have any
+         * valid target. Finally, it return undefined if there is no pointer defined for the node under the given name.
+         *
+         * @func
+         */
+        this.getPointerPath = core.getPointerPath;
+
+        //TODO check if this could be completely removed - or we have to start using it instead of relying on undefined
+        //this.hasPointer = core.hasPointer;
+
+        //this.getOutsidePointerPath = core.getOutsidePointerPath;
+
+        /**
+         * Removes the pointer from the node.
+         * @param {module:Core~Node} node - the node in question.
+         * @param {string} name - the name of the pointer in question.
+         *
+         * @func
+         */
+        this.deletePointer = core.deletePointer;
+
+        /**
+         * Sets the target of the pointer of the node.
+         * @param {module:Core~Node} node - the node in question.
+         * @param {string} name - the name of the pointer in question.
+         * @param {module:Core~Node} target - the new target of the pointer.
+         *
+         * @func
+         */
+        this.setPointer = core.setPointer;
+
+        /**
+         * Retrieves a list of the defined pointer names that has the node as target.
+         * @param {module:Core~Node} node - the node in question.
+         *
+         * @return {string[]} The function returns an array of the names of the pointers pointing to the node.
+         *
+         * @func
+         */
+        this.getCollectionNames = core.getCollectionNames;
+
+        /**
+         * Retrieves a list of absolute paths of nodes that has a given pointer which points to the given node.
+         * @param {module:Core~Node} node - the node in question.
+         * @param {string} name - the name of the pointer.
+         *
+         * @return {string[]} The function returns an array of absolute paths of nodes thath
+         * has the pointer pointing to the node.
+         *
+         * @func
+         */
+        this.getCollectionPaths = core.getCollectionPaths;
+
+        //this.getCoreTree = core.getCoreTree;
+
+        /**
+         * Collects the data hash values of the children of the node.
+         * @param {module:Core~Node} node - the node in question.
+         *
+         * @return {object} The function returns a dictionary of {@link module:Core~ObjectHash} that stored in pair
+         * with the relative id of the corresponding child of the node.
+         *
+         * @func
+         */
+        this.getChildrenHashes = core.getChildrenHashes;
+
+        /**
+         * Returns the base node.
+         * @param {module:Core~Node} node - the node in question.
+         *
+         * @return {module:Core~Node | null} Returns the base of the given node or null if there is no such node.
+         *
+         * @func
+         */
+        this.getBase = core.getBase;
+
+        /**
+         * Returns the root of the inheritance chain of the given node.
+         * @param {module:Core~Node} node - the node in question.
+         *
+         * @return {module:Core~Node} Returns the root of the inheritance chain (usually the FCO).
+         *
+         * @func
+         */
+        this.getBaseRoot = core.getBaseRoot;
+
+        /**
+         * Returns the names of the attributes of the node that have been first defined for the node and not for its
+         * bases.
+         * @param {module:Core~Node} node - the node in question.
+         *
+         * @return {string[]} The function returns an array of the names of the own attributes of the node.
+         *
+         * @func
+         */
+        this.getOwnAttributeNames = core.getOwnAttributeNames;
+
+        /**
+         * Returns the names of the registry enrties of the node that have been first defined for the node
+         * and not for its bases.
+         * @param {module:Core~Node} node - the node in question.
+         *
+         * @return {string[]} The function returns an array of the names of the own registry entries of the node.
+         *
+         * @func
+         */
+        this.getOwnRegistryNames = core.getOwnRegistryNames;
+
+        /**
+         * Returns the value of the attribute defined for the given node.
+         * @param {module:Core~Node} node - the node in question.
+         * @param {string} name - the name of the attribute.
+         *
+         * @return {object | primitive | null | undefined} Returns the value of the attribute defined specifically for
+         * the node. If undefined then it means that there is no such attribute defined directly for the node, meaning
+         * that it either inherits some value or there is no such attribute at all.
+         *
+         * @func
+         */
+        this.getOwnAttribute = core.getOwnAttribute;
+
+        /**
+         * Returns the value of the registry entry defined for the given node.
+         * @param {module:Core~Node} node - the node in question.
+         * @param {string} name - the name of the registry entry.
+         *
+         * @return {object | primitive | null | undefined} Returns the value of the registry entry defined specifically
+         * for the node. If undefined then it means that there is no such registry entry defined directly for the node,
+         * meaning that it either inherits some value or there is no such registry entry at all.
+         *
+         * @func
+         */
+        this.getOwnRegistry = core.getOwnRegistry;
+
+        /**
+         * Returns the list of the names of the pointers that were defined specifically for the node.
+         * @param {module:Core~Node} node - the node in question.
+         *
+         * @return {string[]} Returns an array of names of pointers defined specifically for the node.
+         *
+         *@func
+         */
+        this.getOwnPointerNames = core.getOwnPointerNames;
+
+        /**
+         * Returns the absolute path of the target of the pointer specifically defined for the node.
+         * @param {module:Core~Node} node - the node in question
+         * @param {string} name - the name of the pointer
+         *
+         * @return {string | null | undefined} Returns the absolute path. If the path is null, then it means that
+         * 'no-target' was defined specifically for this node for the pointer. If undeinfed it means that the node
+         * either inherits the target of the pointer or there is no pointer defined at all.
+         *
+         * @func
+         */
+        this.getOwnPointerPath = core.getOwnPointerPath;
+
+        /**
+         * Sets the base node of the given node. The function doesn't touches the properties or the children of the node
+         * so it can cause META rule violations that needs to be corrected manually.
+         * @param {module:Core~Node} node - the node in question.
+         * @param {module:Core~Node | null} base - the new base.
+         *
+         * @func
+         */
+        this.setBase = core.setBase;
+
+        /**
+         * Returns the root of the inheritance chain (cannot be the node itself).
+         * @param {module:Core~Node} node - the node in question.
+         *
+         * @return {module:Core~Node | null} Returns the root of the inheritance chain of the node. If returns null,
+         * that means the node in question is the root of the chain.
+         *
+         * @func
+         */
+        this.getTypeRoot = core.getTypeRoot;
+
+        //TODO check if the whole function could be removed
+        //this.getSetNumbers = core.getSetNumbers;
+
+        /**
+         * Returns the names of the sets of the node.
+         * @param {module:Core~Node} node - the node in question.
+         *
+         * @return {string[]} Returns an array of set names that the node has.
+         *
+         * @func
+         */
+        this.getSetNames = core.getSetNames;
+
+        /**
+         * Returns the list of absolute paths of the members of the given set of the given node.
+         * @param {module:Core~Node} node - the set owner.
+         * @param {string} name - the name of the set.
+         *
+         * @return {string[]} Returns an array of absolute path strings of the member nodes of the set.
+         * @func
+         */
+        this.getMemberPaths = core.getMemberPaths;
+
+        /**
+         * Removes a member from the set. The functions doesn't remove the node itself.
+         * @param {module:Core~Node} node - the owner of the set.
+         * @param {string} name - the name of the set.
+         * @param {string} path - the absolute path of the member to be removed.
+         *
+         * @func
+         */
+        this.delMember = core.delMember;
+
+        /**
+         * Adds a member to the given set.
+         * @param {module:Core~Node} node - the owner of the set.
+         * @param {string} name - the name of the set.
+         * @param {module:Core~Node} member - the new member of the set.
+         *
+         * @func
+         */
+        this.addMember = core.addMember;
+
+        /**
+         * Return the names of the attributes defined for the set membership to the member node.
+         * @param {module:Core~Node} node - the owner of the set.
+         * @param {string} name - the name of the set.
+         * @param {string} memberPath - the absolute path of the member.
+         *
+         * @return {string[]} Returns the array of names of attributes that represents some property of the membership.
+         *
+         * @func
+         */
+        this.getMemberAttributeNames = core.getMemberAttributeNames;
+
+        /**
+         * Return the names of the attributes defined for the set membership specifically defined to the member node.
+         * @param {module:Core~Node} node - the owner of the set.
+         * @param {string} name - the name of the set.
+         * @param {string} memberPath - the absolute path of the member.
+         *
+         * @return {string[]} Returns the array of names of attributes that represents some property of the membership.
+         *
+         * @func
+         */
+        this.getMemberOwnAttributeNames = core.getMemberOwnAttributeNames;
+
+        /**
+         * Get the value of the attribute in relation with the set membership.
+         * @param {module:Core~Node} node - the owner of the set.
+         * @param {string} setName - the name of the set.
+         * @param {string} memberPath - the absolute path of the member node.
+         * @param {string} attrName - the name of the attribute.
+         *
+         * @return {object|primitive|null|undefined} Return teh value of the attribute. If it is undefined, than there
+         * is no such attributed connected to the given set membership.
+         *
+         * @func
+         */
+        this.getMemberAttribute = core.getMemberAttribute;
+
+        /**
+         * Sets the attribute value which represents a property of the membership.
+         * @param {module:Core~Node} node - the owner of the set.
+         * @param {string} setName - the name of the set.
+         * @param {string} memberPath - the absolute path of the member node.
+         * @param {string} attrName - the name of the attribute.
+         * @param {object|primitive|null} value - the new value of the attribute.
+         * @func
+         */
+        this.setMemberAttribute = core.setMemberAttribute;
+
+
+        /**
+         * Removes an attribute which represented a property of the given set membership.
+         * @param {module:Core~Node} node - the owner of the set.
+         * @param {string} setName - the name of the set.
+         * @param {string} memberPath - the absolute path of the member node.
+         * @param {string} attrName - the name of the attribute.
+         *
+         * @func
+         */
+        this.delMemberAttribute = core.delMemberAttribute;
+
+        /**
+         * Return the names of the registry entries defined for the set membership to the member node.
+         * @param {module:Core~Node} node - the owner of the set.
+         * @param {string} name - the name of the set.
+         * @param {string} memberPath - the absolute path of the member.
+         *
+         * @return {string[]} Returns the array of names of registry entries that represents some property of the
+         * membership.
+         *
+         * @func
+         */
+        this.getMemberRegistryNames = core.getMemberRegistryNames;
+
+        /**
+         * Return the names of the registry entries defined for the set membership specifically defined to
+         * the member node.
+         * @param {module:Core~Node} node - the owner of the set.
+         * @param {string} name - the name of the set.
+         * @param {string} memberPath - the absolute path of the member.
+         *
+         * @return {string[]} Returns the array of names of registry entries that represents some property of the
+         * membership.
+         *
+         * @func
+         */
+        this.getMemberOwnRegistryNames = core.getMemberOwnRegistryNames;
+
+        /**
+         * Get the value of the registry entry in relation with the set membership.
+         * @param {module:Core~Node} node - the owner of the set.
+         * @param {string} setName - the name of the set.
+         * @param {string} memberPath - the absolute path of the member node.
+         * @param {string} regName - the name of the registry entry.
+         *
+         * @return {object|primitive|null|undefined} Return teh value of the attribute. If it is undefined, than there
+         * is no such attributed connected to the given set membership.
+         *
+         * @func
+         */
+        this.getMemberRegistry = core.getMemberRegistry;
+
+        /**
+         * Sets the registry entry value which represents a property of the membership.
+         * @param {module:Core~Node} node - the owner of the set.
+         * @param {string} setName - the name of the set.
+         * @param {string} memberPath - the absolute path of the member node.
+         * @param {string} regName - the name of the registry entry.
+         * @param {object|primitive|null} value - the new value of the attribute.
+         * @func
+         */
+        this.setMemberRegistry = core.setMemberRegistry;
+
+        /**
+         * Removes a registry entry which represented a property of the given set membership.
+         * @param {module:Core~Node} node - the owner of the set.
+         * @param {string} setName - the name of the set.
+         * @param {string} memberPath - the absolute path of the member node.
+         * @param {string} regName - the name of the registry entry.
+         *
+         * @func
+         */
+        this.delMemberRegistry = core.delMemberRegistry;
+
+        /**
+         * Creates a set for the node.
+         * @param {module:Core~Node} node - the owner of the set.
+         * @param {string} name - the name of the set.
+         *
+         * @func
+         */
+        this.createSet = core.createSet;
+
+        /**
+         * Removes a set from the node.
+         * @param {module:Core~Node} node - the owner of the set.
+         * @param {string} name - the name of the set.
+         *
+         * @func
+         */
+        this.deleteSet = core.deleteSet;
+
+        /**
+         * Returns all membership information of the given node.
+         * @param {module:Core~Node} node - the node in question
+         *
+         * @return {object} Returns a dictionary where every the key of every entry is an absolute path of a set owner
+         * node. The value of each entry is an array with the set names in which the node can be found as a member.
+         *
+         * @func
+         */
+        this.isMemberOf = core.isMemberOf;
+
+        //this.getMiddleGuid = core.getMiddleGuid;
+
+        /**
+         * Get the GUID of a node.
+         * @param {module:Core~Node} node - the node in question.
+         *
+         * @return {module:Core~GUID} Returns the globally unique identifier.
+         * @func
+         */
+        this.getGuid = core.getGuid;
+
+        //TODO this is only used in import - export use-cases, probably could be removed...
+        /**
+         * Get the GUID of a node. As the Core itself do not checks whether the GUID already exists. The use of
+         * this function is only advised during the creation of the node.
+         * @param {module:Core~Node} node - the node in question.
+         * @param {module:Core~GUID} guid - the new globally unique identifier.
+         * @func
+         */
+        this.setGuid = core.setGuid;
+
+        /**
+         * Gets a constraint object of the node.
+         * @param {module:Core~Node} node - the node in question.
+         * @param {string} name - the name of the constraint.
+         *
+         * @return {module:Core~Constraint | null} Returns the defined constraint or null if it was not
+         * defined for the node.
+         * @func
+         */
+        this.getConstraint = core.getConstraint;
+
+        /**
+         * Sets a constraint object of the node.
+         * @param {module:Core~Node} node - the node in question.
+         * @param {string} name - the name of the constraint.
+         * @param {module:Core~Constraint} constraint  - the contraint to be set.
+         * @func
+         */
+        this.setConstraint = core.setConstraint;
+
+        /**
+         * Removes a constraint from the node.
+         * @param {module:Core~Node} node - the node in question.
+         * @param {string} name - the name of the constraint.
+         *
+         * @func
+         */
+        this.delConstraint = core.delConstraint;
+
+        /**
+         * Retrieves the list of constraint names defined for the node.
+         * @param {module:Core~Node} node - the node in question.
+         *
+         * @return {string[]} Returns the array of names of constraints available for the node.
+         *
+         * @func
+         */
+        this.getConstraintNames = core.getConstraintNames;
+
+        /**
+         * Retrieves the list of constraint names defined specifically for the node.
+         * @param {module:Core~Node} node - the node in question.
+         *
+         * @return {string[]} Returns the array of names of constraints for the node.
+         *
+         * @func
+         */
+        this.getOwnConstraintNames = core.getOwnConstraintNames;
+
+        /**
+         * Checks if the given typeNode is really a base of the node.
+         * @param {module:Core~Node} node - the node in question.
+         * @param {module:Core~Node} type - the type node we want to check.
+         *
+         * @return {bool} The function returns true if the type is in the inheritance chain of the node or false
+         * otherwise. Every node is type of itself.
+         *
+         * @func
+         */
+        this.isTypeOf = core.isTypeOf;
+
+        /**
+         * Checks if according to the META rules the given node can be a child of the parent.
+         * @param {module:Core~Node} node - the node in question
+         * @param {module:Core~Node} parent - the parent we like to test.
+         *
+         * @return {bool} The function returns true if according to the META rules the node can be a child of the
+         * parent. The check does not cover multiplicity (so if the parent can only have twi children and it already
+         * has them, this function will still returns true).
+         * @func
+         */
+        this.isValidChildOf = core.isValidChildOf;
+
+        /**
+         * Returns the list of the META defined pointer names of the node.
+         * @param {module:Core~Node} node - the node in question.
+         *
+         * @return {string[]} The function returns all the pointer names that are defined among the META rules of the node.
+         *
+         * @func
+         */
+        this.getValidPointerNames = core.getValidPointerNames;
+
+        /**
+         * Returns the list of the META defined set names of the node.
+         * @param {module:Core~Node} node - the node in question.
+         *
+         * @return {string[]} The function returns all the set names that are defined among the META rules of the node.
+         *
+         * @func
+         */
+        this.getValidSetNames = core.getValidSetNames;
+
+        /**
+         * Returns the list of the META defined pointers of the node.
+         * @param {module:Core~Node} node - the node in question.
+         * @param {module:Core~Node} source - the source to test.
+         * @param {string} name - the name of the pointer.
+         *
+         * @return {bool} The function returns true if according to the META rules, the given node is a valid
+         * target of the given pointer of the source.
+         *
+         * @func
+         */
+        this.isValidTargetOf = core.isValidTargetOf;
+
+        /**
+         * Returns the list of the META defined attribute names of the node.
+         * @param {module:Core~Node} node - the node in question.
+         *
+         * @return {string[]} The function returns all the attribute names that are defined among the META rules of the
+         * node.
+         *
+         * @func
+         */
+        this.getValidAttributeNames = core.getValidAttributeNames;
+
+        /**
+         * Checks if the given value is of the necessary type, according to the META rules.
+         * @param {module:Core~Node} node - the node in question.
+         * @param {string} name - the name of the attribute.
+         * @param {object|primitive|null} value - the value to test.
+         *
+         * @return {bool} Returns true if the value matches the META definitions.
+         *
+         * @func
+         */
+        this.isValidAttributeValueOf = core.isValidAttributeValueOf;
+
+        /**
+         * Returns the list of the META defined aspect names of the node.
+         * @param {module:Core~Node} node - the node in question.
+         *
+         * @return {string[]} The function returns all the aspect names that are defined among the META rules of the
+         * node.
+         *
+         * @func
+         */
+        this.getValidAspectNames = core.getValidAspectNames;
+
+        /**
+         * Returns the list of valid children types of the given aspect.
+         * @param {module:Core~Node} node - the node in question.
+         * @param {string} name - the name of the aspect.
+         *
+         * @return {string[]} The function returns a list of absolute paths of nodes that are valid childrens of the node
+         * and fits to the META rules defined for the aspect. Any children, visible under the given aspect of the node
+         * must be an instance of at least one node represented by the absolute paths.
+         *
+         * @func
+         */
+        this.getAspectMeta = core.getAspectMeta;
+
+        /**
+         * Gives a JSON representation of the META rules of the node.
+         * @param {module:Core~Node} node - the node in question.
+         *
+         * @return {object} Returns an object that represents all the META rules of the node.
+         *
+         * @func
+         */
+        this.getJsonMeta = core.getJsonMeta;
+
+        /**
+         * Returns the META rules specifically defined for the given node.
+         * @param {module:Core~Node} node - the node in question.
+         *
+         * @return {object} The function returns an object that represent the META rules that were defined
+         * specifically for the node.
+         *
+         * @func
+         */
+        this.getOwnJsonMeta = core.getOwnJsonMeta;
+
+        /**
+         * Removes all META rules that were specifically defined for the node (so the function do not touches
+         * inherited rules).
+         * @param {module:Core~Node} node - the node in question.
+         *
+         * @func
+         */
+        this.clearMetaRules = core.clearMetaRules;
+
+        /**
+         * Sets the META rules of the attribute of the node.
+         * @param {module:Core~Node} node - the node in question.
+         * @param {string} name - the name of the attribute.
+         * @param {object} rule - the rules that defines the attribute
+         * @param {'string'|'integer'|'float'|'bool'} rule.type - the type of the attribute
+         * @param {string[]} rule.enum - if the attribute is an enumeration, this array contains the possible values
+         *
+         * @func
+         */
+        this.setAttributeMeta = core.setAttributeMeta;
+
+        /**
+         * Removes an attribute definition from the META rules of the node.
+         * @param {module:Core~Node} node - the node in question.
+         * @param {string} name - the name of the attribute.
+         *
+         * @func
+         */
+        this.delAttributeMeta = core.delAttributeMeta;
+
+        /**
+         * Returns the definition object of an attribute from the META rules of the node.
+         * @param {module:Core~Node} node - the node in question.
+         * @param {string} name - the name of the attribute.
+         *
+         * @return {object} The function returns the definition object
+         * @func
+         */
+        this.getAttributeMeta = core.getAttributeMeta;
+
+        /**
+         * Returns the list of absolute path of the valid children types of the node.
+         * @param {module:Core~Node} node - the node in question.
+         *
+         * @return {string[]} The function returns an array of absolute paths of the nodes that was defined as valid
+         * children for the node.
+         *
+         * @func
+         */
+        this.getValidChildrenPaths = core.getValidChildrenPaths;
+
+        /**
+         * Sets the given child as a valid children type for the node.
+         * @param {module:Core~Node} node - the node in question.
+         * @param {module:Core~Node} child - the valid child node.
+         * @param {integer} [min] - the allowed minimum number of children from this given node type (if not given or
+         * -1 is set, then there will be no minimum rule according this child type)
+         * @param {integer} [max] - the allowed maximum number of children from this given node type (if not given or
+         * -1 is set, then there will be no minimum rule according this child type)
+         *
+         * @func
+         */
+        this.setChildMeta = core.setChildMeta;
+
+        /**
+         * Removes the given child rule from the node.
+         * @param {module:Core~Node} node - the node in question.
+         * @param {string} childPath - the absolute path of the child which rule is to be removed from the node.
+         *
+         * @func
+         */
+        this.delChildMeta = core.delChildMeta;
+
+        /**
+         * Sets the global containment limits for the node.
+         *
+         * @param {integer} [min] - the allowed minimum number of children (if not given or
+         * -1 is set, then there will be no minimum rule according this child type)
+         * @param {integer} [min] - the allowed minimum number of children (if not given or
+         * -1 is set, then there will be no minimum rule according this child type)
+         *
+         * @func
+         */
+        this.setChildrenMetaLimits = core.setChildrenMetaLimits;
+
+        /**
+         * Sets the given target as a valid target type for the pointer/set of the node.
+         * @param {module:Core~Node} node - the node in question.
+         * @param {string} name - the name of the pointer/set.
+         * @param {module:Core~Node} target - the valid target/member node.
+         * @param {integer} [min] - the allowed minimum number of target/member from this given node type (if not
+         * given or -1 is set, then there will be no minimum rule according this child type)
+         * @param {integer} [max] - the allowed maximum number of target/member from this given node type (if not
+         * given or -1 is set, then there will be no minimum rule according this child type)
+         *
+         * @func
+         */
+        this.setPointerMetaTarget = core.setPointerMetaTarget;
+
+        /**
+         * Removes a possible target type from the pointer/set of the node.
+         * @param {module:Core~Node} node - the node in question.
+         * @param {string} name - the name of the pointer/set
+         * @param {string} targetPath - the absolute path of the possible target type.
+         *
+         * @func
+         */
+        this.delPointerMetaTarget = core.delPointerMetaTarget;
+
+        /**
+         * Sets the global target limits for pointer/set of the node. On META level the only distinction between
+         * pointer and sets is the global multiplicity which has to maximize the number of possible targets to 1 in
+         * case of 'pure' pointer definitions.
+         *
+         * @param {integer} [min] - the allowed minimum number of children (if not given or
+         * -1 is set, then there will be no minimum rule according this child type)
+         * @param {integer} [min] - the allowed minimum number of children (if not given or
+         * -1 is set, then there will be no minimum rule according this child type)
+         *
+         * @func
+         */
+        this.setPointerMetaLimits = core.setPointerMetaLimits;
+
+        /**
+         * Removes the complete META rule regarding the given pointer/set of the node.
+         * @param {module:Core~Node} node - the node in question.
+         * @param {string} name - the name of the pointer/set.
+         *
+         * @func
+         */
+        this.delPointerMeta = core.delPointerMeta;
+
+        /**
+         * Return a JSON representation of the META rules regarding the given pointer/set of the given node.
+         * @param {module:Core~Node} node - the node in question.
+         * @param {string} name - the name of the pointer/set.
+         *
+         * @return {module:Core~RelationRule} The funciton returns a detailed JSON structure that represents the META
+         * rules regarding the given pointer/set of the node.
+         *
+         * @func
+         */
+        this.getPointerMeta = core.getPointerMeta;
+
+        /**
+         * Sets a valid type for the given aspect of the node.
+         * @param {module:Core~Node} node - the node in question.
+         * @param {string} name - the name of the aspect.
+         * @param {module:Core~Node} target - the valid type for the aspect.
+         *
+         * @func
+         */
+        this.setAspectMetaTarget = core.setAspectMetaTarget;
+
+
+        /**
+         * Removes a valid type from the given aspect of the node.
+         * @param {module:Core~Node} node - the node in question.
+         * @param {string} name - the name of the aspect.
+         * @param {string} targetPath - the absolute path of the valid type of the aspect.
+         *
+         * @func
+         */
+        this.delAspectMetaTarget = core.delAspectMetaTarget;
+
+        /**
+         * Removes the given aspect rule of the node.
+         * @param {module:Core~Node} node - the node in question.
+         * @param {string} name - the name of the aspect.
+         *
+         * @func
+         */
+        this.delAspectMeta = core.delAspectMeta;
+
+        /**
+         * Searches for the closes META node of the node in question.
+         * @param {module:Core~Node} node - the node in question
+         *
+         * @return {module:Core~Node | null} Returns the first node (including itself) among the inheritance chain
+         * that is a META node. It returns null if it does not find such node (ideally the only node with this result
+         * is the ROOT).
+         *
+         * @func
+         */
+        this.getBaseType = core.getBaseType;
+
+        /**
+         * Checks if there is a node with the given name in the nodes inheritance chain (excluding itself).
+         * @param {module:Core~Node} node - the node in question.
+         * @param {string} name - the name of the base node.
+         *
+         * @return {bool} The function returns true if it finds an ancestor with the given name attribute.
+         *
+         * @func
+         */
+        this.isInstanceOf = core.isInstanceOf;
+
+        //this.nodeDiff = core.nodeDiff;
+
+        /**
+         * Generates a differential tree among the two states of the project that contains the necessary changes
+         * that can modify the source to be identical to the target.
+         * @param {module:Core~Node} sourceRoot - the root node of the source state.
+         * @param {module:Core~Node} targetRoot - the root node of the target state.
+         *
+         * @return {object} The function returns a tree structured patch, that contains the necessary modification
+         * that would changes the source state to be identical with the target state.
+         *
+         * @func
+         */
+        this.generateTreeDiff = core.generateTreeDiff;
+
+        //this.generateLightTreeDiff = core.generateLightTreeDiff;
+
+        /**
+         * Apply changes to the current project.
+         * @param {module:Core~Node} root - the root of the containment hierarchy where we wish to apply the changes
+         * @param {object} patch - the tree structured collection of changes represented with a special JSON object
+         *
+         * @func
+         */
+        this.applyTreeDiff = core.applyTreeDiff;
+
+        /**
+         * Tries to merge two patch object. The patches ideally represents changes made by two parties. They represents
+         * changes from the same source ending in different states. Our aim is to generate a single patch that could
+         * cover the changes of both party.
+         * @param {object} mine - the tree structured JSON patch that represents my changes.
+         * @param {object} theirs - the tree structured JSON patch that represents the changes of the other party.
+         *
+         * @return {object} The function returns with an object that contains the conflicts (if any) and the merged
+         * patch.
+         *
+         * @func
+         */
+        this.tryToConcatChanges = core.tryToConcatChanges;
+
+        /**
+         * When our attempt to merge two patches ended in some conflict, then we can modify that result highlighting
+         * that in case of every conflict, which side we prefer (mine vs. theirs). If we give that object as an input
+         * to this function, it will finish the merge resolving the conflict according our settings and present a final
+         * patch.
+         * @param {object} conflict - the object that represents our settings for every conflict and the so-far-merged
+         * patch.
+         *
+         * @return {object} The function results in a tree structured patch object that contains the changesthat cover
+         * both parties modifications (and the conflicts are resolved according the input settings).
+         *
+         * @func
+         */
+        this.applyResolution = core.applyResolution;
+
+        /**
+         * Checks if the node is abstract.
+         * @param {module:Core~Node} node - the node in question.
+         *
+         * @return {bool} The function returns true if the registry entry 'isAbstract' of the node if true hence
+         * the node is abstract.
+         *
+         * @func
+         */
+        this.isAbstract = core.isAbstract;
+
+        /**
+         * Check is the node is a connection-like node.
+         * @param {module:Core~Node} node - the node in question.
+         *
+         * @return {bool} Returns true if both the 'src' and 'dst' pointer are defined as valid for the node.
+         *
+         * @func
+         */
+        this.isConnection = core.isConnection;
+
+        /**
+         * Retrieves the valid META nodes that can be base of a child of the node.
+         * @param {object} parameters - the input parameters of the query.
+         * @param {module:Core~Node} parameters.node - the node in question.
+         * @param {module:Core~Node[]} [parameters.children] - the children of the node in question.
+         * @param {bool} - [parameters.sensitive] - if true, the query filters out the abstract and connection-like
+         * nodes (the default value is false)
+         * @param {bool} - [parameters.multiplicity] - if true, the query tries to filter out even more nodes according
+         * to the multiplicity rules (the default value is false, the check is only meaningful if all the children were
+         * passed)
+         * @param {string} - [parameters.aspect] - if given, the query filters to contain only types that are visible
+         * in the given aspect.
+         * @return {module:Core~Node[]} The function returns a list of valid nodes that can be instantiated as a
+         * child of the node.
+         *
+         * @func
+         */
+        this.getValidChildrenMetaNodes = core.getValidChildrenMetaNodes;
+
+        /**
+         * Retrieves the valid META nodes that can be base of a member of the set of the node.
+         * @param {object} parameters - the input parameters of the query.
+         * @param {module:Core~Node} parameters.node - the node in question.
+         * @param {string} parameters.name - the name of the set.
+         * @param {module:Core~Node[]} [parameters.members] - the members of the set of the node in question.
+         * @param {bool} - [parameters.sensitive] - if true, the query filters out the abstract and connection-like
+         * nodes (the default value is false)
+         * @param {bool} - [parameters.multiplicity] - if true, the query tries to filter out even more nodes according
+         * to the multiplicity rules (the default value is false, the check is only meaningful if all the members were
+         * passed)
+         *
+         * @return {module:Core~Node[]} The function returns a list of valid nodes that can be instantiated as a
+         * member of the set of the node.
+         *
+         * @func
+         */
+        this.getValidSetElementsMetaNodes = core.getValidSetElementsMetaNodes;
+
+        /**
+         * Returns all META nodes.
+         * @param {module:Core~Node} node - any node of the containment hierarchy.
+         *
+         * @return {object} The function returns a dictionary. The keys of the dictionary are the absolute paths of
+         * the META nodes of the project. Every value of the dictionary is a {@link module:Core~Node}.
+         *
+         * @func
+         */
+        this.getAllMetaNodes = core.getAllMetaNodes;
+
+        /**
+         * Checks if the node is a META node.
+         * @param {module:Core~Node} node - the node to test.
+         *
+         * @return {bool} Returns true if the node is a member of the METAAspectSet of the ROOT node hence can be
+         * seen as a META node.
+         *
+         * @func
+         */
+        this.isMetaNode = core.isMetaNode;
     }
 
     return Core;
@@ -14257,7 +14414,14 @@ define('js/client/constants',['common/storage/constants'], function (STORAGE_CON
         PROJECT_OPENED: 'PROJECT_OPENED',
 
         UNDO_AVAILABLE: 'UNDO_AVAILABLE',
-        REDO_AVAILABLE: 'REDO_AVAILABLE'
+        REDO_AVAILABLE: 'REDO_AVAILABLE',
+
+        // general notification event
+        NOTIFICATION: 'NOTIFICATION',
+
+        // Constraint Checking
+        META_RULES_RESULT: 'META_RULES_RESULT',
+        CONSTRAINT_RESULT: 'CONSTRAINT_RESULT'
     };
 });
 /*globals define*/
@@ -15128,537 +15292,70 @@ define('common/util/url',[],function () {
 });
 
 /*globals define*/
-/*jshint node: true, browser: true*/
-
+/*jshint browser: true*/
 /**
- * @author kecso / https://github.com/kecso
+ * REGISTRY KEY NAMES USED BY THE UI
+ *
+ * @author rkereskenyi / https://github.com/rkereskenyi
  */
 
-define('common/core/users/tojson',['common/core/users/meta', 'common/util/url'], function (BaseMeta, URL) {
+define('js/RegistryKeys',[], function () {
+
     'use strict';
 
-    var META = new BaseMeta(),
-        _refTypes = {
-            url: 'url',
-            path: 'path',
-            guid: 'guid'
-        };
+    return {
+        COLOR: 'color',   //fill color of the item
+        TEXT_COLOR: 'textColor',   //color of the texts of the item
+        BORDER_COLOR: 'borderColor',   //border color of the item (if any)
+        POSITION: 'position',  //position of the item {x, y}
+        ROTATION: 'rotation',   //rotation of the item
+        DECORATOR: 'decorator', //custom decorator name of the item
+        IS_PORT: 'isPort',  //if the item is port in its parent or not
+        IS_ABSTRACT: 'isAbstract',  //whether the item is abstract or not !!! (attribute???)
+        LINE_STYLE: 'lineStyle',    //the style of the line (solid, dot, dash-dot)
+        LINE_TYPE: 'lineType',      //the type of the line (straight, bezier, ...)
+        LINE_WIDTH: 'lineWidth',     //width of the line
+        LINE_START_ARROW: 'lineStartArrow',     //start arrow of a line
+        LINE_END_ARROW: 'lineEndArrow',     //start arrow of a line
+        LINE_CUSTOM_POINTS: 'lineCustomPoints',  //custom routing points of a line
 
-    var changeRefObjects = function (refType, urlPrefix, object, core, root, callback) {
-        var i,
-            needed = 0,
-            neededNames = [],
-            error = null,
-            pathToRefObjFinished = function (err, refObj) {
-                error = error || err;
-                object[neededNames[i]] = refObj;
-                if (--needed === 0) {
-                    callback(error);
-                }
-            },
-            changeRefObjDone = function (err) {
-                error = error || err;
-                if (--needed === 0) {
-                    callback(error);
-                }
-            };
-        if (typeof object === 'object') {
-            for (i in object) { // TODO: use key here instead
-                if (object[i] !== null && typeof object[i] === 'object') {
-                    needed++;
-                    neededNames.push(i);
-                }
-            }
-            if (needed > 0) {
-                for (i = 0; i < neededNames.length; i++) {
-                    if (object[neededNames[i]].$ref) {
-                        //reference object
-                        pathToRefObjAsync(refType, urlPrefix, object[neededNames[i]].$ref/*.substring(1)*/,
-                            core, root, pathToRefObjFinished);
-                    } else {
-                        changeRefObjects(refType, urlPrefix, object[neededNames[i]], core, root, changeRefObjDone);
-                    }
-                }
-            } else {
-                callback(null);
-            }
-        } else {
-            callback(null);
-        }
+        //TODO maybe we should harmonize with project registry
+        VALID_PLUGINS: 'validPlugins', //space separated list of valid plugins for the project
+        USED_ADDONS: 'usedAddOns', //space separated list of used addons in the given project
+        VALID_VISUALIZERS: 'validVisualizers', //space separated list of valid visualizers for the node
+        VALID_DECORATORS: 'validDecorators', //space separated list of valid decorators for the project
+        /*
+         *  MISC
+         */
+        PROJECT_REGISTRY: 'ProjectRegistry',
+        DISPLAY_FORMAT: 'DisplayFormat',
+        SVG_ICON: 'SVGIcon',
+        PORT_SVG_ICON: 'PortSVGIcon',
+
+        /*
+         * META_SHEETS_METADATA (title, order, setID, etc)
+         */
+        META_SHEETS: 'MetaSheets',
+
+        /*
+         * CROSSCUTS_META_INFO_REGISTRY_KEY
+         */
+        CROSSCUTS: 'CrossCuts',
+
+        /*
+         * DISABLED CONNECTION AREAS FOR DIAGRAM-DESIGNER-WIDGET DECORATORS ARE STORED UNDER THIS REGISTRY KEY
+         * ON A PER DECORATOR BASIS
+         */
+        DIAGRAM_DESIGNER_WIDGET_DECORATOR_DISABLED_CONNECTION_AREAS:
+            'diagramDesignerWidgetDecoratorDisabledConnectionAreas_'
     };
-
-    var pathToRefObj = function (refType, urlPrefix, path) {
-        var result;
-        switch (refType) {
-            case _refTypes.url:
-                if (path === null) {
-                    result = URL.urlToRefObject(null);
-                } else {
-                    result = URL.urlToRefObject(urlPrefix + '&path=' + encodeURIComponent(path));
-                }
-                break;
-            case _refTypes.path:
-                result = URL.urlToRefObject(path);
-                break;
-            default:
-                result = URL.urlToRefObject(null);
-                break;
-        }
-
-        return result;
-    };
-
-    var getParentRefObject = function (refType, urlPrefix, core, node) {
-        var parent = core.getParent(node),
-            path = null,
-            result;
-
-        if (parent) {
-            path = core.getPath(parent);
-        }
-        switch (refType) {
-            case _refTypes.url:
-                if (path === null) {
-                    result = URL.urlToRefObject(null);
-                } else {
-                    result = URL.urlToRefObject(urlPrefix + '&path=' + encodeURIComponent(path));
-                }
-                break;
-            case _refTypes.path:
-                result = URL.urlToRefObject(path);
-                break;
-            case _refTypes.guid:
-                if (path === null) {
-                    result = URL.urlToRefObject(null);
-                } else {
-                    var refObj = URL.urlToRefObject(path);
-                    refObj.GUID = core.getGuid(parent);
-                    result = refObj;
-                }
-                break;
-        }
-
-        return result;
-    };
-
-    var pathToRefObjAsync = function (refType, urlPrefix, path, core, root, callback) {
-        switch (refType) {
-            case _refTypes.url:
-                if (path === null) {
-                    callback(null, URL.urlToRefObject(null));
-                }
-                callback(null, URL.urlToRefObject(urlPrefix + '&path=' + encodeURIComponent(path)));
-                break;
-            case _refTypes.path:
-                callback(null, URL.urlToRefObject(path));
-                break;
-            case _refTypes.guid:
-                core.loadByPath(root, path, function (err, node) {
-                    if (err) {
-                        callback(err, null);
-                    } else {
-                        var refObj = URL.urlToRefObject(path);
-                        refObj.GUID = core.getGuid(node);
-                        callback(null, refObj);
-                    }
-                });
-                break;
-            default:
-                callback(null, URL.urlToRefObject(null));
-        }
-    };
-
-    var getChildrenGuids = function (core, node, callback) {
-        var GUIDHash = {};
-        core.loadChildren(node, function (err, children) {
-            if (err) {
-                callback(err, null);
-            } else {
-                for (var i = 0; i < children.length; i++) {
-                    GUIDHash[core.getPath(children[i])] = core.getGuid(children[i]);
-                }
-                callback(null, GUIDHash);
-            }
-        });
-    };
-
-    var getMetaOfNode = function (core, node, urlPrefix, refType, callback) {
-        var meta = META.getMeta(core.getPath(node));
-        changeRefObjects(refType, urlPrefix, meta, core, core.getRoot(node), function (err) {
-            callback(err, meta);
-        });
-    };
-
-    var getChildrenOfNode = function (core, node, urlPrefix, refType, callback) {
-        if (refType === _refTypes.guid) {
-            getChildrenGuids(core, node, function (err, gHash) {
-                if (err) {
-                    callback(err);
-                } else {
-                    //TODO possibly it needs some ordering
-                    var children = [];
-                    for (var i in gHash) {
-                        var refObj = URL.urlToRefObject(i);
-                        refObj.GUID = gHash[i];
-                        children.push(refObj);
-                    }
-                    callback(null, children);
-                }
-            });
-        } else {
-            var paths = core.getChildrenPaths(node);
-            var children = [];
-            for (var i = 0; i < paths.length; i++) {
-                children.push(pathToRefObj(refType, urlPrefix, paths[i]));
-            }
-            callback(null, children);
-        }
-    };
-
-    var getSetAttributesAndRegistry = function (core, node, setName, setOwnerPath, callback) {
-        var path = core.getPath(node),
-            i;
-        core.loadByPath(core.getRoot(node), setOwnerPath, function (err, owner) {
-            if (err) {
-                callback(err);
-            } else {
-                if (owner) {
-                    var atrAndReg = {attributes: {}, registry: {}};
-                    var names = core.getMemberAttributeNames(owner, setName, path);
-                    for (i = 0; i < names.length; i++) {
-                        atrAndReg.attributes[names[i]] = core.getMemberAttribute(owner, setName, path, names[i]);
-                    }
-                    names = core.getMemberRegistryNames(owner, setName, path);
-                    for (i = 0; i < names.length; i++) {
-                        atrAndReg.registry[names[i]] = core.getMemberRegistry(owner, setName, path, names[i]);
-                    }
-                    callback(null, atrAndReg);
-                } else {
-                    callback('internal error', null);
-                }
-            }
-        });
-    };
-
-    var getMemberAttributesAndRegistry = function (core, node, setName, memberPath) {
-        var retObj = {attributes: {}, registry: {}},
-            names,
-            i;
-        names = core.getMemberAttributeNames(node, setName, memberPath);
-        for (i = 0; i < names.length; i++) {
-            retObj.attributes[names[i]] = core.getMemberAttribute(node, setName, memberPath, names[i]);
-        }
-        names = core.getMemberRegistryNames(node, setName, memberPath);
-        for (i = 0; i < names.length; i++) {
-            retObj.registry[names[i]] = core.getMemberRegistry(node, setName, memberPath, names[i]);
-        }
-        return retObj;
-    };
-
-    var getSetsOfNode = function (core, node, urlPrefix, refType, callback) {
-        var setsInfo = {},
-            tArray = core.getSetNames(node),
-            memberOfInfo = core.isMemberOf(node),
-            i, j, needed,
-            error = null,
-            createOneSetInfoFinished = function(err){
-                error = error || err;
-                if (--needed === 0) {
-                    callback(error, setsInfo);
-                }
-            },
-            createOneSetInfo = function (setName) {
-            var needed,
-                members = (core.getMemberPaths(node, setName)).sort(), //TODO Remove the sort part at some point
-                info = {from: [], to: [], set: true},
-                i,
-                error = null,
-                containers = [],
-                collectSetInfoFinished = function (err, refObj) {
-                    error = error || err;
-                    if (refObj !== undefined && refObj !== null) {
-                        info.to.push(refObj);
-                    }
-
-                    if (--needed === 0) {
-                        if (error === null) {
-                            setsInfo[setName] = info;
-                        }
-                        createOneSetInfoFinished(error);
-                    }
-                },
-                collectSetInfo = function (nodePath, container) {
-                    if (container === true) {
-                        pathToRefObjAsync(refType, urlPrefix, nodePath, core, core.getRoot(node),
-                            function (err, refObj) {
-                                if (!err && refObj !== undefined && refObj !== null) {
-                                    getSetAttributesAndRegistry(core, node, setName, nodePath,
-                                        function (err, atrAndReg) {
-                                            if (atrAndReg) {
-                                                for (var j in atrAndReg) {
-                                                    refObj[j] = atrAndReg[j];
-                                                }
-                                            }
-                                            collectSetInfoFinished(err, refObj);
-                                        }
-                                    );
-                                } else {
-                                    collectSetInfoFinished(err, null);
-                                }
-                            }
-                        );
-                    } else {
-                        //member
-                        pathToRefObjAsync(refType, urlPrefix, nodePath, core, core.getRoot(node),
-                            function (err, refObj) {
-                                if (refObj !== undefined && refObj !== null) {
-                                    var atrAndReg = getMemberAttributesAndRegistry(core, node, setName, nodePath);
-                                    for (var j in atrAndReg) {
-                                        refObj[j] = atrAndReg[j];
-                                    }
-                                    collectSetInfoFinished(err, refObj);
-                                }
-                            }
-                        );
-                    }
-                };
-
-            for (i in memberOfInfo) {
-                if (memberOfInfo[i].indexOf(setName) !== -1) {
-                    containers.push(i);
-                }
-            }
-
-            needed = members.length + containers.length;
-            if (needed > 0) {
-                for (i = 0; i < members.length; i++) {
-                    collectSetInfo(members[i], false);
-                }
-
-                for (i = 0; i < containers.length; i++) {
-                    collectSetInfo(containers[i], true);
-                }
-            } else {
-                callback(null);
-            }
-        };
-
-        for (j in memberOfInfo) {
-            for (i = 0; i < memberOfInfo[j].length; i++) {
-                if (tArray.indexOf(memberOfInfo[j][i]) === -1) {
-                    tArray.push(memberOfInfo[j][i]);
-                }
-            }
-        }
-        needed = tArray.length;
-        if (needed > 0) {
-            for (i = 0; i < tArray.length; i++) {
-                createOneSetInfo(tArray[i]);
-            }
-        } else {
-            callback(null, setsInfo);
-        }
-    };
-
-    var getPointersGUIDs = function (core, node, callback) {
-        var gHash = {},
-            pointerNames = core.getPointerNames(node),
-            collectionNames = core.getCollectionNames(node),
-            needed = pointerNames.length + collectionNames.length,
-            error = null,
-            i;
-        if (needed > 0) {
-            //pointers
-            for (i = 0; i < pointerNames.length; i++) {
-                core.loadPointer(node, pointerNames[i], function (err, pointer) {
-                    error = error || err;
-                    if (pointer) {
-                        if (gHash[core.getPath(pointer)] === undefined) {
-                            gHash[core.getPath(pointer)] = core.getGuid(pointer);
-                        }
-                    }
-
-                    if (--needed === 0) {
-                        callback(error, gHash);
-                    }
-                });
-            }
-            //collections
-            for (i = 0; i < collectionNames.length; i++) {
-                core.loadCollection(node, collectionNames[i], function (err, collection) {
-                    error = error || err;
-                    if (collection) {
-                        for (var j = 0; j < collection.length; j++) {
-                            if (gHash[core.getPath(collection[j])] === undefined) {
-                                gHash[core.getPath(collection[j])] = core.getGuid(collection[j]);
-                            }
-                        }
-                    }
-
-                    if (--needed === 0) {
-                        callback(error, gHash);
-                    }
-                });
-            }
-        } else {
-            callback(error, gHash);
-        }
-    };
-
-    var getPointersOfNode = function (core, node, urlPrefix, refType, callback) {
-        var GUIDHash = {};
-        var getRefObj = function (path) {
-            if (refType === _refTypes.guid) {
-                var refObj = URL.urlToRefObject(path);
-                refObj.GUID = GUIDHash[path];
-                return refObj;
-            } else {
-                return pathToRefObj(refType, urlPrefix, path);
-            }
-        };
-        var initialized = function () {
-            var pointers = {},
-                tArray = core.getPointerNames(node),
-                t2Array = core.getCollectionNames(node),
-                i, j;
-            for (i = 0; i < t2Array.length; i++) {
-                if (tArray.indexOf(t2Array[i]) === -1) {
-                    tArray.push(t2Array[i]);
-                }
-            }
-            for (i = 0; i < tArray.length; i++) {
-                var coll = core.getCollectionPaths(node, tArray[i]);
-                var pointer = {to: [], from: [], set: false},
-                    pPath = core.getPointerPath(node, tArray[i]);
-                if (pPath !== undefined) {
-                    pointer.to.push(getRefObj(pPath));
-                }
-                for (j = 0; j < coll.length; j++) {
-                    pointer.from.push(getRefObj(coll[j]));
-                }
-                pointers[tArray[i]] = pointer;
-            }
-            callback(null, pointers);
-        };
-
-        //start
-        if (refType === _refTypes.guid) {
-            getPointersGUIDs(core, node, function (err, gHash) {
-                if (err) {
-                    callback(err, null);
-                } else {
-                    GUIDHash = gHash;
-                    initialized();
-                }
-            });
-        } else {
-            initialized();
-        }
-    };
-
-    var getOwnPartOfNode = function (core, node) {
-        var own = {attributes: [], registry: [], pointers: []};
-        own.attributes = core.getOwnAttributeNames(node);
-        own.registry = core.getOwnRegistryNames(node);
-        own.pointers = core.getOwnPointerNames(node);
-        return own;
-    };
-
-    var getJsonNode = function (core, node, urlPrefix, refType, callback) {
-        var nodes = {},
-            tArray,
-            i,
-            jNode;
-
-        if (refType === _refTypes.guid && typeof core.getGuid !== 'function') {
-            callback(new Error('cannot provide GUIDs'), null);
-        }
-
-        nodes[core.getPath(node)] = node;
-        META.initialize(core, nodes, function () {
-            //TODO: is this asynchronous?
-        });
-
-        jNode = {
-            meta: {},
-            children: [],
-            attributes: {},
-            pointers: {},
-            registry: {}
-        };
-
-
-        //basic parts of the node
-        //GUID
-        if (typeof core.getGuid === 'function') {
-            jNode.GUID = core.getGuid(node);
-        }
-        //RELID
-        jNode.RELID = core.getRelid(node);
-        //registry entries
-        tArray = core.getRegistryNames(node);
-        for (i = 0; i < tArray.length; i++) {
-            jNode.registry[tArray[i]] = core.getRegistry(node, tArray[i]);
-        }
-        //attribute entries
-        tArray = core.getAttributeNames(node);
-        for (i = 0; i < tArray.length; i++) {
-            jNode.attributes[tArray[i]] = core.getAttribute(node, tArray[i]);
-        }
-
-        //own part of the node
-        jNode.OWN = getOwnPartOfNode(core, node);
-
-        //reference to parent
-        jNode.parent = getParentRefObject(refType, urlPrefix, core, node);
-
-
-        //now calling the relational parts
-        var needed = 4,
-            error = null;
-        getChildrenOfNode(core, node, urlPrefix, refType, function (err, children) {
-            error = error || err;
-            jNode.children = children;
-            if (--needed === 0) {
-                callback(error, jNode);
-            }
-        });
-        getMetaOfNode(core, node, urlPrefix, refType, function (err, meta) {
-            error = error || err;
-            jNode.meta = meta;
-            if (--needed === 0) {
-                callback(error, jNode);
-            }
-        });
-        getPointersOfNode(core, node, urlPrefix, refType, function (err, pointers) {
-            error = error || err;
-            for (var i in pointers) {
-                jNode.pointers[i] = pointers[i];
-            }
-            if (--needed === 0) {
-                callback(error, jNode);
-            }
-        });
-        getSetsOfNode(core, node, urlPrefix, refType, function (err, sets) {
-            error = error || err;
-            for (var i in sets) {
-                jNode.pointers[i] = sets[i];
-            }
-            if (--needed === 0) {
-                callback(error, jNode);
-            }
-        });
-    };
-
-    return getJsonNode;
 });
-
 /*globals define*/
 /*jshint browser: true*/
 /**
  * @author kecso / https://github.com/kecso
  */
-define('js/client/gmeNodeGetter',['common/core/users/tojson'], function (toJson) {
+define('js/client/gmeNodeGetter',['js/RegistryKeys'], function (REG_KEYS) {
     'use strict';
 
     //getNode
@@ -15747,8 +15444,10 @@ define('js/client/gmeNodeGetter',['common/core/users/tojson'], function (toJson)
             //return _core.getPointerPath(_nodes[_id].node,name);
             if (name === 'base') {
                 //base is a special case as it complicates with inherited children
-                return {to: state.core.getPath(state.core.getBase(state.nodes[_id].node)),
-                    from: []};
+                return {
+                    to: state.core.getPath(state.core.getBase(state.nodes[_id].node)),
+                    from: []
+                };
             }
             return {to: state.core.getPointerPath(state.nodes[_id].node, name), from: []};
         }
@@ -15836,6 +15535,10 @@ define('js/client/gmeNodeGetter',['common/core/users/tojson'], function (toJson)
             return state.core.getValidPointerNames(state.nodes[_id].node);
         }
 
+        function getValidSetNames() {
+            return state.core.getValidSetNames(state.nodes[_id].node);
+        }
+
         //constraint functions
         function getConstraintNames() {
             return state.core.getConstraintNames(state.nodes[_id].node);
@@ -15855,6 +15558,91 @@ define('js/client/gmeNodeGetter',['common/core/users/tojson'], function (toJson)
 
         function getCollectionPaths(name) {
             return state.core.getCollectionPaths(state.nodes[_id].node, name);
+        }
+
+        //adding functionality to get rid of GMEConcepts
+        function isConnection() {
+            return state.core.isConnection(state.nodes[_id].node);
+        }
+
+        function isAbstract() {
+            return state.core.isAbstract(state.nodes[_id].node);
+        }
+
+        function getCrosscutsInfo() {
+            return state.core.getRegistry(state.nodes[_id].node, REG_KEYS.CROSSCUTS) || [];
+        }
+
+        function getValidChildrenTypesDetailed(aspect) {
+            var parameters = {
+                    node: state.nodes[_id].node,
+                    children: [],
+                    sensitive: true,
+                    multiplicity: false,
+                    aspect: aspect
+                },
+                fullList,
+                filteredList,
+                validTypes = {},
+                keys = getChildrenIds(),
+                i;
+
+            for (i = 0; i < keys.length; i++) {
+                if (state.nodes[keys[i]]) {
+                    parameters.children.push(state.nodes[keys[i]].node);
+                }
+            }
+
+            fullList = state.core.getValidChildrenMetaNodes(parameters);
+
+            parameters.multiplicity = true;
+            filteredList = state.core.getValidChildrenMetaNodes(parameters);
+
+            for (i = 0; i < fullList.length; i += 1) {
+                validTypes[state.core.getPath(fullList[i])] = false;
+            }
+
+            for (i = 0; i < filteredList.length; i += 1) {
+                validTypes[state.core.getPath(filteredList[i])] = true;
+            }
+
+            return validTypes;
+        }
+
+        function getValidSetMemberTypesDetailed(setName) {
+            var parameters = {
+                    node: state.nodes[_id].node,
+                    children: [],
+                    sensitive: true,
+                    multiplicity: false,
+                    name: setName
+                },
+                fullList,
+                filteredList,
+                validTypes = {},
+                keys = getChildrenIds(),
+                i;
+
+            for (i = 0; i < keys.length; i++) {
+                if (state.nodes[keys[i]]) {
+                    parameters.children.push(state.nodes[keys[i]].node);
+                }
+            }
+
+            fullList = state.core.getValidSetElementsMetaNodes(parameters);
+
+            parameters.multiplicity = true;
+            filteredList = state.core.getValidSetElementsMetaNodes(parameters);
+
+            for (i = 0; i < fullList.length; i += 1) {
+                validTypes[state.core.getPath(fullList[i])] = false;
+            }
+
+            for (i = 0; i < filteredList.length; i += 1) {
+                validTypes[state.core.getPath(filteredList[i])] = true;
+            }
+
+            return validTypes;
         }
 
         if (state.nodes[_id]) {
@@ -15896,6 +15684,12 @@ define('js/client/gmeNodeGetter',['common/core/users/tojson'], function (toJson)
                 getValidChildrenTypes: getValidChildrenTypes,
                 getValidAttributeNames: getValidAttributeNames,
                 getValidPointerNames: getValidPointerNames,
+                getValidSetNames: getValidSetNames,
+                getValidChildrenTypesDetailed: getValidChildrenTypesDetailed,
+                getValidSetMemberTypesDetailed: getValidSetMemberTypesDetailed,
+                isConnection: isConnection,
+                isAbstract: isAbstract,
+                getCrosscutsInfo: getCrosscutsInfo,
 
                 //constraint functions
                 getConstraintNames: getConstraintNames,
@@ -17351,1925 +17145,6 @@ define('common/core/users/serialization',['common/util/assert'], function (ASSER
         import: importLibrary
     };
 });
-
-/*globals define*/
-/*jshint browser: true*/
-/**
- * @author kecso / https://github.com/kecso
- */
-define('js/client/addon',[], function () {
-    'use strict';
-
-    function AddOn(state, storage, logger__, gmeConfig) {
-        var _addOns = {},
-            logger = logger__.fork('addOn'),
-            _constraintCallback = function () {
-            };
-        //addOn functions
-        function startAddOn(name) {
-            if (_addOns[name] === undefined) {
-                _addOns[name] = 'loading';
-                logger.debug('loading addOn ' + name);
-                storage.simpleRequest({
-                        command: 'connectedWorkerStart',
-                        workerName: name,
-                        projectId: state.project.projectId,
-                        branch: state.branchName
-                    },
-                    function (err, id) {
-                        if (err) {
-                            logger.error('starting addon failed ' + err);
-                            delete _addOns[name];
-                            return logger.error(err);
-                        }
-
-                        logger.debug('started addon ' + name + ' ' + id);
-                        _addOns[name] = id;
-                    });
-            }
-
-        }
-
-        function queryAddOn(name, query, callback) {
-            if (!_addOns[name] || _addOns[name] === 'loading') {
-                return callback(new Error('no such addOn is ready for queries'));
-            }
-            storage.simpleQuery(_addOns[name], query, callback);
-        }
-
-        function stopAddOn(name, callback) {
-            if (_addOns[name] && _addOns[name] !== 'loading') {
-                storage.simpleResult(_addOns[name], callback);
-                delete _addOns[name];
-            } else {
-                callback(_addOns[name] ? new Error('addon loading') : null);
-            }
-        }
-
-        //generic project related addOn handling
-        function updateRunningAddOns(root) {
-            var i,
-                neededAddOns,
-                runningAddOns,
-                callback = function (err) {
-                    logger.error(err);
-                };
-
-            if (gmeConfig.addOn.enable === true) {
-                neededAddOns = state.core.getRegistry(root, 'usedAddOns');
-                runningAddOns = getRunningAddOnNames();
-                neededAddOns = neededAddOns ? neededAddOns.split(' ') : [];
-                for (i = 0; i < neededAddOns.length; i += 1) {
-                    if (!_addOns[neededAddOns[i]]) {
-                        startAddOn(neededAddOns[i]);
-                    }
-                }
-                for (i = 0; i < runningAddOns.length; i += 1) {
-                    if (neededAddOns.indexOf(runningAddOns[i]) === -1) {
-                        stopAddOn(runningAddOns[i], callback);
-                    }
-                }
-            }
-        }
-
-        function stopRunningAddOns() {
-            var i,
-                keys,
-                callback;
-
-            if (gmeConfig.addOn.enable === true) {
-                keys = Object.keys(_addOns);
-                callback = function (err) {
-                    if (err) {
-                        logger.error('stopAddOn' + err);
-                    }
-                };
-
-                for (i = 0; i < keys.length; i++) {
-                    stopAddOn(keys[i], callback);
-                }
-            }
-        }
-
-        function getRunningAddOnNames() {
-            var i,
-                names = [],
-                keys = Object.keys(_addOns);
-            for (i = 0; i < keys.length; i++) {
-                if (_addOns[keys[i]] !== 'loading') {
-                    names.push(keys[i]);
-                }
-            }
-            return names;
-        }
-
-        //core addOns
-        //history
-        function getDetailedHistoryAsync(callback) {
-            if (_addOns.hasOwnProperty('HistoryAddOn') && _addOns.HistoryAddOn !== 'loading') {
-                queryAddOn('HistoryAddOn', {}, callback);
-            } else {
-                callback(new Error('history information is not available'));
-            }
-        }
-
-        //constraint
-        function validateProjectAsync(callback) {
-            callback = callback || _constraintCallback || function (/*err, result*/) {
-                };
-            if (_addOns.hasOwnProperty('ConstraintAddOn') && _addOns.ConstraintAddOn !== 'loading') {
-                queryAddOn('ConstraintAddOn', {querytype: 'checkProject'}, callback);
-            } else {
-                callback(new Error('constraint checking is not available'));
-            }
-        }
-
-        function validateModelAsync(path, callback) {
-            callback = callback || _constraintCallback || function (/* err, result */) {
-                };
-            if (_addOns.hasOwnProperty('ConstraintAddOn') && _addOns.ConstraintAddOn !== 'loading') {
-                queryAddOn('ConstraintAddOn', {querytype: 'checkModel', path: path}, callback);
-            } else {
-                callback(new Error('constraint checking is not available'));
-            }
-        }
-
-        function validateNodeAsync(path, callback) {
-            callback = callback || _constraintCallback || function (/* err, result */) {
-                };
-            if (_addOns.hasOwnProperty('ConstraintAddOn') && _addOns.ConstraintAddOn !== 'loading') {
-                queryAddOn('ConstraintAddOn', {querytype: 'checkNode', path: path}, callback);
-            } else {
-                callback(new Error('constraint checking is not available'));
-            }
-        }
-
-        function setValidationCallback(cFunction) {
-            if (typeof cFunction === 'function' || cFunction === null) {
-                _constraintCallback = cFunction;
-            }
-        }
-
-        //core addOns end
-
-        return {
-            startAddOn: startAddOn,
-            queryAddOn: queryAddOn,
-            stopAddOn: stopAddOn,
-            updateRunningAddOns: updateRunningAddOns,
-            stopRunningAddOns: stopRunningAddOns,
-            getDetailedHistoryAsync: getDetailedHistoryAsync,
-            validateProjectAsync: validateProjectAsync,
-            validateModelAsync: validateModelAsync,
-            validateNodeAsync: validateNodeAsync,
-            setValidationCallback: setValidationCallback,
-            getRunningAddOnNames: getRunningAddOnNames
-        };
-    }
-
-    return AddOn;
-});
-/*globals define, console*/
-/*jshint browser: true*/
-/**
- * @author kecso / https://github.com/kecso
- * @author pmeijer / https://github.com/pmeijer
- */
-define('client/js/client',[
-    'js/logger',
-    'common/storage/browserstorage',
-    'common/EventDispatcher',
-    'common/core/core',
-    'js/client/constants',
-    'common/core/users/meta',
-    'common/util/assert',
-    'common/core/tasync',
-    'common/util/guid',
-    'common/util/url',
-    'js/client/gmeNodeGetter',
-    'js/client/gmeNodeSetter',
-    'common/core/users/serialization',
-    'js/client/addon'
-], function (Logger,
-             Storage,
-             EventDispatcher,
-             Core,
-             CONSTANTS,
-             META,
-             ASSERT,
-             TASYNC,
-             GUID,
-             URL,
-             getNode,
-             getNodeSetters,
-             Serialization,
-             AddOn) {
-    'use strict';
-
-    function Client(gmeConfig) {
-        var self = this,
-            logger = Logger.create('gme:client', gmeConfig.client.log),
-            storage = Storage.getStorage(logger, gmeConfig, true),
-            state = {
-                connection: null, // CONSTANTS.STORAGE. CONNECTED/DISCONNECTED/RECONNECTED
-                project: null,
-                core: null,
-                branchName: null,
-                branchStatus: null, //CONSTANTS.BRANCH_STATUS. SYNC/AHEAD_SYNC/AHEAD_FORKED/PULLING or null
-                readOnlyProject: false,
-                viewer: false, // This means that a specific commit is selected w/o regards to any branch.
-
-                users: {},
-                nodes: {},
-                loadNodes: {},
-                // FIXME: This should be the same as nodes (need to make sure they are not modified in meta).
-                metaNodes: {},
-
-                rootHash: null,
-                rootObject: null,
-                commitHash: null,
-
-                undoRedoChain: null, //{commitHash: '#hash', rootHash: '#hash', previous: object, next: object}
-
-                inTransaction: false,
-                msg: '',
-                gHash: 0,
-                loadError: null
-            },
-            monkeyPatchKey,
-            nodeSetterFunctions,
-            addOnFunctions = new AddOn(state, storage, logger, gmeConfig);
-
-        EventDispatcher.call(this);
-
-        this.CONSTANTS = CONSTANTS;
-
-        function logState(level, msg) {
-            var lightState;
-
-            function replacer(key, value) {
-                var chainItem,
-                    prevChain,
-                    nextChain,
-                    chain;
-                if (key === 'project') {
-                    if (value) {
-                        return value.name;
-                    } else {
-                        return null;
-                    }
-
-                } else if (key === 'core') {
-                    if (value) {
-                        return 'instantiated';
-                    } else {
-                        return 'notInstantiated';
-                    }
-                } else if (key === 'metaNodes') {
-                    return Object.keys(value);
-                } else if (key === 'nodes') {
-                    return Object.keys(value);
-                } else if (key === 'loadNodes') {
-                    return Object.keys(value);
-                } else if (key === 'users') {
-                    return Object.keys(value);
-                } else if (key === 'rootObject') {
-                    return;
-                } else if (key === 'undoRedoChain') {
-                    if (value) {
-                        chain = {
-                            previous: null,
-                            next: null
-                        };
-                        if (value.previous) {
-                            prevChain = {};
-                            chain.previous = prevChain;
-                        }
-                        chainItem = value;
-                        while (chainItem.previous) {
-                            prevChain.previous = {
-                                commitHash: chainItem.commitHash,
-                                previous: null
-                            };
-                            prevChain = prevChain.previous;
-                            chainItem = chainItem.previous;
-                        }
-                        if (value.next) {
-                            nextChain = {};
-                            chain.next = nextChain;
-                        }
-                        chainItem = value;
-                        while (chainItem.next) {
-                            nextChain.next = {
-                                commitHash: chainItem.commitHash,
-                                next: null
-                            };
-                            nextChain = nextChain.next;
-                            chainItem = chainItem.next;
-                        }
-                        return chain;
-                    }
-                }
-
-                return value;
-            }
-
-            if (gmeConfig.debug) {
-                logger[level]('state at ' + msg, JSON.stringify(state, replacer, 2));
-            } else {
-                lightState = {
-                    connection: self.getNetworkStatus(),
-                    projectId: self.getActiveProjectId(),
-                    branchName: self.getActiveBranchName(),
-                    branchStatus: self.getBranchStatus(),
-                    commitHash: self.getActiveCommitHash(),
-                    rootHash: self.getActiveRootHash(),
-                    projectReadOnly: self.isProjectReadOnly(),
-                    commitReadOnly: self.isCommitReadOnly()
-                };
-                if (level === 'console') {
-                    console.log('state at ' + msg, JSON.stringify(lightState));
-                } else {
-                    logger[level]('state at ' + msg, JSON.stringify(lightState));
-                }
-            }
-        }
-
-        // Forwarded functions
-        function saveRoot(msg, callback) {
-            var persisted,
-                numberOfPersistedObjects,
-                wrappedCallback,
-                newCommitObject;
-            logger.debug('saveRoot msg', msg);
-            if (callback) {
-                wrappedCallback = function (err, result) {
-                    if (err) {
-                        logger.error('saveRoot failure', err);
-                    } else {
-                        logger.debug('saveRoot', result);
-                    }
-                    callback(err, result);
-                };
-            } else {
-                wrappedCallback = function (err, result) {
-                    if (err) {
-                        logger.error('saveRoot failure', err);
-                    } else {
-                        logger.debug('saveRoot', result);
-                    }
-                };
-            }
-
-            if (!state.viewer && !state.readOnlyProject) {
-                if (state.msg) {
-                    state.msg += '\n' + msg;
-                } else {
-                    state.msg += msg;
-                }
-                if (!state.inTransaction) {
-                    ASSERT(state.project && state.core && state.branchName);
-
-                    logger.debug('is NOT in transaction - will persist.');
-                    persisted = state.core.persist(state.nodes[ROOT_PATH].node);
-                    logger.debug('persisted', persisted);
-                    numberOfPersistedObjects = Object.keys(persisted.objects).length;
-                    if (numberOfPersistedObjects === 0) {
-                        logger.warn('No changes after persist will return from saveRoot.');
-                        wrappedCallback(null);
-                        return;
-                    } else if (numberOfPersistedObjects > 200) {
-                        //This is just for debugging
-                        logger.warn('Lots of persisted objects', numberOfPersistedObjects);
-                    }
-
-                    // Make the commit on the storage (will emit hashUpdated)
-                    newCommitObject = storage.makeCommit(
-                        state.project.projectId,
-                        state.branchName,
-                        [state.commitHash],
-                        persisted.rootHash,
-                        persisted.objects,
-                        state.msg,
-                        wrappedCallback
-                    );
-
-                    state.msg = '';
-                } else {
-                    logger.debug('is in transaction - will NOT persist.');
-                }
-            } else {
-                //TODO: Why is this set to empty here?
-                state.msg = '';
-                wrappedCallback(null);
-            }
-        }
-
-        function storeNode(node /*, basic */) {
-            var path;
-            //basic = basic || true;
-            if (node) {
-                path = state.core.getPath(node);
-                state.metaNodes[path] = node;
-                if (state.nodes[path]) {
-                    //TODO we try to avoid this
-                } else {
-                    state.nodes[path] = {node: node, hash: ''/*,incomplete:true,basic:basic*/};
-                    //TODO this only needed when real eventing will be reintroduced
-                    //_inheritanceHash[path] = getInheritanceChain(node);
-                }
-                return path;
-            }
-            return null;
-        }
-
-        // Monkey patching from other files..
-        this.meta = new META();
-
-        for (monkeyPatchKey in this.meta) {
-            //TODO: These should be accessed via this.meta.
-            //TODO: e.g. client.meta.getMetaAspectNames(id) instead of client.getMetaAspectNames(id)
-            //TODO: However that will break a lot since it's used all over the place...
-            if (this.meta.hasOwnProperty(monkeyPatchKey)) {
-                self[monkeyPatchKey] = this.meta[monkeyPatchKey];
-            }
-        }
-
-        nodeSetterFunctions = getNodeSetters(logger, state, saveRoot, storeNode);
-
-        for (monkeyPatchKey in nodeSetterFunctions) {
-            if (nodeSetterFunctions.hasOwnProperty(monkeyPatchKey)) {
-                self[monkeyPatchKey] = nodeSetterFunctions[monkeyPatchKey];
-            }
-        }
-
-        // Main API functions (with helpers) for connecting, selecting project and branches etc.
-        this.connectToDatabase = function (callback) {
-            if (isConnected()) {
-                logger.warn('connectToDatabase - already connected');
-                callback(null);
-                return;
-            }
-            storage.open(function (connectionState) {
-                state.connection = connectionState;
-                if (connectionState === CONSTANTS.STORAGE.CONNECTED) {
-                    //N.B. this event will only be triggered once.
-                    self.dispatchEvent(CONSTANTS.NETWORK_STATUS_CHANGED, connectionState);
-                    reLaunchUsers();
-                    callback(null);
-                } else if (connectionState === CONSTANTS.STORAGE.DISCONNECTED) {
-                    self.dispatchEvent(CONSTANTS.NETWORK_STATUS_CHANGED, connectionState);
-                } else if (connectionState === CONSTANTS.STORAGE.RECONNECTED) {
-                    self.dispatchEvent(CONSTANTS.NETWORK_STATUS_CHANGED, connectionState);
-                } else { //CONSTANTS.ERROR
-                    callback(Error('Connection failed!' + connectionState));
-                }
-            });
-        };
-
-        this.disconnectFromDatabase = function (callback) {
-
-            function closeStorage(err) {
-                storage.close(function (err2) {
-                    state.connection = CONSTANTS.STORAGE.DISCONNECTED;
-                    callback(err || err2);
-                });
-            }
-
-            if (isConnected()) {
-                if (state.project) {
-                    closeProject(state.project.projectId, closeStorage);
-                } else {
-                    closeStorage(null);
-                }
-            } else {
-                logger.warn('Trying to disconnect when already disconnected.');
-                callback(null);
-            }
-        };
-
-        this.selectProject = function (projectId, branchName, callback) {
-            if (callback === undefined && typeof branchName === 'function') {
-                callback = branchName;
-                branchName = undefined;
-            }
-            if (isConnected() === false) {
-                callback(new Error('There is no open database connection!'));
-            }
-            var prevProjectId,
-                branchToOpen = branchName || 'master';
-
-            logger.debug('selectProject', projectId, branchToOpen);
-
-            function projectOpened(err, project, branches, access) {
-                if (err) {
-                    callback(new Error(err));
-                    return;
-                }
-                state.project = project;
-                state.readOnlyProject = access.write === false;
-                state.core = new Core(project, {
-                    globConf: gmeConfig,
-                    logger: logger.fork('core')
-                });
-                self.meta.initialize(state.core, state.metaNodes, saveRoot);
-                logState('info', 'projectOpened');
-                logger.debug('projectOpened, branches: ', branches);
-                self.dispatchEvent(CONSTANTS.PROJECT_OPENED, projectId);
-
-                if (branches.hasOwnProperty(branchToOpen) === false) {
-                    if (branchName) {
-                        logger.error('Given branch does not exist "' + branchName + '"');
-                        closeProject(projectId, function (err) {
-                            if (err) {
-                                logger.error('closeProject after missing branch failed with err', err);
-                            }
-                            callback(new Error('Given branch does not exist "' + branchName + '"'));
-                        });
-                        return;
-                    }
-                    logger.warn('Project "' + projectId + '" did not have branch', branchToOpen);
-                    branchToOpen = Object.keys(branches)[0] || null;
-                    logger.debug('Picked "' + branchToOpen + '".');
-                }
-
-                ASSERT(branchToOpen, 'No branch available in project');
-
-                self.selectBranch(branchToOpen, null, function (err) {
-                    if (err) {
-                        callback(err);
-                        return;
-                    }
-                    logState('info', 'selectBranch');
-                    reLaunchUsers();
-                    callback(null);
-                });
-            }
-
-            if (state.project) {
-                prevProjectId = state.project.projectId;
-                logger.debug('A project was open, closing it', prevProjectId);
-
-                if (prevProjectId === projectId) {
-                    logger.warn('projectId is already opened', projectId);
-                    callback(null);
-                    return;
-                }
-                closeProject(prevProjectId, function (err) {
-                    if (err) {
-                        logger.error('problems closing previous project', err);
-                        callback(new Error(err));
-                        return;
-                    }
-                    storage.openProject(projectId, projectOpened);
-                });
-            } else {
-                storage.openProject(projectId, projectOpened);
-            }
-        };
-
-        function closeProject(projectId, callback) {
-            state.project = null;
-            //TODO what if for some reason we are in transaction?
-            storage.closeProject(projectId, function (err) {
-                if (err) {
-                    callback(err);
-                    return;
-                }
-                state.core = null;
-                state.branchName = null;
-                //self.dispatchEvent(null);
-                state.patterns = {};
-                //state.gHash = 0;
-                state.nodes = {};
-                state.metaNodes = {};
-                state.loadNodes = {};
-                state.loadError = 0;
-                state.rootHash = null;
-                //state.rootObject = null;
-                state.inTransaction = false;
-                state.msg = '';
-
-                cleanUsersTerritories();
-                self.dispatchEvent(CONSTANTS.PROJECT_CLOSED, projectId);
-                callback(null);
-            });
-        }
-
-        /**
-         *
-         * @param {string} branchName - name of branch to open.
-         * @param {function} [branchStatusHandler=getDefaultCommitHandler()] - Handles returned statuses after commits.
-         * @param callback
-         */
-        this.selectBranch = function (branchName, branchStatusHandler, callback) {
-            var prevBranchName = state.branchName;
-            logger.debug('selectBranch', branchName);
-            if (isConnected() === false) {
-                callback(new Error('There is no open database connection!'));
-                return;
-            }
-            if (!state.project) {
-                callback(new Error('selectBranch invoked without an opened project'));
-                return;
-            }
-
-            if (branchStatusHandler) {
-                logger.warn('passing branchStatusHandler is deprecated, use addHashUpdateHandler or' +
-                    ' addBranchStatusHandler on the branch object instead (getProjectObject().branches[branchName]).');
-            }
-
-            function openBranch(err) {
-                if (err) {
-                    logger.error('Problems closing existing branch', err);
-                    callback(err);
-                    return;
-                }
-
-                state.branchName = branchName;
-                logger.debug('openBranch, calling storage openBranch', state.project.projectId, branchName);
-                storage.openBranch(state.project.projectId, branchName,
-                    getHashUpdateHandler(), getBranchStatusHandler(),
-                    function (err /*, latestCommit*/) {
-                        if (err) {
-                            logger.error('storage.openBranch returned with error', err);
-                            self.dispatchEvent(CONSTANTS.BRANCH_CHANGED, null);
-                            callback(new Error(err));
-                            return;
-                        }
-
-                        state.viewer = false;
-                        state.branchName = branchName;
-                        self.dispatchEvent(CONSTANTS.BRANCH_CHANGED, branchName);
-                        logState('info', 'openBranch');
-                        callback(null);
-                    }
-                );
-            }
-
-            if (prevBranchName !== null) {
-                logger.debug('Branch was open, closing it first', prevBranchName);
-                storage.closeBranch(state.project.projectId, prevBranchName, openBranch);
-            } else {
-                openBranch(null);
-            }
-        };
-
-        this.selectCommit = function (commitHash, callback) {
-            logger.debug('selectCommit', commitHash);
-            if (isConnected() === false) {
-                callback(new Error('There is no open database connection!'));
-                return;
-            }
-            if (!state.project) {
-                callback(new Error('selectCommit invoked without open project'));
-                return;
-            }
-            var prevBranchName;
-
-            function openCommit(err) {
-                if (err) {
-                    logger.error('Problems closing existing branch', err);
-                    callback(err);
-                    return;
-                }
-
-                state.viewer = true;
-
-                state.project.loadObject(commitHash, function (err, commitObj) {
-                    if (!err && commitObj) {
-                        logState('info', 'selectCommit loaded commit');
-                        self.dispatchEvent(CONSTANTS.BRANCH_CHANGED, null);
-                        loading(commitObj.root, commitHash, function (err, aborted) {
-                            if (err) {
-                                logger.error('loading returned error', commitObj.root, err);
-                                logState('error', 'selectCommit loading');
-                                callback(err);
-                            } else if (aborted === true) {
-                                logState('warn', 'selectCommit loading');
-                                callback('Loading selected commit was aborted');
-                            } else {
-                                logger.debug('loading complete for selectCommit rootHash', commitObj.root);
-                                logState('info', 'selectCommit loading');
-                                self.dispatchEvent(CONSTANTS.BRANCH_CHANGED, null);
-                                callback(null);
-                            }
-                        });
-                    } else {
-                        logger.error('Cannot view given ' + commitHash + ' commit as it\'s root cannot be loaded! [' +
-                            JSON.stringify(err) + ']');
-                        callback(err || new Error('commit object cannot be found!'));
-                    }
-                });
-            }
-
-            if (state.branchName !== null) {
-                logger.debug('Branch was open, closing it first', state.branchName);
-                prevBranchName = state.branchName;
-                state.branchName = null;
-                storage.closeBranch(state.project.projectId, prevBranchName, openCommit);
-            } else {
-                openCommit(null);
-            }
-        };
-
-        function getBranchStatusHandler () {
-            return function (branchStatus, commitQueue, updateQueue) {
-                logger.debug('branchStatus changed', branchStatus, commitQueue, updateQueue);
-                logState('debug', 'branchStatus');
-                state.branchStatus = branchStatus;
-                self.dispatchEvent(CONSTANTS.BRANCH_STATUS_CHANGED, {
-                    status: branchStatus,
-                    commitQueue: commitQueue,
-                    updateQueue: updateQueue}
-                );
-            };
-        }
-
-        function getHashUpdateHandler() {
-            return function (data, commitQueue, updateQueue, callback) {
-                var commitData = data.commitData,
-                    clearUndoRedo = data.local !== true,
-                    commitHash = commitData.commitObject[CONSTANTS.STORAGE.MONGO_ID];
-                logger.debug('hashUpdateHandler invoked. project, branch, commitHash',
-                    commitData.projectId, commitData.branchName, commitHash);
-
-                if (state.inTransaction) {
-                    logger.warn('Is in transaction, will not load in changes');
-                    callback(null, false); // proceed: false
-                    return;
-                }
-
-                //undo-redo
-                addModification(commitData.commitObject, clearUndoRedo);
-                self.dispatchEvent(CONSTANTS.UNDO_AVAILABLE, canUndo());
-                self.dispatchEvent(CONSTANTS.REDO_AVAILABLE, canRedo());
-
-                logger.debug('loading commitHash, local?', commitHash, data.local);
-                loading(commitData.commitObject.root, commitHash, function (err, aborted) {
-                    if (err) {
-                        logger.error('hashUpdateHandler invoked loading and it returned error',
-                            commitData.commitObject.root, err);
-                        logState('error', 'hashUpdateHandler');
-                        callback(err, false); // proceed: false
-                    } else if (aborted === true) {
-                        logState('warn', 'hashUpdateHandler');
-                        callback(null, false); // proceed: false
-                    } else {
-                        logger.debug('loading complete for incoming rootHash', commitData.commitObject.root);
-                        logState('debug', 'hashUpdateHandler');
-                        callback(null, true); // proceed: true
-                    }
-                });
-            };
-        }
-
-        this.forkCurrentBranch = function (newName, commitHash, callback) {
-            var self = this,
-                activeBranchName = self.getActiveBranchName(),
-                activeProjectId = self.getActiveProjectId(),
-                forkName;
-
-            logger.debug('forkCurrentBranch', newName, commitHash);
-            if (!state.project) {
-                callback('Cannot fork without an open project!');
-                return;
-            }
-            if (activeBranchName === null) {
-                callback('Cannot fork without an open branch!');
-                return;
-            }
-            forkName = newName || activeBranchName + '_' + (new Date()).getTime();
-            storage.forkBranch(activeProjectId, activeBranchName, forkName, commitHash,
-                function (err, forkHash) {
-                    if (err) {
-                        logger.error('Could not fork branch:', newName, err);
-                        callback(err);
-                        return;
-                    }
-                    callback(null, forkName, forkHash);
-                }
-            );
-        };
-
-        // State getters.
-        this.getNetworkStatus = function () {
-            return state.connection;
-        };
-
-        this.getBranchStatus = function () {
-            return state.branchStatus;
-        };
-
-        this.getActiveProjectId = function () {
-            return state.project && state.project.projectId;
-        };
-
-        this.getActiveBranchName = function () {
-            return state.branchName;
-        };
-
-        this.getActiveCommitHash = function () {
-            return state.commitHash;
-        };
-
-        this.getActiveRootHash = function () {
-            return state.rootHash;
-        };
-
-        this.isProjectReadOnly = function () {
-            return state.readOnlyProject;
-        };
-
-        this.isCommitReadOnly = function () {
-            // This means that a specific commit is selected w/o regards to any branch.
-            return state.viewer;
-        };
-
-        this.getProjectObject = function () {
-            return state.project;
-        };
-
-        // Undo/Redo functionality
-        function addModification(commitObject, clear) {
-            var newItem,
-                commitHash = commitObject[CONSTANTS.STORAGE.MONGO_ID],
-                currItem;
-            if (clear) {
-                logger.debug('foreign modification clearing undo-redo chain');
-                state.undoRedoChain = {
-                    commitHash: commitHash,
-                    rootHash: commitObject.root,
-                    previous: null,
-                    next: null
-                };
-                return;
-            }
-
-            // Check if the modification already exist, i.e. commit is from undoing or redoing.
-            currItem = state.undoRedoChain;
-            while (currItem) {
-                if (currItem.commitHash === commitHash) {
-                    return;
-                }
-                currItem = currItem.previous;
-            }
-
-            currItem = state.undoRedoChain;
-            while (currItem) {
-                if (currItem.commitHash === commitHash) {
-                    return;
-                }
-                currItem = currItem.next;
-            }
-
-            newItem = {
-                commitHash: commitHash,
-                rootHash: commitObject.root,
-                previous: state.undoRedoChain,
-                next: null
-            };
-            state.undoRedoChain.next = newItem;
-            state.undoRedoChain = newItem;
-        }
-
-        function canUndo() {
-            var result = false;
-            if (state.undoRedoChain && state.undoRedoChain.previous) {
-                result = true;
-            }
-
-            return result;
-        }
-
-        function canRedo() {
-            var result = false;
-            if (state.undoRedoChain && state.undoRedoChain.next) {
-                result = true;
-            }
-
-            return result;
-        }
-
-        this.undo = function (branchName, callback) {
-            if (canUndo() === false) {
-                callback(new Error('unable to make undo'));
-                return;
-            }
-
-            state.undoRedoChain = state.undoRedoChain.previous;
-
-            logState('info', 'undo [before setBranchHash]');
-            storage.setBranchHash(state.project.projectId, branchName, state.undoRedoChain.commitHash, state.commitHash,
-                function (err) {
-                    if (err) {
-                        //TODO do we need to handle this? How?
-                        callback(err);
-                        return;
-                    }
-                    logState('info', 'undo [after setBranchHash]');
-                    callback(null);
-                }
-            );
-
-        };
-
-        this.redo = function (branchName, callback) {
-            if (canRedo() === false) {
-                callback(new Error('unable to make redo'));
-                return;
-            }
-
-            state.undoRedoChain = state.undoRedoChain.next;
-
-            logState('info', 'redo [before setBranchHash]');
-            storage.setBranchHash(state.project.projectId, branchName, state.undoRedoChain.commitHash, state.commitHash,
-                function (err) {
-                    if (err) {
-                        //TODO do we need to handle this? How?
-                        callback(err);
-                        return;
-                    }
-                    logState('info', 'redo [after setBranchHash]');
-                    callback(null);
-                }
-            );
-        };
-
-        // REST-like functions and forwarded to storage TODO: add these to separate base class
-
-        //  Getters
-        this.getProjects = function (options, callback) {
-            var asObject;
-            if (isConnected()) {
-                if (options.asObject) {
-                    asObject = true;
-                    delete options.asObject;
-                }
-                storage.getProjects(options, function (err, result) {
-                    var i,
-                        resultObj = {};
-                    if (err) {
-                        callback(err);
-                        return;
-                    }
-                    if (asObject === true) {
-                        for (i = 0; i < result.length; i += 1) {
-                            resultObj[result[i]._id] = result[i];
-                        }
-                        callback(null, resultObj);
-                    } else {
-                        callback(null, result);
-                    }
-                });
-            } else {
-                callback(new Error('There is no open database connection!'));
-            }
-        };
-
-        this.getProjectsAndBranches = function (asObject, callback) {
-            //This is kept for the tests.
-            self.getProjects({rights: true, branches: true, asObject: asObject}, callback);
-        };
-
-        this.getBranches = function (projectId, callback) {
-            if (isConnected()) {
-                storage.getBranches(projectId, callback);
-            } else {
-                callback(new Error('There is no open database connection!'));
-            }
-        };
-
-        this.getCommits = function (projectId, before, number, callback) {
-            if (isConnected()) {
-                storage.getCommits(projectId, before, number, callback);
-            } else {
-                callback(new Error('There is no open database connection!'));
-            }
-        };
-
-        this.getLatestCommitData = function (projectId, branchName, callback) {
-            if (isConnected()) {
-                storage.getLatestCommitData(projectId, branchName, callback);
-            } else {
-                callback(new Error('There is no open database connection!'));
-            }
-        };
-
-        //  Setters
-        this.createProject = function (projectName, parameters, callback) {
-            if (isConnected()) {
-                storage.createProject(projectName, parameters, callback);
-            } else {
-                callback(new Error('There is no open database connection!'));
-            }
-        };
-
-        this.deleteProject = function (projectId, callback) {
-            if (isConnected()) {
-                storage.deleteProject(projectId, function (err, didExist) {
-                    if (err) {
-                        callback(new Error(err));
-                        return;
-                    }
-                    callback(null, didExist);
-                });
-            } else {
-                callback(new Error('There is no open database connection!'));
-            }
-        };
-
-        this.createBranch = function (projectId, branchName, newHash, callback) {
-            if (isConnected()) {
-                storage.createBranch(projectId, branchName, newHash, callback);
-            } else {
-                callback(new Error('There is no open database connection!'));
-            }
-        };
-
-        this.deleteBranch = function (projectId, branchName, oldHash, callback) {
-            if (isConnected()) {
-                storage.deleteBranch(projectId, branchName, oldHash, callback);
-            } else {
-                callback(new Error('There is no open database connection!'));
-            }
-        };
-
-        // Watchers (used in e.g. ProjectNavigator).
-        /**
-         * Triggers eventHandler(storage, eventData) on PROJECT_CREATED and PROJECT_DELETED.
-         *
-         * eventData = {
-         *    etype: PROJECT_CREATED||DELETED,
-         *    projectId: %id of project%
-         * }
-         *
-         * @param {function} eventHandler
-         * @param {function} [callback]
-         */
-        this.watchDatabase = function (eventHandler, callback) {
-            callback = callback || function (err) {
-                    if (err) {
-                        logger.error('Problems watching database room');
-                    }
-                };
-            storage.watchDatabase(eventHandler, callback);
-        };
-
-        this.unwatchDatabase = function (eventHandler, callback) {
-            callback = callback || function (err) {
-                    if (err) {
-                        logger.error('Problems unwatching database room');
-                    }
-                };
-            storage.unwatchDatabase(eventHandler, callback);
-        };
-
-        /**
-         * Triggers eventHandler(storage, eventData) on BRANCH_CREATED, BRANCH_DELETED and BRANCH_HASH_UPDATED
-         * for the given projectId.
-         *
-         *
-         * eventData = {
-         *    etype: BRANCH_CREATED||DELETED||HASH_UPDATED,
-         *    projectId: %id of project%,
-         *    branchName: %name of branch%,
-         *    newHash: %new commitHash (='' when DELETED)%
-         *    oldHash: %previous commitHash (='' when CREATED)%
-         * }
-         *
-         * @param {string} projectId
-         * @param {function} eventHandler
-         * @param {function} [callback]
-         */
-        this.watchProject = function (projectId, eventHandler, callback) {
-            callback = callback || function (err) {
-                    if (err) {
-                        logger.error('Problems watching project room', projectId);
-                    }
-                };
-            storage.watchProject(projectId, eventHandler, callback);
-        };
-
-        this.unwatchProject = function (projectId, eventHandler, callback) {
-            callback = callback || function (err) {
-                    if (err) {
-                        logger.error('Problems unwatching project room', projectId);
-                    }
-                };
-            storage.unwatchProject(projectId, eventHandler, callback);
-        };
-
-        // Internal functions
-        function isConnected() {
-            return state.connection === CONSTANTS.STORAGE.CONNECTED ||
-                state.connection === CONSTANTS.STORAGE.RECONNECTED;
-        }
-
-        var ROOT_PATH = ''; //FIXME: This should come from constants..
-
-        function COPY(object) {
-            if (object) {
-                return JSON.parse(JSON.stringify(object));
-            }
-            return null;
-        }
-
-        // Node handling
-        this.getNode = function (nodePath) {
-            return getNode(nodePath, logger, state, self.meta, storeNode);
-        };
-
-        function getStringHash(node) {
-            //TODO there is a memory issue with the huge strings so we have to replace it with something
-            if (node.parent && node.parent.data && node.parent.data[node.relid]) {
-                return node.parent.data[node.relid]; // FIXME this is buggy when creating connections
-            }
-            state.gHash += 1;
-            return state.gHash;
-        }
-
-        function getModifiedNodes(newerNodes) {
-            var modifiedNodes = [],
-                i;
-
-            for (i in state.nodes) {
-                if (state.nodes.hasOwnProperty(i)) {
-                    if (newerNodes[i]) {
-                        if (newerNodes[i].hash !== state.nodes[i].hash && state.nodes[i].hash !== '') {
-                            modifiedNodes.push(i);
-                        }
-                    }
-                }
-            }
-            return modifiedNodes;
-        }
-
-        //this is just a first brute implementation it needs serious optimization!!!
-        function fitsInPatternTypes(path, pattern) {
-            var i;
-
-            if (pattern.items && pattern.items.length > 0) {
-                for (i = 0; i < pattern.items.length; i += 1) {
-                    if (self.meta.isTypeOf(path, pattern.items[i])) {
-                        return true;
-                    }
-                }
-                return false;
-            } else {
-                return true;
-            }
-        }
-
-        function patternToPaths(patternId, pattern, pathsSoFar) {
-            var children,
-                subPattern,
-                i;
-
-            if (state.nodes[patternId]) {
-                pathsSoFar[patternId] = true;
-                if (pattern.children && pattern.children > 0) {
-                    children = state.core.getChildrenPaths(state.nodes[patternId].node);
-                    subPattern = COPY(pattern);
-                    subPattern.children -= 1;
-                    for (i = 0; i < children.length; i += 1) {
-                        if (fitsInPatternTypes(children[i], pattern)) {
-                            patternToPaths(children[i], subPattern, pathsSoFar);
-                        }
-                    }
-                }
-            } else {
-                state.loadError++;
-            }
-        }
-
-        function userEvents(userId, modifiedNodes) {
-            var newPaths = {},
-                startErrorLevel = state.loadError,
-                i,
-                events = [];
-
-            for (i in state.users[userId].PATTERNS) {
-                if (state.users[userId].PATTERNS.hasOwnProperty(i)) {
-                    if (state.nodes[i]) { //TODO we only check pattern if its root is there...
-                        patternToPaths(i, state.users[userId].PATTERNS[i], newPaths);
-                    }
-                }
-            }
-
-            if (startErrorLevel !== state.loadError) {
-                return; //we send events only when everything is there correctly
-            }
-
-            //deleted items
-            for (i in state.users[userId].PATHS) {
-                if (!newPaths[i]) {
-                    events.push({etype: 'unload', eid: i});
-                }
-            }
-
-            //added items
-            for (i in newPaths) {
-                if (!state.users[userId].PATHS[i]) {
-                    events.push({etype: 'load', eid: i});
-                }
-            }
-
-            //updated items
-            for (i = 0; i < modifiedNodes.length; i++) {
-                if (newPaths[modifiedNodes[i]]) {
-                    events.push({etype: 'update', eid: modifiedNodes[i]});
-                }
-            }
-
-            state.users[userId].PATHS = newPaths;
-
-            //this is how the events should go
-            if (events.length > 0) {
-                if (state.loadError > startErrorLevel) {
-                    events.unshift({etype: 'incomplete', eid: null});
-                } else {
-                    events.unshift({etype: 'complete', eid: null});
-                }
-            } else {
-                events.unshift({etype: 'complete', eid: null});
-            }
-            state.users[userId].FN(events);
-        }
-
-        function loadChildrenPattern(core, nodesSoFar, node, level, callback) {
-            var path = core.getPath(node),
-                childrenPaths = core.getChildrenPaths(node),
-                childrenRelids = core.getChildrenRelids(node),
-                missing = childrenPaths.length,
-                error = null,
-                i,
-                childLoaded = function (err, child) {
-                    if (err || child === null) {
-                        error = error || err;
-                        missing -= 1;
-                        if (missing === 0) {
-                            callback(error);
-                        }
-                    } else {
-                        loadChildrenPattern(core, nodesSoFar, child, level - 1, childrenPatternLoaded);
-                    }
-                },
-                childrenPatternLoaded = function (err) {
-                    error = error || err;
-                    missing -= 1;
-                    if (missing === 0) {
-                        callback(error);
-                    }
-                };
-            state.metaNodes[path] = node;
-            if (!nodesSoFar[path]) {
-                nodesSoFar[path] = {node: node, incomplete: true, basic: true, hash: getStringHash(node)};
-            }
-            if (level > 0) {
-                if (missing > 0) {
-                    for (i = 0; i < childrenPaths.length; i++) {
-                        if (nodesSoFar[childrenPaths[i]]) {
-                            loadChildrenPattern(core,
-                                nodesSoFar,
-                                nodesSoFar[childrenPaths[i]].node,
-                                level - 1, childrenPatternLoaded);
-                        } else {
-                            core.loadChild(node, childrenRelids[i], childLoaded);
-                        }
-                    }
-                } else {
-                    callback(error);
-                }
-            } else {
-                callback(error);
-            }
-        }
-
-        function loadPattern(core, id, pattern, nodesSoFar, callback) {
-            var base = null,
-                baseLoaded = function () {
-                    if (pattern.children && pattern.children > 0) {
-                        var level = pattern.children;
-                        loadChildrenPattern(core, nodesSoFar, base, level, callback);
-                    } else {
-                        callback(null);
-                    }
-                };
-
-            if (nodesSoFar[id]) {
-                base = nodesSoFar[id].node;
-                baseLoaded();
-            } else {
-                base = null;
-                if (state.loadNodes[ROOT_PATH]) {
-                    base = state.loadNodes[ROOT_PATH].node;
-                } else if (state.nodes[ROOT_PATH]) {
-                    base = state.nodes[ROOT_PATH].node;
-                }
-                core.loadByPath(base, id, function (err, node) {
-                    var path;
-                    if (!err && node && !core.isEmpty(node)) {
-                        path = core.getPath(node);
-                        state.metaNodes[path] = node;
-                        if (!nodesSoFar[path]) {
-                            nodesSoFar[path] = {
-                                node: node,
-                                incomplete: false,
-                                basic: true,
-                                hash: getStringHash(node)
-                            };
-                        }
-                        base = node;
-                        baseLoaded();
-                    } else {
-                        callback(err);
-                    }
-                });
-            }
-        }
-
-        function orderStringArrayByElementLength(strArray) {
-            var ordered = [],
-                i, j, index;
-
-            for (i = 0; i < strArray.length; i++) {
-                index = -1;
-                j = 0;
-                while (index === -1 && j < ordered.length) {
-                    if (ordered[j].length > strArray[i].length) {
-                        index = j;
-                    }
-                    j++;
-                }
-
-                if (index === -1) {
-                    ordered.push(strArray[i]);
-                } else {
-                    ordered.splice(index, 0, strArray[i]);
-                }
-            }
-            return ordered;
-        }
-
-        function loadRoot(newRootHash, callback) {
-            //with the newer approach we try to optimize a bit the mechanism of the loading and
-            // try to get rid of the parallelism behind it
-            var patterns = {},
-                orderedPatternIds = [],
-                error = null,
-                i,
-                j,
-                keysi,
-                keysj;
-
-            state.loadNodes = {};
-            state.loadError = 0;
-
-            //gathering the patterns
-            keysi = Object.keys(state.users);
-            for (i = 0; i < keysi.length; i++) {
-                keysj = Object.keys(state.users[keysi[i]].PATTERNS);
-                for (j = 0; j < keysj.length; j++) {
-                    if (patterns[keysj[j]]) {
-                        //we check if the range is bigger for the new definition
-                        if (patterns[keysj[j]].children < state.users[keysi[i]].PATTERNS[keysj[j]].children) {
-                            patterns[keysj[j]].children = state.users[keysi[i]].PATTERNS[keysj[j]].children;
-                        }
-                    } else {
-                        patterns[keysj[j]] = state.users[keysi[i]].PATTERNS[keysj[j]];
-                    }
-                }
-            }
-            //getting an ordered key list
-            orderedPatternIds = Object.keys(patterns);
-            orderedPatternIds = orderStringArrayByElementLength(orderedPatternIds);
-
-
-            //and now the one-by-one loading
-            state.core.loadRoot(newRootHash, function (err, root) {
-                var fut,
-                    _loadPattern;
-
-                ASSERT(err || root);
-
-                state.rootObject = root;
-                addOnFunctions.updateRunningAddOns(root);
-                error = error || err;
-                if (!err) {
-                    //_clientGlobal.addOn.updateRunningAddOns(root); //FIXME: ADD ME BACK!!
-                    state.loadNodes[state.core.getPath(root)] = {
-                        node: root,
-                        incomplete: true,
-                        basic: true,
-                        hash: getStringHash(root)
-                    };
-                    state.metaNodes[state.core.getPath(root)] = root;
-                    if (orderedPatternIds.length === 0 && Object.keys(state.users) > 0) {
-                        //we have user, but they do not interested in any object -> let's relaunch them :D
-                        callback(null);
-                        reLaunchUsers();
-                    } else {
-                        _loadPattern = TASYNC.throttle(TASYNC.wrap(loadPattern), 1);
-                        fut = TASYNC.lift(
-                            orderedPatternIds.map(function (pattern /*, index */) {
-                                return TASYNC.apply(_loadPattern,
-                                    [state.core, pattern, patterns[pattern], state.loadNodes],
-                                    this);
-                            }));
-                        TASYNC.unwrap(function () {
-                            return fut;
-                        })(callback);
-                    }
-                } else {
-                    callback(err);
-                }
-            });
-        }
-
-        //this is just a first brute implementation it needs serious optimization!!!
-        function loading(newRootHash, newCommitHash, callback) {
-            var firstRoot = !state.nodes[ROOT_PATH],
-                originatingRootHash = state.nodes[ROOT_PATH] ? state.core.getHash(state.nodes[ROOT_PATH].node) : null,
-                finalEvents = function () {
-                    var modifiedPaths,
-                        i;
-                    logger.debug('firing finalEvents from loading for new rootHash', newRootHash);
-                    modifiedPaths = getModifiedNodes(state.loadNodes);
-                    state.nodes = state.loadNodes;
-                    state.loadNodes = {};
-                    // We have now loaded the new root from the commit, update the state
-                    state.rootHash = newRootHash;
-                    state.commitHash = newCommitHash;
-
-                    for (i in state.users) {
-                        if (state.users.hasOwnProperty(i)) {
-                            userEvents(i, modifiedPaths);
-                        }
-                    }
-                    callback(null);
-                };
-            logger.debug('loading originatingRootHash, newRootHash', originatingRootHash, newRootHash);
-
-            callback = callback || function (/*err*/) {
-                };
-
-
-            loadRoot(newRootHash, function (err) {
-                if (err) {
-                    state.rootHash = null;
-                    callback(err);
-                } else {
-                    if (firstRoot ||
-                        state.core.getHash(state.nodes[ROOT_PATH].node) === originatingRootHash) {
-                        finalEvents();
-                    } else {
-                        // This relies on the fact that loading is synchronous for local updates.
-                        logger.warn('Modifications were done during loading - load aborted.');
-                        callback(null, true);
-                    }
-                }
-            });
-        }
-
-        this.startTransaction = function (msg) {
-            if (state.inTransaction) {
-                logger.error('Already in transaction, will proceed though..');
-            }
-            if (state.core) {
-                state.inTransaction = true;
-                msg = msg || 'startTransaction()';
-                saveRoot(msg);
-            } else {
-                logger.error('Can not start transaction with no core avaliable.');
-            }
-        };
-
-        this.completeTransaction = function (msg, callback) {
-            state.inTransaction = false;
-            if (state.core) {
-                msg = msg || 'completeTransaction()';
-                saveRoot(msg, callback);
-            }
-        };
-
-        //territory functions
-        this.addUI = function (ui, fn, guid) {
-            ASSERT(fn);
-            ASSERT(typeof fn === 'function');
-            guid = guid || GUID();
-            state.users[guid] = {type: 'notused', UI: ui, PATTERNS: {}, PATHS: {}, SENDEVENTS: true, FN: fn};
-            return guid;
-        };
-
-        this.removeUI = function (guid) {
-            logger.debug('removeUI', guid);
-            delete state.users[guid];
-        };
-
-        function reLaunchUsers() {
-            var i;
-            for (i in state.users) {
-                if (state.users.hasOwnProperty(i)) {
-                    if (state.users[i].UI.reLaunch) {
-                        state.users[i].UI.reLaunch();
-                    }
-                }
-            }
-        }
-
-        function _updateTerritoryAllDone(guid, patterns, error) {
-            if (state.users[guid]) {
-                state.users[guid].PATTERNS = JSON.parse(JSON.stringify(patterns));
-                if (!error) {
-                    userEvents(guid, []);
-                }
-            }
-        }
-
-        this.updateTerritory = function (guid, patterns) {
-            var missing,
-                error,
-                patternLoaded,
-                i;
-
-            if (state.users[guid]) {
-                if (state.project) {
-                    if (state.nodes[ROOT_PATH]) {
-                        //TODO: this has to be optimized
-                        missing = 0;
-                        error = null;
-
-                        patternLoaded = function (err) {
-                            error = error || err;
-                            missing -= 1;
-                            if (missing === 0) {
-                                //allDone();
-                                _updateTerritoryAllDone(guid, patterns, error);
-                            }
-                        };
-
-                        for (i in patterns) {
-                            missing += 1;
-                        }
-                        if (missing > 0) {
-                            for (i in patterns) {
-                                if (patterns.hasOwnProperty(i)) {
-                                    loadPattern(state.core, i, patterns[i], state.nodes, patternLoaded);
-                                }
-                            }
-                        } else {
-                            //allDone();
-                            _updateTerritoryAllDone(guid, patterns, error);
-                        }
-                    } else {
-                        //something funny is going on
-                        if (state.loadNodes[ROOT_PATH]) {
-                            //probably we are in the loading process,
-                            // so we should redo this update when the loading finishes
-                            //setTimeout(updateTerritory, 100, guid, patterns);
-                        } else {
-                            //root is not in nodes and has not even started to load it yet...
-                            state.users[guid].PATTERNS = JSON.parse(JSON.stringify(patterns));
-                        }
-                    }
-                } else {
-                    //we should update the patterns, but that is all
-                    state.users[guid].PATTERNS = JSON.parse(JSON.stringify(patterns));
-                }
-            }
-        };
-
-        function cleanUsersTerritories() {
-            //look out as the user can remove itself at any time!!!
-            var userIds = Object.keys(state.users),
-                i,
-                j,
-                events;
-
-            for (i = 0; i < userIds.length; i++) {
-                if (state.users[userIds[i]]) {
-                    events = [{eid: null, etype: 'complete'}];
-                    for (j in state.users[userIds[i]].PATHS
-                        ) {
-                        events.push({etype: 'unload', eid: j});
-                    }
-                    state.users[userIds[i]].PATTERNS = {};
-                    state.users[userIds[i]].PATHS = {};
-                    state.users[userIds[i]].SENDEVENTS = true;
-                    state.users[userIds[i]].FN(events);
-                }
-            }
-        }
-
-        this.getUserId = function () {
-            var cookies = URL.parseCookie(document.cookie);
-            if (cookies.webgme) {
-                return cookies.webgme;
-            } else {
-                return 'n/a';
-            }
-        };
-
-        //create from file
-        this.createProjectFromFile = function (projectName, branchName, jProject, callback) {
-            branchName = branchName || 'master';
-
-            storage.createProject(projectName, function (err, projectId) {
-                if (err) {
-                    callback(err);
-                    return;
-                }
-                storage.openProject(projectId, function (err, project) {
-                    var core,
-                        rootNode,
-                        persisted;
-                    if (err) {
-                        callback(err);
-                        return;
-                    }
-
-                    core = new Core(project, {
-                        globConf: gmeConfig,
-                        logger: logger.fork('core')
-                    });
-
-                    rootNode = core.createNode({parent: null, base: null});
-                    Serialization.import(core, rootNode, jProject, function (err) {
-                        if (err) {
-                            return callback(err);
-                        }
-
-                        persisted = core.persist(rootNode);
-
-                        storage.makeCommit(projectId,
-                            null,
-                            [],
-                            persisted.rootHash,
-                            persisted.objects,
-                            'creating project from a file',
-                            function (err, commitResult) {
-                                if (err) {
-                                    logger.error('cannot make initial commit for project creation from file');
-                                    callback(err);
-                                    return;
-                                }
-
-                                project.createBranch(branchName, commitResult.hash, function (err) {
-                                    if (err) {
-                                        logger.error('cannot set branch \'master\' for project creation from file');
-                                        callback(err);
-                                        return;
-                                    }
-
-                                    storage.closeProject(projectId, function (err) {
-                                        if (err) {
-                                            logger.error('Closing temporary project failed in project creation ' +
-                                                'from file', err);
-                                            callback(err);
-                                            return;
-                                        }
-                                        callback(null, projectId, branchName);
-                                    });
-                                });
-                            }
-                        );
-                    });
-                });
-            });
-        };
-
-        //seed
-        this.seedProject = function (parameters, callback) {
-            logger.debug('seeding project', parameters);
-            parameters.command = 'seedProject';
-            storage.simpleRequest(parameters, function (err, id) {
-                if (err) {
-                    callback(err);
-                    return;
-                }
-
-                storage.simpleResult(id, callback);
-            });
-        };
-
-        //export branch
-        this.getExportProjectBranchUrl = function (projectId, branchName, fileName, callback) {
-            var command = {};
-            command.command = 'exportLibrary';
-            command.projectId = projectId;
-            command.branchName = branchName;
-            command.path = ROOT_PATH;
-            logger.debug('getExportProjectBranchUrl, command', command);
-            if (command.projectId && command.branchName) {
-                storage.simpleRequest(command, function (err, resId) {
-                    var resultUrl = window.location.origin + '/worker/simpleResult/' + resId + '/' + fileName;
-                    logger.debug('getExportProjectBranchUrl', resultUrl);
-                    if (err) {
-                        logger.error('getExportProjectBranchUrl failed with error', err);
-                        callback(err);
-                    } else {
-                        callback(null, resultUrl);
-                    }
-                });
-            } else {
-                callback(new Error('invalid parameters!'));
-            }
-        };
-
-        //dump nodes
-        this.getExportItemsUrl = function (paths, filename, callback) {
-            storage.simpleRequest({
-                    command: 'dumpMoreNodes',
-                    projectId: state.project.projectId,
-                    hash: state.rootHash,
-                    nodes: paths
-                },
-                function (err, resId) {
-                    if (err) {
-                        callback(err);
-                    } else {
-                        callback(null,
-                            window.location.protocol + '//' + window.location.host + '/worker/simpleResult/' +
-                            resId + '/' + filename);
-                    }
-                });
-        };
-
-        //library functions
-        this.getExportLibraryUrl = function (libraryRootPath, filename, callback) {
-            var command = {};
-            command.command = 'exportLibrary';
-            command.projectId = state.project.projectId;
-            command.hash = state.rootHash;
-            command.path = libraryRootPath;
-            if (command.projectId && command.hash) {
-                storage.simpleRequest(command, function (err, resId) {
-                    if (err) {
-                        logger.error('getExportLibraryUrl failed with error', err);
-                        callback(err);
-                    } else {
-                        callback(null,
-                            window.location.protocol + '//' + window.location.host + '/worker/simpleResult/' +
-                            resId + '/' + filename);
-                    }
-                });
-            } else {
-                callback(new Error('there is no open project!'));
-            }
-        };
-
-        this.updateLibrary = function (libraryRootPath, newLibrary, callback) {
-            Serialization.import(state.core, state.nodes[libraryRootPath].node, newLibrary, function (err, log) {
-                if (err) {
-                    return callback(err);
-                }
-
-                saveRoot('library update done\nlogs:\n' + log, callback);
-            });
-        };
-
-        this.addLibrary = function (libraryParentPath, newLibrary, callback) {
-            self.startTransaction('creating library as a child of ' + libraryParentPath);
-            var libraryRoot = self.createChild({
-                parentId: libraryParentPath,
-                baseId: null
-            }, 'library placeholder');
-            Serialization.import(state.core,
-                state.nodes[libraryRoot].node, newLibrary, function (err, log) {
-                    if (err) {
-                        return callback(err);
-                    }
-
-                    self.completeTransaction('library update done\nlogs:\n' + log, callback);
-                }
-            );
-        };
-
-        /**
-         * Run the plugin on the server inside a worker process.
-         * @param {string} name - name of plugin.
-         * @param {object} context
-         * @param {object} context.managerConfig - where the plugin should execute.
-         * @param {string} context.managerConfig.project - id of project.
-         * @param {string} context.managerConfig.activeNode - path to activeNode.
-         * @param {string} [context.managerConfig.activeSelection=[]] - paths to selected nodes.
-         * @param {string} context.managerConfig.commit - commit hash to start the plugin from.
-         * @param {string} context.managerConfig.branchName - branch which to save to.
-         * @param {object} [context.pluginConfig=%defaultForPlugin%] - specific configuration for the plugin.
-         * @param {function} callback
-         */
-        this.runServerPlugin = function (name, context, callback) {
-            storage.simpleRequest({command: 'executePlugin', name: name, context: context}, callback);
-        };
-
-        /**
-         * @param {string[]} pluginNames - All avaliable plugins from server.
-         * @param {string} [nodePath=''] - Node to get the validPlugins from.
-         * @returns {string[]} - Filtered plugin names.
-         */
-        this.filterPlugins = function (pluginNames, nodePath) {
-            var filteredNames = [],
-                validPlugins,
-                i,
-                node;
-
-            logger.debug('filterPluginsBasedOnNode allPlugins, given nodePath', pluginNames, nodePath);
-            if (!nodePath) {
-                logger.debug('filterPluginsBasedOnNode nodePath not given - will fall back on root-node.');
-                nodePath = ROOT_PATH;
-            }
-
-            node = state.nodes[nodePath];
-
-            if (!node) {
-                logger.warn('filterPluginsBasedOnNode node not loaded - will fall back on root-node.', nodePath);
-                nodePath = ROOT_PATH;
-                node = state.nodes[nodePath];
-            }
-
-            if (!node) {
-                logger.warn('filterPluginsBasedOnNode root node not loaded - will return full list.');
-                return pluginNames;
-            }
-
-            validPlugins = (state.core.getRegistry(node.node, 'validPlugins') || '').split(' ');
-            for (i = 0; i < validPlugins.length; i += 1) {
-                if (pluginNames.indexOf(validPlugins[i]) > -1) {
-                    filteredNames.push(validPlugins[i]);
-                } else {
-                    logger.warn('Registered plugin for node at path "' + nodePath +
-                        '" is not amongst avaliable plugins', pluginNames);
-                }
-            }
-
-            return filteredNames;
-        };
-
-        //addOn
-        this.validateProjectAsync = addOnFunctions.validateProjectAsync;
-        this.validateModelAsync = addOnFunctions.validateModelAsync;
-        this.validateNodeAsync = addOnFunctions.validateNodeAsync;
-        this.setValidationCallback = addOnFunctions.setValidationCallback;
-        this.getDetailedHistoryAsync = addOnFunctions.getDetailedHistoryAsync;
-        this.getRunningAddOnNames = addOnFunctions.getRunningAddOnNames;
-        this.addOnsAllowed = gmeConfig.addOn.enable === true;
-
-        //constraint
-        this.setConstraint = function (path, name, constraintObj) {
-            if (state.core && state.nodes[path] && typeof state.nodes[path].node === 'object') {
-                state.core.setConstraint(state.nodes[path].node, name, constraintObj);
-                saveRoot('setConstraint(' + path + ',' + name + ')');
-            }
-        };
-
-        this.delConstraint = function (path, name) {
-            if (state.core && state.nodes[path] && typeof state.nodes[path].node === 'object') {
-                state.core.delConstraint(state.nodes[path].node, name);
-                saveRoot('delConstraint(' + path + 'name' + ')');
-            }
-        };
-
-        //automerge
-        this.autoMerge = function (projectId, mine, theirs, callback) {
-            var command = {
-                command: 'autoMerge',
-                projectId: projectId,
-                mine: mine,
-                theirs: theirs
-            };
-            storage.simpleRequest(command, function (err, resId) {
-                if (err) {
-                    callback(err);
-                } else {
-                    storage.simpleResult(resId, callback);
-                }
-            });
-        };
-
-        this.resolve = function (mergeResult, callback) {
-            var command = {
-                command: 'resolve',
-                partial: mergeResult
-            };
-            storage.simpleRequest(command, function (err, resId) {
-                if (err) {
-                    callback(err);
-                } else {
-                    storage.simpleResult(resId, callback);
-                }
-            });
-        };
-    }
-
-
-    // Inherit from the EventDispatcher
-    Client.prototype = Object.create(EventDispatcher.prototype);
-    Client.prototype.constructor = Client;
-
-    return Client;
-  });
-
 /*globals define*/
 /*jshint browser: true, node:true*/
 
@@ -20176,7 +18051,7 @@ function Request(method, url) {
     new_err.response = res;
     new_err.status = res.status;
 
-    self.callback(err || new_err, res);
+    self.callback(new_err, res);
   });
 }
 
@@ -20649,7 +18524,8 @@ Request.prototype.end = function(fn){
   // body
   if ('GET' != this.method && 'HEAD' != this.method && 'string' != typeof data && !isHost(data)) {
     // serialize stuff
-    var serialize = request.serialize[this.getHeader('Content-Type')];
+    var contentType = this.getHeader('Content-Type');
+    var serialize = request.serialize[contentType ? contentType.split(';')[0] : ''];
     if (serialize) data = serialize(data);
   }
 
@@ -20664,6 +18540,20 @@ Request.prototype.end = function(fn){
   xhr.send(data);
   return this;
 };
+
+/**
+ * Faux promise support
+ *
+ * @param {Function} fulfill
+ * @param {Function} reject
+ * @return {Request}
+ */
+
+Request.prototype.then = function (fulfill, reject) {
+  return this.end(function(err, res) {
+    err ? reject(err) : fulfill(res);
+  });
+}
 
 /**
  * Expose `Request`.
@@ -21366,6 +19256,1978 @@ define('blob/BlobClient',['blob/Artifact', 'blob/BlobMetadata', 'superagent'], f
     return BlobClient;
 });
 
+/*globals define, console*/
+/*jshint browser: true*/
+/**
+ * @author kecso / https://github.com/kecso
+ * @author pmeijer / https://github.com/pmeijer
+ */
+define('client/js/client',[
+    'js/logger',
+    'common/storage/browserstorage',
+    'common/EventDispatcher',
+    'common/core/core',
+    'js/client/constants',
+    'common/core/users/meta',
+    'common/util/assert',
+    'common/core/tasync',
+    'common/util/guid',
+    'common/util/url',
+    'js/client/gmeNodeGetter',
+    'js/client/gmeNodeSetter',
+    'common/core/users/serialization',
+    'blob/BlobClient'
+], function (Logger,
+             Storage,
+             EventDispatcher,
+             Core,
+             CONSTANTS,
+             META,
+             ASSERT,
+             TASYNC,
+             GUID,
+             URL,
+             getNode,
+             getNodeSetters,
+             Serialization,
+             BlobClient) {
+    'use strict';
+
+    function Client(gmeConfig) {
+        var self = this,
+            logger = Logger.create('gme:client', gmeConfig.client.log),
+            storage = Storage.getStorage(logger, gmeConfig, true),
+            state = {
+                connection: null, // CONSTANTS.STORAGE. CONNECTED/DISCONNECTED/RECONNECTED
+                project: null,
+                core: null,
+                branchName: null,
+                branchStatus: null, //CONSTANTS.BRANCH_STATUS. SYNC/AHEAD_SYNC/AHEAD_FORKED/PULLING or null
+                readOnlyProject: false,
+                viewer: false, // This means that a specific commit is selected w/o regards to any branch.
+
+                users: {},
+                nodes: {},
+                loadNodes: {},
+                // FIXME: This should be the same as nodes (need to make sure they are not modified in meta).
+                metaNodes: {},
+
+                rootHash: null,
+                rootObject: null,
+                commitHash: null,
+
+                undoRedoChain: null, //{commitHash: '#hash', rootHash: '#hash', previous: object, next: object}
+
+                inTransaction: false,
+                msg: '',
+                gHash: 0,
+                loadError: null,
+                ongoingTerritoryUpdateCounter: 0,
+                ongoingLoadPatternsCounter: 0,
+                pendingTerritoryUpdatePatterns: {},
+                loadingStatus: null,
+                inLoading: false,
+                loading: {
+                    rootHash: null,
+                    commitHash: null,
+                    next: null
+                }
+
+            },
+            blobClient,
+            monkeyPatchKey,
+            nodeSetterFunctions,
+        //addOnFunctions = new AddOn(state, storage, logger, gmeConfig),
+            loadPatternThrottled = TASYNC.throttle(loadPattern, 1); //magic number could be fine-tuned
+        //loadPatternThrottled = loadPattern; //magic number could be fine-tuned
+
+        blobClient = new BlobClient();
+        EventDispatcher.call(this);
+
+        this.CONSTANTS = CONSTANTS;
+
+        function logState(level, msg) {
+            var lightState;
+
+            function replacer(key, value) {
+                var chainItem,
+                    prevChain,
+                    nextChain,
+                    chain;
+                if (key === 'project') {
+                    if (value) {
+                        return value.name;
+                    } else {
+                        return null;
+                    }
+
+                } else if (key === 'core') {
+                    if (value) {
+                        return 'instantiated';
+                    } else {
+                        return 'notInstantiated';
+                    }
+                } else if (key === 'metaNodes') {
+                    return Object.keys(value);
+                } else if (key === 'nodes') {
+                    return Object.keys(value);
+                } else if (key === 'loadNodes') {
+                    return Object.keys(value);
+                } else if (key === 'users') {
+                    return Object.keys(value);
+                } else if (key === 'rootObject') {
+                    return;
+                } else if (key === 'undoRedoChain') {
+                    if (value) {
+                        chain = {
+                            previous: null,
+                            next: null
+                        };
+                        if (value.previous) {
+                            prevChain = {};
+                            chain.previous = prevChain;
+                        }
+                        chainItem = value;
+                        while (chainItem.previous) {
+                            prevChain.previous = {
+                                commitHash: chainItem.commitHash,
+                                previous: null
+                            };
+                            prevChain = prevChain.previous;
+                            chainItem = chainItem.previous;
+                        }
+                        if (value.next) {
+                            nextChain = {};
+                            chain.next = nextChain;
+                        }
+                        chainItem = value;
+                        while (chainItem.next) {
+                            nextChain.next = {
+                                commitHash: chainItem.commitHash,
+                                next: null
+                            };
+                            nextChain = nextChain.next;
+                            chainItem = chainItem.next;
+                        }
+                        return chain;
+                    }
+                }
+
+                return value;
+            }
+
+            if (gmeConfig.debug) {
+                logger[level]('state at ' + msg, JSON.stringify(state, replacer, 2));
+            } else {
+                lightState = {
+                    connection: self.getNetworkStatus(),
+                    projectId: self.getActiveProjectId(),
+                    branchName: self.getActiveBranchName(),
+                    branchStatus: self.getBranchStatus(),
+                    commitHash: self.getActiveCommitHash(),
+                    rootHash: self.getActiveRootHash(),
+                    projectReadOnly: self.isProjectReadOnly(),
+                    commitReadOnly: self.isCommitReadOnly()
+                };
+                if (level === 'console') {
+                    console.log('state at ' + msg, JSON.stringify(lightState));
+                } else {
+                    logger[level]('state at ' + msg, JSON.stringify(lightState));
+                }
+            }
+        }
+
+        // Forwarded functions
+        function saveRoot(msg, callback) {
+            var persisted,
+                numberOfPersistedObjects,
+                wrappedCallback,
+                newCommitObject;
+            logger.debug('saveRoot msg', msg);
+            if (callback) {
+                wrappedCallback = function (err, result) {
+                    if (err) {
+                        logger.error('saveRoot failure', err);
+                    } else {
+                        logger.debug('saveRoot', result);
+                    }
+                    callback(err, result);
+                };
+            } else {
+                wrappedCallback = function (err, result) {
+                    if (err) {
+                        logger.error('saveRoot failure', err);
+                    } else {
+                        logger.debug('saveRoot', result);
+                    }
+                };
+            }
+
+            if (!state.viewer && !state.readOnlyProject) {
+                if (state.msg) {
+                    state.msg += '\n' + msg;
+                } else {
+                    state.msg += msg;
+                }
+                if (!state.inTransaction) {
+                    ASSERT(state.project && state.core && state.branchName);
+
+                    logger.debug('is NOT in transaction - will persist.');
+                    persisted = state.core.persist(state.nodes[ROOT_PATH].node);
+                    logger.debug('persisted', persisted);
+                    numberOfPersistedObjects = Object.keys(persisted.objects).length;
+                    if (numberOfPersistedObjects === 0) {
+                        logger.warn('No changes after persist will return from saveRoot.');
+                        wrappedCallback(null);
+                        return;
+                    } else if (numberOfPersistedObjects > 200) {
+                        //This is just for debugging
+                        logger.warn('Lots of persisted objects', numberOfPersistedObjects);
+                    }
+
+                    // Make the commit on the storage (will emit hashUpdated)
+                    newCommitObject = storage.makeCommit(
+                        state.project.projectId,
+                        state.branchName,
+                        [state.commitHash],
+                        persisted.rootHash,
+                        persisted.objects,
+                        state.msg,
+                        wrappedCallback
+                    );
+
+                    state.msg = '';
+                } else {
+                    logger.debug('is in transaction - will NOT persist.');
+                }
+            } else {
+                //TODO: Why is this set to empty here?
+                state.msg = '';
+                wrappedCallback(null);
+            }
+        }
+
+        function storeNode(node /*, basic */) {
+            var path;
+            //basic = basic || true;
+            if (node) {
+                path = state.core.getPath(node);
+                state.metaNodes[path] = node;
+                if (state.nodes[path]) {
+                    //TODO we try to avoid this
+                } else {
+                    state.nodes[path] = {node: node, hash: ''/*,incomplete:true,basic:basic*/};
+                    //TODO this only needed when real eventing will be reintroduced
+                    //_inheritanceHash[path] = getInheritanceChain(node);
+                }
+                return path;
+            }
+            return null;
+        }
+
+        // Monkey patching from other files..
+        this.meta = new META();
+
+        for (monkeyPatchKey in this.meta) {
+            //TODO: These should be accessed via this.meta.
+            //TODO: e.g. client.meta.getMetaAspectNames(id) instead of client.getMetaAspectNames(id)
+            //TODO: However that will break a lot since it's used all over the place...
+            if (this.meta.hasOwnProperty(monkeyPatchKey)) {
+                self[monkeyPatchKey] = this.meta[monkeyPatchKey];
+            }
+        }
+
+        function checkMetaNameCollision(core, rootNode) {
+            var names = [],
+                nodes = core.getAllMetaNodes(rootNode),
+                i,
+                keys = Object.keys(nodes || {}),
+                name;
+            for (i = 0; i < keys.length; i += 1) {
+                name = core.getAttribute(nodes[keys[i]], 'name');
+                if (names.indexOf(name) === -1) {
+                    names.push(name);
+                } else {
+                    self.dispatchEvent(CONSTANTS.NOTIFICATION, {
+                        type: 'META',
+                        severity: 'error',
+                        message: 'Duplicate name on META level: \'' + name + '\'',
+                        hint: 'Rename one of the objects'
+                    });
+                }
+            }
+
+        }
+
+
+        nodeSetterFunctions = getNodeSetters(logger, state, saveRoot, storeNode);
+
+        for (monkeyPatchKey in nodeSetterFunctions) {
+            if (nodeSetterFunctions.hasOwnProperty(monkeyPatchKey)) {
+                self[monkeyPatchKey] = nodeSetterFunctions[monkeyPatchKey];
+            }
+        }
+
+        // Main API functions (with helpers) for connecting, selecting project and branches etc.
+        this.connectToDatabase = function (callback) {
+            if (isConnected()) {
+                logger.warn('connectToDatabase - already connected');
+                callback(null);
+                return;
+            }
+            storage.open(function (connectionState) {
+                state.connection = connectionState;
+                if (connectionState === CONSTANTS.STORAGE.CONNECTED) {
+                    //N.B. this event will only be triggered once.
+                    self.dispatchEvent(CONSTANTS.NETWORK_STATUS_CHANGED, connectionState);
+                    storage.webSocket.addEventListener(CONSTANTS.STORAGE.BRANCH_ROOM_SOCKETS,
+                        function (emitter, eventData) {
+                            var notification = {
+                                severity: 'INFO',
+                                message: ''
+                            };
+                            if (state.project && state.project.projectId === eventData.projectId &&
+                                state.branchName === eventData.branchName) {
+                                if (eventData.currNbrOfSockets > eventData.prevNbrOfSockets) {
+                                    notification.message = 'Another socket joined your branch [' +
+                                        eventData.currNbrOfSockets + ']';
+                                } else {
+                                    notification.message = 'A socket disconnected from your branch [' +
+                                        eventData.currNbrOfSockets + ']';
+                                }
+                                self.dispatchEvent(CONSTANTS.NOTIFICATION, notification);
+                            }
+                        }
+                    );
+                    reLaunchUsers();
+                    callback(null);
+                } else if (connectionState === CONSTANTS.STORAGE.DISCONNECTED) {
+                    self.dispatchEvent(CONSTANTS.NETWORK_STATUS_CHANGED, connectionState);
+                } else if (connectionState === CONSTANTS.STORAGE.RECONNECTED) {
+                    self.dispatchEvent(CONSTANTS.NETWORK_STATUS_CHANGED, connectionState);
+                } else { //CONSTANTS.ERROR
+                    callback(Error('Connection failed!' + connectionState));
+                }
+            });
+        };
+
+        this.disconnectFromDatabase = function (callback) {
+
+            function closeStorage(err) {
+                storage.close(function (err2) {
+                    state.connection = CONSTANTS.STORAGE.DISCONNECTED;
+                    callback(err || err2);
+                });
+            }
+
+            if (isConnected()) {
+                if (state.project) {
+                    closeProject(state.project.projectId, closeStorage);
+                } else {
+                    closeStorage(null);
+                }
+            } else {
+                logger.warn('Trying to disconnect when already disconnected.');
+                callback(null);
+            }
+        };
+
+        /**
+         * If branchName is given and it does not exist, the project will be closed and callback resolved with an error.
+         * If branchName NOT given it will attempt the following in order and break if successful at any step:
+         *  1) Select the master if available.
+         *  2) Select any available branch.
+         *  3) Select the latest commit.
+         *  4) Close the project and resolve with error.
+         * @param {string} projectId
+         * @param {string} [branchName='master']
+         * @param {function} callback
+         */
+        this.selectProject = function (projectId, branchName, callback) {
+            if (callback === undefined && typeof branchName === 'function') {
+                callback = branchName;
+                branchName = undefined;
+            }
+            if (isConnected() === false) {
+                callback(new Error('There is no open database connection!'));
+            }
+            var prevProjectId,
+                branchToOpen = branchName || 'master';
+
+            logger.debug('selectProject', projectId, branchToOpen);
+
+            function projectOpened(err, project, branches, access) {
+                if (err) {
+                    callback(new Error(err));
+                    return;
+                }
+                state.project = project;
+                state.readOnlyProject = access.write === false;
+                state.core = new Core(project, {
+                    globConf: gmeConfig,
+                    logger: logger.fork('core')
+                });
+                self.meta.initialize(state.core, state.metaNodes, saveRoot);
+                logState('info', 'projectOpened');
+                logger.debug('projectOpened, branches: ', branches);
+                self.dispatchEvent(CONSTANTS.PROJECT_OPENED, projectId);
+
+                if (branches.hasOwnProperty(branchToOpen) === false) {
+                    if (branchName) {
+                        logger.error('Given branch does not exist "' + branchName + '"');
+                        closeProject(projectId, function (err) {
+                            if (err) {
+                                logger.error('closeProject after missing branch failed with err', err);
+                            }
+                            callback(new Error('Given branch does not exist "' + branchName + '"'));
+                        });
+                        return;
+                    }
+                    logger.warn('Project "' + projectId + '" did not have branch', branchToOpen);
+                    branchToOpen = Object.keys(branches)[0] || null;
+                    logger.debug('Picked "' + branchToOpen + '".');
+                }
+
+                if (branchToOpen) {
+                    self.selectBranch(branchToOpen, null, function (err) {
+                        if (err) {
+                            callback(err);
+                            return;
+                        }
+                        logState('info', 'selectBranch');
+                        reLaunchUsers();
+                        callback(null);
+                    });
+                } else {
+                    logger.warn('No branches available in project, will attempt to select latest commit.');
+                    self.getCommits(projectId, (new Date()).getTime(), 1, function (err, commitObjects) {
+                        if (err || commitObjects.length === 0) {
+                            logger.error(err);
+                            closeProject(projectId, function (err) {
+                                if (err) {
+                                    logger.error('closeProject after missing any commits failed with err', err);
+                                }
+                                callback(new Error('Project does not have any commits.'));
+                            });
+                            return;
+                        }
+                        self.selectCommit(commitObjects[0]._id, function (err) {
+                            if (err) {
+                                logger.error(err);
+                                closeProject(projectId, function (err) {
+                                    if (err) {
+                                        logger.error('closeProject after missing any commits failed with err', err);
+                                    }
+                                    callback(new Error('Failed selecting commit when opening project.'));
+                                });
+                                return;
+                            }
+                            reLaunchUsers();
+                            callback(null);
+                        });
+                    });
+                }
+            }
+
+            if (state.project) {
+                prevProjectId = state.project.projectId;
+                logger.debug('A project was open, closing it', prevProjectId);
+
+                if (prevProjectId === projectId) {
+                    logger.warn('projectId is already opened', projectId);
+                    callback(null);
+                    return;
+                }
+                closeProject(prevProjectId, function (err) {
+                    if (err) {
+                        logger.error('problems closing previous project', err);
+                        callback(err);
+                        return;
+                    }
+                    storage.openProject(projectId, projectOpened);
+                });
+            } else {
+                storage.openProject(projectId, projectOpened);
+            }
+        };
+
+        function closeProject(projectId, callback) {
+            state.project = null;
+            //TODO what if for some reason we are in transaction?
+            storage.closeProject(projectId, function (err) {
+                if (err) {
+                    callback(err);
+                    return;
+                }
+                state.core = null;
+                state.branchName = null;
+                //self.dispatchEvent(null);
+                state.patterns = {};
+                //state.gHash = 0;
+                state.nodes = {};
+                state.metaNodes = {};
+                state.loadNodes = {};
+                state.loadError = 0;
+                state.rootHash = null;
+                //state.rootObject = null;
+                state.inTransaction = false;
+                state.msg = '';
+
+                cleanUsersTerritories();
+                self.dispatchEvent(CONSTANTS.PROJECT_CLOSED, projectId);
+
+                callback(null);
+            });
+        }
+
+        /**
+         *
+         * @param {string} branchName - name of branch to open.
+         * @param {function} [branchStatusHandler=getDefaultCommitHandler()] - Handles returned statuses after commits.
+         * @param callback
+         */
+        this.selectBranch = function (branchName, branchStatusHandler, callback) {
+            var prevBranchName = state.branchName;
+            logger.debug('selectBranch', branchName);
+            if (isConnected() === false) {
+                callback(new Error('There is no open database connection!'));
+                return;
+            }
+            if (!state.project) {
+                callback(new Error('selectBranch invoked without an opened project'));
+                return;
+            }
+
+            if (branchStatusHandler) {
+                logger.warn('passing branchStatusHandler is deprecated, use addHashUpdateHandler or' +
+                    ' addBranchStatusHandler on the branch object instead (getProjectObject().branches[branchName]).');
+            }
+
+            function openBranch(err) {
+                if (err) {
+                    logger.error('Problems closing existing branch', err);
+                    callback(err);
+                    return;
+                }
+
+                state.branchName = branchName;
+                logger.debug('openBranch, calling storage openBranch', state.project.projectId, branchName);
+                storage.openBranch(state.project.projectId, branchName,
+                    getHashUpdateHandler(), getBranchStatusHandler(),
+                    function (err /*, latestCommit*/) {
+                        if (err) {
+                            logger.error('storage.openBranch returned with error', err);
+                            self.dispatchEvent(CONSTANTS.BRANCH_CHANGED, null);
+                            callback(err);
+                            return;
+                        }
+
+                        state.viewer = false;
+                        state.branchName = branchName;
+                        self.dispatchEvent(CONSTANTS.BRANCH_CHANGED, branchName);
+                        logState('info', 'openBranch');
+                        callback(null);
+                    }
+                );
+            }
+
+            if (prevBranchName !== null) {
+                logger.debug('Branch was open, closing it first', prevBranchName);
+                storage.closeBranch(state.project.projectId, prevBranchName, openBranch);
+            } else {
+                openBranch(null);
+            }
+        };
+
+        this.selectCommit = function (commitHash, callback) {
+            logger.debug('selectCommit', commitHash);
+            if (isConnected() === false) {
+                callback(new Error('There is no open database connection!'));
+                return;
+            }
+            if (!state.project) {
+                callback(new Error('selectCommit invoked without open project'));
+                return;
+            }
+            var prevBranchName;
+
+            function openCommit(err) {
+                if (err) {
+                    logger.error('Problems closing existing branch', err);
+                    callback(err);
+                    return;
+                }
+
+                state.viewer = true;
+
+                state.project.loadObject(commitHash, function (err, commitObj) {
+                    if (!err && commitObj) {
+                        logState('info', 'selectCommit loaded commit');
+                        self.dispatchEvent(CONSTANTS.BRANCH_CHANGED, null);
+                        loading(commitObj.root, commitHash, function (err, aborted) {
+                            if (err) {
+                                logger.error('loading returned error', commitObj.root, err);
+                                logState('error', 'selectCommit loading');
+                                callback(err);
+                            } else if (aborted === true) {
+                                logState('warn', 'selectCommit loading');
+                                callback(new Error('Loading selected commit was aborted'));
+                            } else {
+                                logger.debug('loading complete for selectCommit rootHash', commitObj.root);
+                                logState('info', 'selectCommit loading');
+                                self.dispatchEvent(CONSTANTS.BRANCH_CHANGED, null);
+                                callback(null);
+                            }
+                        });
+                    } else {
+                        logger.error('Cannot view given ' + commitHash + ' commit as it\'s root cannot be loaded! [' +
+                            JSON.stringify(err) + ']');
+                        callback(err || new Error('commit object cannot be found!'));
+                    }
+                });
+            }
+
+            if (state.branchName !== null) {
+                logger.debug('Branch was open, closing it first', state.branchName);
+                prevBranchName = state.branchName;
+                state.branchName = null;
+                storage.closeBranch(state.project.projectId, prevBranchName, openCommit);
+            } else {
+                openCommit(null);
+            }
+        };
+
+        function getBranchStatusHandler() {
+            return function (branchStatus, commitQueue, updateQueue) {
+                logger.debug('branchStatus changed', branchStatus, commitQueue, updateQueue);
+                logState('debug', 'branchStatus');
+                state.branchStatus = branchStatus;
+                self.dispatchEvent(CONSTANTS.BRANCH_STATUS_CHANGED, {
+                        status: branchStatus,
+                        commitQueue: commitQueue,
+                        updateQueue: updateQueue
+                    }
+                );
+            };
+        }
+
+        function getHashUpdateHandler() {
+            return function (data, commitQueue, updateQueue, callback) {
+                var commitData = data.commitData,
+                    clearUndoRedo = data.local !== true,
+                    commitHash = commitData.commitObject[CONSTANTS.STORAGE.MONGO_ID];
+                logger.debug('hashUpdateHandler invoked. project, branch, commitHash',
+                    commitData.projectId, commitData.branchName, commitHash);
+
+                if (state.inTransaction) {
+                    logger.warn('Is in transaction, will not load in changes');
+                    callback(null, false); // proceed: false
+                    return;
+                }
+
+                //undo-redo
+                addModification(commitData.commitObject, clearUndoRedo);
+                self.dispatchEvent(CONSTANTS.UNDO_AVAILABLE, canUndo());
+                self.dispatchEvent(CONSTANTS.REDO_AVAILABLE, canRedo());
+
+                logger.debug('loading commitHash, local?', commitHash, data.local);
+                loading(commitData.commitObject.root, commitHash, function (err, aborted) {
+                    if (err) {
+                        logger.error('hashUpdateHandler invoked loading and it returned error',
+                            commitData.commitObject.root, err);
+                        logState('error', 'hashUpdateHandler');
+                        callback(err, false); // proceed: false
+                    } else if (aborted === true) {
+                        logState('warn', 'hashUpdateHandler');
+                        callback(null, false); // proceed: false
+                    } else {
+                        logger.debug('loading complete for incoming rootHash', commitData.commitObject.root);
+                        logState('debug', 'hashUpdateHandler');
+                        callback(null, true); // proceed: true
+                    }
+                });
+            };
+        }
+
+        this.forkCurrentBranch = function (newName, commitHash, callback) {
+            var self = this,
+                activeBranchName = self.getActiveBranchName(),
+                activeProjectId = self.getActiveProjectId(),
+                forkName;
+
+            logger.debug('forkCurrentBranch', newName, commitHash);
+            if (!state.project) {
+                callback('Cannot fork without an open project!');
+                return;
+            }
+            if (activeBranchName === null) {
+                callback('Cannot fork without an open branch!');
+                return;
+            }
+            forkName = newName || activeBranchName + '_' + (new Date()).getTime();
+            storage.forkBranch(activeProjectId, activeBranchName, forkName, commitHash,
+                function (err, forkHash) {
+                    if (err) {
+                        logger.error('Could not fork branch:', newName, err);
+                        callback(err);
+                        return;
+                    }
+                    callback(null, forkName, forkHash);
+                }
+            );
+        };
+
+        // State getters.
+        this.getNetworkStatus = function () {
+            return state.connection;
+        };
+
+        this.getBranchStatus = function () {
+            return state.branchStatus;
+        };
+
+        this.getActiveProjectId = function () {
+            return state.project && state.project.projectId;
+        };
+
+        this.getActiveBranchName = function () {
+            return state.branchName;
+        };
+
+        this.getActiveCommitHash = function () {
+            return state.commitHash;
+        };
+
+        this.getActiveRootHash = function () {
+            return state.rootHash;
+        };
+
+        this.isProjectReadOnly = function () {
+            return state.readOnlyProject;
+        };
+
+        this.isCommitReadOnly = function () {
+            // This means that a specific commit is selected w/o regards to any branch.
+            return state.viewer;
+        };
+
+        this.getProjectObject = function () {
+            return state.project;
+        };
+
+        // Undo/Redo functionality
+        function addModification(commitObject, clear) {
+            var newItem,
+                commitHash = commitObject[CONSTANTS.STORAGE.MONGO_ID],
+                currItem;
+            if (clear) {
+                logger.debug('foreign modification clearing undo-redo chain');
+                state.undoRedoChain = {
+                    commitHash: commitHash,
+                    rootHash: commitObject.root,
+                    previous: null,
+                    next: null
+                };
+                return;
+            }
+
+            // Check if the modification already exist, i.e. commit is from undoing or redoing.
+            currItem = state.undoRedoChain;
+            while (currItem) {
+                if (currItem.commitHash === commitHash) {
+                    return;
+                }
+                currItem = currItem.previous;
+            }
+
+            currItem = state.undoRedoChain;
+            while (currItem) {
+                if (currItem.commitHash === commitHash) {
+                    return;
+                }
+                currItem = currItem.next;
+            }
+
+            newItem = {
+                commitHash: commitHash,
+                rootHash: commitObject.root,
+                previous: state.undoRedoChain,
+                next: null
+            };
+            state.undoRedoChain.next = newItem;
+            state.undoRedoChain = newItem;
+        }
+
+        function canUndo() {
+            var result = false;
+            if (state.undoRedoChain && state.undoRedoChain.previous && state.undoRedoChain.previous.commitHash) {
+                result = true;
+            }
+
+            return result;
+        }
+
+        function canRedo() {
+            var result = false;
+            if (state.undoRedoChain && state.undoRedoChain.next) {
+                result = true;
+            }
+
+            return result;
+        }
+
+        this.undo = function (branchName, callback) {
+            if (canUndo() === false) {
+                callback(new Error('unable to make undo'));
+                return;
+            }
+
+            state.undoRedoChain = state.undoRedoChain.previous;
+
+            logState('info', 'undo [before setBranchHash]');
+            storage.setBranchHash(state.project.projectId, branchName, state.undoRedoChain.commitHash, state.commitHash,
+                function (err) {
+                    if (err) {
+                        //TODO do we need to handle this? How?
+                        callback(err);
+                        return;
+                    }
+                    logState('info', 'undo [after setBranchHash]');
+                    callback(null);
+                }
+            );
+
+        };
+
+        this.redo = function (branchName, callback) {
+            if (canRedo() === false) {
+                callback(new Error('unable to make redo'));
+                return;
+            }
+
+            state.undoRedoChain = state.undoRedoChain.next;
+
+            logState('info', 'redo [before setBranchHash]');
+            storage.setBranchHash(state.project.projectId, branchName, state.undoRedoChain.commitHash, state.commitHash,
+                function (err) {
+                    if (err) {
+                        //TODO do we need to handle this? How?
+                        callback(err);
+                        return;
+                    }
+                    logState('info', 'redo [after setBranchHash]');
+                    callback(null);
+                }
+            );
+        };
+
+        // REST-like functions and forwarded to storage TODO: add these to separate base class
+
+        //  Getters
+        this.getProjects = function (options, callback) {
+            var asObject;
+            if (isConnected()) {
+                if (options.asObject) {
+                    asObject = true;
+                    delete options.asObject;
+                }
+                storage.getProjects(options, function (err, result) {
+                    var i,
+                        resultObj = {};
+                    if (err) {
+                        callback(err);
+                        return;
+                    }
+                    if (asObject === true) {
+                        for (i = 0; i < result.length; i += 1) {
+                            resultObj[result[i]._id] = result[i];
+                        }
+                        callback(null, resultObj);
+                    } else {
+                        callback(null, result);
+                    }
+                });
+            } else {
+                callback(new Error('There is no open database connection!'));
+            }
+        };
+
+        this.getProjectsAndBranches = function (asObject, callback) {
+            //This is kept for the tests.
+            self.getProjects({rights: true, branches: true, asObject: asObject}, callback);
+        };
+
+        this.getBranches = function (projectId, callback) {
+            if (isConnected()) {
+                storage.getBranches(projectId, callback);
+            } else {
+                callback(new Error('There is no open database connection!'));
+            }
+        };
+
+        this.getCommits = function (projectId, before, number, callback) {
+            if (isConnected()) {
+                storage.getCommits(projectId, before, number, callback);
+            } else {
+                callback(new Error('There is no open database connection!'));
+            }
+        };
+
+        this.getLatestCommitData = function (projectId, branchName, callback) {
+            if (isConnected()) {
+                storage.getLatestCommitData(projectId, branchName, callback);
+            } else {
+                callback(new Error('There is no open database connection!'));
+            }
+        };
+
+        //  Setters
+        this.createProject = function (projectName, parameters, callback) {
+            if (isConnected()) {
+                storage.createProject(projectName, parameters, callback);
+            } else {
+                callback(new Error('There is no open database connection!'));
+            }
+        };
+
+        this.deleteProject = function (projectId, callback) {
+            if (isConnected()) {
+                storage.deleteProject(projectId, callback);
+            } else {
+                callback(new Error('There is no open database connection!'));
+            }
+        };
+
+        this.transferProject = function (projectId, newOwnerId, callback) {
+            if (isConnected()) {
+                storage.transferProject(projectId, newOwnerId, callback);
+            } else {
+                callback(new Error('There is no open database connection!'));
+            }
+        };
+
+        this.createBranch = function (projectId, branchName, newHash, callback) {
+            if (isConnected()) {
+                storage.createBranch(projectId, branchName, newHash, callback);
+            } else {
+                callback(new Error('There is no open database connection!'));
+            }
+        };
+
+        this.deleteBranch = function (projectId, branchName, oldHash, callback) {
+            if (isConnected()) {
+                storage.deleteBranch(projectId, branchName, oldHash, callback);
+            } else {
+                callback(new Error('There is no open database connection!'));
+            }
+        };
+
+        // Watchers (used in e.g. ProjectNavigator).
+        /**
+         * Triggers eventHandler(storage, eventData) on PROJECT_CREATED and PROJECT_DELETED.
+         *
+         * eventData = {
+         *    etype: PROJECT_CREATED||DELETED,
+         *    projectId: %id of project%
+         * }
+         *
+         * @param {function} eventHandler
+         * @param {function} [callback]
+         */
+        this.watchDatabase = function (eventHandler, callback) {
+            callback = callback || function (err) {
+                    if (err) {
+                        logger.error('Problems watching database room');
+                    }
+                };
+            storage.watchDatabase(eventHandler, callback);
+        };
+
+        this.unwatchDatabase = function (eventHandler, callback) {
+            callback = callback || function (err) {
+                    if (err) {
+                        logger.error('Problems unwatching database room');
+                    }
+                };
+            storage.unwatchDatabase(eventHandler, callback);
+        };
+
+        /**
+         * Triggers eventHandler(storage, eventData) on BRANCH_CREATED, BRANCH_DELETED and BRANCH_HASH_UPDATED
+         * for the given projectId.
+         *
+         *
+         * eventData = {
+         *    etype: BRANCH_CREATED||DELETED||HASH_UPDATED,
+         *    projectId: %id of project%,
+         *    branchName: %name of branch%,
+         *    newHash: %new commitHash (='' when DELETED)%
+         *    oldHash: %previous commitHash (='' when CREATED)%
+         * }
+         *
+         * @param {string} projectId
+         * @param {function} eventHandler
+         * @param {function} [callback]
+         */
+        this.watchProject = function (projectId, eventHandler, callback) {
+            callback = callback || function (err) {
+                    if (err) {
+                        logger.error('Problems watching project room', projectId);
+                    }
+                };
+            storage.watchProject(projectId, eventHandler, callback);
+        };
+
+        this.unwatchProject = function (projectId, eventHandler, callback) {
+            callback = callback || function (err) {
+                    if (err) {
+                        logger.error('Problems unwatching project room', projectId);
+                    }
+                };
+            storage.unwatchProject(projectId, eventHandler, callback);
+        };
+
+        // Internal functions
+        function isConnected() {
+            return state.connection === CONSTANTS.STORAGE.CONNECTED ||
+                state.connection === CONSTANTS.STORAGE.RECONNECTED;
+        }
+
+        var ROOT_PATH = ''; //FIXME: This should come from constants..
+
+        function COPY(object) {
+            if (object) {
+                return JSON.parse(JSON.stringify(object));
+            }
+            return null;
+        }
+
+        // Node handling
+        this.getNode = function (nodePath) {
+            return getNode(nodePath, logger, state, self.meta, storeNode);
+        };
+
+        this.getAllMetaNodes = function () {
+            if (state && state.core && state.nodes && state.nodes[ROOT_PATH]) {
+                var metaNodes = state.core.getAllMetaNodes(state.nodes[ROOT_PATH].node),
+                    gmeNodes = [],
+                    keys = Object.keys(metaNodes || {}),
+                    i;
+
+                for (i = 0; i < keys.length; i += 1) {
+                    gmeNodes.push(this.getNode(storeNode(metaNodes[keys[i]]), logger, state, self.meta, storeNode));
+                }
+
+                return gmeNodes;
+            }
+
+            return [];
+        };
+
+        function getStringHash(node) {
+            //TODO there is a memory issue with the huge strings so we have to replace it with something
+            if (node.parent && node.parent.data && node.parent.data[node.relid]) {
+                return node.parent.data[node.relid]; // FIXME this is buggy when creating connections
+            }
+            state.gHash += 1;
+            return state.gHash;
+        }
+
+        function getModifiedNodes(newerNodes) {
+            var modifiedNodes = [],
+                i;
+
+            for (i in state.nodes) {
+                if (state.nodes.hasOwnProperty(i)) {
+                    if (newerNodes[i]) {
+                        if (newerNodes[i].hash !== state.nodes[i].hash && state.nodes[i].hash !== '') {
+                            modifiedNodes.push(i);
+                        }
+                    }
+                }
+            }
+            return modifiedNodes;
+        }
+
+        //this is just a first brute implementation it needs serious optimization!!!
+        function fitsInPatternTypes(path, pattern) {
+            var i;
+
+            if (pattern.items && pattern.items.length > 0) {
+                for (i = 0; i < pattern.items.length; i += 1) {
+                    if (self.meta.isTypeOf(path, pattern.items[i])) {
+                        return true;
+                    }
+                }
+                return false;
+            } else {
+                return true;
+            }
+        }
+
+        function patternToPaths(patternId, pattern, pathsSoFar) {
+            var children,
+                subPattern,
+                i;
+
+            if (state.nodes[patternId]) {
+                pathsSoFar[patternId] = true;
+                if (pattern.children && pattern.children > 0) {
+                    children = state.core.getChildrenPaths(state.nodes[patternId].node);
+                    subPattern = COPY(pattern);
+                    subPattern.children -= 1;
+                    for (i = 0; i < children.length; i += 1) {
+                        if (fitsInPatternTypes(children[i], pattern)) {
+                            patternToPaths(children[i], subPattern, pathsSoFar);
+                        }
+                    }
+                }
+            } else {
+                state.loadError++;
+            }
+        }
+
+        function userEvents(userId, modifiedNodes) {
+            var newPaths = {},
+                startErrorLevel = state.loadError,
+                i,
+                events = [];
+
+            for (i in state.users[userId].PATTERNS) {
+                if (state.users[userId].PATTERNS.hasOwnProperty(i)) {
+                    if (state.nodes[i]) { //TODO we only check pattern if its root is there...
+                        patternToPaths(i, state.users[userId].PATTERNS[i], newPaths);
+                    }
+                }
+            }
+
+            if (startErrorLevel !== state.loadError) {
+                return; //we send events only when everything is there correctly
+            }
+
+            //deleted items
+            for (i in state.users[userId].PATHS) {
+                if (!newPaths[i]) {
+                    events.push({etype: 'unload', eid: i});
+                }
+            }
+
+            //added items
+            for (i in newPaths) {
+                if (!state.users[userId].PATHS[i]) {
+                    events.push({etype: 'load', eid: i});
+                }
+            }
+
+            //updated items
+            for (i = 0; i < modifiedNodes.length; i++) {
+                if (newPaths[modifiedNodes[i]]) {
+                    events.push({etype: 'update', eid: modifiedNodes[i]});
+                }
+            }
+
+            state.users[userId].PATHS = newPaths;
+
+            //this is how the events should go
+            if (events.length > 0) {
+                if (state.loadError > startErrorLevel) {
+                    events.unshift({etype: 'incomplete', eid: null});
+                } else {
+                    events.unshift({etype: 'complete', eid: null});
+                }
+            } else {
+                events.unshift({etype: 'complete', eid: null});
+            }
+            state.users[userId].FN(events);
+        }
+
+        function loadChildrenPattern(core, nodesSoFar, node, level, callback) {
+            var path = core.getPath(node),
+                childrenPaths = core.getChildrenPaths(node),
+                childrenRelids = core.getChildrenRelids(node),
+                missing = childrenPaths.length,
+                error = null,
+                i,
+                childLoaded = function (err, child) {
+                    if (err || child === null) {
+                        error = error || err;
+                        missing -= 1;
+                        if (missing === 0) {
+                            callback(error);
+                        }
+                    } else {
+                        loadChildrenPattern(core, nodesSoFar, child, level - 1, childrenPatternLoaded);
+                    }
+                },
+                childrenPatternLoaded = function (err) {
+                    error = error || err;
+                    missing -= 1;
+                    if (missing === 0) {
+                        callback(error);
+                    }
+                };
+
+            if (!nodesSoFar[path]) {
+                nodesSoFar[path] = {node: node, incomplete: true, basic: true, hash: getStringHash(node)};
+            }
+            if (level > 0) {
+                if (missing > 0) {
+                    for (i = 0; i < childrenPaths.length; i++) {
+                        if (nodesSoFar[childrenPaths[i]]) {
+                            loadChildrenPattern(core,
+                                nodesSoFar,
+                                nodesSoFar[childrenPaths[i]].node,
+                                level - 1, childrenPatternLoaded);
+                        } else {
+                            core.loadChild(node, childrenRelids[i], childLoaded);
+                        }
+                    }
+                } else {
+                    callback(error);
+                }
+            } else {
+                callback(error);
+            }
+        }
+
+        function loadPattern(core, id, pattern, nodesSoFar, callback) {
+            //console.log('LP',id,pattern);
+            //var _callback = callback;
+            //callback = function(error){
+            //    console.log('LPF',id,pattern);
+            //    _callback(error);
+            //};
+
+            var base = null,
+                baseLoaded = function () {
+                    if (pattern.children && pattern.children > 0) {
+                        var level = pattern.children;
+                        loadChildrenPattern(core, nodesSoFar, base, level, callback);
+                    } else {
+                        callback(null);
+                    }
+                };
+
+            if (nodesSoFar[id]) {
+                base = nodesSoFar[id].node;
+                baseLoaded();
+            } else {
+                if (!nodesSoFar[ROOT_PATH]) {
+                    logger.error('pattern cannot be loaded if there is no root!!!');
+                }
+                base = nodesSoFar[ROOT_PATH].node;
+
+                core.loadByPath(base, id, function (err, node) {
+                    var path;
+                    if (!err && node && !core.isEmpty(node)) {
+                        path = core.getPath(node);
+                        if (!nodesSoFar[path]) {
+                            nodesSoFar[path] = {
+                                node: node,
+                                incomplete: false,
+                                basic: true,
+                                hash: getStringHash(node)
+                            };
+                        }
+                        base = node;
+                        baseLoaded();
+                    } else {
+                        callback(err);
+                    }
+                });
+            }
+        }
+
+        function orderStringArrayByElementLength(strArray) {
+            var ordered = [],
+                i, j, index;
+
+            for (i = 0; i < strArray.length; i++) {
+                index = -1;
+                j = 0;
+                while (index === -1 && j < ordered.length) {
+                    if (ordered[j].length > strArray[i].length) {
+                        index = j;
+                    }
+                    j++;
+                }
+
+                if (index === -1) {
+                    ordered.push(strArray[i]);
+                } else {
+                    ordered.splice(index, 0, strArray[i]);
+                }
+            }
+            return ordered;
+        }
+
+        this.startTransaction = function (msg) {
+            if (state.inTransaction) {
+                logger.error('Already in transaction, will proceed though..');
+            }
+            if (state.core) {
+                state.inTransaction = true;
+                msg = msg || 'startTransaction()';
+                saveRoot(msg);
+            } else {
+                logger.error('Can not start transaction with no core avaliable.');
+            }
+        };
+
+        this.completeTransaction = function (msg, callback) {
+            state.inTransaction = false;
+            if (state.core) {
+                msg = msg || 'completeTransaction()';
+                saveRoot(msg, callback);
+            }
+        };
+
+        //territory functions
+        this.addUI = function (ui, fn, guid) {
+            ASSERT(fn);
+            ASSERT(typeof fn === 'function');
+            guid = guid || GUID();
+            state.users[guid] = {type: 'notused', UI: ui, PATTERNS: {}, PATHS: {}, SENDEVENTS: true, FN: fn};
+            return guid;
+        };
+
+        this.removeUI = function (guid) {
+            logger.debug('removeUI', guid);
+            delete state.users[guid];
+        };
+
+        function reLaunchUsers() {
+            var i;
+            for (i in state.users) {
+                if (state.users.hasOwnProperty(i)) {
+                    if (state.users[i].UI.reLaunch) {
+                        state.users[i].UI.reLaunch();
+                    }
+                }
+            }
+        }
+
+        function _updateTerritoryAllDone(guid, patterns, error) {
+
+            logger.debug('updateTerritory related loads finished', {
+                metadata: {
+                    userId: guid, patterns: patterns, error: error
+                }
+            });
+            refreshMetaNodes(state.nodes, state.nodes);
+
+            if (state.users[guid]) {
+                state.users[guid].PATTERNS = COPY(patterns);
+                if (!error) {
+                    userEvents(guid, []);
+                }
+            }
+        }
+
+        function canSwitchStates() {
+            if (state.inLoading && state.ongoingTerritoryUpdateCounter === 0 &&
+                state.ongoingLoadPatternsCounter === 0) {
+                return true;
+            }
+            return false;
+        }
+
+        function loadingPatternFinished(err) {
+            state.loadingStatus = state.loadingStatus || err;
+            state.ongoingLoadPatternsCounter -= 1;
+
+            if (canSwitchStates()) {
+                switchStates();
+            }
+        }
+
+        this.updateTerritory = function (guid, patterns) {
+            var loadRequestCounter = 0,
+                updateRequestId = GUID(),
+                error = null,
+                keys = Object.keys(patterns || {}),
+                i,
+                patternLoaded = function (err) {
+                    error = error || err;
+                    if (--loadRequestCounter === 0) {
+                        delete state.pendingTerritoryUpdatePatterns[updateRequestId];
+                        _updateTerritoryAllDone(guid, patterns, error);
+                        state.ongoingTerritoryUpdateCounter -= 1;
+                        if (state.ongoingTerritoryUpdateCounter < 0) {
+                            logger.error('patternLoaded callback have been called multiple times!!');
+                            state.ongoingTerritoryUpdateCounter = 0; //FIXME
+                        }
+                        if (canSwitchStates()) {
+                            switchStates();
+                        }
+                    }
+                };
+
+            logger.debug('updatingTerritory', {
+                metadata: {
+                    userId: guid,
+                    patterns: patterns
+                }
+            });
+
+            if (!state.nodes[ROOT_PATH]) {
+                if (state.users[guid]) {
+                    logger.debug('early updateTerritory for user[' + guid + ']. No loaded project state yet.');
+                    state.users[guid].PATTERNS = COPY(patterns);
+                }
+                return;
+            }
+
+            //empty territory check
+            if (keys.length === 0) {
+                _updateTerritoryAllDone(guid, patterns, null);
+                return;
+            }
+
+            state.ongoingTerritoryUpdateCounter += 1;
+
+            //first we have to set the internal counter as the actual load can get synchronous :(
+            loadRequestCounter = keys.length;
+
+
+            for (i = 0; i < keys.length; i += 1) {
+                if (state.inLoading) {
+                    state.ongoingLoadPatternsCounter += 1;
+                    loadPatternThrottled(state.core,
+                        keys[i], patterns[keys[i]], state.loadNodes, loadingPatternFinished);
+                } else {
+                    //we should save the patterns to a pending directory
+                    state.pendingTerritoryUpdatePatterns[updateRequestId] = patterns;
+                }
+                loadPatternThrottled(state.core, keys[i], patterns[keys[i]], state.nodes, patternLoaded);
+            }
+
+        };
+
+        function refreshMetaNodes(oldSource, newSource) {
+            var pathsToRemove = [],
+                i,
+                oldPaths = Object.keys(oldSource),
+                newPaths = Object.keys(newSource);
+
+            for (i = 0; i < oldPaths.length; i += 1) {
+                if (newPaths.indexOf(oldPaths[i]) === -1) {
+                    pathsToRemove.push(oldPaths[i]);
+                }
+            }
+
+            for (i = 0; i < newPaths.length; i += 1) {
+                state.metaNodes[newPaths[i]] = newSource[newPaths[i]].node;
+            }
+
+            for (i = 0; i < pathsToRemove.length; i += 1) {
+                delete state.metaNodes[pathsToRemove[i]];
+            }
+        }
+
+        function switchStates() {
+            //it is safe now to move the loadNodes into nodes,
+            // refresh the metaNodes and generate events - all in a synchronous manner!!!
+            var modifiedPaths,
+                i;
+
+            logger.debug('switching project state [C#' +
+                state.commitHash + ']->[C#' + state.loading.commitHash + '] : [R#' +
+                state.rootHash + ']->[R#' + state.loading.rootHash + ']');
+            refreshMetaNodes(state.nodes, state.loadNodes);
+
+            modifiedPaths = getModifiedNodes(state.loadNodes);
+            state.nodes = state.loadNodes;
+            state.loadNodes = {};
+
+            state.inLoading = false;
+            state.rootHash = state.loading.rootHash;
+            state.loading.rootHash = null;
+            state.commitHash = state.loading.commitHash;
+            state.loading.commitHash = null;
+
+            checkMetaNameCollision(state.core, state.nodes[ROOT_PATH].node);
+
+            for (i in state.users) {
+                if (state.users.hasOwnProperty(i)) {
+                    userEvents(i, modifiedPaths);
+                }
+            }
+
+            if (state.loadingStatus) {
+                state.loading.next(state.loadingStatus);
+            } else {
+                state.loading.next(null);
+            }
+        }
+
+        function loading(newRootHash, newCommitHash, callback) {
+            var i, j,
+                userIds,
+                patternPaths,
+                patternsToLoad = [];
+
+            if (state.ongoingLoadPatternsCounter !== 0) {
+                throw new Error('at the start of loading counter should bee zero!!! [' +
+                    state.ongoingLoadPatternsCounter + ']');
+            }
+
+            state.loadingStatus = null;
+            state.loadNodes = {};
+            state.loading.rootHash = newRootHash;
+            state.loading.commitHash = newCommitHash;
+            state.loading.next = callback;
+
+            state.core.loadRoot(state.loading.rootHash, function (err, root) {
+                if (err) {
+                    return state.loading.next(err);
+                }
+
+                state.inLoading = true;
+                state.loadNodes[state.core.getPath(root)] = {
+                    node: root,
+                    incomplete: true,
+                    basic: true,
+                    hash: getStringHash(root)
+                };
+
+
+                //we first only set the counter of patterns but we also generate a completely separate pattern queue
+                //as we cannot be sure if all the users will remain at the point of giving the actual load command!!!
+                userIds = Object.keys(state.users);
+                for (i = 0; i < userIds.length; i += 1) {
+                    state.ongoingLoadPatternsCounter += Object.keys(state.users[userIds[i]].PATTERNS || {}).length;
+                    patternPaths = Object.keys(state.users[userIds[i]].PATTERNS || {});
+                    for (j = 0; j < patternPaths.length; j += 1) {
+                        patternsToLoad.push({
+                            id: patternPaths[j],
+                            pattern: COPY(state.users[userIds[i]].PATTERNS[patternPaths[j]])
+                        });
+                    }
+                }
+                userIds = Object.keys(state.pendingTerritoryUpdatePatterns);
+                for (i = 0; i < userIds.length; i += 1) {
+                    state.ongoingLoadPatternsCounter +=
+                        Object.keys(state.pendingTerritoryUpdatePatterns[userIds[i]] || {}).length;
+                    patternPaths = Object.keys(state.pendingTerritoryUpdatePatterns[userIds[i]] || {});
+                    for (j = 0; j < patternPaths.length; j += 1) {
+                        patternsToLoad.push({
+                            id: patternPaths[j],
+                            pattern: COPY(state.pendingTerritoryUpdatePatterns[userIds[i]][patternPaths[j]])
+                        });
+                    }
+                }
+
+                //empty load check
+                if (state.ongoingLoadPatternsCounter === 0) {
+                    if (canSwitchStates()) {
+                        switchStates();
+                        reLaunchUsers();
+                    }
+                    return;
+                }
+
+                for (i = 0; i < patternsToLoad.length; i += 1) {
+                    loadPatternThrottled(state.core,
+                        patternsToLoad[i].id, patternsToLoad[i].pattern, state.loadNodes, loadingPatternFinished);
+                }
+            });
+        }
+
+        function cleanUsersTerritories() {
+            //look out as the user can remove itself at any time!!!
+            var userIds = Object.keys(state.users),
+                i,
+                j,
+                events;
+
+            for (i = 0; i < userIds.length; i++) {
+                if (state.users[userIds[i]]) {
+                    events = [{eid: null, etype: 'complete'}];
+                    for (j in state.users[userIds[i]].PATHS
+                        ) {
+                        events.push({etype: 'unload', eid: j});
+                    }
+                    state.users[userIds[i]].PATTERNS = {};
+                    state.users[userIds[i]].PATHS = {};
+                    state.users[userIds[i]].SENDEVENTS = true;
+                    state.users[userIds[i]].FN(events);
+                }
+            }
+        }
+
+        this.getUserId = function () {
+            var cookies = URL.parseCookie(document.cookie);
+            if (cookies.webgme) {
+                return cookies.webgme;
+            } else {
+                return 'n/a';
+            }
+        };
+
+        //create from file
+        this.createProjectFromFile = function (projectName, branchName, jProject, ownerId, callback) {
+            branchName = branchName || 'master';
+            if (callback === undefined && typeof ownerId === 'function') {
+                callback = ownerId;
+                ownerId = undefined;
+            }
+
+            storage.createProject(projectName, ownerId, function (err, projectId) {
+                if (err) {
+                    callback(err);
+                    return;
+                }
+                storage.openProject(projectId, function (err, project) {
+                    var core,
+                        rootNode,
+                        persisted;
+                    if (err) {
+                        callback(err);
+                        return;
+                    }
+
+                    core = new Core(project, {
+                        globConf: gmeConfig,
+                        logger: logger.fork('core')
+                    });
+
+                    rootNode = core.createNode({parent: null, base: null});
+                    Serialization.import(core, rootNode, jProject, function (err) {
+                        if (err) {
+                            return callback(err);
+                        }
+
+                        persisted = core.persist(rootNode);
+
+                        storage.makeCommit(projectId,
+                            null,
+                            [],
+                            persisted.rootHash,
+                            persisted.objects,
+                            'creating project from a file',
+                            function (err, commitResult) {
+                                if (err) {
+                                    logger.error('cannot make initial commit for project creation from file');
+                                    callback(err);
+                                    return;
+                                }
+
+                                project.createBranch(branchName, commitResult.hash, function (err) {
+                                    if (err) {
+                                        logger.error('cannot set branch \'master\' for project creation from file');
+                                        callback(err);
+                                        return;
+                                    }
+
+                                    storage.closeProject(projectId, function (err) {
+                                        if (err) {
+                                            logger.error('Closing temporary project failed in project creation ' +
+                                                'from file', err);
+                                            callback(err);
+                                            return;
+                                        }
+                                        callback(null, projectId, branchName);
+                                    });
+                                });
+                            }
+                        );
+                    });
+                });
+            });
+        };
+
+        //meta rules checking
+        /**
+         *
+         * @param {string[]} nodePaths - Paths to nodes of which to check.
+         * @param includeChildren
+         * @param callback
+         */
+        this.checkMetaRules = function (nodePaths, includeChildren, callback) {
+            var parameters = {
+                command: 'checkConstraints',
+                checkType: 'META', //TODO this should come from a constant
+                includeChildren: includeChildren,
+                nodePaths: nodePaths,
+                commitHash: state.commitHash,
+                projectId: state.project.projectId
+            };
+
+            storage.simpleRequest(parameters, function (err, result) {
+                if (err) {
+                    logger.error(err);
+                }
+
+                self.dispatchEvent(CONSTANTS.META_RULES_RESULT, result);
+
+                if (callback) {
+                    callback(err, result);
+                }
+            });
+        };
+
+        /**
+         *
+         * @param {string[]} nodePaths - Paths to nodes of which to check.
+         * @param includeChildren
+         * @param callback
+         */
+        this.checkCustomConstraints = function (nodePaths, includeChildren, callback) {
+            var parameters = {
+                command: 'checkConstraints',
+                checkType: 'CUSTOM', //TODO this should come from a constant
+                includeChildren: includeChildren,
+                nodePaths: nodePaths,
+                commitHash: state.commitHash,
+                projectId: state.project.projectId
+            };
+
+            storage.simpleRequest(parameters, function (err, result) {
+                if (err) {
+                    logger.error(err);
+                }
+
+                self.dispatchEvent(CONSTANTS.CONSTRAINT_RESULT, result);
+
+                if (callback) {
+                    callback(err, result);
+                }
+            });
+        };
+
+        //seed
+        this.seedProject = function (parameters, callback) {
+            logger.debug('seeding project', parameters);
+            parameters.command = 'seedProject';
+            storage.simpleRequest(parameters, function (err, result) {
+                if (err) {
+                    logger.error(err);
+                }
+                callback(err, result);
+            });
+        };
+
+        //export branch
+        this.getExportProjectBranchUrl = function (projectId, branchName, fileName, callback) {
+            var command = {};
+            command.command = 'exportLibrary';
+            command.projectId = projectId;
+            command.branchName = branchName;
+            command.path = ROOT_PATH;
+            logger.debug('getExportProjectBranchUrl, command', command);
+            if (command.projectId && command.branchName) {
+                storage.simpleRequest(command, function (err, result) {
+                    if (err) {
+                        logger.error('getExportProjectBranchUrl failed with error', err);
+                        callback(err);
+                    } else {
+                        callback(null, blobClient.getDownloadURL(result.file.hash));
+                    }
+                });
+            } else {
+                callback(new Error('invalid parameters!'));
+            }
+        };
+
+        this.getExportItemsUrl = function (paths, filename, callback) {
+            callback(new Error('getExportItemsUrl is no longer supported!'));
+        };
+
+        //library functions
+        /**
+         * Request an export of the given library.
+         * A library can be any sub-tree of the project (the whole project as well).
+         * The export will only keep the internal relation, and it just notices the targets of any
+         * outgoing relation. If those outgoing relations will not present in the source, the result
+         * could be faulty.
+         * @param {string} libraryRootPath - the absolute path of the root node of the library.
+         * @param {string} filename - the requested output name of the library.
+         * @param {funciton} callback - if successful, the result is a URL where the exported format of the library
+         * can be found.
+         */
+        this.getExportLibraryUrl = function (libraryRootPath, filename, callback) {
+            var command = {};
+            command.command = 'exportLibrary';
+            command.projectId = state.project.projectId;
+            command.hash = state.rootHash;
+            command.path = libraryRootPath;
+            if (command.projectId && command.hash) {
+                storage.simpleRequest(command, function (err, result) {
+                    if (err) {
+                        logger.error('getExportLibraryUrl failed with error', err);
+                        callback(err);
+                    } else {
+                        callback(null, blobClient.getDownloadURL(result.file.hash));
+                    }
+                });
+            } else {
+                callback(new Error('there is no open project!'));
+            }
+        };
+
+        /**
+         * Updates a library.
+         * 1, it removes the nodes that are not exists in the new library
+         * 2, adds the nodes that only exists in the new library
+         * 3, updates all properties and relations of the nodes in the library
+         * (it keeps all incoming relations, so the instance models will updates their state automatically)
+         * @param {string} libraryRootPath - the absolute path of the root node of the library.
+         * @param {object} newLibrary - JSON export format of the updated library.
+         * @param callback
+         */
+        this.updateLibrary = function (libraryRootPath, newLibrary, callback) {
+            Serialization.import(state.core, state.nodes[libraryRootPath].node, newLibrary, function (err, log) {
+                if (err) {
+                    return callback(err);
+                }
+
+                saveRoot('library update done\nlogs:\n' + log, callback);
+            });
+        };
+
+        /**
+         * Imports a library into the project under the given parent.
+         * @param {string} libraryParentPath - absolute path of the parent node of the library.
+         * @param {object} newLibrary - JSON export format of the library.
+         * @param {function} callback
+         */
+        this.addLibrary = function (libraryParentPath, newLibrary, callback) {
+            self.startTransaction('creating library as a child of ' + libraryParentPath);
+            var libraryRoot = self.createChild({
+                parentId: libraryParentPath,
+                baseId: null
+            }, 'library placeholder');
+            Serialization.import(state.core,
+                state.nodes[libraryRoot].node, newLibrary, function (err, log) {
+                    if (err) {
+                        return callback(err);
+                    }
+
+                    self.completeTransaction('library update done\nlogs:\n' + log, callback);
+                }
+            );
+        };
+
+        /**
+         * Run the plugin on the server inside a worker process.
+         * @param {string} name - name of plugin.
+         * @param {object} context
+         * @param {object} context.managerConfig - where the plugin should execute.
+         * @param {string} context.managerConfig.project - id of project.
+         * @param {string} context.managerConfig.activeNode - path to activeNode.
+         * @param {string} [context.managerConfig.activeSelection=[]] - paths to selected nodes.
+         * @param {string} context.managerConfig.commit - commit hash to start the plugin from.
+         * @param {string} context.managerConfig.branchName - branch which to save to.
+         * @param {object} [context.pluginConfig=%defaultForPlugin%] - specific configuration for the plugin.
+         * @param {function} callback
+         */
+        this.runServerPlugin = function (name, context, callback) {
+            storage.simpleRequest({command: 'executePlugin', name: name, context: context}, callback);
+        };
+
+        /**
+         * @param {string[]} pluginNames - All avaliable plugins from server.
+         * @param {string} [nodePath=''] - Node to get the validPlugins from.
+         * @returns {string[]} - Filtered plugin names.
+         */
+        this.filterPlugins = function (pluginNames, nodePath) {
+            var filteredNames = [],
+                validPlugins,
+                i,
+                node;
+
+            logger.debug('filterPluginsBasedOnNode allPlugins, given nodePath', pluginNames, nodePath);
+            if (!nodePath) {
+                logger.debug('filterPluginsBasedOnNode nodePath not given - will fall back on root-node.');
+                nodePath = ROOT_PATH;
+            }
+
+            node = state.nodes[nodePath];
+
+            if (!node) {
+                logger.warn('filterPluginsBasedOnNode node not loaded - will fall back on root-node.', nodePath);
+                nodePath = ROOT_PATH;
+                node = state.nodes[nodePath];
+            }
+
+            if (!node) {
+                logger.warn('filterPluginsBasedOnNode root node not loaded - will return full list.');
+                return pluginNames;
+            }
+
+            validPlugins = (state.core.getRegistry(node.node, 'validPlugins') || '').split(' ');
+            for (i = 0; i < validPlugins.length; i += 1) {
+                if (pluginNames.indexOf(validPlugins[i]) > -1) {
+                    filteredNames.push(validPlugins[i]);
+                } else {
+                    logger.warn('Registered plugin for node at path "' + nodePath +
+                        '" is not amongst avaliable plugins', pluginNames);
+                }
+            }
+
+            return filteredNames;
+        };
+
+        // Constraints
+        this.setConstraint = function (path, name, constraintObj) {
+            if (state.core && state.nodes[path] && typeof state.nodes[path].node === 'object') {
+                state.core.setConstraint(state.nodes[path].node, name, constraintObj);
+                saveRoot('setConstraint(' + path + ',' + name + ')');
+            }
+        };
+
+        this.delConstraint = function (path, name) {
+            if (state.core && state.nodes[path] && typeof state.nodes[path].node === 'object') {
+                state.core.delConstraint(state.nodes[path].node, name);
+                saveRoot('delConstraint(' + path + 'name' + ')');
+            }
+        };
+
+        //automerge
+        this.autoMerge = function (projectId, mine, theirs, callback) {
+            var command = {
+                command: 'autoMerge',
+                projectId: projectId,
+                mine: mine,
+                theirs: theirs
+            };
+            storage.simpleRequest(command, function (err, result) {
+                if (err) {
+                    logger.error('autoMerge failed with error', err);
+                    callback(err);
+                } else {
+                    callback(null, result);
+                }
+            });
+        };
+
+        this.resolve = function (mergeResult, callback) {
+            var command = {
+                command: 'resolve',
+                partial: mergeResult
+            };
+            storage.simpleRequest(command, function (err, result) {
+                if (err) {
+                    logger.error('resolve failed with error', err);
+                    callback(err);
+                } else {
+                    callback(null, result);
+                }
+            });
+        };
+
+        this.gmeConfig = gmeConfig;
+    }
+
+
+    // Inherit from the EventDispatcher
+    Client.prototype = Object.create(EventDispatcher.prototype);
+    Client.prototype.constructor = Client;
+
+    return Client;
+  });
+
 /*globals define*/
 /*jshint browser: true, node:true*/
 
@@ -21555,7 +21417,8 @@ define('plugin/PluginConfig',[], function () {
      *
      * Note: this object is JSON serializable see serialize method.
      *
-     * @param config - deserializes an existing configuration to this object.
+     * @param {object} config - deserializes an existing configuration to this object.
+     * @alias PluginConfig
      * @constructor
      */
     var PluginConfig = function (config) {
@@ -21571,7 +21434,7 @@ define('plugin/PluginConfig',[], function () {
     /**
      * Serializes this object to a JSON representation.
      *
-     * @returns {{}}
+     * @returns {object}
      */
     PluginConfig.prototype.serialize = function () {
         var keys = Object.keys(this);
@@ -21646,7 +21509,6 @@ define('plugin/PluginNodeDescription',[], function () {
 /**
  * A module representing a PluginMessage.
  *
- * @module PluginMessage
  * @author lattmann / https://github.com/lattmann
  */
 
@@ -21659,7 +21521,7 @@ define('plugin/PluginMessage',['plugin/PluginNodeDescription'], function (Plugin
      *
      * Note: this object is JSON serializable see serialize method.
      *
-     * @param config - deserializes an existing configuration to this object.
+     * @param {object} config - deserializes an existing configuration to this object.
      * @constructor
      * @alias PluginMessage
      */
@@ -21689,7 +21551,7 @@ define('plugin/PluginMessage',['plugin/PluginNodeDescription'], function (Plugin
     /**
      * Serializes this object to a JSON representation.
      *
-     * @returns {{}}
+     * @returns {object}
      */
     PluginMessage.prototype.serialize = function () {
         var result = {
@@ -21779,7 +21641,7 @@ define('plugin/PluginResult',['plugin/PluginMessage'], function (PluginMessage) 
     /**
      * Returns with the plugin messages.
      *
-     * @returns {plugin.PluginMessage[]}
+     * @returns {PluginMessage[]}
      */
     PluginResult.prototype.getMessages = function () {
         return this.messages;
@@ -21788,7 +21650,7 @@ define('plugin/PluginResult',['plugin/PluginMessage'], function (PluginMessage) 
     /**
      * Adds a new plugin message to the messages list.
      *
-     * @param {plugin.PluginMessage} pluginMessage
+     * @param {PluginMessage} pluginMessage
      */
     PluginResult.prototype.addMessage = function (pluginMessage) {
         this.messages.push(pluginMessage);
@@ -21828,7 +21690,7 @@ define('plugin/PluginResult',['plugin/PluginMessage'], function (PluginMessage) 
     /**
      * Sets the name of the plugin to which the result object belongs to.
      *
-     * @param pluginName - name of the plugin
+     * @param {string} pluginName - name of the plugin
      */
     PluginResult.prototype.setPluginName = function (pluginName) {
         this.pluginName = pluginName;
@@ -21885,7 +21747,11 @@ define('plugin/PluginResult',['plugin/PluginMessage'], function (PluginMessage) 
      * @param {string} time
      */
     PluginResult.prototype.setError = function (error) {
-        this.error = error;
+        if (error instanceof Error) {
+            this.error = error.message;
+        } else {
+            this.error = error;
+        }
     };
 
     /**
@@ -21902,7 +21768,7 @@ define('plugin/PluginResult',['plugin/PluginMessage'], function (PluginMessage) 
             pluginName: this.pluginName,
             startTime: this.startTime,
             finishTime: this.finishTime,
-            error: this.error
+            error: null
         },
             i;
 
@@ -21938,6 +21804,7 @@ define('plugin/PluginBase',[
      * Initializes a new instance of a plugin object, which should be a derived class.
      *
      * @constructor
+     * @alias PluginBase
      */
     var PluginBase = function () {
         // set by initialize
@@ -21949,6 +21816,7 @@ define('plugin/PluginBase',[
         this.core = null;
         this.project = null;
         this.projectName = null;
+        this.projectId = null;
         this.branchName = null;
         this.branchHash = null;
         this.commitHash = null;
@@ -21973,7 +21841,7 @@ define('plugin/PluginBase',[
      * - do NOT put any user interaction logic UI, etc. inside this function
      * - callback always have to be called even if error happened
      *
-     * @param {function(string, plugin.PluginResult)} callback - the result callback
+     * @param {function(string|Error, PluginResult)} callback - the result callback
      */
     PluginBase.prototype.main = function (/*callback*/) {
         throw new Error('implement this function in the derived class');
@@ -22096,8 +21964,8 @@ define('plugin/PluginBase',[
     /**
      * Checks if the given node is of the given meta-type.
      * Usage: <tt>self.isMetaTypeOf(aNode, self.META['FCO']);</tt>
-     * @param node - Node to be checked for type.
-     * @param metaNode - Node object defining the meta type.
+     * @param {module:Core~Node} node - Node to be checked for type.
+     * @param {module:Core~Node} metaNode - Node object defining the meta type.
      * @returns {boolean} - True if the given object was of the META type.
      */
     PluginBase.prototype.isMetaTypeOf = function (node, metaNode) {
@@ -22113,8 +21981,8 @@ define('plugin/PluginBase',[
 
     /**
      * Finds and returns the node object defining the meta type for the given node.
-     * @param node - Node to be checked for type.
-     * @returns {Object} - Node object defining the meta type of node.
+     * @param {module:Core~Node} node - Node to be checked for type.
+     * @returns {module:Core~Node} - Node object defining the meta type of node.
      */
     PluginBase.prototype.getMetaType = function (node) {
         var self = this,
@@ -22131,7 +21999,7 @@ define('plugin/PluginBase',[
 
     /**
      * Returns true if node is a direct instance of a meta-type node (or a meta-type node itself).
-     * @param node - Node to be checked.
+     * @param {module:Core~Node} node - Node to be checked.
      * @returns {boolean}
      */
     PluginBase.prototype.baseIsMeta = function (node) {
@@ -22150,7 +22018,7 @@ define('plugin/PluginBase',[
     /**
      * Gets the current configuration of the plugin that was set by the user and plugin manager.
      *
-     * @returns {object}
+     * @returns {PluginConfig}
      */
     PluginBase.prototype.getCurrentConfig = function () {
         return this._currentConfig;
@@ -22159,7 +22027,7 @@ define('plugin/PluginBase',[
     /**
      * Creates a new message for the user and adds it to the result.
      *
-     * @param {object} node - webgme object which is related to the message
+     * @param {module:Core~Node} node - webgme object which is related to the message
      * @param {string} message - feedback to the user
      * @param {string} severity - severity level of the message: 'debug', 'info' (default), 'warning', 'error'.
      */
@@ -22183,11 +22051,10 @@ define('plugin/PluginBase',[
 
     /**
      * Saves all current changes if there is any to a new commit.
-     * If the changes were started from a branch, then tries to fast forward the branch to the new commit.
-     * Note: Does NOT handle any merges at this point.
+     * If the commit result is either 'FORKED' or 'CANCELED', it creates a new branch.
      *
      * @param {string|null} message - commit message
-     * @param callback
+     * @param {function(Error|string, module:Storage~commitResult)} callback
      */
     PluginBase.prototype.save = function (message, callback) {
         var self = this,
@@ -22218,7 +22085,7 @@ define('plugin/PluginBase',[
                 if (commitResult.status === STORAGE_CONSTANTS.SYNCED) {
                     self.logger.info('"' + self.branchName + '" was updated to the new commit.');
                     self.addCommitToResult(STORAGE_CONSTANTS.SYNCED);
-                    callback(null, {status: STORAGE_CONSTANTS.SYNCED});
+                    callback(null, {status: STORAGE_CONSTANTS.SYNCED, hash: self.currentHash});
                 } else if (commitResult.status === STORAGE_CONSTANTS.FORKED) {
                     self._createFork(callback);
                 } else if (commitResult.status === STORAGE_CONSTANTS.CANCELED) {
@@ -22264,7 +22131,7 @@ define('plugin/PluginBase',[
                     '(Successive saves will try to save to this new branch.)');
                 self.addCommitToResult(STORAGE_CONSTANTS.FORKED);
 
-                callback(null, {status: STORAGE_CONSTANTS.FORKED, forkName: forkName});
+                callback(null, {status: STORAGE_CONSTANTS.FORKED, forkName: forkName, hash: forkResult.hash});
 
             } else if (forkResult.status === STORAGE_CONSTANTS.FORKED) {
                 self.branchName = null;
@@ -22294,9 +22161,9 @@ define('plugin/PluginBase',[
     /**
      * Initializes the plugin with objects that can be reused within the same plugin instance.
      *
-     * @param {logManager} logger - logging capability to console (or file) based on PluginManager configuration
-     * @param {blob.BlobClient} blobClient - virtual file system where files can be generated then saved as a zip file.
-     * @param {object} gmeConfig - global configuration for webGME.
+     * @param {GmeLogger} logger - logging capability to console (or file) based on PluginManager configuration
+     * @param {BlobClient} blobClient - virtual file system where files can be generated then saved as a zip file.
+     * @param {GmeConfig} gmeConfig - global configuration for webGME.
      */
     PluginBase.prototype.initialize = function (logger, blobClient, gmeConfig) {
         if (logger) {
@@ -22330,6 +22197,7 @@ define('plugin/PluginBase',[
         this.project = config.project;
         this.branch = config.branch;  // This is only for client side.
         this.projectName = config.projectName;
+        this.projectId = config.projectId;
         this.branchName = config.branchName;
         this.branchHash = config.branchName ? config.commitHash : null;
 
@@ -22351,7 +22219,7 @@ define('plugin/PluginBase',[
     /**
      * Gets the default configuration based on the configuration structure for this plugin.
      *
-     * @returns {plugin.PluginConfig}
+     * @returns {PluginConfig}
      */
     PluginBase.prototype.getDefaultConfig = function () {
         var configStructure = this.getConfigStructure();
@@ -22368,7 +22236,7 @@ define('plugin/PluginBase',[
     /**
      * Sets the current configuration of the plugin.
      *
-     * @param {object} newConfig - this is the actual configuration and NOT the configuration structure.
+     * @param {PluginConfig} newConfig - this is the actual configuration and NOT the configuration structure.
      */
     PluginBase.prototype.setCurrentConfig = function (newConfig) {
         this._currentConfig = newConfig;
@@ -22409,6 +22277,42 @@ define('plugin/PluginContext',[], function () {
     return PluginContext;
 });
 /*globals define*/
+/*jshint node:true, browser: true*/
+/**
+ * @author lattmann / https://github.com/lattmann
+ */
+
+define('common/storage/util',['common/storage/constants'], function (CONSTANTS) {
+    'use strict';
+    return {
+
+        getProjectFullNameFromProjectId: function (projectId) {
+            if (projectId) {
+                return projectId.replace(CONSTANTS.PROJECT_ID_SEP, CONSTANTS.PROJECT_DISPLAYED_NAME_SEP);
+            }
+        },
+        getProjectDisplayedNameFromProjectId: function (projectId) {
+            if (projectId) {
+                return projectId.replace(CONSTANTS.PROJECT_ID_SEP, ' ' + CONSTANTS.PROJECT_DISPLAYED_NAME_SEP + ' ');
+            }
+        },
+        getProjectIdFromProjectFullName: function (projectFullName) {
+            if (projectFullName) {
+                return projectFullName.replace(CONSTANTS.PROJECT_DISPLAYED_NAME_SEP, CONSTANTS.PROJECT_ID_SEP);
+            }
+        },
+        getProjectIdFromOwnerIdAndProjectName: function (userId, projectName) {
+            return userId + CONSTANTS.PROJECT_ID_SEP + projectName;
+        },
+        getProjectNameFromProjectId: function (projectId) {
+            if (projectId) {
+                return projectId.substring(projectId.indexOf(CONSTANTS.PROJECT_ID_SEP) + 1);
+            }
+        }
+    };
+});
+
+/*globals define*/
 /*jshint browser: true, node:true*/
 
 /**
@@ -22423,8 +22327,9 @@ define('plugin/PluginContext',[], function () {
 // TODO: PluginManager should download the plugins
 
 
-define('plugin/PluginManagerBase',['plugin/PluginBase', 'plugin/PluginContext'], function (PluginBase, PluginContext) {
-'use strict';
+define('plugin/PluginManagerBase',['plugin/PluginBase', 'plugin/PluginContext', 'common/storage/util'],
+    function (PluginBase, PluginContext, storageUtil) {
+        'use strict';
 
         var PluginManagerBase = function (storage, Core, logger, plugins, gmeConfig) {
             this.gmeConfig = gmeConfig; // global configuration of webgme
@@ -22549,7 +22454,8 @@ define('plugin/PluginManagerBase',['plugin/PluginBase', 'plugin/PluginContext'],
             // 7) return
 
             pluginContext.project = this._storage;
-            pluginContext.projectName = managerConfiguration.project;
+            pluginContext.projectName = storageUtil.getProjectNameFromProjectId(managerConfiguration.project);
+            pluginContext.projectId = managerConfiguration.project;
             pluginContext.branchName = managerConfiguration.branchName;
 
             pluginContext.core = new self._Core(pluginContext.project, {
@@ -22974,7 +22880,7 @@ define('js/Utils/InterpreterManager',[
     return InterpreterManager;
 });
 
-!function(e){if("object"==typeof exports&&"undefined"!=typeof module)module.exports=e();else if("function"==typeof define&&define.amd)define('lib/superagent/superagent-1.2.0',[],e);else{var f;"undefined"!=typeof window?f=window:"undefined"!=typeof global?f=global:"undefined"!=typeof self&&(f=self),f.superagent=e()}}(function(){var define,module,exports;return (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
+!function(e){if("object"==typeof exports&&"undefined"!=typeof module)module.exports=e();else if("function"==typeof define&&define.amd)define('lib/superagent/superagent',[],e);else{var f;"undefined"!=typeof window?f=window:"undefined"!=typeof global?f=global:"undefined"!=typeof self&&(f=self),f.superagent=e()}}(function(){var define,module,exports;return (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
 /**
  * Module dependencies.
  */
@@ -23464,7 +23370,7 @@ function Request(method, url) {
     new_err.response = res;
     new_err.status = res.status;
 
-    self.callback(err || new_err, res);
+    self.callback(new_err, res);
   });
 }
 
@@ -23937,7 +23843,8 @@ Request.prototype.end = function(fn){
   // body
   if ('GET' != this.method && 'HEAD' != this.method && 'string' != typeof data && !isHost(data)) {
     // serialize stuff
-    var serialize = request.serialize[this.getHeader('Content-Type')];
+    var contentType = this.getHeader('Content-Type');
+    var serialize = request.serialize[contentType ? contentType.split(';')[0] : ''];
     if (serialize) data = serialize(data);
   }
 
@@ -23952,6 +23859,20 @@ Request.prototype.end = function(fn){
   xhr.send(data);
   return this;
 };
+
+/**
+ * Faux promise support
+ *
+ * @param {Function} fulfill
+ * @param {Function} reject
+ * @return {Request}
+ */
+
+Request.prototype.then = function (fulfill, reject) {
+  return this.end(function(err, res) {
+    err ? reject(err) : fulfill(res);
+  });
+}
 
 /**
  * Expose `Request`.
@@ -24505,7 +24426,7 @@ define('webgme.classes', [
     'common/core/core',
     'common/storage/browserstorage',
     'js/logger',
-    'lib/superagent/superagent-1.2.0',
+    'lib/superagent/superagent',
     'teststorage/teststorage'
 ], function (Client,
              BlobClient,
